@@ -1,5 +1,11 @@
 import React, { useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+} from "react-native";
 import { router } from "expo-router";
 
 export default function AgeScreen() {
@@ -10,15 +16,15 @@ export default function AgeScreen() {
     "40+ YEARS",
   ];
 
-  // 🔥 Preload images for faster rendering
+  // 🔥 Preload images
   useEffect(() => {
     const images = [
-      require("../../assets/images/age1.png"),
-      require("../../assets/images/age2.png"),
-      require("../../assets/images/age3.png"),
-      require("../../assets/images/age4.png"),
-      require("../../assets/images/age5.png"),
-      require("../../assets/images/age6.png"),
+      require("../assets/images/age1.png"),
+require("../assets/images/age2.png"),
+require("../assets/images/age3.png"),
+require("../assets/images/age4.png"),
+require("../assets/images/age5.png"),
+require("../assets/images/age6.png"),
     ];
 
     images.forEach((img) => {
@@ -26,59 +32,55 @@ export default function AgeScreen() {
     });
   }, []);
 
+  const goNext = () => {
+    router.replace("/"); // change this to your home screen if needed
+  };
+
   return (
     <View style={styles.container}>
       {/* Image Grid */}
       <View style={styles.imageGrid}>
-        {/* Row 1 */}
         <Image
-          source={require("../../assets/images/age1.png")}
-          style={styles.imageLarge}
-          resizeMode="cover"
+          style={[styles.imageLarge, { marginTop: 40 }]}
+          source={require("../assets/images/age1.png")}
         />
         <Image
-          source={require("../../assets/images/age2.png")}
-          style={styles.imageSmall}
-          resizeMode="cover"
+          style={[styles.imageSmall, { marginTop: 40 }]}
+          source={require("../assets/images/age2.png")}
         />
         <Image
-          source={require("../../assets/images/age3.png")}
-          style={styles.imageLarge}
-          resizeMode="cover"
-        />
-
-        {/* Row 2 */}
-        <Image
-          source={require("../../assets/images/age4.png")}
-          style={styles.imageLarge}
-          resizeMode="cover"
+          style={[styles.imageLarge, { marginTop: 40 }]}
+          source={require("../assets/images/age3.png")}
         />
         <Image
-          source={require("../../assets/images/age5.png")}
-          style={styles.imageSmall}
-          resizeMode="cover"
+          style={[styles.imageLarge, { marginTop: 10 }]}
+          source={require("../assets/images/age4.png")}
         />
         <Image
-          source={require("../../assets/images/age6.png")}
-          style={styles.imageLarge}
-          resizeMode="cover"
+          style={[styles.imageSmall, { marginTop: 10 }]}
+          source={require("../assets/images/age5.png")}
+        />
+        <Image
+          style={[styles.imageLarge, { marginTop: 10 }]}
+          source={require("../assets/images/age6.png")}
         />
       </View>
 
       {/* Age Buttons */}
       <View style={styles.buttonContainer}>
         {ageGroups.map((item, index) => (
-          <TouchableOpacity key={index} style={styles.button}>
+          <TouchableOpacity
+            key={index}
+            style={styles.button}
+            onPress={goNext}
+          >
             <Text style={styles.buttonText}>{item}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Skip Button */}
-      <TouchableOpacity
-        style={styles.skipContainer}
-        onPress={() => router.push("/")}
-      >
+      {/* Skip */}
+      <TouchableOpacity style={styles.skipContainer} onPress={goNext}>
         <Text style={styles.skip}>SKIP &gt;</Text>
       </TouchableOpacity>
     </View>
@@ -104,14 +106,14 @@ const styles = StyleSheet.create({
 
   imageLarge: {
     width: "30%",
-    height: 110, // slightly reduced for faster layout
+    height: 110,
     borderRadius: 12,
     marginBottom: 15,
   },
 
   imageSmall: {
     width: "30%",
-    height: 95, // optimized
+    height: 95,
     borderRadius: 12,
     marginBottom: 15,
     marginTop: 15,
@@ -137,17 +139,23 @@ const styles = StyleSheet.create({
   buttonText: {
     fontWeight: "600",
     fontSize: 15,
+    color: "#000",
   },
 
   /* Skip */
   skipContainer: {
     position: "absolute",
-    bottom: 30,
-    right: 25,
+    left: 266,
+    top: 672,
+    width: 70,
+    height: 59,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   skip: {
-    fontWeight: "bold",
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000",
   },
 });
