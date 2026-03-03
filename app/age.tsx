@@ -33,7 +33,7 @@ require("../assets/images/age6.png"),
   }, []);
 
   const goNext = () => {
-    router.replace("/"); // change this to your home screen if needed
+    router.replace("/promote"); 
   };
 
   return (
