@@ -53,7 +53,7 @@ const SplashScreen = () => {
     <View style={styles.container}>
       {/* 🔹 Background Large Logo */}
       <Animated.Image
-        source={require("../assets/images/f&tlogo.jpg.jpeg")}
+        source={require("../assets/images/logo.png")}
         resizeMode="contain"
         style={[
           styles.backgroundLogo,
