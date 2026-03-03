@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
+import NotificationPermission from "./notification";
+import LocationPermission from "./loc";
 
 const { width } = Dimensions.get("window");
 
@@ -25,6 +27,8 @@ const languages = [
 
 export default function LanguageScreen() {
   const router = useRouter();
+  const [showNotification, setShowNotification] = useState(false);
+  const [showLocation, setShowLocation] = useState(false);
 
   const scales = useRef(
     languages.map(() => new Animated.Value(1))
@@ -43,8 +47,33 @@ export default function LanguageScreen() {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      router.replace("/gender"); // navigate to gender screen
+      setShowNotification(true);
     });
+  };
+
+  const handleNotificationAllow = () => {
+    setShowNotification(false);
+    setShowLocation(true);
+  };
+
+  const handleNotificationDeny = () => {
+    setShowNotification(false);
+    setShowLocation(true);
+  };
+
+  const handleLocationWhileUsing = () => {
+    setShowLocation(false);
+    router.replace("/gender");
+  };
+
+  const handleLocationOnlyThisTime = () => {
+    setShowLocation(false);
+    router.replace("/gender");
+  };
+
+  const handleLocationDontAllow = () => {
+    setShowLocation(false);
+    router.replace("/gender");
   };
 
   return (
@@ -72,6 +101,21 @@ export default function LanguageScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Notification Permission Modal */}
+      <NotificationPermission
+        visible={showNotification}
+        onAllow={handleNotificationAllow}
+        onDeny={handleNotificationDeny}
+      />
+
+      {/* Location Permission Modal */}
+      <LocationPermission
+        visible={showLocation}
+        onWhileUsing={handleLocationWhileUsing}
+        onOnlyThisTime={handleLocationOnlyThisTime}
+        onDontAllow={handleLocationDontAllow}
+      />
     </View>
   );
 }
