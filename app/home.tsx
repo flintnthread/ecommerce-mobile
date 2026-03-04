@@ -13,10 +13,13 @@ import {
   NativeSyntheticEvent,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
 const { width } = Dimensions.get("window");
 
 export default function Home() {
+  const router = useRouter();
+
   const placeholderTexts = [
     "Search Shoes",
     "Search Womens Wear",
@@ -67,7 +70,6 @@ export default function Home() {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          {/* Greeting + Profile */}
           <View style={styles.topRow}>
             <View>
               <Text style={styles.helloText}>Hello 👋</Text>
@@ -90,20 +92,17 @@ export default function Home() {
 
             <View style={styles.searchContainer}>
               <Ionicons name="search-outline" size={18} color="#777" />
-
               <TextInput
                 placeholder={placeholderTexts[placeholderIndex]}
                 placeholderTextColor="#777"
                 style={styles.searchInput}
               />
-
               <Ionicons
                 name="camera-outline"
                 size={20}
                 color="#777"
                 style={{ marginRight: 10 }}
               />
-
               <Ionicons name="mic-outline" size={18} color="#777" />
             </View>
           </View>
@@ -129,7 +128,7 @@ export default function Home() {
           )}
         />
 
-        {/* DOT INDICATOR */}
+        {/* DOTS */}
         <View style={styles.dotContainer}>
           {[0, 1].map((i) => (
             <View
@@ -161,13 +160,13 @@ export default function Home() {
         </View>
       </ScrollView>
 
-      {/* ORIGINAL BOTTOM TAB (NOT REMOVED) */}
+      {/* CUSTOM BOTTOM TAB WITH NAVIGATION */}
       <View style={styles.bottomTab}>
-        <TabItem icon="home-outline" label="Home" />
-        <TabItem icon="grid-outline" label="Categories" />
-        <TabItem icon="clipboard-outline" label="Orders" />
-        <TabItem icon="person-outline" label="Account" />
-        <TabItem icon="cart-outline" label="Cart" />
+        <TabItem icon="home-outline" label="Home" route="/home" />
+        <TabItem icon="grid-outline" label="Categories" route="/categories" />
+        <TabItem icon="clipboard-outline" label="Orders" route="/orders" />
+        <TabItem icon="person-outline" label="Account" route="/account" />
+        <TabItem icon="cart-outline" label="Cart" route="/cart" />
       </View>
     </View>
   );
@@ -180,42 +179,42 @@ const FilterItem = ({ icon, label }: any) => (
   </TouchableOpacity>
 );
 
-const TabItem = ({ icon, label }: any) => (
-  <TouchableOpacity style={styles.tabItem}>
-    <Ionicons name={icon} size={22} color="#000" />
-    <Text style={styles.tabLabel}>{label}</Text>
-  </TouchableOpacity>
-);
+const TabItem = ({ icon, label, route }: any) => {
+  const router = useRouter();
+
+  return (
+    <TouchableOpacity
+      style={styles.tabItem}
+      onPress={() => router.replace(route)}  // better than push
+    >
+      <Ionicons name={icon} size={22} color="#000" />
+      <Text style={styles.tabLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
-
   header: {
     backgroundColor: "#fff",
     paddingTop: 50,
     paddingHorizontal: 16,
     paddingBottom: 15,
   },
-
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   helloText: { fontSize: 14, color: "#777" },
   shopText: { fontSize: 18, fontWeight: "bold" },
-
   profileImage: { width: 40, height: 40, borderRadius: 20 },
-
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 15,
   },
-
   logo: { width: 60, height: 35, marginRight: 8 },
-
   searchContainer: {
     flex: 1,
     flexDirection: "row",
@@ -225,9 +224,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 45,
   },
-
   searchInput: { flex: 1, marginLeft: 8 },
-
   categoryPage: {
     width: width,
     flexDirection: "row",
@@ -236,40 +233,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
-
   categoryBox: {
     width: width / 5 - 10,
     alignItems: "center",
     marginBottom: 15,
   },
-
   categoryImage: { width: 55, height: 55, marginBottom: 4 },
-
   categoryText: { fontSize: 11, textAlign: "center" },
-
   dotContainer: {
     flexDirection: "row",
     justifyContent: "center",
     marginBottom: 10,
   },
-
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 5,
-  },
-
+  dot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 5 },
   filterRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginVertical: 15,
   },
-
   filterItem: { alignItems: "center" },
-
   filterText: { fontSize: 12, marginTop: 4 },
-
   banner: {
     height: 200,
     backgroundColor: "#D9D9D9",
@@ -278,7 +261,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   videoBox: {
     height: 180,
     backgroundColor: "#D9D9D9",
@@ -287,7 +269,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   bottomTab: {
     position: "absolute",
     bottom: 0,
@@ -301,8 +282,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
     borderColor: "#ccc",
   },
-
   tabItem: { alignItems: "center" },
-
   tabLabel: { fontSize: 11, marginTop: 3 },
 });
