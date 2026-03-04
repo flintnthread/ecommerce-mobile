@@ -15,10 +15,8 @@ export default function OTP() {
 
   const [otp, setOtp] = useState(["", "", "", ""]);
 
-  // ✅ Proper typing (fix red mark)
   const inputs = useRef<Array<TextInput | null>>([]);
 
-  // ✅ Mask function
   const maskValue = (value: string | string[] | undefined) => {
     if (!value || typeof value !== "string") return "";
 
@@ -51,12 +49,11 @@ export default function OTP() {
       return;
     }
 
-    if (enteredOtp === "1234") {
-      Alert.alert("Success", "Login Successful");
-      router.replace("/");
-    } else {
-      Alert.alert("Invalid OTP", "Try 1234");
-    }
+    // ✅ Since backend not ready, accept any 4-digit OTP
+    Alert.alert("Success", "Login Successful");
+
+    // ✅ Correct navigation path
+    router.replace("/home");
   };
 
   return (
@@ -68,7 +65,6 @@ export default function OTP() {
         <Text style={styles.boldText}>{maskValue(phone)}</Text>
       </Text>
 
-      {/* ✅ FIXED BOX SPACING */}
       <View style={styles.otpContainer}>
         {otp.map((digit, index) => (
           <TextInput
@@ -121,15 +117,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#000",
   },
-
-  // ✅ FIXED CONTAINER
   otpContainer: {
     flexDirection: "row",
     justifyContent: "center",
     marginVertical: 30,
   },
-
-  // ✅ SMALLER WIDTH + MARGIN = NO MERGE
   otpBox: {
     width: 55,
     height: 55,
@@ -137,9 +129,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 20,
     borderRadius: 8,
-    marginHorizontal: 8,  // ← separation fix
+    marginHorizontal: 8,
   },
-
   verifyButton: {
     backgroundColor: "#4b2be3",
     paddingVertical: 14,
