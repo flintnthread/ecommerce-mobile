@@ -13,10 +13,12 @@ import {
   NativeSyntheticEvent,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
 const { width } = Dimensions.get("window");
 
 export default function Home() {
+  const router = useRouter();
   const placeholderTexts = [
     "Search Shoes",
     "Search Womens Wear",
@@ -161,13 +163,17 @@ export default function Home() {
         </View>
       </ScrollView>
 
-      {/* ORIGINAL BOTTOM TAB (NOT REMOVED) */}
+      {/* BOTTOM TAB */}
       <View style={styles.bottomTab}>
-        <TabItem icon="home-outline" label="Home" />
-        <TabItem icon="grid-outline" label="Categories" />
-        <TabItem icon="clipboard-outline" label="Orders" />
-        <TabItem icon="person-outline" label="Account" />
-        <TabItem icon="cart-outline" label="Cart" />
+        <TabItem icon="home-outline" label="Home" onPress={() => {}} />
+        <TabItem icon="grid-outline" label="Categories" onPress={() => {}} />
+        <TabItem icon="clipboard-outline" label="Orders" onPress={() => {}} />
+        <TabItem
+          icon="person-outline"
+          label="Account"
+          onPress={() => router.push("/account")}
+        />
+        <TabItem icon="cart-outline" label="Cart" onPress={() => {}} />
       </View>
     </View>
   );
@@ -180,8 +186,8 @@ const FilterItem = ({ icon, label }: any) => (
   </TouchableOpacity>
 );
 
-const TabItem = ({ icon, label }: any) => (
-  <TouchableOpacity style={styles.tabItem}>
+const TabItem = ({ icon, label, onPress }: any) => (
+  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
     <Ionicons name={icon} size={22} color="#000" />
     <Text style={styles.tabLabel}>{label}</Text>
   </TouchableOpacity>
