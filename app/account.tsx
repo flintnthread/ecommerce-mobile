@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import "expo-image-picker"
+import "expo-image-picker";
 import {
   View,
   Text,
@@ -18,6 +18,19 @@ import NotificationPermission from "./notification";
 import * as ImagePicker from "expo-image-picker";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+// Orders data types
+type OrderStatus = "all" | "in_progress" | "delivered" | "cancelled" | "returns";
+
+interface Order {
+  id: string;
+  orderNumber: string;
+  date: string;
+  status: OrderStatus;
+  items: number;
+  total: string;
+  image: any;
+}
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -97,18 +110,6 @@ export default function AccountScreen() {
   };
 
   // Orders data and functions
-  type OrderStatus = "all" | "in_progress" | "delivered" | "cancelled" | "returns";
-
-  interface Order {
-    id: string;
-    orderNumber: string;
-    date: string;
-    status: OrderStatus;
-    items: number;
-    total: string;
-    image: any;
-  }
-
   const sampleOrders: Order[] = [
     {
       id: "1",
@@ -694,7 +695,7 @@ export default function AccountScreen() {
         <View style={styles.menuSection}>
           <MenuItem label="My Orders" onPress={handleMyOrdersPress} />
           <MenuItem label="Your Rewards" />
-          <MenuItem label="Payment Methods" />
+          <MenuItem label="Payment Methods" onPress={() => router.push("/payment-methods")} />
           <MenuItem label="My Activity" />
           <MenuItem label="Other" />
           <MenuItem label="Help Center" onPress={handleHelpPress} />
@@ -1810,7 +1811,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
   },
-  newModalContainer: {
+  newModalContainer:{
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
