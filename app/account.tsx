@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import "expo-image-picker"
 import {
   View,
   Text,

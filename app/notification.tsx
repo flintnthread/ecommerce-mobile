@@ -44,7 +44,7 @@ const NotificationPermission: React.FC<NotificationPermissionProps> = ({
           
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.denyButton} onPress={onDeny}>
-              <Text style={styles.denyButtonText}>Don't Allow</Text>
+              <Text style={styles.denyButtonText}>Don&apos;t Allow</Text>
             </TouchableOpacity>
           </View>
         </View>

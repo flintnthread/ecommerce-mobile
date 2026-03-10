@@ -36,7 +36,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
 
           {/* Title */}
           <Text style={styles.title}>
-            Allow Maps to access this device's precise location?
+            Allow Maps to access this device&apos;s precise location?
           </Text>
 
           {/* Location Options */}

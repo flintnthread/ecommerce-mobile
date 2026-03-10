@@ -10,7 +10,7 @@ export default function Index() {
     }, 1000); 
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [router]);
 
   return <SplashScreen />;
 }

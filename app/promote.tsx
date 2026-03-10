@@ -43,7 +43,7 @@ export default function PromoteScreen() {
     }, 3000); // 3 seconds
 
     return () => clearInterval(interval);
-  }, [currentIndex]);
+  }, [currentIndex, images.length]);
 
   const onScroll = (event: any) => {
     const index = Math.round(
