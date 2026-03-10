@@ -6,13 +6,10 @@ import {
   StyleSheet,
   Image,
   Animated,
-  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import NotificationPermission from "./notification";
 import LocationPermission from "./loc";
-
-const { width } = Dimensions.get("window");
 
 const languages = [
   { name: "Telugu", image: require("../assets/images/telugu.png") },

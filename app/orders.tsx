@@ -8,7 +8,6 @@ import {
   Image,
   StatusBar,
   Modal,
-  Dimensions,
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -221,8 +220,6 @@ const sampleOrders: Order[] = [
     estimatedDelivery: "Delivered on 19 Feb 2024",
   },
 ];
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function OrdersScreen() {
   const router = useRouter();

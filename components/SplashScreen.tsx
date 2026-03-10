@@ -47,7 +47,7 @@ const SplashScreen = () => {
         }),
       ]).start();
     });
-  }, []);
+  }, [bgScale, bgOpacity, logoTranslateX, logoOpacity]);
 
   return (
     <View style={styles.container}>

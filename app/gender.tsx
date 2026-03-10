@@ -3,19 +3,21 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   Animated,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
+
+// 7 floating animations created outside component to avoid hook rule violation
+const createAnimations = () =>
+  Array.from({ length: 7 }, () => useRef(new Animated.Value(0)).current);
 
 export default function GenderScreen() {
   const router = useRouter();
 
   // 7 floating animations
-  const animations = Array.from({ length: 7 }, () =>
-    useRef(new Animated.Value(0)).current
-  );
+  const animations = createAnimations();
 
   useEffect(() => {
     animations.forEach((anim, index) => {
@@ -35,7 +37,7 @@ export default function GenderScreen() {
         ])
       ).start();
     });
-  }, []);
+  }, [animations]);
 
   const goAge = () => {
     router.replace("/age");

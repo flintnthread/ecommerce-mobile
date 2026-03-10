@@ -15,7 +15,7 @@ export default function OTP() {
 
   const [otp, setOtp] = useState(["", "", "", ""]);
 
-  const inputs = useRef<Array<TextInput | null>>([]);
+  const inputs = useRef<(TextInput | null)[]>([]);
 
   const maskValue = (value: string | string[] | undefined) => {
     if (!value || typeof value !== "string") return "";
