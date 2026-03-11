@@ -92,7 +92,7 @@ export default function AccountScreen() {
   };
 
   const handleMyOrdersPress = () => {
-    setShowOrdersModal(true);
+    router.push("/orders");
   };
 
   // Orders data and functions
