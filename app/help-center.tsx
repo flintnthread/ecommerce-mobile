@@ -197,9 +197,9 @@ export default function HelpCenterScreen() {
       id: "1",
       title: "Call Us",
       icon: "call",
-      value: "+91 1800-123-4567",
+      value: "+91 9063499092",
       action: () => {
-        Linking.openURL("tel:+9118001234567");
+        Linking.openURL("tel:+919063499092");
       },
       color: "#4CAF50",
     },
@@ -209,7 +209,7 @@ export default function HelpCenterScreen() {
       icon: "mail",
       value: "support@fashionapp.com",
       action: () => {
-        Linking.openURL("mailto:support@fashionapp.com");
+        Linking.openURL("mailto:support@flintnthread.in");
       },
       color: "#2196F3",
     },
@@ -227,9 +227,9 @@ export default function HelpCenterScreen() {
       id: "4",
       title: "WhatsApp",
       icon: "logo-whatsapp",
-      value: "+91 98765 43210",
+      value: "+91 9063499092",
       action: () => {
-        Linking.openURL("https://wa.me/919876543210");
+        Linking.openURL("https://wa.me/919063499092");
       },
       color: "#25D366",
     },

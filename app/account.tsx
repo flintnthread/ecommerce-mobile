@@ -243,6 +243,46 @@ export default function AccountScreen() {
     router.push("/my-activity");
   };
 
+  const handleBecomeSellerPress = () => {
+    Alert.alert(
+      "Become a Seller",
+      "Would you like to start selling on our platform?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Get Started",
+          onPress: () => {
+            Alert.alert(
+              "Seller Registration",
+              "We'll guide you through the seller registration process. This feature will be available soon!",
+              [{ text: "OK" }]
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePromoteWithUsPress = () => {
+    Alert.alert(
+      "Promote with Us",
+      "Partner with us to promote your products and services!",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Learn More",
+          onPress: () => {
+            Alert.alert(
+              "Promotion Partnership",
+              "Join our promotion program to reach more customers and grow your business. Our team will contact you soon!",
+              [{ text: "OK" }]
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const handleOtherPress = () => {
     router.push("/other");
   };
@@ -1081,6 +1121,8 @@ export default function AccountScreen() {
           <MenuItem label="Your Rewards" onPress={handleRewardsPress} />
           <MenuItem label="Payment Methods" onPress={handlePaymentMethodsPress} />
           <MenuItem label="My Activity" onPress={handleMyActivityPress} />
+          <MenuItem label="Become a Seller" onPress={handleBecomeSellerPress} />
+          <MenuItem label="Promote with Us" onPress={handlePromoteWithUsPress} />
           <MenuItem label="Other" onPress={handleOtherPress} />
           <MenuItem label="Help Center" onPress={handleHelpPress} />
           <MenuItem label="Settings" onPress={handleSettingsPress} />
@@ -1552,12 +1594,34 @@ export default function AccountScreen() {
 type MenuItemProps = {
   label: string;
   onPress?: () => void;
+  icon?: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
 };
 
-const MenuItem: React.FC<MenuItemProps> = ({ label, onPress }) => {
+const MenuItem: React.FC<MenuItemProps> = ({ label, onPress, icon, iconColor = "#666" }) => {
+  // Map labels to icons if icon not provided
+  const getIconForLabel = (label: string): keyof typeof Ionicons.glyphMap => {
+    if (icon) return icon;
+    const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
+      "My Orders": "receipt-outline",
+      "Your Rewards": "gift-outline",
+      "Payment Methods": "wallet-outline",
+      "My Activity": "time-outline",
+      "Become a Seller": "storefront-outline",
+      "Promote with Us": "megaphone-outline",
+      "Other": "ellipsis-horizontal-outline",
+      "Help Center": "help-circle-outline",
+      "Settings": "settings-outline",
+    };
+    return iconMap[label] || "chevron-forward-outline";
+  };
+
   return (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
-      <Text style={styles.menuLabel}>{label}</Text>
+      <View style={styles.menuItemLeft}>
+        <Ionicons name={getIconForLabel(label)} size={20} color={iconColor} />
+        <Text style={styles.menuLabel}>{label}</Text>
+      </View>
       <Ionicons name="chevron-forward" size={16} color="#000" />
     </TouchableOpacity>
   );
@@ -1987,15 +2051,21 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#DDDDDD",
   },
+  menuItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 12,
+  },
   menuLabel: {
     fontSize: 14,
+    flex: 1,
   },
   logoutButton: {
     backgroundColor: "#FFFFFF",
