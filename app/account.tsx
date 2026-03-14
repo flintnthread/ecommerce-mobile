@@ -23,7 +23,7 @@ export default function AccountScreen() {
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [showFullImageModal, setShowFullImageModal] = useState(false);
   const [activeProfile, setActiveProfile] =
-    useState<"sankar" | "kusuma" | "new">("sankar");
+    useState<"sankar" | "kusuma" | "new" | string>("sankar");
   const [showSankar, setShowSankar] = useState(true);
   const [showKusuma, setShowKusuma] = useState(true);
   const [newName, setNewName] = useState("");
@@ -37,36 +37,172 @@ export default function AccountScreen() {
   const [newPincode, setNewPincode] = useState("");
   const [newUsername, setNewUsername] = useState("");
   const [newPhotoUri, setNewPhotoUri] = useState<string | null>(null);
+  const [sankarPhotoUri, setSankarPhotoUri] = useState<string | null>(null);
+  const [kusumaPhotoUri, setKusumaPhotoUri] = useState<string | null>(null);
   const [hasNewProfile, setHasNewProfile] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Saved profiles array to support multiple accounts
+  interface SavedProfile {
+    id: string;
+    name: string;
+    username: string;
+    email: string;
+    mobile: string;
+    photoUri: string | null;
+  }
+
+  const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
   const [showOrdersModal, setShowOrdersModal] = useState(false);
   const [showOrderDetailsModal, setShowOrderDetailsModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [activeOrderTab, setActiveOrderTab] = useState<"all" | "in_progress" | "delivered" | "cancelled" | "returns">("all");
 
-  const currentProfile =
-    activeProfile === "kusuma"
-      ? {
-          name: "Kusuma",
-          email: "kusuma@example.com",
-        }
-      : activeProfile === "new"
-      ? {
-          name: (newUsername || newName || "New user").trim(),
-          email: newEmail || "newuser@example.com",
-        }
-      : {
-          name: "Sankar",
-          email: "sankarp036@gmail.com",
+  const getCurrentProfileData = () => {
+    if (activeProfile === "kusuma") {
+      return {
+        name: "Kusuma",
+        email: "kusuma@example.com",
+      };
+    } else if (activeProfile === "new") {
+      return {
+        name: (newUsername || newName || "New user").trim(),
+        email: newEmail || "newuser@example.com",
+      };
+    } else if (activeProfile.startsWith("saved_")) {
+      const profileId = activeProfile.replace("saved_", "");
+      const savedProfile = savedProfiles.find((p) => p.id === profileId);
+      if (savedProfile) {
+        return {
+          name: savedProfile.username || savedProfile.name,
+          email: savedProfile.email,
         };
+      }
+    }
+    return {
+      name: "Sankar",
+      email: "sankarp036@gmail.com",
+    };
+  };
+
+  const currentProfile = getCurrentProfileData();
 
   const getCurrentImageSource = () => {
     if (activeProfile === "kusuma") {
+      if (kusumaPhotoUri) {
+        return { uri: kusumaPhotoUri };
+      }
       return require("../assets/images/age6.png");
     } else if (activeProfile === "new" && newPhotoUri) {
       return { uri: newPhotoUri };
-    } else {
+    } else if (activeProfile.startsWith("saved_")) {
+      const profileId = activeProfile.replace("saved_", "");
+      const savedProfile = savedProfiles.find((p) => p.id === profileId);
+      if (savedProfile && savedProfile.photoUri) {
+        return { uri: savedProfile.photoUri };
+      }
       return require("../assets/images/age5.png");
+    } else {
+      // Sankar profile
+      if (sankarPhotoUri) {
+        return { uri: sankarPhotoUri };
+      }
+      return require("../assets/images/age5.png");
+    }
+  };
+
+  const handleUpdateProfilePhoto = async () => {
+    Alert.alert(
+      "Update Profile Photo",
+      "Choose an option",
+      [
+        {
+          text: "Camera",
+          onPress: () => handleTakePhotoForCurrentProfile(),
+        },
+        {
+          text: "Photo Library",
+          onPress: () => handlePickFromLibraryForCurrentProfile(),
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]
+    );
+  };
+
+  const handleTakePhotoForCurrentProfile = async () => {
+    const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
+    if (cameraStatus.status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "We need access to your camera to take a photo."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const photoUri = result.assets[0].uri;
+      if (activeProfile === "sankar") {
+        setSankarPhotoUri(photoUri);
+      } else if (activeProfile === "kusuma") {
+        setKusumaPhotoUri(photoUri);
+      } else if (activeProfile === "new") {
+        setNewPhotoUri(photoUri);
+      } else if (activeProfile.startsWith("saved_")) {
+        const profileId = activeProfile.replace("saved_", "");
+        setSavedProfiles((prev) =>
+          prev.map((p) =>
+            p.id === profileId ? { ...p, photoUri } : p
+          )
+        );
+      }
+      Alert.alert("Success", "Profile photo updated successfully!");
+    }
+  };
+
+  const handlePickFromLibraryForCurrentProfile = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "We need access to your photos to upload a profile picture."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const photoUri = result.assets[0].uri;
+      if (activeProfile === "sankar") {
+        setSankarPhotoUri(photoUri);
+      } else if (activeProfile === "kusuma") {
+        setKusumaPhotoUri(photoUri);
+      } else if (activeProfile === "new") {
+        setNewPhotoUri(photoUri);
+      } else if (activeProfile.startsWith("saved_")) {
+        const profileId = activeProfile.replace("saved_", "");
+        setSavedProfiles((prev) =>
+          prev.map((p) =>
+            p.id === profileId ? { ...p, photoUri } : p
+          )
+        );
+      }
+      Alert.alert("Success", "Profile photo updated successfully!");
     }
   };
 
@@ -83,7 +219,7 @@ export default function AccountScreen() {
   };
 
   const handleHelpPress = () => {
-    Alert.alert("Help Center", "Support options will be available here.");
+    router.push("/help-center");
   };
 
   const handleLanguagePress = () => {
@@ -93,6 +229,26 @@ export default function AccountScreen() {
 
   const handleMyOrdersPress = () => {
     router.push("/orders");
+  };
+
+  const handleRewardsPress = () => {
+    router.push("/rewards");
+  };
+
+  const handlePaymentMethodsPress = () => {
+    router.push("/payment-methods");
+  };
+
+  const handleMyActivityPress = () => {
+    router.push("/my-activity");
+  };
+
+  const handleOtherPress = () => {
+    router.push("/other");
+  };
+
+  const handleSettingsPress = () => {
+    router.push("/settings");
   };
 
   // Orders data and functions
@@ -239,12 +395,65 @@ export default function AccountScreen() {
       Alert.alert("Invalid pincode", "Please enter a valid 6-digit pincode.");
       return;
     }
-    setShowAddForm(false);
-    setActiveProfile("new");
-    setHasNewProfile(true);
-    setTimeout(() => {
-      Alert.alert("Profile saved", "New shopper details have been saved.");
-    }, 100);
+
+    // Check if editing existing profile
+    if (activeProfile.startsWith("saved_")) {
+      const profileId = activeProfile.replace("saved_", "");
+      // Update existing profile
+      setSavedProfiles((prev) =>
+        prev.map((p) =>
+          p.id === profileId
+            ? {
+                ...p,
+                name: newName.trim(),
+                username: newUsername.trim() || newName.trim(),
+                email: newEmail.trim(),
+                mobile: newMobile.trim(),
+                photoUri: newPhotoUri,
+              }
+            : p
+        )
+      );
+      setShowAddForm(false);
+      setTimeout(() => {
+        Alert.alert("Success", "Profile updated successfully!");
+      }, 100);
+    } else {
+      // Create new profile object
+      const newProfile: SavedProfile = {
+        id: `profile_${Date.now()}`,
+        name: newName.trim(),
+        username: newUsername.trim() || newName.trim(),
+        email: newEmail.trim(),
+        mobile: newMobile.trim(),
+        photoUri: newPhotoUri,
+      };
+
+      // Add to saved profiles array
+      setSavedProfiles((prev) => [...prev, newProfile]);
+      setHasNewProfile(true);
+      setShowAddForm(false);
+      
+      // Switch to the newly created profile
+      setActiveProfile(`saved_${newProfile.id}` as any);
+      
+      setTimeout(() => {
+        Alert.alert("Profile saved", "New shopper account has been saved successfully!");
+      }, 100);
+    }
+    
+    // Reset form
+    setNewName("");
+    setNewEmail("");
+    setNewMobile("");
+    setNewPassword("");
+    setNewConfirmPassword("");
+    setNewAddress("");
+    setNewCity("");
+    setNewState("");
+    setNewPincode("");
+    setNewUsername("");
+    setNewPhotoUri(null);
   };
 
   const handleRemoveNewProfile = () => {
@@ -304,6 +513,50 @@ export default function AccountScreen() {
   };
 
   const handleUploadPhotoPress = async () => {
+    Alert.alert(
+      "Select Photo",
+      "Choose an option",
+      [
+        {
+          text: "Camera",
+          onPress: handleTakePhoto,
+        },
+        {
+          text: "Photo Library",
+          onPress: handlePickFromLibrary,
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]
+    );
+  };
+
+  const handleTakePhoto = async () => {
+    // Request camera permissions
+    const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
+    if (cameraStatus.status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "We need access to your camera to take a photo."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setNewPhotoUri(result.assets[0].uri);
+    }
+  };
+
+  const handlePickFromLibrary = async () => {
     const { status } =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -332,221 +585,354 @@ export default function AccountScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile card */}
+        {/* Profile card - Enhanced Design */}
         <View style={styles.profileCard}>
-          <TouchableOpacity
-            onPress={() => setShowFullImageModal(true)}
-            activeOpacity={0.8}
-          >
-            <Image
-              source={getCurrentImageSource()}
-              style={styles.avatar}
-            />
-          </TouchableOpacity>
-
-          {/* Right-side quick action icons */}
-          <View style={styles.profileIconsContainer}>
-            {/* Notifications with count */}
-            <TouchableOpacity
-              style={styles.circleIcon}
-              onPress={handleNotificationPress}
-            >
-              <Ionicons name="notifications-outline" size={18} color="#000" />
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>3</Text>
+          {/* Header Section with Gradient Background */}
+          <View style={styles.profileCardHeader}>
+            <View style={styles.profileHeaderContent}>
+              {/* Avatar with Border */}
+              <View style={styles.avatarContainer}>
+                <TouchableOpacity
+                  onPress={() => setShowFullImageModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.avatarBorder}>
+                    <Image
+                      source={getCurrentImageSource()}
+                      style={styles.avatar}
+                    />
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.avatarEditBadge}
+                  onPress={handleUpdateProfilePhoto}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="camera" size={14} color="#FFFFFF" />
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
 
-            {/* Help / support */}
-            <TouchableOpacity
-              style={styles.circleIcon}
-              onPress={handleHelpPress}
-            >
-              <Ionicons name="help-circle-outline" size={18} color="#000" />
-            </TouchableOpacity>
-
-            {/* Language change */}
-            <TouchableOpacity
-              style={styles.circleIcon}
-              onPress={handleLanguagePress}
-            >
-              <Ionicons name="globe-outline" size={18} color="#000" />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.profileLabel}>Profile</Text>
-          <Text style={styles.profileEmail}>{currentProfile.email}</Text>
-
-          <Text style={styles.shoppingFor}>
-            Shopping for {currentProfile.name}
-          </Text>
-
-          <View style={styles.shopperRow}>
-            {showSankar && (
-              <TouchableOpacity
-                style={styles.shopperItem}
-                onPress={() => setActiveProfile("sankar")}
-              >
-                <View style={styles.shopperCircle}>
-                  <Text style={styles.shopperInitial}>S</Text>
-                </View>
-                <Text style={styles.shopperName}>Sankar</Text>
-              </TouchableOpacity>
-            )}
-
-            {showKusuma && (
-              <TouchableOpacity
-                style={styles.shopperItem}
-                onPress={() => setActiveProfile("kusuma")}
-              >
-                <View style={styles.shopperCircle}>
-                  <Text style={styles.shopperInitial}>K</Text>
-                </View>
-                <Text style={styles.shopperName}>Kusuma</Text>
-              </TouchableOpacity>
-            )}
-
-            {hasNewProfile && (newUsername || newName) ? (
-              <TouchableOpacity
-                style={styles.shopperItem}
-                onPress={() => {
-                  setActiveProfile("new");
-                  setShowAddForm(false);
-                }}
-              >
-                <View style={styles.shopperCircle}>
-                  <Text style={styles.shopperInitial}>
-                    {(newUsername || newName)
-                      .trim()
-                      .charAt(0)
-                      .toUpperCase()}
+              {/* Profile Info */}
+              <View style={styles.profileInfoSection}>
+                <Text style={styles.profileLabel}>Profile</Text>
+                <Text style={styles.profileEmail}>{currentProfile.email}</Text>
+                <View style={styles.activeProfileBadge}>
+                  <View style={styles.activeProfileDot} />
+                  <Text style={styles.activeProfileText}>
+                    Shopping for {currentProfile.name}
                   </Text>
                 </View>
-                <Text style={styles.shopperName}>
-                  {(newUsername || newName).trim()}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-
-            <TouchableOpacity
-              style={styles.shopperItem}
-              onPress={() => {
-                setActiveProfile("new");
-                setShowAddForm(true);
-              }}
-            >
-              <View style={styles.shopperCircle}>
-                <Text style={styles.shopperInitial}>+</Text>
               </View>
-              <Text style={styles.shopperName}>Add</Text>
-            </TouchableOpacity>
+            </View>
 
-            <Ionicons
-              name="person-circle-outline"
-              size={26}
-              color="#000"
-              style={{ marginLeft: "auto" }}
-            />
+            {/* Quick Action Icons */}
+            <View style={styles.profileIconsContainer}>
+              {/* Notifications with count */}
+              <TouchableOpacity
+                style={styles.circleIcon}
+                onPress={handleNotificationPress}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="notifications" size={20} color="#E97A1F" />
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>3</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Help / support */}
+              <TouchableOpacity
+                style={styles.circleIcon}
+                onPress={handleHelpPress}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="help-circle" size={20} color="#2196F3" />
+              </TouchableOpacity>
+
+              {/* Language change */}
+              <TouchableOpacity
+                style={styles.circleIcon}
+                onPress={handleLanguagePress}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="globe" size={20} color="#4CAF50" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Shoppers Section */}
+          <View style={styles.shoppersSection}>
+            <Text style={styles.shoppersSectionTitle}>Switch Shopper</Text>
+            <View style={styles.shopperRow}>
+              {showSankar && (
+                <TouchableOpacity
+                  style={[
+                    styles.shopperItem,
+                    activeProfile === "sankar" && styles.shopperItemActive,
+                  ]}
+                  onPress={() => setActiveProfile("sankar")}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.shopperCircle,
+                      activeProfile === "sankar" && styles.shopperCircleActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.shopperInitial,
+                        activeProfile === "sankar" && styles.shopperInitialActive,
+                      ]}
+                    >
+                      S
+                    </Text>
+                    {activeProfile === "sankar" && (
+                      <View style={styles.shopperCheckmark}>
+                        <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                      </View>
+                    )}
+                  </View>
+                  <Text
+                    style={[
+                      styles.shopperName,
+                      activeProfile === "sankar" && styles.shopperNameActive,
+                    ]}
+                  >
+                    Sankar
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {showKusuma && (
+                <TouchableOpacity
+                  style={[
+                    styles.shopperItem,
+                    activeProfile === "kusuma" && styles.shopperItemActive,
+                  ]}
+                  onPress={() => setActiveProfile("kusuma")}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.shopperCircle,
+                      activeProfile === "kusuma" && styles.shopperCircleActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.shopperInitial,
+                        activeProfile === "kusuma" && styles.shopperInitialActive,
+                      ]}
+                    >
+                      K
+                    </Text>
+                    {activeProfile === "kusuma" && (
+                      <View style={styles.shopperCheckmark}>
+                        <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                      </View>
+                    )}
+                  </View>
+                  <Text
+                    style={[
+                      styles.shopperName,
+                      activeProfile === "kusuma" && styles.shopperNameActive,
+                    ]}
+                  >
+                    Kusuma
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Display all saved profiles */}
+              {savedProfiles.length > 0 &&
+                savedProfiles.map((profile) => {
+                const profileKey = `saved_${profile.id}`;
+                const isActive = activeProfile === profileKey;
+                return (
+                  <TouchableOpacity
+                    key={profile.id}
+                    style={[
+                      styles.shopperItem,
+                      isActive && styles.shopperItemActive,
+                    ]}
+                    onPress={() => {
+                      setActiveProfile(profileKey);
+                      setShowAddForm(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={[
+                        styles.shopperCircle,
+                        isActive && styles.shopperCircleActive,
+                      ]}
+                    >
+                      {profile.photoUri ? (
+                        <Image
+                          source={{ uri: profile.photoUri }}
+                          style={styles.shopperCircleImage}
+                        />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.shopperInitial,
+                            isActive && styles.shopperInitialActive,
+                          ]}
+                        >
+                          {(profile.username || profile.name)
+                            .trim()
+                            .charAt(0)
+                            .toUpperCase()}
+                        </Text>
+                      )}
+                      {isActive && (
+                        <View style={styles.shopperCheckmark}>
+                          <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </View>
+                    <Text
+                      style={[
+                        styles.shopperName,
+                        isActive && styles.shopperNameActive,
+                      ]}
+                    >
+                      {profile.username || profile.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <TouchableOpacity
+                style={styles.shopperItemAdd}
+                onPress={() => {
+                  // Reset form and open add form
+                  setNewName("");
+                  setNewEmail("");
+                  setNewMobile("");
+                  setNewPassword("");
+                  setNewConfirmPassword("");
+                  setNewAddress("");
+                  setNewCity("");
+                  setNewState("");
+                  setNewPincode("");
+                  setNewUsername("");
+                  setNewPhotoUri(null);
+                  setShowAddForm(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.shopperCircleAdd}>
+                  <Ionicons name="add" size={20} color="#E97A1F" />
+                </View>
+                <Text style={styles.shopperNameAdd}>Add</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
         {/* Edit / remove actions for active account */}
         {activeProfile === "sankar" && showSankar && (
-          <View style={styles.profileActionsRow}>
+          <View style={styles.profileActionsCard}>
             <TouchableOpacity
               style={styles.profileActionButton}
-              onPress={() =>
-                Alert.alert(
-                  "Edit account",
-                  "Edit options for Sankar can be wired to a detailed edit screen later."
-                )
-              }
+              onPress={() => router.push("/settings")}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name="create-outline"
-                size={16}
-                color="#1d324e"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.profileActionText}>Edit account</Text>
+              <View style={styles.profileActionIconContainer}>
+                <Ionicons name="create" size={18} color="#E97A1F" />
+              </View>
+              <Text style={styles.profileActionText}>Edit Account</Text>
+              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
             </TouchableOpacity>
+
+            <View style={styles.profileActionDivider} />
 
             <TouchableOpacity
               style={styles.profileActionButton}
               onPress={() => handleRemoveBaseProfile("sankar")}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name="trash-outline"
-                size={16}
-                color="#B00020"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.profileActionRemoveText}>Remove account</Text>
+              <View style={[styles.profileActionIconContainer, styles.profileActionIconContainerDanger]}>
+                <Ionicons name="trash" size={18} color="#F44336" />
+              </View>
+              <Text style={styles.profileActionRemoveText}>Remove Account</Text>
+              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
             </TouchableOpacity>
           </View>
         )}
 
         {activeProfile === "kusuma" && showKusuma && (
-          <View style={styles.profileActionsRow}>
+          <View style={styles.profileActionsCard}>
             <TouchableOpacity
               style={styles.profileActionButton}
-              onPress={() =>
-                Alert.alert(
-                  "Edit account",
-                  "Edit options for Kusuma can be wired to a detailed edit screen later."
-                )
-              }
+              onPress={() => router.push("/settings")}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name="create-outline"
-                size={16}
-                color="#1d324e"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.profileActionText}>Edit account</Text>
+              <View style={styles.profileActionIconContainer}>
+                <Ionicons name="create" size={18} color="#E97A1F" />
+              </View>
+              <Text style={styles.profileActionText}>Edit Account</Text>
+              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
             </TouchableOpacity>
+
+            <View style={styles.profileActionDivider} />
 
             <TouchableOpacity
               style={styles.profileActionButton}
               onPress={() => handleRemoveBaseProfile("kusuma")}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name="trash-outline"
-                size={16}
-                color="#B00020"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.profileActionRemoveText}>Remove account</Text>
+              <View style={[styles.profileActionIconContainer, styles.profileActionIconContainerDanger]}>
+                <Ionicons name="trash" size={18} color="#F44336" />
+              </View>
+              <Text style={styles.profileActionRemoveText}>Remove Account</Text>
+              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
             </TouchableOpacity>
           </View>
         )}
 
-        {hasNewProfile && activeProfile === "new" && (
-          <View style={styles.profileActionsRow}>
+        {/* Edit / remove actions for saved profiles */}
+        {activeProfile.startsWith("saved_") && (
+          <View style={styles.profileActionsCard}>
             <TouchableOpacity
               style={styles.profileActionButton}
-              onPress={() => setShowAddForm(true)}
+              onPress={() => {
+                const profileId = activeProfile.replace("saved_", "");
+                const profile = savedProfiles.find((p) => p.id === profileId);
+                if (profile) {
+                  // Pre-fill form with existing data
+                  setNewName(profile.name);
+                  setNewEmail(profile.email);
+                  setNewMobile(profile.mobile);
+                  setNewUsername(profile.username);
+                  setNewPhotoUri(profile.photoUri);
+                  setShowAddForm(true);
+                  // Update profile on save
+                  Alert.alert("Edit Mode", "Update the details and save to update the profile.");
+                }
+              }}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name="create-outline"
-                size={16}
-                color="#1d324e"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.profileActionText}>Edit account</Text>
+              <View style={styles.profileActionIconContainer}>
+                <Ionicons name="create" size={18} color="#E97A1F" />
+              </View>
+              <Text style={styles.profileActionText}>Edit Account</Text>
+              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
             </TouchableOpacity>
+
+            <View style={styles.profileActionDivider} />
 
             <TouchableOpacity
               style={styles.profileActionButton}
               onPress={handleRemoveNewProfile}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name="trash-outline"
-                size={16}
-                color="#B00020"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.profileActionRemoveText}>Remove account</Text>
+              <View style={[styles.profileActionIconContainer, styles.profileActionIconContainerDanger]}>
+                <Ionicons name="trash" size={18} color="#F44336" />
+              </View>
+              <Text style={styles.profileActionRemoveText}>Remove Account</Text>
+              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
             </TouchableOpacity>
           </View>
         )}
@@ -692,12 +1078,12 @@ export default function AccountScreen() {
         {/* Menu items */}
         <View style={styles.menuSection}>
           <MenuItem label="My Orders" onPress={handleMyOrdersPress} />
-          <MenuItem label="Your Rewards" />
-          <MenuItem label="Payment Methods" />
-          <MenuItem label="My Activity" />
-          <MenuItem label="Other" />
+          <MenuItem label="Your Rewards" onPress={handleRewardsPress} />
+          <MenuItem label="Payment Methods" onPress={handlePaymentMethodsPress} />
+          <MenuItem label="My Activity" onPress={handleMyActivityPress} />
+          <MenuItem label="Other" onPress={handleOtherPress} />
           <MenuItem label="Help Center" onPress={handleHelpPress} />
-          <MenuItem label="Settings" onPress={handleLanguagePress} />
+          <MenuItem label="Settings" onPress={handleSettingsPress} />
         </View>
 
         {/* Logout */}
@@ -1198,97 +1584,253 @@ const styles = StyleSheet.create({
   },
   profileCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 20,
+    borderRadius: 20,
     marginTop: 24,
     marginBottom: 20,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+  },
+  profileCardHeader: {
+    backgroundColor: "#F8F9FA",
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E5E5",
+  },
+  profileHeaderContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  avatarContainer: {
     position: "relative",
+    marginRight: 16,
+  },
+  avatarBorder: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "#FFFFFF",
+    padding: 3,
+    borderWidth: 3,
+    borderColor: "#E97A1F",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#E97A1F",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
     backgroundColor: "#DDDDDD",
-    alignSelf: "center",
-    marginBottom: 12,
   },
-  profileIconsContainer: {
+  avatarEditBadge: {
     position: "absolute",
-    right: 16,
-    top: 24,
-    alignItems: "center",
-  },
-  circleIcon: {
+    bottom: 0,
+    right: 0,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#F1F1F1",
+    backgroundColor: "#E97A1F",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 10,
+  },
+  profileInfoSection: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  profileIconsContainer: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  circleIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+    position: "relative",
   },
   badge: {
     position: "absolute",
-    top: -4,
-    right: -4,
-    minWidth: 14,
-    paddingHorizontal: 3,
-    height: 14,
-    borderRadius: 7,
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    paddingHorizontal: 4,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: "#E53935",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
   badgeText: {
     color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
   },
   profileLabel: {
-    textAlign: "center",
-    fontSize: 14,
-    color: "#777777",
+    fontSize: 13,
+    color: "#999999",
+    marginBottom: 4,
+    fontWeight: "500",
   },
   profileEmail: {
-    textAlign: "center",
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 4,
-  },
-  shoppingFor: {
-    textAlign: "left",
-    fontSize: 13,
-    color: "#555555",
-    marginTop: 14,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#000000",
     marginBottom: 8,
-    paddingHorizontal: 4,
+  },
+  activeProfileBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E97A1F20",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  activeProfileDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#E97A1F",
+    marginRight: 6,
+  },
+  activeProfileText: {
+    fontSize: 12,
+    color: "#E97A1F",
+    fontWeight: "600",
+  },
+  shoppersSection: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  shoppersSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#000000",
+    marginBottom: 16,
+    letterSpacing: 0.3,
   },
   shopperRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
+    flexWrap: "wrap",
+    gap: 12,
   },
   shopperItem: {
     alignItems: "center",
-    marginRight: 18,
+    position: "relative",
+  },
+  shopperItemActive: {
+    transform: [{ scale: 1.05 }],
   },
   shopperCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#EEEEEE",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#F5F5F5",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 6,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: "#E5E5E5",
+    position: "relative",
+  },
+  shopperCircleActive: {
+    backgroundColor: "#E97A1F",
+    borderColor: "#E97A1F",
+    shadowColor: "#E97A1F",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  shopperCircleImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  shopperCircleAdd: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: "#E97A1F",
+    borderStyle: "dashed",
   },
   shopperInitial: {
-    fontWeight: "600",
-    fontSize: 16,
+    fontWeight: "700",
+    fontSize: 20,
+    color: "#666666",
+  },
+  shopperInitialActive: {
+    color: "#FFFFFF",
+  },
+  shopperCheckmark: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#4CAF50",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
   shopperName: {
     fontSize: 12,
+    color: "#666666",
+    fontWeight: "500",
+  },
+  shopperNameActive: {
+    color: "#E97A1F",
+    fontWeight: "700",
+  },
+  shopperItemAdd: {
+    alignItems: "center",
+  },
+  shopperNameAdd: {
+    fontSize: 12,
+    color: "#E97A1F",
+    fontWeight: "600",
   },
   menuSection: {
     backgroundColor: "#FFFFFF",
@@ -1385,6 +1927,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#555555",
   },
+  profileActionsCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    marginTop: 12,
+    marginBottom: 20,
+    paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+  },
   profileActionsRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -1396,17 +1952,37 @@ const styles = StyleSheet.create({
   profileActionButton: {
     flexDirection: "row",
     alignItems: "center",
-    marginLeft: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  profileActionIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#E97A1F20",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  profileActionIconContainerDanger: {
+    backgroundColor: "#F4433620",
   },
   profileActionText: {
-    fontSize: 12,
-    color: "#1d324e",
-    fontWeight: "500",
+    flex: 1,
+    fontSize: 15,
+    color: "#000000",
+    fontWeight: "600",
   },
   profileActionRemoveText: {
-    fontSize: 12,
-    color: "#B00020",
-    fontWeight: "500",
+    flex: 1,
+    fontSize: 15,
+    color: "#F44336",
+    fontWeight: "600",
+  },
+  profileActionDivider: {
+    height: 1,
+    backgroundColor: "#F0F0F0",
+    marginHorizontal: 16,
   },
   menuItem: {
     flexDirection: "row",
