@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -147,6 +148,11 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "w3",
           name: "Lehengas",
+          image: require("../assets/images/womencate.png"),
+        },
+        {
+          id: "w13",
+          name: "Gowns",
           image: require("../assets/images/womencate.png"),
         },
       ],
@@ -393,64 +399,112 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
 export default function Categories() {
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState<CategoryKey>("trending");
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSideBarOpen, setIsSideBarOpen] = useState(true);
 
   const sections = CATEGORY_CONTENT[activeCategory] || [];
 
+  // All sections from every main category, used for global search
+  const allSections = React.useMemo(
+    () => Object.values(CATEGORY_CONTENT).flat(),
+    []
+  );
+
+  const filteredSections = React.useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    // When there is no search text, show only the active category's sections
+    if (!query) return sections;
+
+    // When searching, look across all categories so items like "Sarees"
+    // are found even if you're currently on another main category tab.
+    return allSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) =>
+          item.name.toLowerCase().includes(query)
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [sections, allSections, searchQuery]);
+
   return (
     <View style={styles.container}>
-      {/* HEADER */}
+      {/* HEADER + INLINE SEARCH */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={22} color="#000" />
+          <Ionicons name="arrow-back" size={22} color="#1d324e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Categories</Text>
+
+        {isSearchVisible ? (
+          <View style={styles.headerSearchWrapper}>
+            
+            <TextInput
+              placeholder="Search subcategories"
+              placeholderTextColor="#69798c"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.searchInputHeader}
+              autoFocus
+            />
+          </View>
+        ) : (
+          <Text style={styles.headerTitle}>Categories</Text>
+        )}
+
         <View style={styles.headerIcons}>
+          <TouchableOpacity
+            onPress={() => setIsSearchVisible((prev) => !prev)}
+            style={styles.headerIcon}
+          >
+            <Ionicons name="search-outline" size={20} color="#ef7b1a" />
+          </TouchableOpacity>
           <Ionicons
-            name="search-outline"
+            name="heart"
             size={20}
-            color="#000"
+            color="red"
             style={styles.headerIcon}
           />
-          <Ionicons
-            name="heart-outline"
-            size={20}
-            color="#000"
-            style={styles.headerIcon}
-          />
-          <Ionicons name="cart-outline" size={20} color="#000" />
+          <Ionicons name="cart-outline" size={20} color="#1d324e" />
         </View>
       </View>
 
       {/* MAIN CONTENT */}
       <View style={styles.contentRow}>
         {/* LEFT SIDE CATEGORY LIST */}
-        <ScrollView
-          style={styles.sideBar}
-          contentContainerStyle={styles.sideBarContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {SIDE_CATEGORIES.map((cat) => {
-            const isActive = cat.key === activeCategory;
-            return (
-              <TouchableOpacity
-                key={cat.key}
-                onPress={() => setActiveCategory(cat.key)}
-                style={[styles.sideItem, isActive && styles.sideItemActive]}
-              >
-                <Image
-                  source={cat.image}
-                  style={[styles.sideImage, isActive && styles.sideImageActive]}
-                  resizeMode="cover"
-                />
-                <Text
-                  style={[styles.sideLabel, isActive && styles.sideLabelActive]}
+        {isSideBarOpen && (
+          <ScrollView
+            style={styles.sideBar}
+            contentContainerStyle={styles.sideBarContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {SIDE_CATEGORIES.map((cat) => {
+              const isActive = cat.key === activeCategory;
+              return (
+                <TouchableOpacity
+                  key={cat.key}
+                  onPress={() => {
+                    setActiveCategory(cat.key);
+                    setIsSideBarOpen(false);
+                  }}
+                  style={[styles.sideItem, isActive && styles.sideItemActive]}
                 >
-                  {cat.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                  <Image
+                    source={cat.image}
+                    style={[styles.sideImage, isActive && styles.sideImageActive]}
+                    resizeMode="cover"
+                  />
+                  <Text
+                    style={[styles.sideLabel, isActive && styles.sideLabelActive]}
+                  >
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
 
         {/* RIGHT SIDE SECTIONS & SUBCATEGORIES */}
         <ScrollView
@@ -458,7 +512,7 @@ export default function Categories() {
           contentContainerStyle={{ paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}
         >
-          {sections.map((section) => (
+          {filteredSections.map((section) => (
             <View key={section.title} style={styles.sectionBlock}>
               <Text style={styles.sectionTitle}>{section.title}</Text>
               <View style={styles.itemsGrid}>
@@ -485,6 +539,18 @@ export default function Categories() {
             </View>
           ))}
         </ScrollView>
+
+        {/* RIGHT-SIDE HAMBURGER TOGGLE (only when sidebar is closed) */}
+        {!isSideBarOpen && (
+          <View style={styles.sideToggleColumn}>
+            <TouchableOpacity
+              style={styles.sideToggleButton}
+              onPress={() => setIsSideBarOpen(true)}
+            >
+              <Ionicons name="menu-outline" size={20} color="#1d324e" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -493,7 +559,7 @@ export default function Categories() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFF7F0",
   },
   header: {
     flexDirection: "row",
@@ -502,8 +568,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#E0E0E0",
-    backgroundColor: "#FFFFFF",
+    borderBottomColor: "#f6c795",
+    backgroundColor: "#f6c795",
   },
   backButton: {
     paddingRight: 8,
@@ -515,6 +581,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "left",
     marginLeft: 4,
+    color: "#1d324e",
   },
   headerIcons: {
     flexDirection: "row",
@@ -527,48 +594,87 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
   },
-  
+  headerSearchWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: "#FFEBD3",
+  },
+  searchIcon: {
+    marginRight: 6,
+  },
+  searchInputHeader: {
+    flex: 1,
+    fontSize: 14,
+    color: "#1d324e",
+    paddingVertical: 2,
+  },
   sideBar: {
-    flex: 0.08,
-    backgroundColor: "#F6F6F9",
+    flexShrink: 0,
+    width: 0.1,
+    backgroundColor: "#FFF0E0",
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: "#E0E0E0",
+    borderRightColor: "#f6c795",
   },
   sideBarContent: {
     paddingVertical: 16,
+    
   },
   sideItem: {
     alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 2,
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 0,
   },
   sideItemActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#79411c",
   },
   sideImage: {
-    width: 30,
-    height: 30,
-    borderRadius: 5,
+    width: 100,
+    height: 100,
+    borderRadius: 8,
     marginBottom: 3,
     backgroundColor: "#D8D8E2",
   },
   sideImageActive: {
-    borderWidth: 1.5,
-    borderColor: "#000000",
+    borderWidth: 2,
+    borderColor: "#ef7b1a",
+
   },
   sideLabel: {
     fontSize: 11,
-    color: "#555555",
+    color: "#1d324e",
     textAlign: "center",
   },
   sideLabelActive: {
-    color: "#000000",
+    color: "#fff",
     fontWeight: "600",
   },
   sectionContainer: {
     flex: 1,
     paddingHorizontal: 12,
     paddingTop: 16,
+  },
+  sideToggleColumn: {
+    width: 40,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 20,
+    paddingRight: 8,
+  },
+  sideToggleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F6F6F9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E0E0E0",
   },
   sectionBlock: {
     marginBottom: 24,
@@ -578,23 +684,25 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 10,
     textTransform: "capitalize",
+    color: "#1d324e",
   },
   itemsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
+    marginTop: 18,
+    paddingLeft: 36,
   },
   itemCard: {
-    width: "28%",
-    marginRight: "4%",
-    marginBottom: 24,
+    width: "48%",
+    marginBottom: 18,
   },
   itemImageWrapper: {
     width: "100%",
     aspectRatio: 1,
-    borderRadius: 6,
+    borderRadius: 50,
     overflow: "hidden",
-    backgroundColor: "#E5E5F0",
+    backgroundColor: "#F6F6F9",
   },
   itemImage: {
     width: "100%",
@@ -603,7 +711,8 @@ const styles = StyleSheet.create({
   itemLabel: {
     fontSize: 11,
     marginTop: 4,
-    color: "#333333",
+    color: "#1d324e",
+    textAlign: "center",
   },
   
 });
