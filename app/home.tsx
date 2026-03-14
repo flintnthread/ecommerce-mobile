@@ -1,4 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState ,useRef} from "react";
+import * as ImagePicker from "expo-image-picker";
+import * as SpeechRecognition from "expo-speech-recognition";
+import { VideoView, useVideoPlayer } from 'expo-video';
+
+
 import {
   View,
   Text,
@@ -9,6 +14,7 @@ import {
   Image,
   Dimensions,
   Modal,
+  Alert
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -21,7 +27,10 @@ interface FilterItemProps {
   onPress: () => void;
 }
 
+
+
 export default function Home() {
+
   const router = useRouter();   
   const placeholderTexts = [
     "Search Shoes",
@@ -29,9 +38,11 @@ export default function Home() {
     "Search Fashion",
     "Search Sportswear",
   ];
+  
 
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [bannerIndex, setBannerIndex] = useState(0);
+  const [bannerIndex2, setBannerIndex2] = useState(0);
 
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -44,6 +55,15 @@ export default function Home() {
   const [selectedFilterSection, setSelectedFilterSection] = useState("Category");
   const [searchCategoryText, setSearchCategoryText] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
+  
+const player = useVideoPlayer(
+    require('../assets/images/videobanner.mp4'),
+    (player) => {
+      player.loop = true;
+      player.muted = true;
+      player.play();
+    }
+  );
 
   const banners = [
     require("../assets/images/banner1.png"),
@@ -52,6 +72,14 @@ export default function Home() {
     require("../assets/images/banner1.png"),
     require("../assets/images/banner5.png"),
   ];
+const banners2 = [
+  require("../assets/images/banner6.png"),
+  require("../assets/images/banner7.png"),
+  require("../assets/images/banner8.png"),
+   require("../assets/images/banner9.png"),
+];
+
+
 
   const serviceItems = [
     {
@@ -111,6 +139,32 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, [banners.length]);
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    setBannerIndex2((prev) => (prev + 1) % banners2.length);
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, []);
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    setMegaBannerIndex((prev) =>
+      prev === megaBanners.length - 1 ? 0 : prev + 1
+    );
+  }, 3000);
+
+
+  
+// scroling brand
+
+
+
+  return () => clearInterval(interval);
+}, []);
+
+
 
   const categories = [
     { name: "Kids Wear", image: require("../assets/images/kidscate.png") },
@@ -305,6 +359,209 @@ export default function Home() {
     },
   ];
 
+  // mega discounts
+  const megaProducts = [
+  {
+    id: '1',
+    name: 'women wear',
+    subtitle: 'Up to 60% Off',
+    image: require('../assets/images/megadis1.png'),
+  },
+  {
+    id: '2',
+    name: 'new brand',
+    subtitle: 'Best Deals',
+    image: require('../assets/images/megadis2.png'),
+  },
+  {
+    id: '3',
+    name: 'performance',
+    subtitle: 'Flat 50% Off',
+    image: require('../assets/images/megadis3.png'),
+  },
+  {
+    id: '4',
+    name: 'Stylish ',
+    subtitle: 'Trending Deals',
+    image: require('../assets/images/megadis4.png'),
+  },
+];
+// megabanners
+const megaBanners = [
+  { id: '1', image: require('../assets/images/mega1.png') },
+  { id: '2', image: require('../assets/images/mega2.png') },
+  { id: '3', image: require('../assets/images/mega3.png') },
+];
+
+
+
+
+// focus in
+const focusBanners = [
+  {
+    id: '1',
+    image: require('../assets/images/focus1.png'),
+  },
+  {
+    id: '2',
+    image: require('../assets/images/focus2.png'),
+  },
+];
+  const openCamera = async () => {
+  const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+  if (status !== "granted") {
+    Alert.alert("Permission required", "Camera permission is needed.");
+    return;
+  }
+
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.8,
+  });
+
+  if (!result.canceled) {
+    console.log("Captured image:", result.assets[0].uri);
+  }
+};
+
+const startVoiceSearch = () => {
+  Alert.alert("Mic clicked", "Voice search setup is pending.");
+};
+    // suggested
+    const suggestedProducts = [
+  {
+    id: '1',
+    name: 'Fresh Apple',
+    image: require('../assets/images/suggest1.png'),
+    oldPrice: '₹120',
+    price: '₹99',
+    rating: '4.5',
+  },
+  {
+    id: '2',
+    name: 'Banana',
+    image: require('../assets/images/suggest2.png'),
+    oldPrice: '₹80',
+    price: '₹60',
+    rating: '4.2',
+  },
+  {
+    id: '3',
+    name: 'Mango',
+    image: require('../assets/images/suggest3.png'),
+    oldPrice: '₹150',
+    price: '₹130',
+    rating: '4.8',
+  },
+  {
+    id: '4',
+    name: 'Orange',
+    image: require('../assets/images/suggest4.png'),
+    oldPrice: '₹100',
+    price: '₹85',
+    rating: '4.3',
+  },
+];
+
+
+
+const premiumProducts = [
+  {
+    id: '1',
+    name: 'Induction Cooktops',
+    subtitle: "Don't Miss",
+    image: require('../assets/images/premium1.png'),
+  },
+  {
+    id: '2',
+    name: 'new ',
+    subtitle: 'New Collection',
+    image: require('../assets/images/premium2.png'),
+  },
+  {
+    id: '3',
+    name: 'Shirt',
+    subtitle: 'Trending Now',
+    image: require('../assets/images/premium3.png'),
+  },
+  {
+    id: '4',
+    name: 'mens wear',
+    subtitle: 'Best Seller',
+    image: require('../assets/images/premium4.png'),
+  },
+];
+// latest products
+
+
+const latestProducts = [
+  {
+    id: "1",
+    name: "Golden Bangles Set",
+    image: require("../assets/images/latest1.png"),
+    rating: "0.0 (0)",
+    price: "₹1,446",
+  },
+  {
+    id: "2",
+    name: "Traditional Meenakari P...",
+    image: require("../assets/images/latest2.png"),
+    rating: "0.0 (0)",
+    price: "₹2,394",
+    oldPrice: "₹3,999",
+    discount: "50%",
+  },
+  {
+    id: "3",
+    name: "Bridal Bangles Set",
+    image: require("../assets/images/latest3.png"),
+    rating: "0.0 (0)",
+    price: "₹1,899",
+  },
+  {
+    id: "4",
+    name: "Red Designer Bangles",
+    image: require("../assets/images/latest4.png"),
+    rating: "0.0 (0)",
+    price: "₹1,599",
+  },
+];
+
+// scrolling brand
+const brands = [
+  {
+    id: "1",
+    name: "men",
+    image: require("../assets/images/visky.png"),
+  },
+  {
+    id: "2",
+    name: "accessaries",
+    image: require("../assets/images/shanthoshi.png"),
+  },
+  {
+    id: "3",
+    name: "shoes",
+    image: require("../assets/images/aman.png"),
+  },
+  {
+    id: "4",
+    name: "bangles",
+    image: require("../assets/images/satyasai.png"),
+  },
+  {
+    id: "5",
+    name: "saree",
+    image: require("../assets/images/sasia.png"),
+  },
+];
+
+
+// megabanners
+const [megaBannerIndex, setMegaBannerIndex] = useState(0);
   return (
     <View style={styles.container}>
       <ScrollView
@@ -364,13 +621,17 @@ export default function Home() {
                 placeholderTextColor="#777"
                 style={styles.searchInput}
               />
-              <Ionicons
-                name="camera-outline"
-                size={20}
-                color="#777"
-                style={{ marginRight: 10 }}
-              />
-              <Ionicons name="mic-outline" size={18} color="#777" />
+<TouchableOpacity onPress={openCamera}>
+  <Ionicons
+    name="camera-outline"
+    size={20}
+    color="#777"
+    style={{ marginRight: 10 }}
+  />
+  </TouchableOpacity>
+<TouchableOpacity onPress={startVoiceSearch}>
+  <Ionicons name="mic-outline" size={18} color="#777" />
+</TouchableOpacity>
             </View>
           </View>
         </View>
@@ -467,10 +728,14 @@ export default function Home() {
         {/* YOU MAY ALSO LIKE PRODUCT GRID */}
         <View style={styles.productSectionHeader}>
           <Text style={styles.productSectionTitle}>You May Also Like...</Text>
+          
           <TouchableOpacity style={styles.productArrowButton}>
             <Ionicons name="arrow-forward" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
+
+
+        {/* suggested for you */}
 
         <View style={styles.productGridWrapper}>
           {productGrid.map((item) => (
@@ -483,7 +748,7 @@ export default function Home() {
                 />
                 {item.rating ? (
                   <View style={styles.ratingBadge}>
-                    <Text style={styles.ratingText}>{item.rating}</Text>
+                    <Text style={styles.ratingText}></Text>
                   </View>
                 ) : null}
               </View>
@@ -496,12 +761,238 @@ export default function Home() {
                 <Text style={styles.oldPrice}>{item.oldPrice}</Text>
                 <Text style={styles.newPrice}> {item.price}</Text>
               </View>
-
-              <Text style={styles.buyText}>Buy at {item.buyPrice}</Text>
+<View style={styles.addCartContainer}>
+  <TouchableOpacity style={styles.addCartButton}>
+    <Text style={styles.addCartText}>Add to Cart</Text>
+  </TouchableOpacity>
+</View>
             </TouchableOpacity>
           ))}
         </View>
+{/* second banner section  */}
+
+<View style={{ marginTop: 4 }}>
+  <View style={styles.banner}>
+    <Image
+      source={banners2[bannerIndex2]}
+      style={styles.bannerImage}
+      resizeMode="cover"
+    />
+  </View>
+
+  <View style={styles.bannerDotsRow}>
+    {banners2.map((_, index) => (
+      <View
+        key={index}
+        style={[
+          styles.bannerDot,
+          bannerIndex2 === index && styles.bannerDotActive,
+        ]}
+      />
+    ))}
+  </View>
+</View>
+
+{/* suggested list */}
+
+<View style={styles.productSectionHeader}>
+  <Text style={styles.productSectionTitle}>Suggested For You</Text>
+  <TouchableOpacity style={styles.productArrowButton}>
+    <Ionicons name="arrow-forward" size={22} color="#fff" />
+  </TouchableOpacity>
+</View>
+
+<View style={styles.productGridWrapper}>
+  {suggestedProducts.map((item) => (
+    <TouchableOpacity key={item.id} style={styles.productCard}>
+      <View style={styles.productImageWrap}>
+        <Image
+          source={item.image}
+          style={styles.productCardImage}
+          resizeMode="cover"
+        />
+        {item.rating ? (
+          <View style={styles.ratingBadge}>
+            <Text style={styles.ratingText}>{}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Text style={styles.productName} numberOfLines={1}>
+        {item.name}
+      </Text>
+
+      <View style={styles.priceRow}>
+        <Text style={styles.oldPrice}>{item.oldPrice}</Text>
+        <Text style={styles.newPrice}> {item.price}</Text>
+      </View>
+
+      <View style={styles.addCartContainer}>
+        <TouchableOpacity style={styles.addCartButton}>
+          <Text style={styles.addCartText}>Add to Cart</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  ))}
+</View>
+
+{/* Video Banner Section */}
+  <View style={styles.videoBannerContainer}>
+  <VideoView
+    player={player}
+    style={{ width: '100%', height: '100%' }}
+    contentFit="contain"
+    nativeControls={false}
+  />
+</View>
+
+
+{/* Premium Finds Section */}
+<View style={styles.premiumSection}>
+  <View style={styles.premiumHeader}>
+    <Text style={styles.premiumTitle}>Premium finds for you</Text>
+
+    <TouchableOpacity style={styles.premiumArrowButton}>
+      <Ionicons name="arrow-forward" size={22} color="#000" />
+    </TouchableOpacity>
+  </View>
+
+  <View style={styles.premiumGrid}>
+    {premiumProducts.map((item) => (
+      <TouchableOpacity key={item.id} style={styles.premiumCard}>
+        <View style={styles.premiumImageWrap}>
+          <Image
+            source={item.image}
+            style={styles.premiumImage}
+            resizeMode="contain"
+          />
+        </View>
+
+        <Text style={styles.premiumName} numberOfLines={1}>
+          {item.name}
+        </Text>
+
+        <Text style={styles.premiumSubtitle} numberOfLines={1}>
+          {item.subtitle}
+        </Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+</View>
+
+
+{/* focus */}
+{/* IN FOCUS Section */}
+<View style={styles.focusSection}>
+  <Text style={styles.focusTitle}>IN FOCUS</Text>
+  <View style={styles.focusUnderline} />
+
+  {focusBanners.map((item) => (
+    <TouchableOpacity key={item.id} style={styles.focusCard} activeOpacity={0.9}>
+      <Image source={item.image} style={styles.focusImage} resizeMode="cover" />
+    </TouchableOpacity>
+  ))}
+</View>
+
+
+
+
+{/* premium list */}
+{/* Mega Discounts Section */}
+<View style={styles.megaSection}>
+  <View style={styles.megaHeader}>
+    <Text style={styles.megaTitle}>Mega Discounts</Text>
+
+    <TouchableOpacity style={styles.megaArrowButton}>
+      <Ionicons name="arrow-forward" size={22} color="#000" />
+    </TouchableOpacity>
+  </View>
+
+  <View style={styles.megaGrid}>
+    {megaProducts.map((item) => (
+      <TouchableOpacity key={item.id} style={styles.megaCard}>
+        <View style={styles.megaImageWrap}>
+          <Image
+            source={item.image}
+            style={styles.megaImage}
+            resizeMode="contain"
+          />
+        </View>
+
+        <Text style={styles.megaName}>{item.name}</Text>
+
+        <Text style={styles.megaSubtitle}>{item.subtitle}</Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+</View>
+
+{/* Latest Products Section */}
+<View style={styles.latestSection}>
+  <View style={styles.latestTopLine} />
+
+  <View style={styles.latestHeaderWrap}>
+    <View style={styles.latestHeaderBox}>
+      <Text style={styles.latestHeaderTitle}>Latest Products</Text>
+      <View style={styles.latestHeaderUnderline} />
+    </View>
+  </View>
+
+  <Text style={styles.latestHeaderSubtitle}>
+    Check out our newest arrivals
+  </Text>
+
+  <View style={styles.latestGrid}>
+    {latestProducts.map((item) => (
+      <TouchableOpacity key={item.id} style={styles.latestCard}>
+        <View style={styles.latestImageWrap}>
+          <Image
+            source={item.image}
+            style={styles.latestImage}
+            resizeMode="cover"
+          />
+
+          {item.discount ? (
+            <View style={styles.latestDiscountBadge}>
+              <Text style={styles.latestDiscountText}>{item.discount}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <Text style={styles.latestProductTitle} numberOfLines={1}>
+          {item.name}
+        </Text>
+
+        <View style={styles.latestRatingRow}>
+          <Text style={styles.latestStars}>★★★★★</Text>
+          <Text style={styles.latestRatingValue}>{item.rating}</Text>
+        </View>
+
+        <View style={styles.latestPriceRow}>
+          {item.oldPrice ? (
+            <Text style={styles.latestOldPrice}>{item.oldPrice}</Text>
+          ) : null}
+          <Text style={styles.latestNewPrice}>{item.price}</Text>
+        </View>
+
+        <TouchableOpacity style={styles.latestCartButton}>
+          <Text style={styles.latestCartButtonText}>🛒 Add To Cart</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    ))}
+  </View>
+</View>
+{/* OUR BRANDS SECTION */}
+
+
       </ScrollView>
+
+
+
+
+
+
+
 
       {/* SORT MODAL */}
       <Modal
@@ -784,6 +1275,13 @@ export default function Home() {
         </View>
       </Modal>
 
+
+
+
+
+
+      
+
       {/* BOTTOM TAB */}
       <View style={styles.bottomTab}>
         <TabItem icon="home-outline" label="Home" onPress={() => {}} />
@@ -797,6 +1295,15 @@ export default function Home() {
         <TabItem icon="cart-outline" label="Cart" onPress={() => router.push("/cart")} />
       </View>
     </View>
+
+
+
+
+
+
+
+
+
   );
 }
 
@@ -819,6 +1326,11 @@ const TabItem = ({ icon, label, onPress }: TabItemProps) => (
     <Text style={styles.tabLabel}>{label}</Text>
   </TouchableOpacity>
 );
+
+
+
+
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
@@ -897,16 +1409,16 @@ const styles = StyleSheet.create({
   filterItem: { alignItems: "center" },
   filterText: { fontSize: 12, marginTop: 4 },
 
-  banner: {
-    height: 150,
-    backgroundColor: "#fff",
-    marginHorizontal: 10,
-    borderRadius: 15,
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-    marginTop: 8,
-  },
+ banner: {
+  width: '100%',
+  height: 170,
+  backgroundColor: '#fff',
+  borderRadius: 15,
+  justifyContent: 'center',
+  alignItems: 'center',
+  overflow: 'hidden',
+  marginTop: 15,
+},
 
   bannerImage: {
     width: "100%",
@@ -957,7 +1469,7 @@ const styles = StyleSheet.create({
   },
 
   lookingItemCard: {
-    width: 150,
+    width: 250,
     backgroundColor: "#F1F1F1",
     borderRadius: 22,
     padding: 10,
@@ -966,11 +1478,11 @@ const styles = StyleSheet.create({
   },
 
   lookingItemImage: {
-    width: 118,
-    height: 160,
+    width: 140,
+    height: 180,
     borderRadius: 14,
     marginBottom: 12,
-    backgroundColor: "#DDD",
+    backgroundColor: "#e6e7e9",
   },
 
   lookingItemText: {
@@ -1410,7 +1922,7 @@ const styles = StyleSheet.create({
 
   productImageWrap: {
     width: "100%",
-    height: 190,
+    height: 150,
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#E5E5E5",
@@ -1469,4 +1981,420 @@ const styles = StyleSheet.create({
     color: "#1E4AA8",
     fontWeight: "700",
   },
+addCartContainer: {
+  marginTop: 6,
+},
+
+addCartButton: {
+  backgroundColor: "#FF7A00",
+  paddingVertical: 6,
+  borderRadius: 6,
+  alignItems: "center",
+},
+
+addCartText: {
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: "600",
+},
+
+videoBannerContainer: {
+  width: '100%',
+  height: 210,
+  marginVertical: 5,
+  aspectRatio: 16 / 9,
+  borderRadius: 12,
+  overflow: 'hidden',
+  marginBottom: 40,
+  marginTop: -40,
+},
+
+videoBanner: {
+  width: '100%',
+  height: '100%',
+},
+// premimum
+premiumSection: {
+  marginHorizontal: 10,
+  marginTop: -30,
+  backgroundColor: '#ef7b1a',
+  borderRadius: 26,
+  paddingTop: 18,
+  paddingBottom: 18,
+  paddingHorizontal: 14,
+},
+
+premiumHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+
+premiumTitle: {
+  color: '#fff',
+  fontSize: 18,
+  fontWeight: '800',
+},
+
+premiumArrowButton: {
+  width: 42,
+  height: 42,
+  borderRadius: 21,
+  backgroundColor: '#fff',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+premiumGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  justifyContent: 'space-between',
+},
+
+premiumCard: {
+  width: '48.5%',
+  backgroundColor: '#fff',
+  borderRadius: 18,
+  padding: 10,
+  marginBottom: 12,
+},
+
+premiumImageWrap: {
+  width: '100%',
+  height: 150,
+  borderRadius: 14,
+  backgroundColor: '#f3f3f3',
+  justifyContent: 'center',
+  alignItems: 'center',
+  overflow: 'hidden',
+  marginBottom: 10,
+},
+
+premiumImage: {
+  width: '100%',
+  height: '100%',
+},
+
+premiumName: {
+  fontSize: 14,
+  color: '#222',
+  marginBottom: 4,
+},
+
+premiumSubtitle: {
+  fontSize: 15,
+  fontWeight: '800',
+  color: '#000',
+},
+// megacolors
+megaSection: {
+  marginHorizontal: 10,
+  marginTop: 45,
+  backgroundColor: '#1d324e',
+  borderRadius: 26,
+  paddingTop: 18,
+  paddingBottom: 18,
+  paddingHorizontal: 14,
+},
+
+megaHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+
+megaTitle: {
+  color: '#fff',
+  fontSize: 18,
+  fontWeight: '800',
+},
+
+megaArrowButton: {
+  width: 42,
+  height: 42,
+  borderRadius: 21,
+  backgroundColor: '#fff',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+megaGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  justifyContent: 'space-between',
+},
+
+megaCard: {
+  width: '48%',
+  backgroundColor: '#fff',
+  borderRadius: 18,
+  padding: 10,
+  marginBottom: 12,
+},
+
+megaImageWrap: {
+  width: '100%',
+  height: 150,
+  borderRadius: 14,
+  backgroundColor: '#f3f3f3',
+  justifyContent: 'center',
+  alignItems: 'center',
+  overflow: 'hidden',
+  marginBottom: 10,
+},
+
+megaImage: {
+  width: '100%',
+  height: '100%',
+},
+
+megaName: {
+  fontSize: 14,
+  color: '#333',
+},
+
+megaSubtitle: {
+  fontSize: 15,
+  fontWeight: '800',
+  color: '#000',
+},
+// focus
+focusSection: {
+  marginTop: 20,
+  paddingHorizontal: 14,
+},
+
+focusTitle: {
+  fontSize: 22,
+  fontWeight: '800',
+  color: '#243b5a',
+  textAlign: 'center',
+  letterSpacing: 1,
+  marginBottom: 12,
+},
+
+focusUnderline: {
+  height: 3,
+  backgroundColor: '#d98324',
+  borderRadius: 2,
+  marginBottom: 22,
+},
+
+focusCard: {
+  width: '100%',
+  height: 210,
+  borderRadius: 18,
+  overflow: 'hidden',
+  backgroundColor: '#f3f3f3',
+  marginBottom: 20,
+},
+
+focusImage: {
+  width: '100%',
+  height: '100%',
+},
+
+nextSectionTitleWrap: {
+  marginTop: 8,
+  marginBottom: 12,
+  alignItems: 'center',
+},
+
+nextSectionTitle: {
+  fontSize: 22,
+  fontWeight: '800',
+  color: '#243b5a',
+  letterSpacing: 1,
+},
+
+megaBannerSection: {
+  paddingHorizontal: 14,
+  marginBottom: 30,
+},
+
+megaBannerCard: {
+  width: '100%',
+  height: 300,
+  borderRadius: 18,
+  overflow: 'hidden',
+  marginBottom: 18,
+  backgroundColor: '#f3f3f3',
+},
+
+megaBannerImage: {
+  width: '100%',
+  height: 300,
+},
+
+
+
+// latest products
+
+latestSection: {
+  marginTop: 14,
+  backgroundColor: "#f6f6f6",
+  paddingTop: 8,
+  paddingBottom: 10,
+},
+
+latestTopLine: {
+  height: 3,
+  backgroundColor: "#d8922f",
+  marginHorizontal: 12,
+  marginBottom: 14,
+},
+
+latestHeaderWrap: {
+  alignItems: "center",
+},
+
+latestHeaderBox: {
+  minWidth: 210,
+  backgroundColor: "#f7f3ed",
+  borderWidth: 1,
+  borderColor: "#eadbc8",
+  paddingVertical: 16,
+  paddingHorizontal: 26,
+  alignItems: "center",
+},
+
+latestHeaderTitle: {
+  fontSize: 20,
+  fontWeight: "800",
+  color: "#243b5a",
+},
+
+latestHeaderUnderline: {
+  width: 94,
+  height: 8,
+  borderRadius: 10,
+  backgroundColor: "#8b4e22",
+  marginTop: 10,
+},
+
+latestHeaderSubtitle: {
+  textAlign: "center",
+  fontSize: 17,
+  color: "#556f99",
+  marginTop: 10,
+  marginBottom: 22,
+},
+
+latestGrid: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  justifyContent: "space-between",
+  paddingHorizontal: 14,
+},
+
+latestCard: {
+  width: "48.3%",
+  backgroundColor: "#ffffff",
+  borderRadius: 16,
+  marginBottom: 18,
+  overflow: "hidden",
+  elevation: 3,
+  shadowColor: "#000",
+  shadowOpacity: 0.08,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 3 },
+},
+
+latestImageWrap: {
+  width: "100%",
+  height: 200,
+  backgroundColor: "#f2f2f2",
+  position: "relative",
+},
+
+latestImage: {
+  width: "100%",
+  height: "100%",
+},
+
+latestDiscountBadge: {
+  position: "absolute",
+  top: 14,
+  left: 14,
+  backgroundColor: "white",
+  width: 88,
+  height: 30,
+  borderRadius: 27,
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+latestDiscountText: {
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: "700",
+},
+
+latestProductTitle: {
+  fontSize: 14,
+  color: "#243b5a",
+  marginTop: 14,
+  marginHorizontal: 12,
+},
+
+latestRatingRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginTop: 10,
+  marginHorizontal: 12,
+},
+
+latestStars: {
+  color: "#8b8b8b",
+  fontSize: 16,
+  letterSpacing: 1,
+},
+
+latestRatingValue: {
+  marginLeft: 8,
+  color: "#6f7b8a",
+  fontSize: 13,
+},
+
+latestPriceRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginTop: 10,
+  marginHorizontal: 12,
+},
+
+latestOldPrice: {
+  color: "#7a8795",
+  fontSize: 16,
+  textDecorationLine: "line-through",
+  marginRight: 8,
+},
+
+latestNewPrice: {
+  color: "#f28a18",
+  fontSize: 18,
+  fontWeight: "800",
+},
+
+latestCartButton: {
+  backgroundColor: "#f28118",
+  marginHorizontal: 12,
+  marginTop: 16,
+  marginBottom: 18,
+  borderRadius: 12,
+  paddingVertical: 14,
+  alignItems: "center",
+},
+
+latestCartButtonText: {
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: "700",
+},
+ 
+
+
+
 });

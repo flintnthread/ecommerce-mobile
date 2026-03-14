@@ -13,9 +13,9 @@ export default function OTP() {
   const { phone } = useLocalSearchParams();
   const router = useRouter();
 
-  const [otp, setOtp] = useState(["", "", "", ""]);
+  const [otp, setOtp] = useState(["", "", "", "","",""]);
 
-  const inputs = useRef<(TextInput | null)[]>([]);
+  const inputs = useRef<Array<TextInput | null>>([]);
 
   const maskValue = (value: string | string[] | undefined) => {
     if (!value || typeof value !== "string") return "";
@@ -36,7 +36,7 @@ export default function OTP() {
     newOtp[index] = text;
     setOtp(newOtp);
 
-    if (text && index < 3) {
+    if (text && index < 5) {
       inputs.current[index + 1]?.focus();
     }
   };
@@ -44,7 +44,7 @@ export default function OTP() {
   const handleVerify = () => {
     const enteredOtp = otp.join("");
 
-    if (enteredOtp.length < 4) {
+    if (enteredOtp.length < 6) {
       Alert.alert("Error", "Please enter complete OTP");
       return;
     }
@@ -52,7 +52,7 @@ export default function OTP() {
     // ✅ Since backend not ready, accept any 4-digit OTP
     Alert.alert("Success", "Login Successful");
 
-    // ✅ Correct navigation path
+ 
     router.replace("/home");
   };
 
@@ -123,11 +123,11 @@ const styles = StyleSheet.create({
     marginVertical: 30,
   },
   otpBox: {
-    width: 55,
-    height: 55,
+    width: 40,
+    height: 40,
     backgroundColor: "#ddd",
     textAlign: "center",
-    fontSize: 20,
+    fontSize: 15,
     borderRadius: 8,
     marginHorizontal: 8,
   },
