@@ -1,4 +1,7 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+
+import api from "../services/api"; 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -10,12 +13,46 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 export default function OTP() {
-  const { phone } = useLocalSearchParams();
+  const params = useLocalSearchParams();
   const router = useRouter();
 
-  const [otp, setOtp] = useState(["", "", "", "","",""]);
+  const receivedOtp =
+  typeof params.otp === "string"
+    ? params.otp
+    : Array.isArray(params.otp)
+    ? params.otp[0]
+    : "";
 
-  const inputs = useRef<Array<TextInput | null>>([]);
+  const userInput =
+    typeof params.input === "string"
+      ? params.input
+      : Array.isArray(params.input)
+      ? params.input[0]
+      : "";
+
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+const inputs = useRef<(TextInput | null)[]>([]);
+  useEffect(() => {
+  inputs.current[0]?.focus();
+}, []);
+
+  useEffect(() => {
+  if (receivedOtp?.length === 6) {
+    const otpArray = receivedOtp.split("");
+setTimeout(() => {
+  setOtp(otpArray);
+}, 100);
+    // optional focus last box
+    inputs.current[5]?.focus();
+  }
+}, [receivedOtp]);
+
+const [isVerifying, setIsVerifying] = useState(false);
+useEffect(() => {
+  if (otp.join("").length === 6 && !isVerifying) {
+    handleVerify();
+  }
+}, [otp, isVerifying]);
 
   const maskValue = (value: string | string[] | undefined) => {
     if (!value || typeof value !== "string") return "";
@@ -41,20 +78,75 @@ export default function OTP() {
     }
   };
 
-  const handleVerify = () => {
-    const enteredOtp = otp.join("");
+  const handleVerify = async () => {
+  if (isVerifying) return; // جلوگیری multiple calls
 
-    if (enteredOtp.length < 6) {
-      Alert.alert("Error", "Please enter complete OTP");
-      return;
+  setIsVerifying(true);
+
+  const enteredOtp = otp.join("");
+
+  if (enteredOtp.length < 6) {
+    Alert.alert("Error", "Please enter complete OTP");
+    setIsVerifying(false);
+    return;
+  }
+
+  if (!userInput) {
+    Alert.alert("Error", "User data missing");
+    setIsVerifying(false);
+    return;
+  }
+
+  try {
+    const payload = userInput.includes("@")
+      ? { email: userInput, otp: enteredOtp }
+      : { mobile: userInput, otp: enteredOtp };
+
+    const response = await api.post("/auth/verify-otp", payload);
+    const data = response.data;
+
+    if (data.success) {
+      await AsyncStorage.setItem("token", data.token);
+
+      Alert.alert("Success", "Login Successful");
+      router.replace("/home");
+    } else {
+      Alert.alert("Error", data.message || "Invalid OTP");
     }
+  } catch (error) {
+    console.log("Verify OTP Error:", error?.response || error);
+    Alert.alert("Error", "OTP verification failed");
+  }
 
-    // ✅ Since backend not ready, accept any 4-digit OTP
-    Alert.alert("Success", "Login Successful");
+  setIsVerifying(false);
+};
 
- 
-    router.replace("/home");
-  };
+  const handleResend = async () => {
+  if (!userInput) {
+    Alert.alert("Error", "User data missing");
+    return;
+  }
+
+  try {
+    const payload = userInput.includes("@")
+      ? { email: userInput }
+      : { mobile: userInput };
+
+    const response = await api.post("/auth/send-otp", payload);
+
+    if (response.data.success) {
+      Alert.alert("Success", "OTP resent successfully");
+      setOtp(["", "", "", "", "", ""]);
+      inputs.current[0]?.focus();
+    } else {
+      Alert.alert("Error", "Failed to resend OTP");
+    }
+  } catch (error) {
+    console.log("Resend Error:", error);
+    Alert.alert("Error", "Resend failed");
+  }
+};
+
 
   return (
     <View style={styles.container}>
@@ -62,33 +154,45 @@ export default function OTP() {
 
       <Text style={styles.subtitle}>
         For your security, we have sent the code to{"\n"}
-        <Text style={styles.boldText}>{maskValue(phone)}</Text>
+        <Text style={styles.boldText}>{maskValue(userInput)}</Text>
       </Text>
 
       <View style={styles.otpContainer}>
         {otp.map((digit, index) => (
           <TextInput
-            key={index}
-            ref={(ref) => {
-              inputs.current[index] = ref;
-            }}
-            style={styles.otpBox}
-            keyboardType="number-pad"
-            maxLength={1}
-            value={digit}
-            onChangeText={(text) => handleChange(text, index)}
-          />
+  key={index}
+  ref={(ref) => {
+    inputs.current[index] = ref;
+  }}
+  style={styles.otpBox}
+  keyboardType="number-pad"
+  maxLength={1}
+  value={digit}
+  onChangeText={(text) => handleChange(text, index)}
+  onKeyPress={({ nativeEvent }) => {
+    if (nativeEvent.key === "Backspace" && !otp[index] && index > 0) {
+      inputs.current[index - 1]?.focus();
+    }
+  }}
+/>
         ))}
       </View>
 
-      <TouchableOpacity style={styles.verifyButton} onPress={handleVerify}>
-        <Text style={styles.verifyText}>Verify</Text>
-      </TouchableOpacity>
+      <TouchableOpacity
+  style={[styles.verifyButton, isVerifying && { opacity: 0.6 }]}
+  onPress={handleVerify}
+  disabled={isVerifying}
+>
+  <Text style={styles.verifyText}>
+    {isVerifying ? "Verifying..." : "Verify"}
+  </Text>
+</TouchableOpacity>
 
       <Text style={styles.resendText}>Didn’t receive code?</Text>
-      <TouchableOpacity>
-        <Text style={styles.resendLink}>Resend</Text>
-      </TouchableOpacity>
+
+<TouchableOpacity onPress={handleResend}>
+  <Text style={styles.resendLink}>Resend</Text>
+</TouchableOpacity>
     </View>
   );
 }
