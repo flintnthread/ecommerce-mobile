@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import api from "../services/api";
 import {
   View,
   Text,
@@ -21,31 +22,52 @@ export default function Login() {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const mobileRegex = /^[0-9]{10}$/;
 
-  const handleSignIn = () => {
-    if (!inputValue) {
-      Alert.alert("Error", "Please enter Email or Mobile Number");
-      return;
-    }
+  const handleSignIn = async () => {
+  if (!inputValue) {
+    Alert.alert("Error", "Please enter Email or Mobile Number");
+    return;
+  }
 
-    if (!emailRegex.test(inputValue) && !mobileRegex.test(inputValue)) {
-      Alert.alert(
-        "Invalid Input",
-        "Enter valid Email or 10-digit Mobile Number"
-      );
-      return;
-    }
+  if (!emailRegex.test(inputValue) && !mobileRegex.test(inputValue)) {
+    Alert.alert(
+      "Invalid Input",
+      "Enter valid Email or 10-digit Mobile Number"
+    );
+    return;
+  }
 
-    if (!isChecked) {
-      Alert.alert("Error", "Please accept terms & conditions");
-      return;
-    }
+  if (!isChecked) {
+    Alert.alert("Error", "Please accept terms & conditions");
+    return;
+  }
 
-    // ✅ NAVIGATE TO OTP
-    router.push({
-      pathname: "/otpsection",
-      params: { phone: inputValue },
-    });
-  };
+  try {
+    const payload = emailRegex.test(inputValue)
+      ? { email: inputValue }
+      : { mobile: inputValue };
+
+    const response = await api.post("/auth/send-otp", payload);
+    const data = response.data;
+
+    if (data.success) {
+      Alert.alert("Success", "OTP sent successfully");
+
+      // ✅ PASS OTP via query (NO pathname error)
+router.push({
+  pathname: "/otpsection",
+  params: {
+    input: inputValue,
+    otp: data.otp?.toString(), // 👈 ensure string
+  },
+} as any);
+    } else {
+      Alert.alert("Error", data.message || "Something went wrong");
+    }
+  } catch (error) {
+    console.log("API Error:", error?.response || error);
+    Alert.alert("Error", "Server not reachable");
+  }
+};
 
   const handleGoogleLogin = async () => {
     await WebBrowser.openBrowserAsync("https://accounts.google.com");
