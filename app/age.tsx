@@ -7,6 +7,7 @@ import {
   Image,
 } from "react-native";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function AgeScreen() {
   const ageGroups = [
@@ -44,6 +45,8 @@ require("../assets/images/age6.png"),
           style={[styles.imageLarge, { marginTop: 40 }]}
           source={require("../assets/images/age1.png")}
         />
+
+      
         <Image
           style={[styles.imageSmall, { marginTop: 40 }]}
           source={require("../assets/images/age2.png")}
@@ -78,6 +81,13 @@ require("../assets/images/age6.png"),
           </TouchableOpacity>
         ))}
       </View>
+
+        <TouchableOpacity
+  style={styles.backButton}
+  onPress={() => router.push("/gender")} // change route if needed
+>
+  <Ionicons name="arrow-back" size={24} color="#000" />
+</TouchableOpacity>
 
       {/* Skip */}
       <TouchableOpacity style={styles.skipContainer} onPress={goNext}>
@@ -158,4 +168,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#000",
   },
+
+   backButton: {
+  position: "absolute",
+  top: 60,
+  left: 20,
+  zIndex: 10,
+  backgroundColor: "#fff",
+  padding: 8,
+  borderRadius: 20,
+  elevation: 3, // Android shadow
+},
 });

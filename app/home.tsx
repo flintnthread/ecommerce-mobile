@@ -1,8 +1,12 @@
 import React, { useEffect, useState ,useRef} from "react";
 import * as ImagePicker from "expo-image-picker";
-import * as SpeechRecognition from "expo-speech-recognition";
-import { VideoView, useVideoPlayer } from 'expo-video';
 
+import { VideoView, useVideoPlayer } from 'expo-video';
+import Icon from "react-native-vector-icons/Feather";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { Video } from "expo-av";
+import { ResizeMode } from "expo-av";
 
 import {
   View,
@@ -16,8 +20,7 @@ import {
   Modal,
   Alert
 } from "react-native";
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+
 
 const { width } = Dimensions.get("window");
 
@@ -39,6 +42,10 @@ export default function Home() {
     "Search Sportswear",
   ];
   
+  // mic
+  const startVoiceSearch = () => {
+  router.push("/voicesearchmic");
+};
 
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [bannerIndex, setBannerIndex] = useState(0);
@@ -55,15 +62,16 @@ export default function Home() {
   const [selectedFilterSection, setSelectedFilterSection] = useState("Category");
   const [searchCategoryText, setSearchCategoryText] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
-  
-const player = useVideoPlayer(
-    require('../assets/images/videobanner.mp4'),
-    (player) => {
-      player.loop = true;
-      player.muted = true;
-      player.play();
-    }
-  );
+<View style={styles.videoBannerContainer}>
+  <Video
+  source={require('../assets/images/videobanner.mp4')}
+  style={styles.videoBanner}
+  resizeMode={ResizeMode.COVER}   // ✅ FIXED
+  shouldPlay
+  isLooping
+  isMuted
+/>
+</View>
 
   const banners = [
     require("../assets/images/banner1.png"),
@@ -157,7 +165,7 @@ useEffect(() => {
 
 
   
-// scroling brand
+
 
 
 
@@ -392,7 +400,7 @@ const megaBanners = [
   { id: '2', image: require('../assets/images/mega2.png') },
   { id: '3', image: require('../assets/images/mega3.png') },
 ];
-
+const [megaBannerIndex, setMegaBannerIndex] = useState(0);
 
 
 
@@ -416,7 +424,7 @@ const focusBanners = [
   }
 
   const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+   
     allowsEditing: true,
     aspect: [1, 1],
     quality: 0.8,
@@ -427,9 +435,7 @@ const focusBanners = [
   }
 };
 
-const startVoiceSearch = () => {
-  Alert.alert("Mic clicked", "Voice search setup is pending.");
-};
+
     // suggested
     const suggestedProducts = [
   {
@@ -559,9 +565,43 @@ const brands = [
   },
 ];
 
+const player = useVideoPlayer(
+    require('../assets/images/videobanner.mp4'),
+    (player) => {
+      player.loop = true;
+      player.muted = true;
+      player.play();
+    }
+  );
+
+// seller gallary
+
+const sellerGallery = [
+  {
+    id: "1",
+    name: "new brand",
+    image: require("../assets/images/seller1.png"),
+  },
+  {
+    id: "2",
+    name: "unlimited stuff",
+    image: require("../assets/images/seller2.png"),
+  },
+  {
+    id: "3",
+    name: "focusing products",
+    image: require("../assets/images/seller4.png"),
+  },
+  {
+    id: "4",
+    name: "brand",
+    image: require("../assets/images/seller1.png"),
+  },
+];
+
 
 // megabanners
-const [megaBannerIndex, setMegaBannerIndex] = useState(0);
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -637,14 +677,18 @@ const [megaBannerIndex, setMegaBannerIndex] = useState(0);
         </View>
 
         {/* ALL CATEGORIES (NO SLIDE) */}
-        <View style={styles.categoryPage}>
-          {categories.map((cat, index) => (
-            <View key={index} style={styles.categoryBox}>
-              <Image source={cat.image} style={styles.categoryImage} />
-              <Text style={styles.categoryText}>{cat.name}</Text>
-            </View>
-          ))}
-        </View>
+      <View style={styles.categoryPage}>
+  {categories.map((cat, index) => (
+    <TouchableOpacity
+      key={index}
+      style={styles.categoryBox}
+      onPress={() => router.push("/subcate")}
+    >
+      <Image source={cat.image} style={styles.categoryImage} />
+      <Text style={styles.categoryText}>{cat.name}</Text>
+    </TouchableOpacity>
+  ))}
+</View>
 
         {/* FILTER ROW */}
         <View style={styles.filterRow}>
@@ -680,38 +724,38 @@ const [megaBannerIndex, setMegaBannerIndex] = useState(0);
             />
           </View>
 
-          <View style={styles.bannerDotsRow}>
-            {banners.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.bannerDot,
-                  bannerIndex === index && styles.bannerDotActive,
-                ]}
-              />
-            ))}
-          </View>
+         <View style={styles.bannerDotsRow}>
+  {banners.map((item, index) => (
+    <View
+      key={item.id || index}
+      style={[
+        styles.bannerDot,
+        bannerIndex === index ? styles.bannerDotActive : null,
+      ]}
+    />
+  ))}
+</View>
         </View>
 
         {/* USER BOX */}
         <View style={styles.userSuggestionCard}>
-          <Text style={styles.userSuggestionTitle}>
-            user name,still looking for these?
-          </Text>
+  <Text style={styles.userSuggestionTitle}>
+    user name, still looking for these?
+  </Text>
 
-          <View style={styles.userSuggestionRow}>
-            {lookingProducts.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.userSuggestionItem}>
-                <Image
-                  source={item.image}
-                  style={styles.userSuggestionImageBox}
-                  resizeMode="cover"
-                />
-                <Text style={styles.userSuggestionText}>{item.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+  <View style={styles.userSuggestionRow}>
+    {lookingProducts.slice(0, 3).map((item) => (
+      <TouchableOpacity key={item.id} style={styles.userSuggestionItem}>
+        <Image
+          source={item.image}
+          style={styles.userSuggestionImageBox}
+          resizeMode="cover"
+        />
+        <Text style={styles.userSuggestionText}>{item.name}</Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+</View>
 
         {/* SERVICE LOGOS */}
         <View style={styles.serviceRow}>
@@ -726,16 +770,19 @@ const [megaBannerIndex, setMegaBannerIndex] = useState(0);
         </View>
 
         {/* YOU MAY ALSO LIKE PRODUCT GRID */}
-        <View style={styles.productSectionHeader}>
-          <Text style={styles.productSectionTitle}>You May Also Like...</Text>
-          
-          <TouchableOpacity style={styles.productArrowButton}>
-            <Ionicons name="arrow-forward" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
+    <View style={styles.productSectionHeader}>
+  <Text style={styles.productSectionTitle}>You May Also Like...</Text>
+
+  <TouchableOpacity
+    style={styles.productArrowButton}
+    onPress={() => router.push("/sartselling")}
+  >
+    <Ionicons name="arrow-forward" size={22} color="#fff" />
+  </TouchableOpacity>
+</View>
 
 
-        {/* suggested for you */}
+        {/* you may also like */}
 
         <View style={styles.productGridWrapper}>
           {productGrid.map((item) => (
@@ -776,28 +823,30 @@ const [megaBannerIndex, setMegaBannerIndex] = useState(0);
     <Image
       source={banners2[bannerIndex2]}
       style={styles.bannerImage}
-      resizeMode="cover"
+      resizeMode="contain"
     />
   </View>
 
   <View style={styles.bannerDotsRow}>
-    {banners2.map((_, index) => (
+    {banners2.map((item, index) => (
       <View
         key={index}
         style={[
           styles.bannerDot,
-          bannerIndex2 === index && styles.bannerDotActive,
+          bannerIndex2 === index ? styles.bannerDotActive : null,
         ]}
       />
     ))}
   </View>
 </View>
-
 {/* suggested list */}
 
 <View style={styles.productSectionHeader}>
   <Text style={styles.productSectionTitle}>Suggested For You</Text>
-  <TouchableOpacity style={styles.productArrowButton}>
+  <TouchableOpacity
+    style={styles.productArrowButton}
+    onPress={() => router.push("/ordersuccesspage")}
+  >
     <Ionicons name="arrow-forward" size={22} color="#fff" />
   </TouchableOpacity>
 </View>
@@ -847,12 +896,19 @@ const [megaBannerIndex, setMegaBannerIndex] = useState(0);
 </View>
 
 
+
+
+
+
 {/* Premium Finds Section */}
 <View style={styles.premiumSection}>
   <View style={styles.premiumHeader}>
     <Text style={styles.premiumTitle}>Premium finds for you</Text>
 
-    <TouchableOpacity style={styles.premiumArrowButton}>
+    <TouchableOpacity
+      style={styles.premiumArrowButton}
+      onPress={() => router.push("/products")}
+    >
       <Ionicons name="arrow-forward" size={22} color="#000" />
     </TouchableOpacity>
   </View>
@@ -903,7 +959,10 @@ const [megaBannerIndex, setMegaBannerIndex] = useState(0);
   <View style={styles.megaHeader}>
     <Text style={styles.megaTitle}>Mega Discounts</Text>
 
-    <TouchableOpacity style={styles.megaArrowButton}>
+    <TouchableOpacity
+      style={styles.megaArrowButton}
+      onPress={() => router.push("/products")}
+    >
       <Ionicons name="arrow-forward" size={22} color="#000" />
     </TouchableOpacity>
   </View>
@@ -982,7 +1041,45 @@ const [megaBannerIndex, setMegaBannerIndex] = useState(0);
     ))}
   </View>
 </View>
-{/* OUR BRANDS SECTION */}
+{/* seller gallary
+ */}
+
+ <View style={styles.sellerSectionContainer}>
+
+  {/* Title */}
+<View style={styles.titleContainer}>
+  <Text style={styles.titleText}>SELLER GALLERY</Text>
+  <View style={styles.titleLine} />
+</View>
+
+  {/* Grid */}
+  <View style={styles.sellerGrid}>
+    {sellerGallery.map((item) => (
+      <View key={item.id} style={styles.sellerCard}>
+        
+        <View style={styles.imageArea}>
+          <Image source={item.image} style={styles.sellerImage} />
+        </View>
+
+        <View style={styles.nameBar}>
+          <Text style={styles.businessName} numberOfLines={1}>
+            {item.name}
+          </Text>
+        </View>
+
+      </View>
+    ))}
+  </View>
+
+  {/* Arrow Navigation */}
+  <TouchableOpacity
+    style={styles.arrowButton}
+    onPress={() => router.push("/sellergalleryscreen")}
+  >
+    <Icon name="arrow-right" size={24} color="#000" />
+  </TouchableOpacity>
+
+</View>
 
 
       </ScrollView>
@@ -1411,7 +1508,7 @@ const styles = StyleSheet.create({
 
  banner: {
   width: '100%',
-  height: 170,
+  height: 200,
   backgroundColor: '#fff',
   borderRadius: 15,
   justifyContent: 'center',
@@ -1445,10 +1542,11 @@ const styles = StyleSheet.create({
     width: 34,
     backgroundColor: "#000",
   },
+// looking card
 
   lookingCard: {
     marginHorizontal: 16,
-    backgroundColor: "#F53545",
+    backgroundColor: "#1d324e",
     borderRadius: 26,
     paddingTop: 18,
     paddingBottom: 22,
@@ -1456,7 +1554,7 @@ const styles = StyleSheet.create({
   },
 
   lookingTitle: {
-    fontSize: 18,
+    fontSize: 45,
     fontWeight: "700",
     color: "#fff",
     paddingHorizontal: 18,
@@ -1469,7 +1567,7 @@ const styles = StyleSheet.create({
   },
 
   lookingItemCard: {
-    width: 250,
+    width: 300,
     backgroundColor: "#F1F1F1",
     borderRadius: 22,
     padding: 10,
@@ -1478,7 +1576,7 @@ const styles = StyleSheet.create({
   },
 
   lookingItemImage: {
-    width: 140,
+    width: 180,
     height: 180,
     borderRadius: 14,
     marginBottom: 12,
@@ -1487,7 +1585,7 @@ const styles = StyleSheet.create({
 
   lookingItemText: {
     fontSize: 13,
-    color: "#555",
+    color: "#050e12",
     textAlign: "center",
     fontWeight: "500",
   },
@@ -1526,7 +1624,7 @@ const styles = StyleSheet.create({
   },
 
   userSuggestionCard: {
-    backgroundColor: "#D3D3D3",
+    backgroundColor: "#c8c8da",
     marginHorizontal: 30,
     marginTop: 18,
     borderRadius: 10,
@@ -1536,8 +1634,8 @@ const styles = StyleSheet.create({
   },
 
   userSuggestionTitle: {
-    fontSize: 18,
-    color: "#333",
+    fontSize: 25,
+    color: "#1d324e",
     marginBottom: 16,
   },
 
@@ -1548,20 +1646,20 @@ const styles = StyleSheet.create({
   },
 
   userSuggestionItem: {
-    width: "22%",
+    width: "28%",
     alignItems: "center",
   },
 
   userSuggestionImageBox: {
-    width: 60,
-    height: 80,
+    width: 90,
+    height: 120,
     backgroundColor: "#ECECEC",
     borderRadius: 8,
     marginBottom: 8,
   },
 
   userSuggestionText: {
-    fontSize: 11,
+    fontSize: 14,
     color: "#333",
     textAlign: "center",
   },
@@ -2216,7 +2314,7 @@ megaBannerSection: {
 
 megaBannerCard: {
   width: '100%',
-  height: 300,
+  height: 400,
   borderRadius: 18,
   overflow: 'hidden',
   marginBottom: 18,
@@ -2225,7 +2323,7 @@ megaBannerCard: {
 
 megaBannerImage: {
   width: '100%',
-  height: 300,
+  height: 400,
 },
 
 
@@ -2393,7 +2491,83 @@ latestCartButtonText: {
   fontSize: 15,
   fontWeight: "700",
 },
- 
+//  seller gallary
+
+
+  sellerSectionContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 20,
+    backgroundColor: "#F5F5F5",
+  },
+
+ titleContainer: {
+  alignItems: "center",
+  marginVertical: 15,
+},
+
+titleText: {
+  fontSize: 20,
+  fontWeight: "700",
+  letterSpacing: 2,
+  color: "#2E3A4D",
+  marginBottom: 8,
+},
+
+titleLine: {
+  width: "90%",
+  height: 4,
+  backgroundColor: "#C4812E",
+  borderRadius: 2,
+},
+
+  sellerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+
+  sellerCard: {
+    width: "48%",
+    borderRadius: 22,
+    overflow: "hidden",
+    marginBottom: 16,
+    backgroundColor: "#E6E3F3",
+  },
+
+  imageArea: {
+    height: 210,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#E6E3F3",
+  },
+
+  sellerImage: {
+    width: "75%",
+    height: "75%",
+    resizeMode: "contain",
+  },
+
+  nameBar: {
+    height: 55,
+    backgroundColor: "#766DCC",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  businessName: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  arrowButton: {
+    alignSelf: "flex-end",
+    marginTop: 6,
+  },
+
+
+
 
 
 

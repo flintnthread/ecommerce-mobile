@@ -9,6 +9,7 @@ import {
   FlatList,
 } from "react-native";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 const { width } = Dimensions.get("window");
 
@@ -57,6 +58,9 @@ export default function PromoteScreen() {
   };
 
   return (
+
+
+    
     <View style={styles.container}>
       {/* Title */}
       <Text style={styles.title}>Checkout</Text>
@@ -67,6 +71,13 @@ export default function PromoteScreen() {
         <Text style={styles.buttonText}>Get Started</Text>
       </TouchableOpacity>
 
+      {/* Back Button */}
+<TouchableOpacity
+  style={styles.backButton}
+  onPress={() => router.push("/age")} // change route if needed
+>
+  <Ionicons name="arrow-back" size={24} color="#000" />
+</TouchableOpacity>
       {/* Slider */}
       <FlatList
         ref={flatListRef}
@@ -165,4 +176,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
     marginHorizontal: 4,
   },
+
+
+  backButton: {
+  position: "absolute",
+  top: 60,
+  left: 20,
+  zIndex: 10,
+  backgroundColor: "#fff",
+  padding: 8,
+  borderRadius: 20,
+  elevation: 3, // Android shadow
+},
 });

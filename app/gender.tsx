@@ -8,6 +8,7 @@ import {
   Image,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 // 7 floating animations created outside component to avoid hook rule violation
 const createAnimations = () =>
@@ -148,11 +149,22 @@ export default function GenderScreen() {
   <Text style={styles.btnText}>MALE</Text>
 </TouchableOpacity>
 
+  <TouchableOpacity
+  style={styles.backButton}
+  onPress={() => router.push("/language")} // change route if needed
+>
+  <Ionicons name="arrow-back" size={24} color="#000" />
+</TouchableOpacity>
+
+
+
       {/* Skip */}
       <TouchableOpacity style={styles.skipRow} onPress={goAge}>
         <Text style={styles.skip}>SKIP &gt;</Text>
       </TouchableOpacity>
     </View>
+
+
   );
 }
 
@@ -232,4 +244,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#000",
   },
+
+  backButton: {
+  position: "absolute",
+  top: 60,
+  left: 20,
+  zIndex: 10,
+  backgroundColor: "#fff",
+  padding: 8,
+  borderRadius: 20,
+  elevation: 3, // Android shadow
+},
 });
