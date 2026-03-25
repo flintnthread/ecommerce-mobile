@@ -240,20 +240,7 @@ export default function CartScreen() {
       Alert.alert("Empty Cart", "Your cart is empty. Add some items first!");
       return;
     }
-    Alert.alert(
-      "Proceed to Checkout",
-      `Total Amount: ₹${total.toLocaleString()}\n\nContinue to checkout?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Continue",
-          onPress: () => {
-            // Navigate to checkout screen (you can implement this later)
-            Alert.alert("Success", "Redirecting to checkout...");
-          },
-        },
-      ]
-    );
+    router.push("/revieworders");
   };
 
   return (
