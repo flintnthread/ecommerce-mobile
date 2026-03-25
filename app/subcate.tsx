@@ -509,7 +509,12 @@ export default function SubcategoriesScreen() {
         {/* PRODUCT GRID */}
         <View style={styles.productGrid}>
           {filteredProducts.map((product) => (
-            <View key={product.id} style={styles.productCard}>
+            <TouchableOpacity
+              key={product.id}
+              style={styles.productCard}
+              activeOpacity={0.9}
+              onPress={() => router.push("/productdetail")}
+            >
               <View style={styles.productImageWrapper}>
                 <Image
                   source={product.image}
@@ -518,7 +523,10 @@ export default function SubcategoriesScreen() {
                 />
                 <TouchableOpacity
                   style={styles.wishlistIcon}
-                  onPress={() => toggleWishlist(product.id)}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    toggleWishlist(product.id);
+                  }}
                 >
                   <Ionicons
                     name={
@@ -561,7 +569,7 @@ export default function SubcategoriesScreen() {
                 </View>
                 <Text style={styles.ratingCount}>({product.ratingCount})</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </ScrollView>
