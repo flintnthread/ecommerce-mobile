@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 type BestDressItem = {
   id: string;
@@ -122,6 +122,609 @@ const bannerImages = [
   require("../assets/images/accessoriescate.png"),
 ];
 
+type HomeChip = {
+  id: string;
+  label: string;
+};
+
+type HomeFeatureTile = {
+  id: string;
+  label: string;
+  countText?: string;
+  image: any;
+};
+
+type HomeContent = {
+  topHeading: string;
+  bannerTitle: string;
+  bannerSubtitle?: string;
+  bannerImage: any;
+  chips: HomeChip[];
+  tiles: HomeFeatureTile[];
+};
+
+const HOME_CONTENT: Record<string, HomeContent> = {
+  womenswear: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "SUMMER VIBES",
+    bannerSubtitle: "COLLECTION",
+    bannerImage: require("../assets/images/womencate.png"),
+    chips: [
+      { id: "wc1", label: "Women\u00a0Bra" },
+      { id: "wc2", label: "Tops" },
+      { id: "wc3", label: "Bottoms" },
+      { id: "wc4", label: "Activewear" },
+    ],
+    tiles: [
+      {
+        id: "wt1",
+        label: "DRESSES",
+        countText: "(1580 items)",
+        image: require("../assets/images/womencate.png"),
+      },
+      {
+        id: "wt2",
+        label: "TOPS",
+        countText: "(1750 items)",
+        image: require("../assets/images/womencate.png"),
+      },
+      {
+        id: "wt3",
+        label: "BOTTOMS",
+        countText: "(980 items)",
+        image: require("../assets/images/womencate.png"),
+      },
+      {
+        id: "wt4",
+        label: "ACTIVEWEAR",
+        countText: "(640 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+    ],
+  },
+  menswear: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "SUMMER ESSENTIALS",
+    bannerSubtitle: "FOR MEN",
+    bannerImage: require("../assets/images/menscate.png"),
+    chips: [
+      { id: "mc1", label: "Bottom Wear" },
+      { id: "mc2", label: "Ethnic Wear" },
+      { id: "mc3", label: "Formal Wear" },
+      { id: "mc4", label: "Innerwear & Nightwear" },
+      { id: "mc5", label: "Top Wear" },
+    ],
+    tiles: [
+      {
+        id: "mt1",
+        label: "SHIRTS",
+        countText: "(1420 items)",
+        image: require("../assets/images/menscate.png"),
+      },
+      {
+        id: "mt2",
+        label: "T-SHIRTS",
+        countText: "(1760 items)",
+        image: require("../assets/images/menscate.png"),
+      },
+      {
+        id: "mt3",
+        label: "JEANS",
+        countText: "(1080 items)",
+        image: require("../assets/images/menscate.png"),
+      },
+      {
+        id: "mt4",
+        label: "ACTIVEWEAR",
+        countText: "(720 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+    ],
+  },
+  kidswear: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "KIDS",
+    bannerSubtitle: "NEW ARRIVALS",
+    bannerImage: require("../assets/images/kidscate.png"),
+    chips: [
+      { id: "kc1", label: "Boys" },
+      { id: "kc2", label: "Girls" },
+      { id: "kc3", label: "Infants" },
+      { id: "kc4", label: "Kids Toys" },
+    ],
+    tiles: [
+      {
+        id: "kt1",
+        label: "BOYS WEAR",
+        countText: "(980 items)",
+        image: require("../assets/images/kidscate.png"),
+      },
+      {
+        id: "kt2",
+        label: "GIRLS WEAR",
+        countText: "(860 items)",
+        image: require("../assets/images/kidscate.png"),
+      },
+      {
+        id: "kt3",
+        label: "INFANT WEAR",
+        countText: "(540 items)",
+        image: require("../assets/images/kidscate.png"),
+      },
+      {
+        id: "kt4",
+        label: "KIDS TOYS",
+        countText: "(420 items)",
+        image: require("../assets/images/kidscate.png"),
+      },
+    ],
+  },
+  sportswear: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "SPORTS",
+    bannerSubtitle: "COLLECTION",
+    bannerImage: require("../assets/images/sportscate.png"),
+    chips: [
+      { id: "sc1", label: "Activewear" },
+      { id: "sc2", label: "Tracksuits" },
+      { id: "sc3", label: "Jerseys" },
+      { id: "sc4", label: "Gym" },
+    ],
+    tiles: [
+      {
+        id: "st1",
+        label: "ACTIVEWEAR",
+        countText: "(1260 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+      {
+        id: "st2",
+        label: "TRACKSUITS",
+        countText: "(910 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+      {
+        id: "st3",
+        label: "JERSEYS",
+        countText: "(760 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+      {
+        id: "st4",
+        label: "GYM",
+        countText: "(520 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+    ],
+  },
+  footwear: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "FOOTWEAR",
+    bannerSubtitle: "BEST DEALS",
+    bannerImage: require("../assets/images/footwearcate.png"),
+    chips: [
+      { id: "fc1", label: "Sneakers" },
+      { id: "fc2", label: "Sandals" },
+      { id: "fc3", label: "Formals" },
+      { id: "fc4", label: "Casual" },
+    ],
+    tiles: [
+      {
+        id: "ft1",
+        label: "SNEAKERS",
+        countText: "(980 items)",
+        image: require("../assets/images/footwearcate.png"),
+      },
+      {
+        id: "ft2",
+        label: "SANDALS",
+        countText: "(740 items)",
+        image: require("../assets/images/footwearcate.png"),
+      },
+      {
+        id: "ft3",
+        label: "FORMALS",
+        countText: "(560 items)",
+        image: require("../assets/images/footwearcate.png"),
+      },
+      {
+        id: "ft4",
+        label: "CASUAL",
+        countText: "(430 items)",
+        image: require("../assets/images/footwearcate.png"),
+      },
+    ],
+  },
+  accessories: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "ACCESSORIES",
+    bannerSubtitle: "STYLE UP",
+    bannerImage: require("../assets/images/accessariescate.png"),
+    chips: [
+      { id: "ac1", label: "Jewellery" },
+      { id: "ac2", label: "Bags" },
+      { id: "ac3", label: "Belts" },
+      { id: "ac4", label: "Watches" },
+    ],
+    tiles: [
+      {
+        id: "at1",
+        label: "JEWELLERY",
+        countText: "(820 items)",
+        image: require("../assets/images/accessariescate.png"),
+      },
+      {
+        id: "at2",
+        label: "BAGS",
+        countText: "(630 items)",
+        image: require("../assets/images/accessariescate.png"),
+      },
+      {
+        id: "at3",
+        label: "BELTS",
+        countText: "(470 items)",
+        image: require("../assets/images/accessariescate.png"),
+      },
+      {
+        id: "at4",
+        label: "WATCHES",
+        countText: "(390 items)",
+        image: require("../assets/images/accessariescate.png"),
+      },
+    ],
+  },
+  homelyHub: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "HOME",
+    bannerSubtitle: "& LIFESTYLE",
+    bannerImage: require("../assets/images/homecate.png"),
+    chips: [
+      { id: "hh1", label: "Home Decor" },
+      { id: "hh2", label: "Kitchen" },
+      { id: "hh3", label: "Bedding" },
+      { id: "hh4", label: "Storage" },
+    ],
+    tiles: [
+      {
+        id: "ht1",
+        label: "HOME DECOR",
+        countText: "(740 items)",
+        image: require("../assets/images/homecate.png"),
+      },
+      {
+        id: "ht2",
+        label: "KITCHEN",
+        countText: "(610 items)",
+        image: require("../assets/images/homecate.png"),
+      },
+      {
+        id: "ht3",
+        label: "BEDDING",
+        countText: "(520 items)",
+        image: require("../assets/images/homecate.png"),
+      },
+      {
+        id: "ht4",
+        label: "STORAGE",
+        countText: "(390 items)",
+        image: require("../assets/images/homecate.png"),
+      },
+    ],
+  },
+  fitnessPro: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "F&T PRO",
+    bannerSubtitle: "FITNESS",
+    bannerImage: require("../assets/images/sportscate.png"),
+    chips: [
+      { id: "fp1", label: "Gym Wear" },
+      { id: "fp2", label: "Fitness Gear" },
+      { id: "fp3", label: "Yoga Essentials" },
+      { id: "fp4", label: "Accessories" },
+    ],
+    tiles: [
+      {
+        id: "fpt1",
+        label: "GYM WEAR",
+        countText: "(820 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+      {
+        id: "fpt2",
+        label: "FITNESS GEAR",
+        countText: "(680 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+      {
+        id: "fpt3",
+        label: "YOGA",
+        countText: "(520 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+      {
+        id: "fpt4",
+        label: "PRO ACCESSORIES",
+        countText: "(410 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+    ],
+  },
+  sweets: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "SWEETS",
+    bannerSubtitle: "SPECIALS",
+    bannerImage: require("../assets/images/sweetscate.png"),
+    chips: [
+      { id: "swc1", label: "Traditional" },
+      { id: "swc2", label: "Chocolates" },
+      { id: "swc3", label: "Dry Fruits" },
+      { id: "swc4", label: "Gifts" },
+    ],
+    tiles: [
+      {
+        id: "swt1",
+        label: "TRADITIONAL",
+        countText: "(420 items)",
+        image: require("../assets/images/sweetscate.png"),
+      },
+      {
+        id: "swt2",
+        label: "CHOCOLATES",
+        countText: "(360 items)",
+        image: require("../assets/images/sweetscate.png"),
+      },
+      {
+        id: "swt3",
+        label: "DRY FRUITS",
+        countText: "(280 items)",
+        image: require("../assets/images/sweetscate.png"),
+      },
+      {
+        id: "swt4",
+        label: "GIFTS",
+        countText: "(220 items)",
+        image: require("../assets/images/sweetscate.png"),
+      },
+    ],
+  },
+  trending: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "TOP PICKS",
+    bannerSubtitle: "RIGHT NOW",
+    bannerImage: require("../assets/images/womencate.png"),
+    chips: [
+      { id: "tc1", label: "Women" },
+      { id: "tc2", label: "Men" },
+      { id: "tc3", label: "Kids" },
+      { id: "tc4", label: "Sports" },
+    ],
+    tiles: [
+      {
+        id: "t1",
+        label: "WOMEN",
+        countText: "(1580 items)",
+        image: require("../assets/images/womencate.png"),
+      },
+      {
+        id: "t2",
+        label: "MEN",
+        countText: "(1420 items)",
+        image: require("../assets/images/menscate.png"),
+      },
+      {
+        id: "t3",
+        label: "KIDS",
+        countText: "(980 items)",
+        image: require("../assets/images/kidscate.png"),
+      },
+      {
+        id: "t4",
+        label: "SPORTS",
+        countText: "(1260 items)",
+        image: require("../assets/images/sportscate.png"),
+      },
+    ],
+  },
+};
+
+const withAllChip = (content: HomeContent): HomeContent => {
+  const hasAll = content.chips.some((chip) => chip.id === "all");
+  if (hasAll) return content;
+
+  return {
+    ...content,
+    chips: [{ id: "all", label: "All" }, ...content.chips],
+  };
+};
+
+const getHomeContent = (mainCat?: string): HomeContent => {
+  if (mainCat && HOME_CONTENT[mainCat]) return withAllChip(HOME_CONTENT[mainCat]);
+  return withAllChip(HOME_CONTENT.womenswear);
+};
+
+const MEN_BOTTOM_WEAR_TILES: HomeFeatureTile[] = [
+  {
+    id: "mb1",
+    label: "Cargo Pants",
+    countText: "(420 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mb2",
+    label: "Casual Trousers",
+    countText: "(680 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mb3",
+    label: "Jeans",
+    countText: "(1,240 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mb4",
+    label: "Joggers",
+    countText: "(510 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mb5",
+    label: "Shorts / Bermudas",
+    countText: "(360 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mb6",
+    label: "Track Pants / Lower Wear",
+    countText: "(290 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mb7",
+    label: "Trousers (Formal / Regular)",
+    countText: "(540 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+];
+
+const MEN_ETHNIC_WEAR_TILES: HomeFeatureTile[] = [
+  {
+    id: "me1",
+    label: "Dhoti",
+    countText: "(180 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "me2",
+    label: "Kurta & Pajama Sets",
+    countText: "(920 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "me3",
+    label: "Nehru Jackets",
+    countText: "(310 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "me4",
+    label: "Sherwanis",
+    countText: "(240 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+];
+
+const MEN_FORMAL_WEAR_TILES: HomeFeatureTile[] = [
+  {
+    id: "mf1",
+    label: "Formal Shirts",
+    countText: "(640 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mf2",
+    label: "Suits & Blazers",
+    countText: "(280 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mf3",
+    label: "Ties",
+    countText: "(150 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+];
+
+const MEN_INNERWEAR_NIGHTWEAR_TILES: HomeFeatureTile[] = [
+  {
+    id: "mi1",
+    label: "Briefs & Boxers",
+    countText: "(410 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mi2",
+    label: "Loungewear",
+    countText: "(260 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mi3",
+    label: "Sleepwear",
+    countText: "(190 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mi4",
+    label: "Thermals",
+    countText: "(220 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mi5",
+    label: "Trunks",
+    countText: "(330 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mi6",
+    label: "Vests",
+    countText: "(180 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+];
+
+const MEN_TOP_WEAR_TILES: HomeFeatureTile[] = [
+  {
+    id: "mtw1",
+    label: "Casual Shirts",
+    countText: "(780 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mtw2",
+    label: "Coats",
+    countText: "(190 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mtw3",
+    label: "Couple Wear",
+    countText: "(85 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mtw4",
+    label: "Hoodies & Sweatshirts",
+    countText: "(420 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mtw5",
+    label: "Jackets",
+    countText: "(360 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mtw6",
+    label: "Polo Shirts",
+    countText: "(510 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mtw7",
+    label: "Rain Jackets",
+    countText: "(120 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mtw8",
+    label: "Shirts",
+    countText: "(960 items)",
+    image: require("../assets/images/menscate.png"),
+  },
+];
+
 const sortOptions = [
   "Relevance",
   "New Arrivals",
@@ -197,6 +800,15 @@ const filterOptions: Record<string, string[]> = {
 
 export default function SubcategoriesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mainCat?: string }>();
+  const homeContent = getHomeContent(params.mainCat);
+  const [selectedHomeChip, setSelectedHomeChip] = useState(
+    homeContent.chips[0]?.id ?? ""
+  );
+
+  useEffect(() => {
+    setSelectedHomeChip(homeContent.chips[0]?.id ?? "");
+  }, [homeContent]);
 
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -269,6 +881,16 @@ export default function SubcategoriesScreen() {
     );
   }, [searchQuery]);
 
+  const visibleFeatureTiles = React.useMemo(() => {
+    if (params.mainCat !== "menswear") return homeContent.tiles;
+    if (selectedHomeChip === "mc1") return MEN_BOTTOM_WEAR_TILES;
+    if (selectedHomeChip === "mc2") return MEN_ETHNIC_WEAR_TILES;
+    if (selectedHomeChip === "mc3") return MEN_FORMAL_WEAR_TILES;
+    if (selectedHomeChip === "mc4") return MEN_INNERWEAR_NIGHTWEAR_TILES;
+    if (selectedHomeChip === "mc5") return MEN_TOP_WEAR_TILES;
+    return homeContent.tiles;
+  }, [homeContent.tiles, params.mainCat, selectedHomeChip]);
+
   const handleBannerScroll = (event: any) => {
     const slideIndex = Math.round(
       event.nativeEvent.contentOffset.x / bannerWidth
@@ -311,14 +933,6 @@ export default function SubcategoriesScreen() {
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.headerIconButton}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={22} color="#1d324e" />
-        </TouchableOpacity>
-
         {isSearchVisible ? (
           <View style={styles.headerSearchWrapper}>
             <TextInput
@@ -331,7 +945,7 @@ export default function SubcategoriesScreen() {
             />
           </View>
         ) : (
-          <Text style={styles.headerTitle}>DRESSES</Text>
+          <Text style={styles.headerTitle}>Men's Hub</Text>
         )}
 
         <View style={styles.headerRight}>
@@ -373,205 +987,86 @@ export default function SubcategoriesScreen() {
         </View>
       </View>
 
-      {/* LOCATION BAR */}
-      <View style={styles.locationBar}>
-        <Ionicons name="location-outline" size={16} color="#ef7b1a" />
-        <Text style={styles.locationText} numberOfLines={1}>
-          Villa-113 - PRAVEENS PRIDE, Road No. 11, Pat...
-        </Text>
-        <Ionicons name="chevron-down" size={16} color="#79411c" />
-      </View>
-
-      {/* STICKY SORT / CATEGORY / GENDER / FILTERS ROW */}
-      <View style={styles.sortTabsRow}>
-        <TouchableOpacity
-          style={styles.sortTab}
-          onPress={() => handleFilterPress("Sort")}
-        >
-          <Text style={styles.sortTabText}>Sort</Text>
-          <Ionicons name="chevron-down" size={14} color="#1d324e" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.sortTab}
-          onPress={() => handleFilterPress("Category")}
-        >
-          <Text style={styles.sortTabText}>Category</Text>
-          <Ionicons name="chevron-down" size={14} color="#1d324e" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.sortTab}
-          onPress={() => handleFilterPress("Gender")}
-        >
-          <Text style={styles.sortTabText}>Gender</Text>
-          <Ionicons name="chevron-down" size={14} color="#1d324e" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.sortTab}
-          onPress={() => handleFilterPress("Filters")}
-        >
-          <Text style={styles.sortTabText}>Filters</Text>
-          <Ionicons name="chevron-down" size={14} color="#1d324e" />
-        </TouchableOpacity>
-      </View>
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* PROMO STRIP */}
-        <View style={styles.promoStrip}>
-          <View style={[styles.promoCard, styles.promoLeft]}>
-            <Text style={styles.promoHighlight}>40% off</Text>
-            <Text style={styles.promoSub}>upto ₹400</Text>
-          </View>
-          <View style={[styles.promoCard, styles.promoRight]}>
-            <Text style={styles.promoHighlight}>EASY</Text>
-            <Text style={styles.promoSub}>Returns</Text>
-          </View>
-        </View>
-
-        {/* BEST OF DRESSES SECTION */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>BEST OF DRESSES</Text>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.bestRow}
-        >
-          {BEST_OF_DRESSES.map((item) => (
-            <View key={item.id} style={styles.bestCard}>
-              <View style={styles.bestImageWrapper}>
-                <Image
-                  source={item.image}
-                  style={styles.bestImage}
-                  resizeMode="cover"
-                />
-                {item.isVideo && (
-                  <View style={styles.playBadge}>
-                    <Ionicons name="play" size={16} color="#FFFFFF" />
-                  </View>
-                )}
-              </View>
-              <Text style={styles.bestTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={styles.bestSubtitle} numberOfLines={1}>
-                {item.subtitle}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* TRENDING DRESSES BANNER */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>TRENDING DRESSES</Text>
-        </View>
-
-        <View style={styles.bannerCarouselWrapper}>
+        {/* TOP CATEGORIES (reference layout) */}
+        <View style={styles.homeTopChipsSection}>
+          <Text style={styles.homeTopHeading}>{homeContent.topHeading}</Text>
           <ScrollView
-            ref={bannerScrollRef}
             horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleBannerScroll}
+            showsHorizontalScrollIndicator
+            contentContainerStyle={styles.homeChipsRow}
           >
-            {bannerImages.map((image, index) => (
-              <View key={index} style={[styles.bannerCard, { width: bannerWidth }]}>
-                <Image
-                  source={image}
-                  style={styles.bannerImage}
-                  resizeMode="cover"
-                />
-              </View>
+            {homeContent.chips.map((chip) => (
+              <TouchableOpacity
+                key={chip.id}
+                style={[
+                  styles.homeChip,
+                  selectedHomeChip === chip.id && styles.homeChipActive,
+                ]}
+                onPress={() => setSelectedHomeChip(chip.id)}
+              >
+                <Text
+                  style={[
+                    styles.homeChipText,
+                    selectedHomeChip === chip.id && styles.homeChipTextActive,
+                  ]}
+                >
+                  {chip.label}
+                </Text>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
 
-        <View style={styles.dotsRow}>
-          {bannerImages.map((_, index) => (
-            <View
-              key={index}
-              style={[styles.dot, index === bannerIndex && styles.dotActive]}
-            />
-          ))}
+        {/* HERO BANNER */}
+        <View style={styles.homeHeroBanner}>
+          <Image
+            source={homeContent.bannerImage}
+            style={styles.homeHeroBannerImage}
+            resizeMode="cover"
+          />
+          <View style={styles.homeHeroBannerOverlay}>
+            <Text style={styles.homeHeroTitle}>{homeContent.bannerTitle}</Text>
+            {homeContent.bannerSubtitle ? (
+              <Text style={styles.homeHeroSubtitle}>
+                {homeContent.bannerSubtitle}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
-        {/* ALL PRODUCTS HEADING */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>
-            ALL <Text style={styles.sectionTitleAccent}>PRODUCTS</Text>
-          </Text>
-        </View>
-
-        {/* PRODUCT GRID */}
-        <View style={styles.productGrid}>
-          {filteredProducts.map((product) => (
+        {/* 2-COLUMN FEATURE TILES */}
+        <View style={styles.homeFeatureGrid}>
+          {visibleFeatureTiles.map((tile) => (
             <TouchableOpacity
-              key={product.id}
-              style={styles.productCard}
+              key={tile.id}
+              style={styles.homeFeatureTile}
               activeOpacity={0.9}
               onPress={() => router.push("/productdetail")}
             >
-              <View style={styles.productImageWrapper}>
-                <Image
-                  source={product.image}
-                  style={styles.productImage}
-                  resizeMode="cover"
-                />
-                <TouchableOpacity
-                  style={styles.wishlistIcon}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    toggleWishlist(product.id);
-                  }}
-                >
-                  <Ionicons
-                    name={
-                      wishlistItems.includes(product.id)
-                        ? "heart"
-                        : "heart-outline"
-                    }
-                    size={18}
-                    color={wishlistItems.includes(product.id) ? "red" : "#444444"}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.productTitle} numberOfLines={2}>
-                {product.title}
-              </Text>
-
-              <View style={styles.priceRow}>
-                <Text style={styles.priceCurrent}>₹{product.price}</Text>
-                <Text style={styles.priceMrp}>₹{product.mrp}</Text>
-                <Text style={styles.priceDiscount}>{product.discount}</Text>
-              </View>
-
-              <Text style={styles.payLaterText} numberOfLines={1}>
-                {product.payLaterText}
-              </Text>
-              <Text style={styles.benefitText} numberOfLines={1}>
-                {product.benefitText}
-              </Text>
-
-              <View style={styles.ratingRow}>
-                <View style={styles.ratingBadge}>
-                  <Text style={styles.ratingText}>{product.rating}</Text>
-                  <Ionicons
-                    name="star"
-                    size={10}
-                    color="#FFFFFF"
-                    style={{ marginLeft: 2 }}
-                  />
-                </View>
-                <Text style={styles.ratingCount}>({product.ratingCount})</Text>
+              <Image
+                source={tile.image}
+                style={styles.homeFeatureTileImage}
+                resizeMode="cover"
+              />
+              <View style={styles.homeFeatureTileOverlay}>
+                <Text style={styles.homeFeatureTileLabel} numberOfLines={1}>
+                  {tile.label}
+                </Text>
+                {tile.countText ? (
+                  <Text style={styles.homeFeatureTileCount} numberOfLines={1}>
+                    {tile.countText}
+                  </Text>
+                ) : null}
               </View>
             </TouchableOpacity>
           ))}
         </View>
+
       </ScrollView>
 
       {/* SORT MODAL */}
@@ -854,9 +1349,43 @@ export default function SubcategoriesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* BOTTOM TAB */}
+      <View style={styles.bottomTab}>
+        <TabItem icon="home-outline" label="Home" onPress={() => router.push("/home")} />
+        <TabItem
+          icon="grid-outline"
+          label="Categories"
+          onPress={() => router.push("/categories")}
+        />
+        <TabItem
+          icon="clipboard-outline"
+          label="Orders"
+          onPress={() => router.push("/orders")}
+        />
+        <TabItem
+          icon="person-outline"
+          label="Account"
+          onPress={() => router.push("/account")}
+        />
+        <TabItem icon="cart-outline" label="Cart" onPress={() => router.push("/cart")} />
+      </View>
     </View>
   );
 }
+
+type TabItemProps = {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+};
+
+const TabItem = ({ icon, label, onPress }: TabItemProps) => (
+  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
+    <Ionicons name={icon} size={22} color="#000" />
+    <Text style={styles.tabLabel}>{label}</Text>
+  </TouchableOpacity>
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -1437,5 +1966,136 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
+  },
+  // Home category header (reference layout)
+  homeTopChipsSection: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    marginBottom: 10,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E6E6E6",
+  },
+  homeTopHeading: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1d324e",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  homeChipsRow: {
+    paddingRight: 10,
+  },
+  homeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  homeChipText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#444",
+  },
+  homeChipActive: {
+    borderBottomColor: "#222",
+  },
+  homeChipTextActive: {
+    color: "#111",
+    fontWeight: "700",
+  },
+
+  // Hero banner (reference layout)
+  homeHeroBanner: {
+    marginHorizontal: 10,
+    borderRadius: 0,
+    overflow: "hidden",
+    height: 230,
+    backgroundColor: "#FFF",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E0E0E0",
+  },
+  homeHeroBannerImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  homeHeroBannerOverlay: {
+    position: "absolute",
+    left: 16,
+    bottom: 18,
+  },
+  homeHeroTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1e1e1e",
+    letterSpacing: 0.3,
+  },
+  homeHeroSubtitle: {
+    marginTop: 2,
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1e1e1e",
+  },
+
+  // 2-column feature tiles
+  homeFeatureGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    marginTop: 10,
+  },
+  homeFeatureTile: {
+    width: "48%",
+    borderRadius: 0,
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    position: "relative",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E0E0E0",
+    marginBottom: 10,
+  },
+  homeFeatureTileImage: {
+    width: "100%",
+    height: 150,
+  },
+  homeFeatureTileOverlay: {
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    backgroundColor: "#fff",
+  },
+  homeFeatureTileLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1f1f1f",
+    textAlign: "center",
+  },
+  homeFeatureTileCount: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#444",
+    textAlign: "center",
+    marginTop: 2,
+    textTransform: "uppercase",
+  },
+  bottomTab: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 70,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: "#ccc",
+  },
+  tabItem: {
+    alignItems: "center",
+  },
+  tabLabel: {
+    fontSize: 11,
+    marginTop: 3,
   },
 });
