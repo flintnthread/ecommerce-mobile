@@ -62,22 +62,22 @@ const SIDE_CATEGORIES: SideCategory[] = [
   },
   {
     key: "accessories",
-    label: "Jewellery",
+    label: "Accessories",
     image: require("../assets/images/accessariescate.png"),
   },
   {
     key: "homelyHub",
-    label: "Home & Lifestyle",
+    label: "Homely Hub",
     image: require("../assets/images/homecate.png"),
   },
   {
     key: "fitnessPro",
-    label: "Accessories",
+    label: "Fitness Pro",
     image: require("../assets/images/sportscate.png"),
   },
   {
     key: "sweets",
-    label: "Beauty by Tira",
+    label: "Sweets",
     image: require("../assets/images/sweetscate.png"),
   },
 ];
@@ -306,28 +306,7 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
       ],
     },
   ],
-  accessories: [
-    {
-      title: "Accessories",
-      items: [
-        {
-          id: "a1",
-          name: "Bags",
-          image: require("../assets/images/accessariescate.png"),
-        },
-        {
-          id: "a2",
-          name: "Belts",
-          image: require("../assets/images/accessariescate.png"),
-        },
-        {
-          id: "a3",
-          name: "Jewellery",
-          image: require("../assets/images/accessariescate.png"),
-        },
-      ],
-    },
-  ],
+  accessories: [],
   homelyHub: [
     {
       title: "homely hub",
@@ -528,6 +507,22 @@ export default function Categories() {
                     setActiveCategory(cat.key);
                     if (cat.key === "accessories") {
                       router.push("/accessories" as never);
+                      return;
+                    }
+                    if (cat.key === "sportswear") {
+                      router.push("/sportswear" as never);
+                      return;
+                    }
+                    if (cat.key === "homelyHub") {
+                      router.push("/homelyhub" as never);
+                      return;
+                    }
+                    if (cat.key === "sweets") {
+                      router.push("/sweets" as never);
+                      return;
+                    }
+                    if (cat.key === "footwear") {
+                      router.push("/footwear" as never);
                       return;
                     }
                     router.push({
