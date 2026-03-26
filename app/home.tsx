@@ -1,12 +1,11 @@
-import React, { useEffect, useState ,useRef} from "react";
-import * as ImagePicker from "expo-image-picker";
-
+import React, { useCallback, useEffect, useState ,useRef} from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { VideoView, useVideoPlayer } from 'expo-video';
 import Icon from "react-native-vector-icons/Feather";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Video } from "expo-av";
-import { ResizeMode } from "expo-av";
+import { FlatList } from "react-native";
 
 import {
   View,
@@ -18,11 +17,14 @@ import {
   Image,
   Dimensions,
   Modal,
-  Alert
+  Alert,
+  Platform,
 } from "react-native";
+import * as IntentLauncher from "expo-intent-launcher";
 
 
 const { width } = Dimensions.get("window");
+const CARD_WIDTH = width * 0.6;
 
 interface FilterItemProps {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -33,19 +35,84 @@ interface FilterItemProps {
 
 
 export default function Home() {
-
+ const [activeIndex, setActiveIndex] = useState(0);
   const router = useRouter();   
   const placeholderTexts = [
     "Search Shoes",
-    "Search Womens Wear",
+    "Search WomensWear",
     "Search Fashion",
     "Search Sportswear",
   ];
   
-  // mic
+  const [searchQuery, setSearchQuery] = useState("");
+  const [userDisplayName, setUserDisplayName] = useState("Ramya");
+
+  const loadUserDisplayName = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem("userDisplayName");
+      if (stored?.trim()) {
+        setUserDisplayName(stored.trim());
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadUserDisplayName();
+    }, [loadUserDisplayName])
+  );
+
+  const launchGoogleVoiceInput = async () => {
+    if (Platform.OS !== "android") {
+      Alert.alert(
+        "Voice search",
+        "Google voice input is available on Android. On iPhone, type your search in the bar."
+      );
+      return;
+    }
+    try {
+      const result = await IntentLauncher.startActivityAsync(
+        "android.speech.action.RECOGNIZE_SPEECH",
+        {
+          extra: {
+            "android.speech.extra.LANGUAGE_MODEL": "free_form",
+            "android.speech.extra.PROMPT": "What do you want to search for?",
+            "android.speech.extra.LANGUAGE": "en-US",
+          },
+        }
+      );
+      if (
+        result.resultCode === IntentLauncher.ResultCode.Success &&
+        result.extra
+      ) {
+        const e = result.extra as Record<string, unknown>;
+        const raw =
+          e["android.speech.extra.RESULTS"] ?? e.results;
+        if (Array.isArray(raw) && raw.length > 0) {
+          setSearchQuery(String(raw[0]));
+          return;
+        }
+      }
+    } catch {
+      Alert.alert(
+        "Voice search",
+        "Could not open speech recognition. Check Google / speech services on your device."
+      );
+    }
+  };
+
   const startVoiceSearch = () => {
-  router.push("/voicesearchmic");
-};
+    Alert.alert(
+      "Microphone access",
+      "Allow microphone access to use voice search?",
+      [
+        { text: "Don't allow", style: "cancel" },
+        { text: "Allow", onPress: () => void launchGoogleVoiceInput() },
+      ]
+    );
+  };
 
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [bannerIndex, setBannerIndex] = useState(0);
@@ -63,14 +130,14 @@ export default function Home() {
   const [searchCategoryText, setSearchCategoryText] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
 <View style={styles.videoBannerContainer}>
-  <Video
+  {/* <Video
   source={require('../assets/images/videobanner.mp4')}
   style={styles.videoBanner}
   resizeMode={ResizeMode.COVER}   // ✅ FIXED
   shouldPlay
   isLooping
   isMuted
-/>
+/> */}
 </View>
 
   const banners = [
@@ -129,6 +196,10 @@ const banners2 = [
       image: require("../assets/images/look4.png"),
     },
   ];
+
+  
+
+  
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -260,7 +331,7 @@ useEffect(() => {
 
   const filterOptions: Record<string, string[]> = {
     Category: categoryOptions,
-    Gender: ["Women", "Men", "Girls", "Boys"],
+    Identity: ["Women", "Men", "Girls", "Boys"],
     Color: ["Black", "Blue", "Pink", "Red", "White", "Green"],
     Fabric: ["Cotton", "Rayon", "Silk", "Polyester", "Linen"],
     "Dial Shape": ["Round", "Square", "Oval", "Rectangle"],
@@ -415,25 +486,16 @@ const focusBanners = [
     image: require('../assets/images/focus2.png'),
   },
 ];
-  const openCamera = async () => {
-  const { status } = await ImagePicker.requestCameraPermissionsAsync();
-
-  if (status !== "granted") {
-    Alert.alert("Permission required", "Camera permission is needed.");
-    return;
-  }
-
-  const result = await ImagePicker.launchCameraAsync({
-   
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 0.8,
-  });
-
-  if (!result.canceled) {
-    console.log("Captured image:", result.assets[0].uri);
-  }
-};
+  const openCamera = () => {
+    Alert.alert(
+      "Camera access",
+      "Allow camera access to take photos?",
+      [
+        { text: "Don't allow", style: "cancel" },
+        { text: "Allow", onPress: () => router.push("/camerasearch") },
+      ]
+    );
+  };
 
 
     // suggested
@@ -598,6 +660,49 @@ const sellerGallery = [
     image: require("../assets/images/seller1.png"),
   },
 ];
+// cards
+const freshData = [
+  { id: "1", image: require("../assets/images/product1.png") },
+  { id: "2", image: require("../assets/images/product2.png") },
+  { id: "3", image: require("../assets/images/premium1.png") },
+  { id: "4", image: require("../assets/images/premium2.png") },
+];
+const FRESH_ROW_PADDING = 16;
+const FRESH_INNER = width - FRESH_ROW_PADDING * 2;
+const FRESH_IMG_60 = FRESH_INNER * 0.6;
+const FRESH_IMG_30 = FRESH_INNER * 0.3;
+const FRESH_IMG_GAP = FRESH_INNER * 0.1;
+
+const freshPairs: (typeof freshData)[] = [];
+for (let i = 0; i < freshData.length; i += 2) {
+  freshPairs.push(freshData.slice(i, i + 2));
+}
+
+
+// categariy data
+
+const categoryData = [
+  {
+    id: "1",
+    title: "Print Store",
+    image: require("../assets/images/megadis1.png"),
+  },
+  {
+    id: "2",
+    title: "Giftables Store",
+    image: require("../assets/images/megadis2.png"),
+  },
+  {
+    id: "3",
+    title: "Summer Store",
+    image: require("../assets/images/megadis3.png"),
+  },
+  {
+    id: "4",
+    title: "Combo Store",
+    image: require("../assets/images/megadis4.png"),
+  },
+];
 
 
 // megabanners
@@ -611,36 +716,57 @@ const sellerGallery = [
         {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.topRow}>
-            <View>
-              <Text style={styles.helloText}>Hello 👋</Text>
-              <Text style={styles.shopText}>Lets shop</Text>
+            <View style={styles.greetingCol}>
+              <Text style={styles.helloText} numberOfLines={1}>
+                Hello, {userDisplayName} 👋
+              </Text>
+              <Text style={styles.shopText}>Let&apos;s shop</Text>
+            </View>
+
+            <View style={styles.locationSlot}>
+              <TouchableOpacity
+                style={styles.locationBtn}
+                onPress={() => router.push("/loc")}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="location-outline" size={18} color="#ff6600" />
+                <Text style={styles.locationBtnText} numberOfLines={1}>
+                  Location
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* ICONS + PROFILE */}
             <View style={styles.iconRow}>
-               <TouchableOpacity onPress={() => router.push("/wishlist")}> 
+               <TouchableOpacity
+                onPress={() => router.push("/wishlist")}
+                style={styles.headerIconHit}
+              >
                 <Ionicons
                   name="heart-outline"
-                  size={22}
+                  size={24}
                   color="#000"
-                  style={styles.iconSpacing}
                 />
-               </TouchableOpacity> 
+               </TouchableOpacity>
 
-               <TouchableOpacity onPress={() => router.push("/cart")}> 
+               <TouchableOpacity
+                onPress={() => router.push("/cart")}
+                style={[styles.headerIconHit, styles.headerIconHitCart]}
+              >
                 <Ionicons
                   name="cart-outline"
-                  size={22}
+                  size={24}
                   color="#000"
-                  style={styles.iconSpacing}
                 />
-               </TouchableOpacity> 
+               </TouchableOpacity>
 
-               <TouchableOpacity onPress={() => router.push("/account")}> 
+               <TouchableOpacity
+                onPress={() => router.push("/account")}
+                style={styles.headerProfileBtn}
+              >
                 <Image
                   source={{ uri: "https://i.pravatar.cc/150?img=12" }}
                   style={styles.profileImage}
-                  
                 />
                </TouchableOpacity> 
             </View>
@@ -660,18 +786,22 @@ const sellerGallery = [
                 placeholder={placeholderTexts[placeholderIndex]}
                 placeholderTextColor="#777"
                 style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
               />
-<TouchableOpacity onPress={openCamera}>
-  <Ionicons
-    name="camera-outline"
-    size={20}
-    color="#777"
-    style={{ marginRight: 10 }}
-  />
-  </TouchableOpacity>
-<TouchableOpacity onPress={startVoiceSearch}>
-  <Ionicons name="mic-outline" size={18} color="#777" />
-</TouchableOpacity>
+<TouchableOpacity onPress={openCamera} style={styles.searchBarIconBtn}>
+                <Ionicons
+                  name="camera-outline"
+                  size={24}
+                  color="#777"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={startVoiceSearch}
+                style={styles.searchBarIconBtn}
+              >
+                <Ionicons name="mic-outline" size={24} color="#777" />
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -740,7 +870,7 @@ const sellerGallery = [
         {/* USER BOX */}
         <View style={styles.userSuggestionCard}>
   <Text style={styles.userSuggestionTitle}>
-    user name, still looking for these?
+    Top Picks for You
   </Text>
 
   <View style={styles.userSuggestionRow}>
@@ -768,54 +898,81 @@ const sellerGallery = [
             </TouchableOpacity>
           ))}
         </View>
+{/* cards section */}
 
-        {/* YOU MAY ALSO LIKE PRODUCT GRID */}
-    <View style={styles.productSectionHeader}>
-  <Text style={styles.productSectionTitle}>You May Also Like...</Text>
+
+
+      
+    <View style={styles.freshSection}>
+ <View style={styles.freshHeader}>
+  <Text style={styles.freshTitle}>Fresh Finds</Text>
 
   <TouchableOpacity
-    style={styles.productArrowButton}
+    style={styles.freshArrow}
     onPress={() => router.push("/sartselling")}
   >
-    <Ionicons name="arrow-forward" size={22} color="#fff" />
+    <Ionicons name="arrow-forward" size={20} color="#fff" />
   </TouchableOpacity>
 </View>
-
-
-        {/* you may also like */}
-
-        <View style={styles.productGridWrapper}>
-          {productGrid.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.productCard}>
-              <View style={styles.productImageWrap}>
+  <FlatList
+    data={freshPairs}
+    horizontal
+    pagingEnabled
+    showsHorizontalScrollIndicator={false}
+    snapToInterval={width}
+    decelerationRate="fast"
+    keyExtractor={(_, i) => `fresh-pair-${i}`}
+    contentContainerStyle={{ marginTop: 8 }}
+    onMomentumScrollEnd={(e) => {
+      const index = Math.round(e.nativeEvent.contentOffset.x / width);
+      setActiveIndex(
+        Math.min(Math.max(0, index), Math.max(0, freshPairs.length - 1))
+      );
+    }}
+    renderItem={({ item: pair, index }) => {
+      const isActive = index === activeIndex;
+      const [left, right] = [pair[0], pair[1]];
+      return (
+        <View style={{ width, paddingHorizontal: FRESH_ROW_PADDING }}>
+          <View
+            style={[
+              styles.freshPairRow,
+              {
+                gap: FRESH_IMG_GAP,
+                opacity: isActive ? 1 : 0.88,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={{ width: FRESH_IMG_60 }}
+            >
+              <Image
+                source={left.image}
+                style={styles.freshCardImage}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+            {right ? (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={{ width: FRESH_IMG_30 }}
+              >
                 <Image
-                  source={item.image}
-                  style={styles.productCardImage}
+                  source={right.image}
+                  style={styles.freshCardImage}
                   resizeMode="cover"
                 />
-                {item.rating ? (
-                  <View style={styles.ratingBadge}>
-                    <Text style={styles.ratingText}></Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <Text style={styles.productName} numberOfLines={1}>
-                {item.name}
-              </Text>
-
-              <View style={styles.priceRow}>
-                <Text style={styles.oldPrice}>{item.oldPrice}</Text>
-                <Text style={styles.newPrice}> {item.price}</Text>
-              </View>
-<View style={styles.addCartContainer}>
-  <TouchableOpacity style={styles.addCartButton}>
-    <Text style={styles.addCartText}>Add to Cart</Text>
-  </TouchableOpacity>
-</View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: FRESH_IMG_30 }} />
+            )}
+          </View>
         </View>
+      );
+    }}
+  />
+</View>
 {/* second banner section  */}
 
 <View style={{ marginTop: 4 }}>
@@ -937,6 +1094,31 @@ const sellerGallery = [
 </View>
 
 
+{/* catagariesbased products
+ */}
+
+ <Text style={styles.sectionTitle}>Shop by Store</Text>
+
+<FlatList
+  data={categoryData}
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  keyExtractor={(item) => item.id}
+  contentContainerStyle={styles.storeList}
+  renderItem={({ item }) => (
+    <View style={styles.storeItem}>
+      
+      <View style={styles.arcContainer}>
+        <Image source={item.image} style={styles.arcImage} />
+      </View>
+
+      <Text style={styles.storeText}>{item.title}</Text>
+
+    </View>
+  )}
+/>
+
+
 {/* focus */}
 {/* IN FOCUS Section */}
 <View style={styles.focusSection}>
@@ -1035,8 +1217,9 @@ const sellerGallery = [
         </View>
 
         <TouchableOpacity style={styles.latestCartButton}>
-          <Text style={styles.latestCartButtonText}>🛒 Add To Cart</Text>
-        </TouchableOpacity>
+  <Ionicons name="cart-outline" size={18} color="#fff" />
+  <Text style={styles.latestCartButtonText}> Add To Cart</Text>
+</TouchableOpacity>
       </TouchableOpacity>
     ))}
   </View>
@@ -1076,7 +1259,7 @@ const sellerGallery = [
     style={styles.arrowButton}
     onPress={() => router.push("/sellergalleryscreen")}
   >
-    <Icon name="arrow-right" size={24} color="#000" />
+    <Icon name="arrow-right" size={24} color="#eedfdf" />
   </TouchableOpacity>
 
 </View>
@@ -1216,7 +1399,7 @@ const sellerGallery = [
         <View style={styles.modalOverlay}>
           <View style={styles.bottomModal}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>GENDER</Text>
+              <Text style={styles.modalTitle}>USER TYPE</Text>
               <TouchableOpacity onPress={() => setGenderModalVisible(false)}>
                 <Ionicons name="close" size={30} color="#555" />
               </TouchableOpacity>
@@ -1441,17 +1624,68 @@ const styles = StyleSheet.create({
 
   topRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+  },
+
+  greetingCol: {
+    flexShrink: 0,
+  },
+
+  locationSlot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    minWidth: 0,
+  },
+
+  locationBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: "100%",
+  },
+
+  locationBtnText: {
+    fontSize: 13,
+    color: "#444",
+    fontWeight: "600",
   },
 
   iconRow: {
     flexDirection: "row",
     alignItems: "center",
+    flexShrink: 0,
   },
 
   iconSpacing: {
     marginRight: 12,
+  },
+
+  headerIconHit: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 0,
+  },
+
+  headerIconHitCart: {
+    marginLeft: -10,
+  },
+
+  headerProfileBtn: {
+    marginLeft: 10,
+  },
+
+  searchBarIconBtn: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 0,
+    marginRight: 0,
+    paddingHorizontal: 2,
   },
 
   helloText: { fontSize: 14, color: "#777" },
@@ -1472,8 +1706,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#EFEFEF",
     borderRadius: 25,
-    paddingHorizontal: 12,
-    height: 45,
+    paddingHorizontal: 10,
+    minHeight: 48,
+    paddingVertical: 2,
   },
 
   searchInput: { flex: 1, marginLeft: 8 },
@@ -2477,19 +2712,21 @@ latestNewPrice: {
 },
 
 latestCartButton: {
-  backgroundColor: "#f28118",
-  marginHorizontal: 12,
-  marginTop: 16,
-  marginBottom: 18,
-  borderRadius: 12,
-  paddingVertical: 14,
+  flexDirection: "row",
   alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "#f28a18",
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  borderRadius: 6,
+  height:50,
 },
 
 latestCartButtonText: {
   color: "#fff",
-  fontSize: 15,
-  fontWeight: "700",
+  fontSize: 14,
+  marginLeft: 6,
+  fontWeight: "600",
 },
 //  seller gallary
 
@@ -2562,13 +2799,93 @@ titleLine: {
   },
 
   arrowButton: {
-    alignSelf: "flex-end",
-    marginTop: 6,
-  },
+  alignSelf: "flex-end",
+  backgroundColor: "black",
+  marginTop: 6,
+  width: 40,
+  height: 36,
+  borderRadius: 18,
+  justifyContent: "center",
+  alignItems: "center",
+},
 
+// cards
+freshSection: {
+  marginTop: 28,
+},
 
+freshTitle: {
+  fontSize: 28,
+  fontWeight: "600",
+  marginLeft: 16,
+  marginBottom: 8,
+},
 
+freshCardImage: {
+  width: "100%",
+  height: 300,
+  borderRadius: 14,
+},
+freshArrow: {
+  backgroundColor: "#0A2540", // navy blue (your theme)
+  padding: 8,
+  borderRadius: 25,
+},
+freshHeader: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  paddingHorizontal: 16,
+},
 
+freshPairRow: {
+  flexDirection: "row",
+  alignItems: "stretch",
+},
 
+// categariesbased
 
+sectionTitle: {
+  fontSize: 28,
+  fontWeight: "600",
+  marginLeft: 15,
+  marginTop: 20,
+  marginBottom: 15,
+  color: "#333",
+},
+
+storeList: {
+  paddingLeft: 15,
+},
+
+storeItem: {
+  width: 140,
+  alignItems: "center",
+  marginRight: 18,
+},
+
+arcContainer: {
+  width: 130,
+  height: 120,
+  borderTopLeftRadius: 80,
+  borderTopRightRadius: 80,
+  borderBottomLeftRadius: 20,
+  borderBottomRightRadius: 20,
+  overflow: "hidden",
+  backgroundColor: "#eee",
+},
+
+arcImage: {
+  width: "100%",
+  height: "100%",
+  resizeMode: "cover",
+},
+
+storeText: {
+  marginTop: 10,
+  fontSize: 15,
+  fontWeight: "500",
+  textAlign: "center",
+  color: "#333",
+},
 });
