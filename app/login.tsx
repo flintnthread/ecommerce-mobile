@@ -13,11 +13,13 @@ import { useRouter } from "expo-router";
 import { Checkbox } from "expo-checkbox";
 import * as WebBrowser from "expo-web-browser";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 
 export default function Login() {
   const router = useRouter();
   const [isChecked, setChecked] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const navigation = useNavigation();
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const mobileRegex = /^[0-9]{10}$/;
@@ -76,7 +78,7 @@ router.push({
   return (
     <View style={styles.container}>
       <Image
-        source={require("../assets/images/logo.png")}
+        source={require("../assets/images/fntfav.png")}
         style={styles.logo}
         resizeMode="contain"
       />
@@ -113,7 +115,12 @@ router.push({
 
       <View style={styles.createAccountRow}>
         <Text style={styles.newText}>New to FlintThread?</Text>
-        <Text style={styles.createText}> Create an account</Text>
+        <TouchableOpacity
+  style={styles.createBtn}
+   onPress={() => router.push("/login")}
+>
+  <Text style={styles.createText}>Create an account</Text>
+</TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -225,4 +232,13 @@ const styles = StyleSheet.create({
   googleText: {
     fontWeight: "500",
   },
+
+  createBtn: {
+  marginTop: -10,
+  
+  paddingVertical: 12,
+  paddingHorizontal: 15,
+  borderRadius: 8,
+  alignItems: "center",
+},
 });
