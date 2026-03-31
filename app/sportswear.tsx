@@ -33,6 +33,12 @@ const IMG_HERO_SOCCER = require("../assets/images/sports3.png");
 const IMG_HERO_TENNIS = require("../assets/images/sports4.png");
 const IMG_HERO = require("../assets/images/sports4.png");
 
+const HERO_BANNERS = [
+  require("../assets/images/sportswear.png"),
+  require("../assets/images/sportsbanner1.png"),
+  require("../assets/images/sportsbanner2.png"),
+];
+
 const SPORTSWEAR_DEAL_CARDS: {
   id: string;
   title: string;
@@ -198,7 +204,7 @@ const colorOptions = [
 
 // mens  sports section
 const interests = [
-  { name: "Sports Wear", size: 170, img: require("../assets/images/sportsbanner1.png") },
+  { name: "Mens Sports Wear", size: 170, img: require("../assets/images/sportsbanner1.png") },
   { name: "Cycling shoes", size: 120, img: require("../assets/images/sportsbanner2.png") },
   { name: "Hiking shoes", size: 90, img: require("../assets/images/sports3.png") },
   { name: "Running shoes", size: 90, img: require("../assets/images/sports4.png") },
@@ -345,21 +351,6 @@ function PlaybookPageGrid({
               </View>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.pbMini}
-            activeOpacity={0.9}
-            onPress={onShop}
-          >
-            <Image source={page.bottomMini2} style={styles.pbCardImg} />
-            <View style={styles.pbCardFooter}>
-              <Text style={styles.pbBadge} numberOfLines={2}>
-                {badges[4]}
-              </Text>
-              <View style={styles.pbShopBtn}>
-                <Text style={styles.pbShopBtnText}>Shop now</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -392,14 +383,6 @@ function SportswearGlassDealCard({
       >
         <View style={styles.glassDealTopRow}>
           <View style={styles.glassDealTopSpacer} />
-          <TouchableOpacity
-            style={styles.glassIconCircle}
-            onPress={onBag}
-            accessibilityRole="button"
-            accessibilityLabel="Bag"
-          >
-            <Ionicons name="bag-outline" size={20} color="#fff" />
-          </TouchableOpacity>
         </View>
 
         <View style={styles.glassDealMiddle} />
@@ -410,14 +393,6 @@ function SportswearGlassDealCard({
             <Text style={styles.glassDealTitle} numberOfLines={2}>
               {title}
             </Text>
-            <TouchableOpacity
-              style={styles.glassIconCircleSm}
-              onPress={onDetail}
-              accessibilityRole="button"
-              accessibilityLabel="View"
-            >
-              <Ionicons name="fitness-outline" size={18} color="#fff" />
-            </TouchableOpacity>
           </View>
         </View>
       </ImageBackground>
@@ -430,6 +405,16 @@ export default function SportsWearSection() {
   const [searchQuery, setSearchQuery] = useState("");
   const [playbookPage, setPlaybookPage] = useState(0);
   const [selectedColor, setSelectedColor] = useState("white");
+  const [bannerIndex, setBannerIndex] = useState(0);
+  const [heroBannerIndex, setHeroBannerIndex] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const sportswearDealsY = useRef(0);
+  const shopByStoreY = useRef(0);
+  const mensInterestY = useRef(0);
+  const athletesPlaybookY = useRef(0);
+  const womenSportsWearY = useRef(0);
+  const bannerScrollRef = useRef<ScrollView>(null);
+  const heroBannerScrollRef = useRef<ScrollView>(null);
 
   const openCamera = useCallback(() => {
     Alert.alert(
@@ -446,6 +431,26 @@ export default function SportsWearSection() {
     router.push("/products");
   }, [router]);
 
+  const scrollToSportswearDeals = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: sportswearDealsY.current, animated: true });
+  }, []);
+
+  const scrollToShopByStore = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: shopByStoreY.current, animated: true });
+  }, []);
+
+  const scrollToMensInterest = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: mensInterestY.current, animated: true });
+  }, []);
+
+  const scrollToAthletesPlaybook = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: athletesPlaybookY.current, animated: true });
+  }, []);
+
+  const scrollToWomenSportsWear = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: womenSportsWearY.current, animated: true });
+  }, []);
+
 
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
@@ -459,13 +464,49 @@ useEffect(() => {
   ).start();
 }, []);
 
+useEffect(() => {
+  const cardWidth = width * 0.75;
+  const interval = setInterval(() => {
+    setBannerIndex((prev) => {
+      const next = (prev + 1) % banners.length;
+      bannerScrollRef.current?.scrollTo({
+        x: next * cardWidth,
+        animated: true,
+      });
+      return next;
+    });
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, []);
+
+useEffect(() => {
+  const cardWidth = width;
+  const interval = setInterval(() => {
+    setHeroBannerIndex((prev) => {
+      const next = (prev + 1) % HERO_BANNERS.length;
+      heroBannerScrollRef.current?.scrollTo({
+        x: next * cardWidth,
+        animated: true,
+      });
+      return next;
+    });
+  }, 4000);
+
+  return () => clearInterval(interval);
+}, []);
+
 const rotate = rotateAnim.interpolate({
   inputRange: [0, 1],
   outputRange: ["0deg", "360deg"],
 });
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      ref={scrollRef}
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
       {/* HEADER */}
       <View style={styles.header}>
         <Image
@@ -506,26 +547,64 @@ const rotate = rotateAnim.interpolate({
       </View>
 
     <View style={styles.bannerContainer}>
-  <Image
-    source={require("../assets/images/sportswear.png")}
-    style={styles.bannerImage}
-  />
-</View>
+      <ScrollView
+        ref={heroBannerScrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+      >
+        {HERO_BANNERS.map((img, index) => (
+          <View key={index} style={{ width }}>
+            <Image
+              source={img}
+              style={styles.bannerImage}
+            />
+            <TouchableOpacity
+              style={styles.bannerShopAllBtn}
+              activeOpacity={0.9}
+              onPress={scrollToSportswearDeals}
+            >
+              <Text style={styles.bannerShopAllText}>Shop All</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
 
 
       
 
       {/* SHOP BY CATEGORY */}
       <View style={styles.glassDealsSection}>
-        <Text style={styles.glassDealsSectionTitle}>Shop by Categories</Text>
+        <Text style={styles.glassDealsSectionTitle}>Explore by category</Text>
         {SPORTSWEAR_DEAL_CARDS.map((item) => (
           <SportswearGlassDealCard
             key={item.id}
             title={item.title}
             image={item.image}
-            onOpen={goShop}
+            onOpen={
+              item.id === "1"
+                ? scrollToSportswearDeals
+                : item.id === "2"
+                ? scrollToShopByStore
+                : item.id === "3"
+                ? scrollToMensInterest
+                : item.id === "4"
+                ? scrollToAthletesPlaybook
+                : goShop
+            }
             onBag={() => router.push("/cart")}
-            onDetail={goShop}
+            onDetail={
+              item.id === "1"
+                ? scrollToSportswearDeals
+                : item.id === "2"
+                ? scrollToShopByStore
+                : item.id === "3"
+                ? scrollToMensInterest
+                : item.id === "4"
+                ? scrollToAthletesPlaybook
+                : goShop
+            }
           />
         ))}
       </View>
@@ -613,7 +692,12 @@ const rotate = rotateAnim.interpolate({
       </View>
 
       {/* Playbook: left page | spiral | right page — swipe for next spread */}
-      <View style={styles.springBookOuter}>
+      <View
+        style={styles.springBookOuter}
+        onLayout={(e) => {
+          athletesPlaybookY.current = e.nativeEvent.layout.y;
+        }}
+      >
         <Text style={styles.diaryTitle}>The Athlete&apos;s Playbook</Text>
 
         <ScrollView
@@ -734,7 +818,12 @@ const rotate = rotateAnim.interpolate({
 
 
 {/* ACESSARORIES*/}
-<View style={styles.storeSection}>
+<View
+  style={styles.storeSection}
+  onLayout={(e) => {
+    shopByStoreY.current = e.nativeEvent.layout.y;
+  }}
+>
   
   {/* 🔶 TOP BANNER */}
   <ImageBackground
@@ -775,14 +864,16 @@ const rotate = rotateAnim.interpolate({
   </ScrollView>
 </View>
 {/* BANNER SECTION */}
-
- 
-
 <View style={styles.lookbookWrapper}>
-
-  <Text style={styles.lookbookTitle}>THE LOCAL LOOKBOOK</Text>
+  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+    <Text style={styles.lookbookTitle}>THE LOCAL LOOKBOOK</Text>
+    <TouchableOpacity onPress={scrollToWomenSportsWear}>
+      <Text style={styles.shopAll}>Shop All</Text>
+    </TouchableOpacity>
+  </View>
 
   <ScrollView
+    ref={bannerScrollRef}
     horizontal
     showsHorizontalScrollIndicator={false}
     snapToInterval={width * 0.75}
@@ -790,23 +881,25 @@ const rotate = rotateAnim.interpolate({
   >
     {banners.map((img, index) => (
       <View key={index} style={styles.cardWrapper}>
-
         <View style={styles.redFrame}>
           <Image
             source={img}
             style={styles.lookbookImage}
           />
         </View>
-
       </View>
     ))}
   </ScrollView>
-
 </View>
 
 {/* womens sports wear */}
 
-<View style={styles.westernSection}>
+<View
+  style={styles.westernSection}
+  onLayout={(e) => {
+    womenSportsWearY.current = e.nativeEvent.layout.y;
+  }}
+>
   
   {/* 🔶 TOP BANNER */}
   <ImageBackground
@@ -872,7 +965,12 @@ const rotate = rotateAnim.interpolate({
 
 
 {/* mens wear */}
- <View style={styles.container2}>
+ <View
+   style={styles.container2}
+   onLayout={(e) => {
+     mensInterestY.current = e.nativeEvent.layout.y;
+   }}
+ >
     <Text style={styles.title}>What's your interest in?</Text>
 
     <View style={styles.centerWrapper}>
@@ -923,6 +1021,7 @@ const rotate = rotateAnim.interpolate({
 
 {/* 🔥 CURVED BIG CARD SLIDER */}
 <View style={styles.curveSection}>
+  <Text style={styles.sectionTitle}>Sportswear Highlights</Text>
   <ScrollView
     horizontal
     pagingEnabled
@@ -955,11 +1054,11 @@ const rotate = rotateAnim.interpolate({
 
         {/* ICONS */}
         <TouchableOpacity style={styles.topIcon}>
-          <Ionicons name="bookmark-outline" size={20} color="#000" />
+          <Ionicons name="heart-outline" size={20} color="#000" />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.bottomIcon}>
-          <Ionicons name="bag-outline" size={22} color="#000" />
+          <Ionicons name="cart-outline" size={22} color="#000" />
         </TouchableOpacity>
 
       </View>
@@ -967,19 +1066,18 @@ const rotate = rotateAnim.interpolate({
   </ScrollView>
 </View>
 {/* deals section */}
-<View style={styles.heroDealsOnlyWrap}>
-       <TouchableOpacity onPress={goShop} activeOpacity={0.9}>
-  <ImageBackground
-    source={IMG_SPORTS_DEALS}
-    style={styles.sportswearDealsBtn}
-    imageStyle={{ borderRadius: 14 }}
-  >
-    <View style={styles.dealsOverlay}>
+<View
+  style={styles.heroDealsOnlyWrap}
+  onLayout={(e) => {
+    sportswearDealsY.current = e.nativeEvent.layout.y;
+  }}
+>
+  <TouchableOpacity onPress={goShop} activeOpacity={0.9}>
+    <View style={styles.sportswearDealsBtn}>
       <Text style={styles.sportswearDealsBtnText}>Sportswear deals</Text>
       <Ionicons name="chevron-forward" size={18} color="#fff" />
     </View>
-  </ImageBackground>
-</TouchableOpacity>
+  </TouchableOpacity>
       </View>
 
       {/* Promo grid — tap any tile; main CTA is the bar above */}
@@ -1025,9 +1123,13 @@ const rotate = rotateAnim.interpolate({
                 onPress={goShop}
                 style={styles.heroBottomCell}
               >
-                <View style={styles.heroSaleOuter}>
-                  <View style={styles.heroSaleInnerMinimal} />
-                </View>
+                <ImageBackground
+                  source={IMG_HERO}
+                  style={styles.heroBgImageOnly}
+                  imageStyle={styles.heroBgImage}
+                >
+                  <View style={styles.heroDimLight} />
+                </ImageBackground>
               </TouchableOpacity>
             </View>
           </View>
@@ -1053,33 +1155,30 @@ const rotate = rotateAnim.interpolate({
 
 
 {/* L shape section  */}
-<ScrollView
-  horizontal
-  showsHorizontalScrollIndicator={false}
-  contentContainerStyle={{
-    paddingHorizontal: 10,
-    paddingTop: 10,   // 👈 small inner spacing
-  }}
-  style={{ marginTop: 45 }}   // 👈 🔥 THIS CREATES GAP FROM ABOVE SECTION
->
+<View style={{ marginTop: 32 }}>
+  <ScrollView
+    horizontal
+    showsHorizontalScrollIndicator={false}
+    contentContainerStyle={{
+      paddingHorizontal: 12,
+      paddingBottom: 4,
+    }}
+  >
+    {data2.map((item) => (
+      <View key={item.id} style={styles.lSection}>
+        {/* BIG L-SHAPE LEFT BLOCK */}
+        <View style={styles.bigBox}>
+          <Image source={item.bigImage} style={styles.bigImage} />
+        </View>
 
-  {data2.map((item) => (
-    <View key={item.id} style={styles.lSection}>
-
-      {/* BIG BOX */}
-      <View style={styles.bigBox}>
-        <Image source={item.bigImage} style={styles.bigImage} />
+        {/* SMALL BLOCK BOTTOM-RIGHT TO COMPLETE L */}
+        <View style={styles.smallBox}>
+          <Image source={item.smallImage} style={styles.smallImage} />
+        </View>
       </View>
-
-      {/* SMALL BOX */}
-      <View style={styles.smallBox}>
-        <Image source={item.smallImage} style={styles.smallImage} />
-      </View>
-
-    </View>
-  ))}
-
-</ScrollView>
+    ))}
+  </ScrollView>
+</View>
 
   
 
@@ -1150,12 +1249,30 @@ const styles = StyleSheet.create({
   bannerContainer: {
     width: "100%",
     height: height * 0.5,
+    position: "relative",
   },
 
   bannerImage: {
     width: "100%",
     height: "100%",
     resizeMode: "cover",
+  },
+
+  bannerShopAllBtn: {
+    position: "absolute",
+    right: 20,
+    bottom: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.65)",
+  },
+
+  bannerShopAllText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.4,
   },
 
   heroDealsOnlyWrap: {
@@ -2174,18 +2291,18 @@ topBanner: {
 // L shape section
 
 lSection: {
-  width: 280,          // 👈 REQUIRED for scroll
+  width: width - 24,
   height: 260,
-  position: 'relative',
-  marginHorizontal: 10,
+  position: "relative",
+  marginHorizontal: 0,
+  marginBottom: 16,
 },
 
 bigBox: {
-  width: '68%',        // 👈 leaves gap for small box
-  height: '100%',
+  width: "68%",        // leaves gap for small box on the right
+  height: "100%",
   borderRadius: 12,
   overflow: 'hidden',
-  
 },
 
 bigImage: {
@@ -2195,15 +2312,20 @@ bigImage: {
 },
 
 smallBox: {
-  position: 'absolute',
+  position: "absolute",
   right: 0,
   bottom: 0,
-
   width: 120,
   height: 110,
-
   borderRadius: 12,
   overflow: 'hidden',
+},
+
+smallRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  gap: 12,
+  marginTop: 10,
 },
 
 smallImage: {
@@ -2211,4 +2333,9 @@ smallImage: {
   height: '100%',
   resizeMode: 'cover',
 },
+
+
+
+
+
 });

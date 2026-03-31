@@ -207,7 +207,7 @@ export default function AccountScreen() {
   };
 
   const handleNotificationPress = () => {
-    setShowNotificationModal(true);
+    router.push("/notifications");
   };
 
   const handleNotificationAllow = () => {

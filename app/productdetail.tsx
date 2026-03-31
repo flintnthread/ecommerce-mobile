@@ -109,7 +109,7 @@ const SUGGEST_PRODUCTS: CatalogProduct[] = [
   },
 ];
 
-const ALL_PRODUCTS = [
+export const ALL_PRODUCTS = [
   {
     id: "ap1",
     name: "Printed cotton kurti",
@@ -169,6 +169,36 @@ const ALL_PRODUCTS = [
     rating: "4.4",
     ratingCount: "3,012",
     image: require("../assets/images/look2.png"),
+  },
+  {
+    id: "ap7",
+    name: "Women sports running t-shirt",
+    price: 799,
+    mrp: 1599,
+    discount: "50% off",
+    rating: "4.2",
+    ratingCount: "860",
+    image: require("../assets/images/sports1.png"),
+  },
+  {
+    id: "ap8",
+    name: "Women gym leggings",
+    price: 999,
+    mrp: 1999,
+    discount: "50% off",
+    rating: "4.4",
+    ratingCount: "1,540",
+    image: require("../assets/images/sports2.png"),
+  },
+  {
+    id: "ap9",
+    name: "Women running shoes",
+    price: 2499,
+    mrp: 4999,
+    discount: "50% off",
+    rating: "4.6",
+    ratingCount: "2,320",
+    image: require("../assets/images/sports3.png"),
   },
 ];
 

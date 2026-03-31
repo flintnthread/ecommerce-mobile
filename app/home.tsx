@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState ,useRef} from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -282,7 +282,7 @@ useEffect(() => {
     {
       name: "Foot Wear",
       image: require("../assets/images/footwearcate.png"),
-      href: "/products",
+      href: "/footwear",
     },
     {
       name: "Sports Wear",
@@ -787,18 +787,18 @@ const categoryData = [
                   size={24}
                   color="#000"
                 />
-               </TouchableOpacity>
+              </TouchableOpacity>
 
-               <TouchableOpacity
-                onPress={() => router.push("/cart")}
+              <TouchableOpacity
+                onPress={() => router.push("/notifications")}
                 style={[styles.headerIconHit, styles.headerIconHitCart]}
               >
                 <Ionicons
-                  name="cart-outline"
+                  name="notifications-outline"
                   size={24}
                   color="#000"
                 />
-               </TouchableOpacity>
+              </TouchableOpacity>
 
                <TouchableOpacity
                 onPress={() => router.push("/account")}
@@ -828,6 +828,9 @@ const categoryData = [
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                onFocus={() => {
+                  router.push("/search");
+                }}
               />
 <TouchableOpacity onPress={openCamera} style={styles.searchBarIconBtn}>
                 <Ionicons
@@ -1752,6 +1755,33 @@ const styles = StyleSheet.create({
   },
 
   searchInput: { flex: 1, marginLeft: 8 },
+
+  searchDropdown: {
+    marginTop: 4,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    paddingVertical: 4,
+    maxHeight: 180,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+
+  searchDropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eee",
+  },
+
+  searchDropdownText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#333",
+  },
 
   categoryPage: {
     flexDirection: "row",
