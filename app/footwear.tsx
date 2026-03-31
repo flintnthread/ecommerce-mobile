@@ -82,6 +82,19 @@ const GENDER_SECTION_BANNER: Record<GenderCategoryId, number> = {
   kids: FW3,
 };
 
+const RELATED_FOOTWEAR_PRODUCTS = [
+  { id: "p1", name: "Urban Lace Sneakers", category: "Women", price: 1299, rating: 4.4, image: FW1 },
+  { id: "p2", name: "Classic Block Heels", category: "Women", price: 1499, rating: 4.3, image: FW2 },
+  { id: "p3", name: "Comfy Travel Slip-ons", category: "Women", price: 999, rating: 4.2, image: FW5 },
+  { id: "p4", name: "Formal Derby Shoes", category: "Men", price: 1799, rating: 4.5, image: FW4 },
+  { id: "p5", name: "Daily Run Sneakers", category: "Men", price: 1599, rating: 4.1, image: FW6 },
+  { id: "p6", name: "Weekend Loafers", category: "Men", price: 1399, rating: 4.2, image: FW7 },
+  { id: "p7", name: "Kids School Comfort", category: "Kids", price: 899, rating: 4.6, image: FW3 },
+  { id: "p8", name: "Kids Sport Runner", category: "Kids", price: 1099, rating: 4.4, image: FW6 },
+  { id: "p9", name: "Party Spark Sandals", category: "Kids", price: 949, rating: 4.3, image: FW2 },
+  { id: "p10", name: "Trail Boots", category: "Unisex", price: 1899, rating: 4.2, image: FW4 },
+];
+
 export default function FootwearScreen() {
   const router = useRouter();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -91,6 +104,7 @@ export default function FootwearScreen() {
   const menSectionYRef = useRef(0);
   const kidsSectionYRef = useRef(0);
   const trendNowSectionYRef = useRef(0);
+  const animatedBlockYRef = useRef(0);
   const womenBannerAnim = useRef(new Animated.Value(0)).current;
   const menBannerAnim = useRef(new Animated.Value(0)).current;
   const kidsBannerAnim = useRef(new Animated.Value(0)).current;
@@ -101,6 +115,8 @@ export default function FootwearScreen() {
   const [headerHeight, setHeaderHeight] = useState(96);
   type TopMenuKey = "footwear" | "womens-footwear" | "mens-footwear" | "kids-footwear" | "trendnow";
   const [activeTopMenu, setActiveTopMenu] = useState<TopMenuKey>("footwear");
+  const getAbsoluteY = (y: number, insideAnimated = false) =>
+    insideAnimated ? animatedBlockYRef.current + y : y;
 
   // Temporary tall video banner until you provide final asset.
   const tallBannerPlayer = useVideoPlayer(
@@ -149,12 +165,12 @@ export default function FootwearScreen() {
     if (id === "women" || id === "kids" || id === "men") {
       const ref =
         id === "women"
-          ? womenSectionYRef
+          ? getAbsoluteY(womenSectionYRef.current, true)
           : id === "kids"
-          ? kidsSectionYRef
-          : menSectionYRef;
+          ? kidsSectionYRef.current
+          : menSectionYRef.current;
       mainScrollRef.current?.scrollTo({
-        y: Math.max(0, ref.current),
+        y: Math.max(0, ref),
         animated: true,
       });
       return;
@@ -194,18 +210,24 @@ export default function FootwearScreen() {
 
     // Banner animation (Women/Men/Kids)
     let candidate: GenderCategoryId | null = null;
-    if (!(womenSectionYRef.current <= 0 && menSectionYRef.current <= 0)) {
+    const womenSectionY = getAbsoluteY(womenSectionYRef.current, true);
+    const menSectionY = menSectionYRef.current;
+    const kidsSectionY = kidsSectionYRef.current;
+    const categoriesY = categoriesListYRef.current;
+    const trendNowY = trendNowSectionYRef.current;
+
+    if (!(womenSectionY <= 0 && menSectionY <= 0)) {
       if (
-        kidsSectionYRef.current > 0 &&
-        currentY >= kidsSectionYRef.current
+        kidsSectionY > 0 &&
+        currentY >= kidsSectionY
       ) {
         candidate = "kids";
       } else if (
-        menSectionYRef.current > 0 &&
-        currentY >= menSectionYRef.current
+        menSectionY > 0 &&
+        currentY >= menSectionY
       ) {
         candidate = "men";
-      } else if (currentY >= womenSectionYRef.current) {
+      } else if (currentY >= womenSectionY) {
         candidate = "women";
       }
     }
@@ -217,24 +239,23 @@ export default function FootwearScreen() {
 
     // Sticky top menu active tab
     let nextMenu: TopMenuKey = "footwear";
-    const beforeCategories =
-      categoriesListYRef.current <= 0 || currentY < categoriesListYRef.current;
+    const beforeCategories = categoriesY <= 0 || currentY < categoriesY;
 
     if (
       beforeCategories &&
-      trendNowSectionYRef.current > 0 &&
-      currentY >= trendNowSectionYRef.current
+      trendNowY > 0 &&
+      currentY >= trendNowY
     ) {
       nextMenu = "trendnow";
     }
 
-    if (womenSectionYRef.current > 0 && currentY >= womenSectionYRef.current) {
+    if (womenSectionY > 0 && currentY >= womenSectionY) {
       nextMenu = "womens-footwear";
     }
-    if (menSectionYRef.current > 0 && currentY >= menSectionYRef.current) {
+    if (menSectionY > 0 && currentY >= menSectionY) {
       nextMenu = "mens-footwear";
     }
-    if (kidsSectionYRef.current > 0 && currentY >= kidsSectionYRef.current) {
+    if (kidsSectionY > 0 && currentY >= kidsSectionY) {
       nextMenu = "kids-footwear";
     }
 
@@ -256,7 +277,7 @@ export default function FootwearScreen() {
       return;
     }
     if (key === "womens-footwear") {
-      scrollToY(womenSectionYRef.current);
+      scrollToY(getAbsoluteY(womenSectionYRef.current, true));
       return;
     }
     if (key === "mens-footwear") {
@@ -381,6 +402,9 @@ export default function FootwearScreen() {
         </View>
 
         <Animated.View
+          onLayout={(event) => {
+            animatedBlockYRef.current = event.nativeEvent.layout.y;
+          }}
           style={{
             opacity: fadeAnim,
             transform: [
@@ -411,10 +435,11 @@ export default function FootwearScreen() {
  <View
           style={styles.categoriesListSection}
           onLayout={(event) => {
-            categoriesListYRef.current = event.nativeEvent.layout.y;
+            categoriesListYRef.current =
+              animatedBlockYRef.current + event.nativeEvent.layout.y;
           }}
         >
-          <Text style={styles.hubScreenTitle}>Categories list</Text>
+          <Text style={styles.hubScreenTitle}>Footwear Categories</Text>
           <Text style={styles.hubScreenSub}>
             Choose Womens, Mens, or Kids footwear.
           </Text>
@@ -499,6 +524,15 @@ export default function FootwearScreen() {
             womenSectionYRef.current = event.nativeEvent.layout.y;
           }}
         >
+          <Text
+            style={[
+              styles.subSectionTitle,
+              styles.womenSubSectionTitle,
+              styles.genderStandaloneTitle,
+            ]}
+          >
+            Womens-Footwear Subcategories
+          </Text>
           <View
             style={[styles.genderBannerWrap, styles.womenGenderBannerWrap]}
           >
@@ -564,11 +598,6 @@ export default function FootwearScreen() {
             </Animated.View>
           </View>
           <View style={[styles.genderSubWrap, styles.womenGenderSubWrap]}>
-            <Text
-              style={[styles.subSectionTitle, styles.womenSubSectionTitle]}
-            >
-              Womens-Footwear Subcategories
-            </Text>
             <View style={styles.subGrid}>
               {SUBCATEGORY_MAP.women.map((sub) => (
                 <TouchableOpacity
@@ -589,7 +618,13 @@ export default function FootwearScreen() {
           </View>
         </View>
 
-          <View style={styles.perfectPairSection}>
+          <View
+            style={styles.perfectPairSection}
+            onLayout={(event) => {
+              trendNowSectionYRef.current =
+                animatedBlockYRef.current + event.nativeEvent.layout.y;
+            }}
+          >
             <View style={styles.perfectPairHeader}>
               <Text style={styles.perfectPairTitle}>Pick Your Perfect Pair</Text>
             </View>
@@ -613,9 +648,6 @@ export default function FootwearScreen() {
           {/* Tall portrait video banner */}
  <View
               style={styles.tallVideoSection}
-              onLayout={(event) => {
-                trendNowSectionYRef.current = event.nativeEvent.layout.y;
-              }}
             >
             <Text style={styles.tallVideoTitle}>Style Reel</Text>
             <View style={styles.tallVideoWrap}>
@@ -639,6 +671,15 @@ export default function FootwearScreen() {
             menSectionYRef.current = event.nativeEvent.layout.y;
           }}
         >
+          <Text
+            style={[
+              styles.subSectionTitle,
+              styles.menSubSectionTitle,
+              styles.genderStandaloneTitle,
+            ]}
+          >
+            Mens-Footwear Subcategories
+          </Text>
           <View
             style={[styles.genderBannerWrap, styles.menGenderBannerWrap]}
           >
@@ -704,11 +745,6 @@ export default function FootwearScreen() {
             </Animated.View>
           </View>
           <View style={[styles.genderSubWrap, styles.menGenderSubWrap]}>
-            <Text
-              style={[styles.subSectionTitle, styles.menSubSectionTitle]}
-            >
-              Mens-Footwear Subcategories
-            </Text>
             <View style={styles.subGrid}>
               {SUBCATEGORY_MAP.men.map((sub) => (
                 <TouchableOpacity
@@ -729,12 +765,41 @@ export default function FootwearScreen() {
           </View>
         </View>
 
+        <View style={styles.goldShowcaseSection}>
+          <View style={styles.goldHeroCard}>
+            <View style={styles.goldHeroTextWrap}>
+              <Text style={styles.goldHeroKicker}>QUICKLY BUY HERE</Text>
+              <Text style={styles.goldHeroTitle}>Best Prices{"\n"}With Us.</Text>
+              <Text style={styles.goldHeroSub}>
+              Premium quality products at the best prices, with reliable service and fast delivery.
+              </Text>
+              <TouchableOpacity style={styles.goldHeroCta} activeOpacity={0.9}>
+                <Text style={styles.goldHeroCtaText}>Shop Here</Text>
+              </TouchableOpacity>
+            </View>
+            <Image source={FW2} style={styles.goldHeroImage} />
+          </View>
+
+         
+
+          
+        </View>
+
         <View
           style={styles.genderSection}
           onLayout={(event) => {
             kidsSectionYRef.current = event.nativeEvent.layout.y;
           }}
         >
+          <Text
+            style={[
+              styles.subSectionTitle,
+              styles.kidsSubSectionTitle,
+              styles.genderStandaloneTitle,
+            ]}
+          >
+            Kids-Footwear Subcategories
+          </Text>
           <View
             style={[styles.genderBannerWrap, styles.kidsGenderBannerWrap]}
           >
@@ -800,11 +865,6 @@ export default function FootwearScreen() {
             </Animated.View>
           </View>
           <View style={[styles.genderSubWrap, styles.kidsGenderSubWrap]}>
-            <Text
-              style={[styles.subSectionTitle, styles.kidsSubSectionTitle]}
-            >
-              Kids-Footwear Subcategories
-            </Text>
             <View style={styles.subGrid}>
               {SUBCATEGORY_MAP.kids.map((sub) => (
                 <TouchableOpacity
@@ -822,6 +882,51 @@ export default function FootwearScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+        </View>
+
+        <View style={styles.relatedProductsSection}>
+          <View style={styles.relatedProductsHeaderRow}>
+            <Text style={styles.relatedProductsTitle}>All Related Footwear Products</Text>
+            <Text style={styles.relatedProductsCount}>
+              {RELATED_FOOTWEAR_PRODUCTS.length} items
+            </Text>
+          </View>
+
+          <View style={styles.relatedProductsGrid}>
+            {RELATED_FOOTWEAR_PRODUCTS.map((product) => (
+              <TouchableOpacity
+                key={product.id}
+                style={styles.relatedProductCard}
+                activeOpacity={0.9}
+              >
+                <View style={styles.relatedProductInner}>
+                  <Image
+                    source={product.image}
+                    style={styles.relatedProductImage}
+                  />
+                  <View style={styles.relatedProductMeta}>
+                    <Text style={styles.relatedProductName} numberOfLines={2}>
+                      {product.name}
+                    </Text>
+                    <Text style={styles.relatedProductCategory}>
+                      {product.category}
+                    </Text>
+                    <View style={styles.relatedProductBottomRow}>
+                      <Text style={styles.relatedProductPrice}>
+                        Rs {product.price}
+                      </Text>
+                      <View style={styles.relatedProductRatingPill}>
+                        <Ionicons name="star" size={12} color="#ef7b1a" />
+                        <Text style={styles.relatedProductRatingText}>
+                          {product.rating}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       </ScrollView>
@@ -1234,6 +1339,11 @@ const styles = StyleSheet.create({
     color: "#1d324e",
     marginBottom: 10,
   },
+  genderStandaloneTitle: {
+    marginHorizontal: 14,
+    marginTop: 6,
+    marginBottom: 8,
+  },
   subGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1508,6 +1618,219 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#79411c",
     fontWeight: "600",
+  },
+  relatedProductsSection: {
+    marginHorizontal: 10,
+    marginTop: 8,
+    marginBottom: 28,
+    paddingHorizontal: 2,
+  },
+  relatedProductsHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  relatedProductsTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#1d324e",
+    flex: 1,
+    paddingRight: 8,
+  },
+  relatedProductsCount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5a6578",
+  },
+  relatedProductsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+    paddingBottom: 40,
+  },
+  relatedProductCard: {
+    width: "49%",
+    borderRadius: 12,
+    
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 18,
+    overflow:"visible",
+  },
+  relatedProductInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin:1,
+  },
+  relatedProductImage: {
+    width: "100%",
+    height: 130,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  relatedProductMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  relatedProductName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 30,
+  },
+  relatedProductCategory: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#6f7a8d",
+    fontWeight: "600",
+  },
+  relatedProductBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  relatedProductPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  relatedProductRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  relatedProductRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
+  },
+  goldShowcaseSection: {
+    marginHorizontal: 10,
+    marginBottom: 12,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.16)",
+    padding: 10,
+  },
+  goldHeroCard: {
+    backgroundColor: "#17314f",
+    borderRadius: 18,
+    padding: 14,
+    overflow: "hidden",
+  },
+  goldHeroTextWrap: {
+    width: "58%",
+    zIndex: 2,
+  },
+  goldHeroKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#f5c24c",
+    marginBottom: 6,
+  },
+  goldHeroTitle: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  goldHeroSub: {
+    marginTop: 10,
+    fontSize: 11,
+    lineHeight: 16,
+    color: "rgba(255,255,255,0.75)",
+  },
+  goldHeroCta: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    backgroundColor: "#f2ba3d",
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  goldHeroCtaText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#1f2d3e",
+  },
+  goldHeroImage: {
+    position: "absolute",
+    right: -12,
+    bottom: 10,
+    borderRadius:290,
+    width: 200,
+    height: 170,
+    resizeMode: "contain",
+  },
+  goldArrivalHeader: {
+    marginTop: 14,
+    alignItems: "center",
+  },
+  goldArrivalTitle: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#1d2430",
+  },
+  goldArrivalSub: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#8b93a2",
+  },
+  goldArrivalViewAll: {
+    position: "absolute",
+    right: 0,
+    top: 14,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5a6578",
+  },
+  goldArrivalGrid: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  goldArrivalCard: {
+    width: "48.5%",
+    marginBottom: 12,
+  },
+  goldArrivalImage: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 8,
+    backgroundColor: "#f4f5f6",
+  },
+  goldArrivalName: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#1d2430",
+  },
+  goldArrivalPrice: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#202938",
+    fontWeight: "700",
+  },
+  goldArrivalStars: {
+    marginTop: 2,
+    fontSize: 10,
+    letterSpacing: 0.6,
+    color: "#e6b63f",
   },
 });
 
