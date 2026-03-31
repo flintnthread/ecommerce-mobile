@@ -441,44 +441,6 @@ const HOME_CONTENT: Record<string, HomeContent> = {
       },
     ],
   },
-  homelyHub: {
-    topHeading: "CATEGORIES",
-    bannerTitle: "GIFT",
-    bannerSubtitle: "STUDIO",
-    bannerImage: require("../assets/images/homecate.png"),
-    chips: [
-      { id: "hh1", label: "Gift Hampers" },
-      { id: "hh2", label: "Personalized Gifts" },
-      { id: "hh3", label: "Festival Specials" },
-      { id: "hh4", label: "Decor Gifts" },
-    ],
-    tiles: [
-      {
-        id: "ht1",
-        label: "LUXURY GIFT HAMPERS",
-        countText: "(860 items)",
-        image: require("../assets/images/homecate.png"),
-      },
-      {
-        id: "ht2",
-        label: "PERSONALIZED GIFTS",
-        countText: "(720 items)",
-        image: require("../assets/images/homecate.png"),
-      },
-      {
-        id: "ht3",
-        label: "FESTIVE GIFT BOXES",
-        countText: "(640 items)",
-        image: require("../assets/images/sweetscate.png"),
-      },
-      {
-        id: "ht4",
-        label: "HOME DECOR GIFTS",
-        countText: "(580 items)",
-        image: require("../assets/images/accessariescate.png"),
-      },
-    ],
-  },
   fitnessPro: {
     topHeading: "CATEGORIES",
     bannerTitle: "F&T PRO",
@@ -1033,7 +995,6 @@ export default function SubcategoriesScreen() {
     if (mainCat === "womenswear") return "Women's Hub";
     if (mainCat === "kidswear") return "Kids Hub";
     if (mainCat === "sportswear") return "Sportswear Hub";
-    if (mainCat === "homelyHub") return "Homely Hub";
     return "Categories Hub";
   }, [mainCat]);
   const [selectedHomeChip, setSelectedHomeChip] = useState(() =>
