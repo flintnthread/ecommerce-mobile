@@ -297,7 +297,7 @@ useEffect(() => {
     {
       name: "Homelyhub",
       image: require("../assets/images/homecate.png"),
-      href: "/homelyhub",
+      href: "/gifts",
     },
   ];
 
