@@ -299,6 +299,10 @@ function getKidsRelatedItemIdForCarouselIndex(index: number) {
   return KIDS_RELATED_LANE_IDS[safeIndex];
 }
 
+function getDefaultKidsCategoryForLane(laneId: string) {
+  return kidsRelatedCategories[laneId]?.[0] ?? null;
+}
+
 const splitShowcaseImages = [
   require("../assets/images/accessariescate.png"),
   require("../assets/images/accessoriescate.png"),
@@ -331,6 +335,28 @@ type WomanYouAreCarouselItem = {
   image: any;
 };
 
+type KidsAccessoryShowcaseItem = {
+  id: string;
+  title: string;
+  offer: string;
+  image: any;
+};
+
+type KidsAccessoryShowcaseRow = {
+  id: string;
+  title: string;
+  items: KidsAccessoryShowcaseItem[];
+};
+
+type AccessoriesHeroDeal = {
+  id: string;
+  title: string;
+  brand: string;
+  subtitle: string;
+  offer: string;
+  image: any;
+};
+
 const KIDS_YOU_ARE_QUOTE =
   "We create pieces that celebrate how you move, imagine, and shine — because growing up should still feel like fun.";
 
@@ -354,6 +380,82 @@ const womanYouAreCardFooters = [
   "CURATED",
   "EXCLUSIVE",
 ] as const;
+
+const kidsAccessoryShowcaseRows: KidsAccessoryShowcaseRow[] = [
+  {
+    id: "kr1",
+    title: "EVERYTHING FOR EVERYONE",
+    items: [
+      { id: "kr1-1", title: "Gold & Silver Jewellery", offer: "UP TO 20% OFF", image: require("../assets/images/latest1.png") },
+      { id: "kr1-2", title: "Accessories", offer: "UP TO 15% OFF", image: require("../assets/images/freepik_0001.jpeg") },
+      { id: "kr1-3", title: "Watches & Sunglasses", offer: "40-50% OFF", image: require("../assets/images/accessoriescate.png") },
+      { id: "kr1-4", title: "Handbags & More", offer: "MIN. 40% OFF", image: require("../assets/images/look3.png") },
+    ],
+  },
+  {
+    id: "kr2",
+    title: "SMART PICKS",
+    items: [
+      { id: "kr2-1", title: "Belts & Wallets", offer: "UP TO 50% OFF", image: require("../assets/images/product1.png") },
+      { id: "kr2-2", title: "Smart Watches", offer: "MIN. 50% OFF", image: require("../assets/images/accessariescate.png") },
+      { id: "kr2-3", title: "Fashion Jewellery", offer: "UP TO 30% OFF", image: require("../assets/images/latest3.png") },
+      { id: "kr2-4", title: "Audio", offer: "UP TO 70% OFF", image: require("../assets/images/product2.png") },
+    ],
+  },
+  {
+    id: "kr3",
+    title: "ACCESSORIES TO IMPRESS",
+    items: [
+      { id: "kr3-1", title: "Tees", offer: "MIN. 55% OFF", image: require("../assets/images/latest4.png") },
+      { id: "kr3-2", title: "Shirts", offer: "MIN. 50% OFF", image: require("../assets/images/look2.png") },
+      { id: "kr3-3", title: "Jeans", offer: "UNDER 1199", image: require("../assets/images/product4.png") },
+      { id: "kr3-4", title: "Jackets", offer: "40-60% OFF", image: require("../assets/images/product6.png") },
+    ],
+  },
+];
+
+const accessoriesHeroDeals: AccessoriesHeroDeal[] = [
+  {
+    id: "ad1",
+    title: "Handbags",
+    brand: "DAMIANO",
+    subtitle: "HIDESIGN",
+    offer: "MIN. 50% OFF",
+    image: require("../assets/images/accessoriescate.png"),
+  },
+  {
+    id: "ad2",
+    title: "Sunglass & Frames",
+    brand: "FOSSIL",
+    subtitle: "MENSWEAR",
+    offer: "MIN. 60% OFF",
+    image: require("../assets/images/freepik_0001.jpeg"),
+  },
+  {
+    id: "ad3",
+    title: "Watches",
+    brand: "FOSSIL",
+    subtitle: "GREY",
+    offer: "UP TO 50% OFF",
+    image: require("../assets/images/look2.png"),
+  },
+  {
+    id: "ad4",
+    title: "Jewellery",
+    brand: "TITAN",
+    subtitle: "WOMEN",
+    offer: "MIN. 40% OFF",
+    image: require("../assets/images/accessariescate.png"),
+  },
+  {
+    id: "ad5",
+    title: "Rings",
+    brand: "KALINI",
+    subtitle: "FASHION",
+    offer: "UP TO 55% OFF",
+    image: require("../assets/images/look1.png"),
+  },
+];
 
 function womanYouAreCardEnterOpacityTranslate(reveal: Animated.Value, index: number) {
   const start = 0.26 + index * 0.068;
@@ -393,8 +495,8 @@ function womanYouAreCardEnterScale(reveal: Animated.Value, index: number) {
 }
 
 /** Reel-style: scale + opacity follow horizontal scroll (focused card near viewport center). */
-const WOMAN_YOU_ARE_CAROUSEL_PAD_LEFT = 8;
-const WOMAN_YOU_ARE_CAROUSEL_PAD_RIGHT = 8;
+const WOMAN_YOU_ARE_CAROUSEL_PAD_LEFT = 0;
+const WOMAN_YOU_ARE_CAROUSEL_PAD_RIGHT = 0;
 
 function getWomanYouAreCarouselScrollMetrics(
   viewportW: number,
@@ -557,13 +659,18 @@ export default function Accessories() {
   const [womenSectionY, setWomenSectionY] = useState(0);
   const [menSectionY, setMenSectionY] = useState(0);
   const [kidsYouAreSectionY, setKidsYouAreSectionY] = useState(0);
+  const [everyoneSectionY, setEveryoneSectionY] = useState(0);
   const womenSectionYRef = useRef<number | null>(null);
   const menSectionYRef = useRef<number | null>(null);
   const kidsYouAreSectionYRef = useRef<number | null>(null);
+  const everyoneSectionYRef = useRef<number | null>(null);
   const [selectedWomenItemId, setSelectedWomenItemId] = useState("w1");
   const [selectedMenItemId, setSelectedMenItemId] = useState("m1");
   const [selectedKidsRelatedItemId, setSelectedKidsRelatedItemId] = useState(
     KIDS_RELATED_SECTION_ITEM_ID
+  );
+  const [selectedKidsAccessoryCategory, setSelectedKidsAccessoryCategory] = useState<string | null>(
+    getDefaultKidsCategoryForLane(KIDS_RELATED_SECTION_ITEM_ID)
   );
   const scrollRef = useRef<ScrollView | null>(null);
   const scrolledToKidsFromParamRef = useRef(false);
@@ -863,6 +970,17 @@ export default function Accessories() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const laneCategories = kidsRelatedCategories[selectedKidsRelatedItemId] || [];
+    if (laneCategories.length === 0) {
+      setSelectedKidsAccessoryCategory(null);
+      return;
+    }
+    if (!selectedKidsAccessoryCategory || !laneCategories.includes(selectedKidsAccessoryCategory)) {
+      setSelectedKidsAccessoryCategory(laneCategories[0]);
+    }
+  }, [selectedKidsRelatedItemId, selectedKidsAccessoryCategory]);
+
   const spotlightFooterAdPageWidth = Math.max(windowWidth, 1);
 
   useEffect(() => {
@@ -1026,6 +1144,18 @@ export default function Accessories() {
                     scrollToSectionY(
                       kidsYouAreSectionYRef.current ?? kidsYouAreSectionY
                     );
+                  } else if (item.id === "accessories") {
+                    setSelectedKidsRelatedItemId(KIDS_RELATED_SECTION_ITEM_ID);
+                    setSelectedKidsAccessoryCategory(
+                      getDefaultKidsCategoryForLane(KIDS_RELATED_SECTION_ITEM_ID)
+                    );
+                    requestAnimationFrame(() => {
+                      requestAnimationFrame(() => {
+                        scrollToSectionY(
+                          everyoneSectionYRef.current ?? everyoneSectionY
+                        );
+                      });
+                    });
                   }
                 }}
               >
@@ -1863,7 +1993,10 @@ export default function Accessories() {
                               <View style={styles.womanYouAreCardCornerGem} pointerEvents="none" />
                               <TouchableOpacity
                                 activeOpacity={0.9}
-                                onPress={() => setSelectedKidsRelatedItemId(kidsLaneItemId)}
+                                onPress={() => {
+                                  setSelectedKidsRelatedItemId(kidsLaneItemId);
+                                  setSelectedKidsAccessoryCategory(getDefaultKidsCategoryForLane(kidsLaneItemId));
+                                }}
                                 style={[styles.womanYouAreCardInner, innerR]}
                               >
                                 <View style={styles.womanYouAreCardMedia} collapsable={false}>
@@ -1928,7 +2061,7 @@ export default function Accessories() {
                 key={category}
                 style={styles.kidsRelatedPill}
                 activeOpacity={0.88}
-                onPress={() => router.push("/productdetail")}
+                onPress={() => setSelectedKidsAccessoryCategory(category)}
               >
                 <View style={styles.kidsRelatedPillImageWrap}>
                   <Image
@@ -1946,6 +2079,159 @@ export default function Accessories() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.92}
+          style={styles.kidsInterstitialAdSection}
+          onPress={() => router.push("/productdetail")}
+        >
+          <ImageBackground
+            source={require("../assets/images/accessoriescate.png")}
+            resizeMode="cover"
+            style={styles.kidsInterstitialAdCard}
+          >
+            <View style={styles.kidsInterstitialAdOverlay}>
+              /* <Text style={styles.kidsInterstitialAdTag}>Ad</Text> */
+              <Text style={styles.kidsInterstitialAdTitle}>Accessories Spotlight</Text>
+            </View>
+          </ImageBackground>
+        </TouchableOpacity>
+
+        <View
+          style={styles.accessoriesReplicaSection}
+          onLayout={(event) => {
+            const y = event.nativeEvent.layout.y;
+            everyoneSectionYRef.current = y;
+            setEveryoneSectionY(y);
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={0.92}
+            style={styles.accessoriesReplicaHero}
+            onPress={() => router.push("/promote")}
+          >
+                <View style={styles.accessoriesReplicaHeroImage}>
+                  <View style={styles.accessoriesReplicaHeroGrid} pointerEvents="none" />
+                  <View style={styles.accessoriesReplicaHeroGlowLeft} pointerEvents="none" />
+                  <View style={styles.accessoriesReplicaHeroGlowRight} pointerEvents="none" />
+                  <View style={styles.accessoriesReplicaHeroGridPattern} pointerEvents="none">
+                    {Array.from({ length: 9 }).map((_, i) => (
+                      <View
+                        key={`h-${i}`}
+                        style={[styles.accessoriesReplicaHeroGridLineH, { top: 20 + i * 20 }]}
+                      />
+                    ))}
+                    {Array.from({ length: 11 }).map((_, i) => (
+                      <View
+                        key={`v-${i}`}
+                        style={[styles.accessoriesReplicaHeroGridLineV, { left: 16 + i * 34 }]}
+                      />
+                    ))}
+                  </View>
+                  <Text style={styles.accessoriesReplicaHeroTitle}>ACCESSORIES</Text>
+                  <Image
+                    source={require("../assets/images/sportsbanner1.png")}
+                    style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceTopLeft]}
+                    resizeMode="cover"
+                  />
+                  <Image
+                    source={require("../assets/images/sportsbanner2.png")}
+                    style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceTopRight]}
+                    resizeMode="cover"
+                  />
+                  <Image
+                    source={require("../assets/images/sportsbanner3.png")}
+                    style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceBottomLeft]}
+                    resizeMode="cover"
+                  />
+                  <Image
+                    source={require("../assets/images/sportsbanner4.png")}
+                    style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceBottomRight]}
+                    resizeMode="cover"
+                  />
+                  <Image
+                    source={require("../assets/images/freepik_0001.jpeg")}
+                    style={styles.accessoriesReplicaHeroCenterBag}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.accessoriesReplicaHeroCta}>Shop All</Text>
+                </View>
+          </TouchableOpacity>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.accessoriesReplicaDealsRow}
+          >
+            {accessoriesHeroDeals.map((deal) => (
+              <TouchableOpacity
+                key={deal.id}
+                activeOpacity={0.9}
+                style={styles.accessoriesReplicaDealCard}
+                onPress={() => router.push("/productdetail")}
+              >
+                <View style={styles.accessoriesReplicaDealImageWrap}>
+                  <Image source={deal.image} style={styles.accessoriesReplicaDealImage} resizeMode="cover" />
+                  <View style={styles.accessoriesReplicaDealImageShade} pointerEvents="none" />
+                      <View style={styles.accessoriesReplicaDealTextWrap} pointerEvents="none">
+                        <Text style={styles.accessoriesReplicaDealTitle} numberOfLines={1}>
+                          {deal.title}
+                        </Text>
+                        <Text style={styles.accessoriesReplicaDealBrand} numberOfLines={1}>
+                          {deal.brand}
+                        </Text>
+                        <Text style={styles.accessoriesReplicaDealSubtitle} numberOfLines={1}>
+                          {deal.subtitle}
+                        </Text>
+                      </View>
+                </View>
+                <Text style={styles.accessoriesReplicaDealOffer}>{deal.offer}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.kidsAccessoryBoardSection}>
+          {kidsAccessoryShowcaseRows.map((row, index) => (
+            <View key={row.id} style={styles.kidsAccessoryBoardRowSection}>
+              <View style={styles.kidsAccessoryBoardRowTitleWrap}>
+                <View style={styles.kidsAccessoryBoardRowTitleLine} />
+                <Text style={styles.kidsAccessoryBoardRowTitle}>{row.title}</Text>
+                <View style={styles.kidsAccessoryBoardRowTitleLine} />
+              </View>
+              <View style={styles.kidsAccessoryBoardRow}>
+                {row.items.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.kidsAccessoryBoardCard}
+                    activeOpacity={0.9}
+                    onPress={() => router.push("/productdetail")}
+                  >
+                    <View>
+                      <ExpoImage
+                        source={item.image}
+                        style={styles.kidsAccessoryBoardCardImage}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        recyclingKey={item.id}
+                      />
+                      <View style={styles.kidsAccessoryBoardCardImageShade} pointerEvents="none" />
+                    </View>
+                    <View style={styles.kidsAccessoryBoardCardFooter}>
+                      <Text style={styles.kidsAccessoryBoardCardTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                      <Text style={styles.kidsAccessoryBoardCardOffer}>{item.offer}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {index < kidsAccessoryShowcaseRows.length - 1 ? (
+                <View style={styles.kidsAccessoryBoardRowDivider} />
+              ) : null}
+            </View>
+          ))}
         </View>
       </ScrollView>
 
@@ -2798,6 +3084,430 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 13,
   },
+  kidsMidBannerAd: {
+    marginHorizontal: 0,
+    marginBottom: 14,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#f6c795",
+    backgroundColor: "#1d324e",
+    shadowColor: "#1d324e",
+    shadowOpacity: 0.28,
+    shadowOffset: { width: 0, height: 7 },
+    shadowRadius: 10,
+    elevation: 7,
+  },
+  kidsMidBannerAdImage: {
+    height: 144,
+    justifyContent: "center",
+  },
+  kidsMidBannerAdImageStyle: {
+    borderRadius: 16,
+  },
+  kidsMidBannerAdOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(17, 28, 44, 0.58)",
+  },
+  kidsMidBannerAdContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  kidsMidBannerAdTagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  kidsMidBannerAdTag: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(246,199,149,0.97)",
+    color: "#1d324e",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  kidsMidBannerAdDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#f6c795",
+    marginHorizontal: 8,
+  },
+  kidsMidBannerAdTagMuted: {
+    color: "#f6c795",
+    fontSize: 11,
+    fontWeight: "700",
+    opacity: 0.95,
+  },
+  kidsMidBannerAdTitle: {
+    color: "#ffffff",
+    marginTop: 10,
+    fontSize: 23,
+    fontWeight: "900",
+    lineHeight: 28,
+  },
+  kidsMidBannerAdSubtitle: {
+    marginTop: 6,
+    color: "#fef3e6",
+    fontSize: 12.5,
+    fontWeight: "700",
+    lineHeight: 18,
+    maxWidth: "90%",
+  },
+  kidsMidBannerAdCta: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#f6c795",
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  kidsMidBannerAdCtaText: {
+    color: "#1d324e",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  kidsInterstitialAdSection: {
+    marginHorizontal: 8,
+    marginBottom: 10,
+  },
+  kidsInterstitialAdCard: {
+    height: 126,
+    width: "100%",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#6c8494",
+    backgroundColor: "#504f56",
+    justifyContent: "flex-end",
+  },
+  kidsInterstitialAdOverlay: {
+    backgroundColor: "rgba(29,50,78,0.52)",
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
+  },
+  kidsInterstitialAdTag: {
+    alignSelf: "flex-start",
+    backgroundColor: "#f6c795",
+    color: "#1d324e",
+    fontSize: 10,
+    fontWeight: "800",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  kidsInterstitialAdTitle: {
+    color: "#f6c795",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  kidsInterstitialAdSubtitle: {
+    marginTop: 2,
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  accessoriesReplicaSection: {
+    marginHorizontal: 8,
+    marginBottom: 10,
+    paddingHorizontal: 1,
+  },
+  accessoriesReplicaHero: {
+    borderWidth: 1,
+    borderColor: "#e7c0ab",
+    borderRadius: 0,
+    overflow: "hidden",
+    backgroundColor: "#f7e5d8",
+  },
+  accessoriesReplicaHeroImage: {
+    height: 214,
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
+    position: "relative",
+    backgroundColor: "#f6ece4",
+  },
+  accessoriesReplicaHeroGrid: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#f6ece4",
+    opacity: 1,
+  },
+  accessoriesReplicaHeroGlowLeft: {
+    position: "absolute",
+    width: 170,
+    height: 120,
+    borderRadius: 85,
+    left: -18,
+    top: 86,
+    backgroundColor: "rgba(241, 157, 145, 0.26)",
+    zIndex: 1,
+  },
+  accessoriesReplicaHeroGlowRight: {
+    position: "absolute",
+    width: 170,
+    height: 120,
+    borderRadius: 85,
+    right: -22,
+    top: 86,
+    backgroundColor: "rgba(241, 157, 145, 0.23)",
+    zIndex: 1,
+  },
+  accessoriesReplicaHeroGridPattern: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+    opacity: 0.42,
+  },
+  accessoriesReplicaHeroGridLineH: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: "#d9cfc6",
+  },
+  accessoriesReplicaHeroGridLineV: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: "#d9cfc6",
+  },
+  accessoriesReplicaHeroTitle: {
+    fontSize: 31,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+    color: "#111111",
+    textAlign: "center",
+    marginTop: 4,
+    zIndex: 2,
+  },
+  accessoriesReplicaHeroPiece: {
+    position: "absolute",
+    zIndex: 4,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  accessoriesReplicaHeroPieceTopLeft: {
+    width: 88,
+    height: 56,
+    left: 8,
+    top: 50,
+    transform: [{ rotate: "-10deg" }],
+  },
+  accessoriesReplicaHeroPieceTopRight: {
+    width: 92,
+    height: 56,
+    right: 8,
+    top: 50,
+    transform: [{ rotate: "-8deg" }],
+  },
+  accessoriesReplicaHeroPieceBottomLeft: {
+    width: 86,
+    height: 96,
+    left: 4,
+    bottom: 10,
+    transform: [{ rotate: "-7deg" }],
+  },
+  accessoriesReplicaHeroPieceBottomRight: {
+    width: 86,
+    height: 96,
+    right: 4,
+    bottom: 10,
+    transform: [{ rotate: "10deg" }],
+  },
+  accessoriesReplicaHeroCenterBag: {
+    position: "absolute",
+    width: 176,
+    height: 124,
+    top: 72,
+    zIndex: 2,
+  },
+  accessoriesReplicaHeroCta: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#111111",
+    textDecorationLine: "underline",
+    marginBottom: 4,
+    zIndex: 5,
+  },
+  accessoriesReplicaDealsRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    gap: 8,
+    paddingRight: 6,
+  },
+  accessoriesReplicaDealCard: {
+    width: 122,
+  },
+  accessoriesReplicaDealImageWrap: {
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#d1b09f",
+    backgroundColor: "#ffffff",
+    height: 128,
+    justifyContent: "flex-end",
+  },
+  accessoriesReplicaDealImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  accessoriesReplicaDealImageShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.22)",
+  },
+  accessoriesReplicaDealTextWrap: {
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+  },
+  accessoriesReplicaDealTitle: {
+    color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "500",
+    textAlign: "center",
+    letterSpacing: 0.2,
+  },
+  accessoriesReplicaDealBrand: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  accessoriesReplicaDealSubtitle: {
+    color: "#ffffff",
+    fontSize: 8,
+    fontWeight: "700",
+    textAlign: "center",
+    letterSpacing: 0.8,
+    marginTop: 1,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  accessoriesReplicaDealOffer: {
+    marginTop: 5,
+    textAlign: "center",
+    color: "#121212",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+
+  },
+  kidsAccessoryBoardSection: {
+    marginTop: 8,
+    marginBottom: 16,
+    paddingTop: 3,
+    paddingBottom: 5,
+    paddingHorizontal: 3,
+    backgroundColor: "#f6c795",
+    borderWidth: 1,
+    borderColor: "#1d324e",
+  },
+  kidsAccessoryBoardRowSection: {
+    marginBottom: 0,
+    paddingTop: 4,
+    paddingBottom: 6,
+    backgroundColor: "#ffffff",
+  },
+  kidsAccessoryBoardRowTitleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  kidsAccessoryBoardRowTitleLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#69798c",
+    opacity: 0.7,
+  },
+  kidsAccessoryBoardRowTitle: {
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#1d324e",
+    marginHorizontal: 8,
+    letterSpacing: 0.8,
+    textShadowColor: "rgba(80,79,86,0.24)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
+  },
+  kidsAccessoryBoardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 3,
+    gap: 3,
+  },
+  kidsAccessoryBoardRowDivider: {
+    height: 1,
+    marginTop: 7,
+    backgroundColor: "#69798c",
+    opacity: 0.9,
+  },
+  kidsAccessoryBoardCard: {
+    width: "24.25%",
+    backgroundColor: "#ffffff",
+    borderRadius: 0,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#6c8494",
+    shadowColor: "#504f56",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  kidsAccessoryBoardCardImage: {
+    width: "100%",
+    height: 80,
+    backgroundColor: "#69798c",
+  },
+  kidsAccessoryBoardCardImageShade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 52,
+    height: 28,
+    backgroundColor: "rgba(29,50,78,0.18)",
+  },
+  kidsAccessoryBoardCardFooter: {
+    backgroundColor: "#1d324e",
+    borderTopWidth: 1,
+    borderTopColor: "#ef7b1a",
+    paddingTop: 2,
+    paddingBottom: 3,
+    paddingHorizontal: 3,
+    minHeight: 34,
+    justifyContent: "space-between",
+  },
+  kidsAccessoryBoardCardTitle: {
+    color: "#f6c795",
+    fontSize: 7,
+    fontWeight: "800",
+    textAlign: "center",
+    lineHeight: 8,
+  },
+  kidsAccessoryBoardCardOffer: {
+    color: "#ef7b1a",
+    fontSize: 7,
+    fontWeight: "900",
+    textAlign: "center",
+    lineHeight: 8,
+  },
   womanYouAreSection: {
     marginHorizontal: 0,
     marginBottom: 22,
@@ -2944,8 +3654,8 @@ const styles = StyleSheet.create({
   womanYouAreCarouselContent: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingLeft: 8,
-    paddingRight: 8,
+    paddingLeft: 0,
+    paddingRight: 0,
     paddingBottom: 6,
     paddingTop: 4,
   },
