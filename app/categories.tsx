@@ -9,7 +9,7 @@ import {
   TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 
 type CategoryKey =
   | "trending"
@@ -417,10 +417,29 @@ export default function Categories() {
     );
   }, [searchQuery]);
 
+  const handleCategoriesHeaderBack = () => {
+    if (isSearchVisible) {
+      setIsSearchVisible(false);
+      return;
+    }
+    if (!router.canGoBack()) {
+      router.replace("/home");
+      return;
+    }
+    router.dismissTo("/home" as Href);
+  };
+
   return (
     <View style={styles.container}>
       {/* HEADER + INLINE SEARCH */}
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={handleCategoriesHeaderBack}
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={22} color="#1d324e" />
+        </TouchableOpacity>
         {isSearchVisible ? (
           <View style={styles.headerSearchWrapper}>
             
@@ -499,50 +518,50 @@ export default function Categories() {
           <View style={styles.sectionBlock}>
             <View style={styles.itemsGrid}>
               {mainCategoryCards.map((cat) => (
-                <TouchableOpacity
-                  key={cat.key}
-                  style={styles.itemCard}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    setActiveCategory(cat.key);
-                    if (cat.key === "accessories") {
-                      router.push("/accessories" as never);
-                      return;
-                    }
-                    if (cat.key === "sportswear") {
-                      router.push("/sportswear" as never);
-                      return;
-                    }
-                    if (cat.key === "homelyHub") {
-                      router.push("/homelyhub" as never);
-                      return;
-                    }
-                    if (cat.key === "sweets") {
-                      router.push("/sweets" as never);
-                      return;
-                    }
-                    if (cat.key === "footwear") {
-                      router.push("/footwear" as never);
-                      return;
-                    }
-                    router.push({
-                      pathname: "/subcate",
-                      params: { mainCat: cat.key },
-                    });
-                  }}
-                >
-                  <View style={styles.itemImageWrapper}>
-                    <Image
-                      source={cat.image}
-                      style={styles.itemImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-                  <Text style={styles.itemLabel} numberOfLines={2}>
-                    {cat.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <TouchableOpacity
+                      key={cat.key}
+                      style={styles.itemCard}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        setActiveCategory(cat.key);
+                        if (cat.key === "accessories") {
+                          router.push("/accessories" as never);
+                          return;
+                        }
+                        if (cat.key === "sportswear") {
+                          router.push("/sportswear" as never);
+                          return;
+                        }
+                        if (cat.key === "homelyHub") {
+                          router.push("/homelyhub" as never);
+                          return;
+                        }
+                        if (cat.key === "sweets") {
+                          router.push("/sweets" as never);
+                          return;
+                        }
+                        if (cat.key === "footwear") {
+                          router.push("/footwear" as never);
+                          return;
+                        }
+                        router.push({
+                          pathname: "/subcate",
+                          params: { mainCat: cat.key },
+                        });
+                      }}
+                    >
+                      <View style={styles.itemImageWrapper}>
+                        <Image
+                          source={cat.image}
+                          style={styles.itemImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+                      <Text style={styles.itemLabel} numberOfLines={2}>
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
             </View>
           </View>
         </ScrollView>
