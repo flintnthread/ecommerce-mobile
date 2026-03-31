@@ -16,10 +16,10 @@ type CategoryKey =
   | "womenswear"
   | "menswear"
   | "kidswear"
+  | "homelyHub"
   | "sportswear"
   | "footwear"
   | "accessories"
-  | "homelyHub"
   | "fitnessPro"
   | "sweets";
 
@@ -51,6 +51,11 @@ const SIDE_CATEGORIES: SideCategory[] = [
     image: require("../assets/images/kidscate.png"),
   },
   {
+    key: "homelyHub",
+    label: "Homely Hub",
+    image: require("../assets/images/homecate.png"),
+  },
+  {
     key: "sportswear",
     label: "Sportswear",
     image: require("../assets/images/sportscate.png"),
@@ -64,11 +69,6 @@ const SIDE_CATEGORIES: SideCategory[] = [
     key: "accessories",
     label: "Accessories",
     image: require("../assets/images/accessariescate.png"),
-  },
-  {
-    key: "homelyHub",
-    label: "Homely Hub",
-    image: require("../assets/images/homecate.png"),
   },
   {
     key: "fitnessPro",
@@ -262,6 +262,28 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
       ],
     },
   ],
+  homelyHub: [
+    {
+      title: "homely hub",
+      items: [
+        {
+          id: "h1",
+          name: "Gift Hampers",
+          image: require("../assets/images/homecate.png"),
+        },
+        {
+          id: "h2",
+          name: "Personalized Gifts",
+          image: require("../assets/images/homecate.png"),
+        },
+        {
+          id: "h3",
+          name: "Festival Gifts",
+          image: require("../assets/images/sweetscate.png"),
+        },
+      ],
+    },
+  ],
   sportswear: [
     {
       title: "Sportswear",
@@ -307,28 +329,6 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
     },
   ],
   accessories: [],
-  homelyHub: [
-    {
-      title: "homely hub",
-      items: [
-        {
-          id: "h1",
-          name: "Home decor",
-          image: require("../assets/images/homecate.png"),
-        },
-        {
-          id: "h2",
-          name: "Kitchen & dining",
-          image: require("../assets/images/homecate.png"),
-        },
-        {
-          id: "h3",
-          name: "Bedding",
-          image: require("../assets/images/homecate.png"),
-        },
-      ],
-    },
-  ],
   fitnessPro: [
     {
       title: "f&t pro",
@@ -524,16 +524,16 @@ export default function Categories() {
                       activeOpacity={0.85}
                       onPress={() => {
                         setActiveCategory(cat.key);
+                        if (cat.key === "homelyHub") {
+                          router.push("/gifts" as never);
+                          return;
+                        }
                         if (cat.key === "accessories") {
                           router.push("/accessories" as never);
                           return;
                         }
                         if (cat.key === "sportswear") {
                           router.push("/sportswear" as never);
-                          return;
-                        }
-                        if (cat.key === "homelyHub") {
-                          router.push("/homelyhub" as never);
                           return;
                         }
                         if (cat.key === "sweets") {
@@ -637,6 +637,7 @@ const styles = StyleSheet.create({
   contentRow: {
     flex: 1,
     flexDirection: "row",
+
   },
   headerSearchWrapper: {
     flex: 1,
