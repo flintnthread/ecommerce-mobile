@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,8 +9,15 @@ import {
   TextInput,
   Modal,
   Dimensions,
+  BackHandler,
+  type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  useFocusEffect,
+  useNavigation,
+  StackActions,
+} from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 type BestDressItem = {
@@ -134,6 +141,66 @@ type HomeFeatureTile = {
   image: any;
 };
 
+/**
+ * Sample spotlight cards (not from API). Images: Unsplash (unsplash.com/license).
+ * Swap `uri` for `require("../assets/images/spotlight/your.jpg")` to bundle offline.
+ */
+type DummySpotlightItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  price: string;
+  badge?: string;
+  image: ImageSourcePropType;
+};
+
+const SPOTLIGHT_IMG = (id: string, w = 800) =>
+  ({
+    uri: `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&q=85`,
+  }) as const;
+
+const DUMMY_SPOTLIGHT_ITEMS: DummySpotlightItem[] = [
+  {
+    id: "ds1",
+    title: "Everyday cotton kurta",
+    subtitle: "4.6 ★ · Free delivery",
+    price: "₹799",
+    badge: "50% OFF",
+    image: SPOTLIGHT_IMG("photo-1617127365659-c47fa864d8bc"),
+  },
+  {
+    id: "ds2",
+    title: "Slim fit casual shirt",
+    subtitle: "4.4 ★ · Bestseller",
+    price: "₹1,049",
+    badge: "NEW",
+    image: SPOTLIGHT_IMG("photo-1602810318383-e386cc2a3ccf"),
+  },
+  {
+    id: "ds3",
+    title: "Printed summer dress",
+    subtitle: "4.3 ★ · 900+ reviews",
+    price: "₹599",
+    badge: "40% OFF",
+    image: SPOTLIGHT_IMG("photo-1595777457583-95e059d581b8"),
+  },
+  {
+    id: "ds4",
+    title: "Festive silk blend saree",
+    subtitle: "4.7 ★ · Gift wrap",
+    price: "₹1,699",
+    image: SPOTLIGHT_IMG("photo-1610030469983-98e550d6193c"),
+  },
+  {
+    id: "ds5",
+    title: "Sports training tee",
+    subtitle: "4.2 ★ · Quick dry",
+    price: "₹449",
+    badge: "DEAL",
+    image: SPOTLIGHT_IMG("photo-1571902943202-507ec261833e"),
+  },
+];
+
 type HomeContent = {
   topHeading: string;
   bannerTitle: string;
@@ -193,6 +260,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
       { id: "mc3", label: "Formal Wear" },
       { id: "mc4", label: "Innerwear & Nightwear" },
       { id: "mc5", label: "Top Wear" },
+
     ],
     tiles: [
       {
@@ -375,39 +443,39 @@ const HOME_CONTENT: Record<string, HomeContent> = {
   },
   homelyHub: {
     topHeading: "CATEGORIES",
-    bannerTitle: "HOME",
-    bannerSubtitle: "& LIFESTYLE",
+    bannerTitle: "GIFT",
+    bannerSubtitle: "STUDIO",
     bannerImage: require("../assets/images/homecate.png"),
     chips: [
-      { id: "hh1", label: "Home Decor" },
-      { id: "hh2", label: "Kitchen" },
-      { id: "hh3", label: "Bedding" },
-      { id: "hh4", label: "Storage" },
+      { id: "hh1", label: "Gift Hampers" },
+      { id: "hh2", label: "Personalized Gifts" },
+      { id: "hh3", label: "Festival Specials" },
+      { id: "hh4", label: "Decor Gifts" },
     ],
     tiles: [
       {
         id: "ht1",
-        label: "HOME DECOR",
-        countText: "(740 items)",
+        label: "LUXURY GIFT HAMPERS",
+        countText: "(860 items)",
         image: require("../assets/images/homecate.png"),
       },
       {
         id: "ht2",
-        label: "KITCHEN",
-        countText: "(610 items)",
+        label: "PERSONALIZED GIFTS",
+        countText: "(720 items)",
         image: require("../assets/images/homecate.png"),
       },
       {
         id: "ht3",
-        label: "BEDDING",
-        countText: "(520 items)",
-        image: require("../assets/images/homecate.png"),
+        label: "FESTIVE GIFT BOXES",
+        countText: "(640 items)",
+        image: require("../assets/images/sweetscate.png"),
       },
       {
         id: "ht4",
-        label: "STORAGE",
-        countText: "(390 items)",
-        image: require("../assets/images/homecate.png"),
+        label: "HOME DECOR GIFTS",
+        countText: "(580 items)",
+        image: require("../assets/images/accessariescate.png"),
       },
     ],
   },
@@ -541,6 +609,12 @@ const getHomeContent = (mainCat?: string): HomeContent => {
   if (mainCat && HOME_CONTENT[mainCat]) return withAllChip(HOME_CONTENT[mainCat]);
   return withAllChip(HOME_CONTENT.womenswear);
 };
+
+function initialHubChip(mainCat: string | undefined, routeChip: string | undefined): string {
+  const hc = getHomeContent(mainCat);
+  if (routeChip && hc.chips.some((c) => c.id === routeChip)) return routeChip;
+  return hc.chips[0]?.id ?? "";
+}
 
 const MEN_BOTTOM_WEAR_TILES: HomeFeatureTile[] = [
   {
@@ -725,6 +799,120 @@ const MEN_TOP_WEAR_TILES: HomeFeatureTile[] = [
   },
 ];
 
+const WOMEN_ALL_TILES: HomeFeatureTile[] = [
+  {
+    id: "wcat1",
+    label: "Women Bra",
+    image: require("../assets/images/womencate.png"),
+  },
+  {
+    id: "wcat2",
+    label: "Tops",
+    image: require("../assets/images/womencate.png"),
+  },
+  {
+    id: "wcat3",
+    label: "Bottoms",
+    image: require("../assets/images/womencate.png"),
+  },
+  {
+    id: "wcat4",
+    label: "Activewear",
+    image: require("../assets/images/sportscate.png"),
+  },
+];
+
+const WOMEN_BRA_TILES: HomeFeatureTile[] = [
+  { id: "wb1", label: "Padded Bras", countText: "(540 items)", image: require("../assets/images/womencate.png") },
+  { id: "wb2", label: "Sports Bras", countText: "(410 items)", image: require("../assets/images/womencate.png") },
+  { id: "wb3", label: "T-Shirt Bras", countText: "(620 items)", image: require("../assets/images/womencate.png") },
+  { id: "wb4", label: "Bralettes", countText: "(280 items)", image: require("../assets/images/womencate.png") },
+];
+
+const WOMEN_TOPS_TILES: HomeFeatureTile[] = [
+  { id: "wtp1", label: "Casual Tops", countText: "(760 items)", image: require("../assets/images/womencate.png") },
+  { id: "wtp2", label: "Shirts", countText: "(520 items)", image: require("../assets/images/womencate.png") },
+  { id: "wtp3", label: "Tunics", countText: "(340 items)", image: require("../assets/images/womencate.png") },
+  { id: "wtp4", label: "Crop Tops", countText: "(460 items)", image: require("../assets/images/womencate.png") },
+];
+
+const WOMEN_BOTTOMS_TILES: HomeFeatureTile[] = [
+  { id: "wbt1", label: "Jeans", countText: "(890 items)", image: require("../assets/images/womencate.png") },
+  { id: "wbt2", label: "Leggings", countText: "(640 items)", image: require("../assets/images/womencate.png") },
+  { id: "wbt3", label: "Palazzos", countText: "(320 items)", image: require("../assets/images/womencate.png") },
+  { id: "wbt4", label: "Skirts", countText: "(280 items)", image: require("../assets/images/womencate.png") },
+];
+
+const WOMEN_ACTIVEWEAR_TILES: HomeFeatureTile[] = [
+  { id: "wa1", label: "Gym Tops", countText: "(260 items)", image: require("../assets/images/sportscate.png") },
+  { id: "wa2", label: "Tights", countText: "(300 items)", image: require("../assets/images/sportscate.png") },
+  { id: "wa3", label: "Track Pants", countText: "(220 items)", image: require("../assets/images/sportscate.png") },
+  { id: "wa4", label: "Sports Jackets", countText: "(170 items)", image: require("../assets/images/sportscate.png") },
+];
+
+const KIDS_ALL_TILES: HomeFeatureTile[] = [
+  { id: "kcat1", label: "Boys", image: require("../assets/images/kidscate.png") },
+  { id: "kcat2", label: "Girls", image: require("../assets/images/kidscate.png") },
+  { id: "kcat3", label: "Infants", image: require("../assets/images/kidscate.png") },
+  { id: "kcat4", label: "Kids Toys", image: require("../assets/images/kidscate.png") },
+];
+
+const KIDS_BOYS_TILES: HomeFeatureTile[] = [
+  { id: "kb1", label: "T-Shirts", countText: "(420 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kb2", label: "Jeans", countText: "(360 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kb3", label: "Shirts", countText: "(280 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kb4", label: "Shorts", countText: "(300 items)", image: require("../assets/images/kidscate.png") },
+];
+
+const KIDS_GIRLS_TILES: HomeFeatureTile[] = [
+  { id: "kg1", label: "Frocks", countText: "(390 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kg2", label: "Tops", countText: "(330 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kg3", label: "Skirts", countText: "(250 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kg4", label: "Leggings", countText: "(290 items)", image: require("../assets/images/kidscate.png") },
+];
+
+const KIDS_INFANTS_TILES: HomeFeatureTile[] = [
+  { id: "ki1", label: "Onesies", countText: "(210 items)", image: require("../assets/images/kidscate.png") },
+  { id: "ki2", label: "Rompers", countText: "(180 items)", image: require("../assets/images/kidscate.png") },
+  { id: "ki3", label: "Infant Sets", countText: "(230 items)", image: require("../assets/images/kidscate.png") },
+  { id: "ki4", label: "Swaddles", countText: "(140 items)", image: require("../assets/images/kidscate.png") },
+];
+
+const KIDS_TOYS_TILES: HomeFeatureTile[] = [
+  { id: "kty1", label: "Educational Toys", countText: "(260 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kty2", label: "Action Toys", countText: "(220 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kty3", label: "Soft Toys", countText: "(310 items)", image: require("../assets/images/kidscate.png") },
+  { id: "kty4", label: "Puzzle Games", countText: "(170 items)", image: require("../assets/images/kidscate.png") },
+];
+
+const MEN_ALL_TILES: HomeFeatureTile[] = [
+  {
+    id: "mcat1",
+    label: "Bottom Wear",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mcat2",
+    label: "Ethnic Wear",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mcat3",
+    label: "Formal Wear",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mcat4",
+    label: "Inner & Nightwear",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "mcat5",
+    label: "Top Wear",
+    image: require("../assets/images/menscate.png"),
+  },
+];
+
 const sortOptions = [
   "Relevance",
   "New Arrivals",
@@ -798,17 +986,68 @@ const filterOptions: Record<string, string[]> = {
   Rating: ["4★ & above", "3★ & above", "2★ & above"],
 };
 
+function tryPopBackToRouteName(
+  navigation: {
+    getState?: () => { routes?: { name: string }[]; index?: number };
+    dispatch?: (action: ReturnType<typeof StackActions.pop>) => void;
+    getParent?: () => unknown;
+  },
+  targetName: string
+): boolean {
+  let nav: unknown = navigation;
+  for (let i = 0; i < 12 && nav && typeof nav === "object"; i++) {
+    const n = nav as {
+      getState?: () => { routes?: { name: string }[]; index?: number };
+      dispatch?: (action: ReturnType<typeof StackActions.pop>) => void;
+      getParent?: () => unknown;
+    };
+    const state = n.getState?.();
+    const routes = state?.routes;
+    if (routes?.length) {
+      const curIdx = state?.index ?? routes.length - 1;
+      const targetIdx = routes.findIndex((r) => r.name === targetName);
+      if (targetIdx >= 0 && curIdx > targetIdx) {
+        n.dispatch?.(StackActions.pop(curIdx - targetIdx));
+        return true;
+      }
+    }
+    nav = n.getParent?.();
+  }
+  return false;
+}
+
 export default function SubcategoriesScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ mainCat?: string }>();
-  const homeContent = getHomeContent(params.mainCat);
-  const [selectedHomeChip, setSelectedHomeChip] = useState(
-    homeContent.chips[0]?.id ?? ""
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{
+    mainCat?: string | string[];
+    initialChip?: string | string[];
+  }>();
+  const mainCat = Array.isArray(params.mainCat) ? params.mainCat[0] : params.mainCat;
+  const initialChipParam = Array.isArray(params.initialChip)
+    ? params.initialChip[0]
+    : params.initialChip;
+  const homeContent = getHomeContent(mainCat);
+  const hubTitle = React.useMemo(() => {
+    if (mainCat === "menswear") return "Men's Hub";
+    if (mainCat === "womenswear") return "Women's Hub";
+    if (mainCat === "kidswear") return "Kids Hub";
+    if (mainCat === "sportswear") return "Sportswear Hub";
+    if (mainCat === "homelyHub") return "Homely Hub";
+    return "Categories Hub";
+  }, [mainCat]);
+  const [selectedHomeChip, setSelectedHomeChip] = useState(() =>
+    initialHubChip(mainCat, initialChipParam)
   );
 
+  const prevMainCatRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    setSelectedHomeChip(homeContent.chips[0]?.id ?? "");
-  }, [homeContent]);
+    const prev = prevMainCatRef.current;
+    prevMainCatRef.current = mainCat;
+    if (prev !== undefined && prev !== mainCat) {
+      setSelectedHomeChip(initialHubChip(mainCat, initialChipParam));
+    }
+  }, [mainCat, initialChipParam]);
 
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -830,6 +1069,25 @@ export default function SubcategoriesScreen() {
   const [wishlistItems, setWishlistItems] = useState<string[]>([]);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const goBackFromSubcateHub = useCallback(() => {
+    if (isSearchVisible) {
+      setIsSearchVisible(false);
+      return;
+    }
+    if (tryPopBackToRouteName(navigation, "categories")) return;
+    router.replace("/categories");
+  }, [isSearchVisible, navigation, router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        goBackFromSubcateHub();
+        return true;
+      });
+      return () => sub.remove();
+    }, [goBackFromSubcateHub])
+  );
 
   const handleFilterPress = (label: string) => {
     if (label === "Sort") setSortModalVisible(true);
@@ -882,14 +1140,31 @@ export default function SubcategoriesScreen() {
   }, [searchQuery]);
 
   const visibleFeatureTiles = React.useMemo(() => {
-    if (params.mainCat !== "menswear") return homeContent.tiles;
+    if (mainCat === "womenswear") {
+      if (selectedHomeChip === "all") return WOMEN_ALL_TILES;
+      if (selectedHomeChip === "wc1") return WOMEN_BRA_TILES;
+      if (selectedHomeChip === "wc2") return WOMEN_TOPS_TILES;
+      if (selectedHomeChip === "wc3") return WOMEN_BOTTOMS_TILES;
+      if (selectedHomeChip === "wc4") return WOMEN_ACTIVEWEAR_TILES;
+      return homeContent.tiles;
+    }
+    if (mainCat === "kidswear") {
+      if (selectedHomeChip === "all") return KIDS_ALL_TILES;
+      if (selectedHomeChip === "kc1") return KIDS_BOYS_TILES;
+      if (selectedHomeChip === "kc2") return KIDS_GIRLS_TILES;
+      if (selectedHomeChip === "kc3") return KIDS_INFANTS_TILES;
+      if (selectedHomeChip === "kc4") return KIDS_TOYS_TILES;
+      return homeContent.tiles;
+    }
+    if (mainCat !== "menswear") return homeContent.tiles;
+    if (selectedHomeChip === "all") return MEN_ALL_TILES;
     if (selectedHomeChip === "mc1") return MEN_BOTTOM_WEAR_TILES;
     if (selectedHomeChip === "mc2") return MEN_ETHNIC_WEAR_TILES;
     if (selectedHomeChip === "mc3") return MEN_FORMAL_WEAR_TILES;
     if (selectedHomeChip === "mc4") return MEN_INNERWEAR_NIGHTWEAR_TILES;
     if (selectedHomeChip === "mc5") return MEN_TOP_WEAR_TILES;
     return homeContent.tiles;
-  }, [homeContent.tiles, params.mainCat, selectedHomeChip]);
+  }, [homeContent.tiles, mainCat, selectedHomeChip]);
 
   const handleBannerScroll = (event: any) => {
     const slideIndex = Math.round(
@@ -929,10 +1204,52 @@ export default function SubcategoriesScreen() {
     );
   };
 
+  const handleFeatureTilePress = (tileId: string) => {
+    const tappedTile = visibleFeatureTiles.find((tile) => tile.id === tileId);
+    const selectedSubCategory = tappedTile?.label ?? "Products";
+
+    if (mainCat === "womenswear" && selectedHomeChip === "all") {
+      if (tileId === "wcat1") return setSelectedHomeChip("wc1");
+      if (tileId === "wcat2") return setSelectedHomeChip("wc2");
+      if (tileId === "wcat3") return setSelectedHomeChip("wc3");
+      if (tileId === "wcat4") return setSelectedHomeChip("wc4");
+    }
+    if (mainCat === "kidswear" && selectedHomeChip === "all") {
+      if (tileId === "kcat1") return setSelectedHomeChip("kc1");
+      if (tileId === "kcat2") return setSelectedHomeChip("kc2");
+      if (tileId === "kcat3") return setSelectedHomeChip("kc3");
+      if (tileId === "kcat4") return setSelectedHomeChip("kc4");
+    }
+
+    // In Men -> "Men" (all) view, category cards should open related subcategory tab.
+    if (mainCat === "menswear" && selectedHomeChip === "all") {
+      if (tileId === "mcat1") return setSelectedHomeChip("mc1");
+      if (tileId === "mcat2") return setSelectedHomeChip("mc2");
+      if (tileId === "mcat3") return setSelectedHomeChip("mc3");
+      if (tileId === "mcat4") return setSelectedHomeChip("mc4");
+      if (tileId === "mcat5") return setSelectedHomeChip("mc5");
+    }
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: mainCat ?? "",
+        subCategory: selectedSubCategory,
+      },
+    });
+  };
+
   return (
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={goBackFromSubcateHub}
+          style={styles.headerIconButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={22} color="#1d324e" />
+        </TouchableOpacity>
         {isSearchVisible ? (
           <View style={styles.headerSearchWrapper}>
             <TextInput
@@ -945,7 +1262,7 @@ export default function SubcategoriesScreen() {
             />
           </View>
         ) : (
-          <Text style={styles.headerTitle}>Men's Hub</Text>
+          <Text style={styles.headerTitle}>{hubTitle}</Text>
         )}
 
         <View style={styles.headerRight}>
@@ -997,7 +1314,7 @@ export default function SubcategoriesScreen() {
           <Text style={styles.homeTopHeading}>{homeContent.topHeading}</Text>
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator
+            showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.homeChipsRow}
           >
             {homeContent.chips.map((chip) => (
@@ -1015,7 +1332,13 @@ export default function SubcategoriesScreen() {
                     selectedHomeChip === chip.id && styles.homeChipTextActive,
                   ]}
                 >
-                  {chip.label}
+                  {mainCat === "menswear" && chip.id === "all"
+                    ? "Men"
+                    : mainCat === "womenswear" && chip.id === "all"
+                      ? "Women"
+                      : mainCat === "kidswear" && chip.id === "all"
+                        ? "Kids"
+                      : chip.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -1024,18 +1347,21 @@ export default function SubcategoriesScreen() {
 
         {/* HERO BANNER */}
         <View style={styles.homeHeroBanner}>
-          <Image
-            source={homeContent.bannerImage}
-            style={styles.homeHeroBannerImage}
-            resizeMode="cover"
-          />
-          <View style={styles.homeHeroBannerOverlay}>
-            <Text style={styles.homeHeroTitle}>{homeContent.bannerTitle}</Text>
-            {homeContent.bannerSubtitle ? (
-              <Text style={styles.homeHeroSubtitle}>
-                {homeContent.bannerSubtitle}
-              </Text>
-            ) : null}
+          <View style={styles.homeHeroBannerInner}>
+            <Image
+              source={homeContent.bannerImage}
+              style={styles.homeHeroBannerImage}
+              resizeMode="cover"
+            />
+            <View style={styles.homeHeroBannerOverlay}>
+              <Text style={styles.homeHeroEyebrow}>COLLECTION</Text>
+              <Text style={styles.homeHeroTitle}>{homeContent.bannerTitle}</Text>
+              {homeContent.bannerSubtitle ? (
+                <Text style={styles.homeHeroSubtitle}>
+                  {homeContent.bannerSubtitle}
+                </Text>
+              ) : null}
+            </View>
           </View>
         </View>
 
@@ -1045,26 +1371,83 @@ export default function SubcategoriesScreen() {
             <TouchableOpacity
               key={tile.id}
               style={styles.homeFeatureTile}
-              activeOpacity={0.9}
-              onPress={() => router.push("/productdetail")}
+              activeOpacity={0.92}
+              onPress={() => handleFeatureTilePress(tile.id)}
             >
-              <Image
-                source={tile.image}
-                style={styles.homeFeatureTileImage}
-                resizeMode="cover"
-              />
-              <View style={styles.homeFeatureTileOverlay}>
-                <Text style={styles.homeFeatureTileLabel} numberOfLines={1}>
-                  {tile.label}
-                </Text>
-                {tile.countText ? (
-                  <Text style={styles.homeFeatureTileCount} numberOfLines={1}>
-                    {tile.countText}
+              <View style={styles.homeFeatureTileImageWrap}>
+                <Image
+                  source={tile.image}
+                  style={styles.homeFeatureTileImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.homeFeatureTileGradient} />
+                <View style={styles.homeFeatureTileTextBlock}>
+                  <Text style={styles.homeFeatureTileLabel} numberOfLines={2}>
+                    {tile.label}
                   </Text>
-                ) : null}
+                  {tile.countText ? (
+                    <View style={styles.homeFeatureTileCountPill}>
+                      <Text
+                        style={styles.homeFeatureTileCountPillText}
+                        numberOfLines={1}
+                      >
+                        {tile.countText}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             </TouchableOpacity>
           ))}
+        </View>
+
+        {/* Dummy spotlight — sample products for preview */}
+        <View style={styles.dummySection}>
+          <View style={styles.dummySectionHeader}>
+            <View style={styles.dummySectionTitleBlock}>
+              <Text style={styles.dummySectionTitle}>Spotlight picks</Text>
+              <Text style={styles.dummySectionSub}>
+                Dummy items — UI preview only
+              </Text>
+            </View>
+            <View style={styles.dummySampleBadge}>
+              <Text style={styles.dummySampleBadgeText}>SAMPLE</Text>
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dummyRow}
+          >
+            {DUMMY_SPOTLIGHT_ITEMS.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.dummyCard}
+                activeOpacity={0.92}
+                onPress={() => router.push("/productdetail")}
+              >
+                <View style={styles.dummyCardImageWrap}>
+                  <Image
+                    source={item.image}
+                    style={styles.dummyCardImage}
+                    resizeMode="cover"
+                  />
+                  {item.badge ? (
+                    <View style={styles.dummyCardOfferPill}>
+                      <Text style={styles.dummyCardOfferText}>{item.badge}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.dummyCardTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <Text style={styles.dummyCardPrice}>{item.price}</Text>
+                <Text style={styles.dummyCardSub} numberOfLines={1}>
+                  {item.subtitle}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
       </ScrollView>
@@ -1397,8 +1780,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 48,
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingBottom: 12,
     backgroundColor: "#f6c795",
+    shadowColor: "#1d324e",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   headerIconButton: {
     paddingRight: 8,
@@ -1472,7 +1860,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
-    backgroundColor: "#FFF7F0",
+    backgroundColor: "#FAF6F1",
   },
   scrollContent: {
     paddingBottom: 90,
@@ -1967,74 +2355,127 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  // Home category header (reference layout)
+  // Home category header
   homeTopChipsSection: {
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 14,
+    marginBottom: 4,
     backgroundColor: "#FFFFFF",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#E6E6E6",
+    shadowColor: "#1d324e",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   homeTopHeading: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "800",
     color: "#1d324e",
-    marginBottom: 6,
+    marginBottom: 12,
     textAlign: "center",
+    letterSpacing: 1.2,
   },
   homeChipsRow: {
-    paddingRight: 10,
+    paddingRight: 12,
+    paddingBottom: 2,
+    alignItems: "center",
   },
   homeChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 4,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginRight: 8,
+    borderRadius: 22,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   homeChipText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#444",
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748B",
   },
   homeChipActive: {
-    borderBottomColor: "#222",
+    backgroundColor: "#1d324e",
+    borderColor: "#1d324e",
+    shadowColor: "#1d324e",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   homeChipTextActive: {
-    color: "#111",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
 
-  // Hero banner (reference layout)
+  // Hero banner
   homeHeroBanner: {
-    marginHorizontal: 10,
-    borderRadius: 0,
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 6,
+    borderRadius: 20,
     overflow: "hidden",
-    height: 230,
-    backgroundColor: "#FFF",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E0E0E0",
+    backgroundColor: "#E8E4DF",
+    shadowColor: "#1d324e",
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  homeHeroBannerInner: {
+    height: 236,
+    borderRadius: 20,
+    overflow: "hidden",
+    position: "relative",
   },
   homeHeroBannerImage: {
     ...StyleSheet.absoluteFillObject,
   },
+  homeHeroBannerScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(29, 50, 78, 0.18)",
+  },
+  homeHeroBannerFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "65%",
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+  },
   homeHeroBannerOverlay: {
     position: "absolute",
-    left: 16,
-    bottom: 18,
+    left: 18,
+    right: 18,
+    bottom: 20,
+  },
+  homeHeroEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#f6c795",
+    letterSpacing: 2.8,
+    marginBottom: 8,
   },
   homeHeroTitle: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: "800",
-    color: "#1e1e1e",
-    letterSpacing: 0.3,
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    lineHeight: 30,
+    textShadowColor: "rgba(0,0,0,0.25)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   homeHeroSubtitle: {
-    marginTop: 2,
+    marginTop: 6,
     fontSize: 22,
     fontWeight: "800",
-    color: "#1e1e1e",
+    color: "#f6c795",
+    lineHeight: 26,
+    textShadowColor: "rgba(0,0,0,0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
 
   // 2-column feature tiles
@@ -2042,41 +2483,185 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
-    marginTop: 10,
+    paddingHorizontal: 14,
+    marginTop: 14,
+    paddingBottom: 12,
   },
   homeFeatureTile: {
     width: "48%",
-    borderRadius: 0,
+    borderRadius: 18,
     overflow: "hidden",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 14,
+    shadowColor: "#1d324e",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
+  },
+  homeFeatureTileImageWrap: {
+    height: 176,
+    borderRadius: 18,
+    overflow: "hidden",
     position: "relative",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E0E0E0",
-    marginBottom: 10,
+    backgroundColor: "#E2E8F0",
   },
   homeFeatureTileImage: {
-    width: "100%",
-    height: 150,
+    ...StyleSheet.absoluteFillObject,
   },
-  homeFeatureTileOverlay: {
-    paddingVertical: 6,
-    paddingHorizontal: 6,
-    backgroundColor: "#fff",
+  homeFeatureTileGradient: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "50%",
+    backgroundColor: "rgba(15, 23, 42, 0.12)",
+  },
+  homeFeatureTileChevron: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(246, 199, 149, 0.96)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  homeFeatureTileTextBlock: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
   },
   homeFeatureTileLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
-    color: "#1f1f1f",
-    textAlign: "center",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+    lineHeight: 18,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  homeFeatureTileCount: {
-    fontSize: 11,
+  homeFeatureTileCountPill: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    backgroundColor: "rgba(246, 199, 149, 0.95)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    maxWidth: "100%",
+  },
+  homeFeatureTileCountPillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#1d324e",
+    letterSpacing: 0.4,
+  },
+
+  dummySection: {
+    marginTop: 8,
+    paddingBottom: 20,
+  },
+  dummySectionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  dummySectionTitleBlock: {
+    flex: 1,
+    marginRight: 12,
+  },
+  dummySectionTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1d324e",
+    letterSpacing: 0.2,
+  },
+  dummySectionSub: {
+    marginTop: 4,
+    fontSize: 12,
     fontWeight: "600",
-    color: "#444",
-    textAlign: "center",
+    color: "#94A3B8",
+  },
+  dummySampleBadge: {
+    backgroundColor: "#EEF2FF",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+  },
+  dummySampleBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#4338CA",
+    letterSpacing: 0.8,
+  },
+  dummyRow: {
+    paddingHorizontal: 14,
+    paddingBottom: 4,
+  },
+  dummyCard: {
+    width: 148,
+    marginRight: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 8,
+    shadowColor: "#1d324e",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  dummyCardImageWrap: {
+    height: 130,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#F1F5F9",
+    position: "relative",
+  },
+  dummyCardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  dummyCardOfferPill: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "#ef7b1a",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  dummyCardOfferText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+  dummyCardTitle: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1d324e",
+    lineHeight: 17,
+    minHeight: 34,
+  },
+  dummyCardPrice: {
+    marginTop: 6,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1d324e",
+  },
+  dummyCardSub: {
     marginTop: 2,
-    textTransform: "uppercase",
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748B",
   },
   bottomTab: {
     position: "absolute",
