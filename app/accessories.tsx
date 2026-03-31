@@ -387,7 +387,7 @@ const kidsAccessoryShowcaseRows: KidsAccessoryShowcaseRow[] = [
     title: "EVERYTHING FOR EVERYONE",
     items: [
       { id: "kr1-1", title: "Gold & Silver Jewellery", offer: "UP TO 20% OFF", image: require("../assets/images/latest1.png") },
-      { id: "kr1-2", title: "Accessories", offer: "UP TO 15% OFF", image: require("../assets/images/freepik_0001.jpeg") },
+      { id: "kr1-2", title: "Accessories", offer: "UP TO 15% OFF", image: require("../assets/images/latest1.png") },
       { id: "kr1-3", title: "Watches & Sunglasses", offer: "40-50% OFF", image: require("../assets/images/accessoriescate.png") },
       { id: "kr1-4", title: "Handbags & More", offer: "MIN. 40% OFF", image: require("../assets/images/look3.png") },
     ],
@@ -429,7 +429,7 @@ const accessoriesHeroDeals: AccessoriesHeroDeal[] = [
     brand: "FOSSIL",
     subtitle: "MENSWEAR",
     offer: "MIN. 60% OFF",
-    image: require("../assets/images/freepik_0001.jpeg"),
+    image: require("../assets/images/latest1.png"),
   },
   {
     id: "ad3",
@@ -1109,7 +1109,7 @@ export default function Accessories() {
         </View>
 
         <ImageBackground
-          source={require("../assets/images/freepik_0001.jpeg")}
+          source={require("../assets/images/latest1.png")}
           style={styles.topStrip}
           imageStyle={styles.topStripBgImage}
         >
@@ -1710,7 +1710,7 @@ export default function Accessories() {
         </View>
 
         <ImageBackground
-          source={require("../assets/images/freepik_0001.jpeg")}
+          source={require("../assets/images/latest1.png")}
           style={styles.splitShowcaseSection}
           imageStyle={styles.splitShowcaseBgImage}
         >
@@ -2151,7 +2151,7 @@ export default function Accessories() {
                     resizeMode="cover"
                   />
                   <Image
-                    source={require("../assets/images/freepik_0001.jpeg")}
+                    source={require("../assets/images/latest1.png")}
                     style={styles.accessoriesReplicaHeroCenterBag}
                     resizeMode="contain"
                   />
