@@ -20,7 +20,8 @@ import {
   Platform,
 } from "react-native";
 import * as IntentLauncher from "expo-intent-launcher";
-
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import HomeBottomTabBar from "@/components/HomeBottomTabBar";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.6;
@@ -35,12 +36,13 @@ interface FilterItemProps {
 
 export default function Home() {
  const [activeIndex, setActiveIndex] = useState(0);
-  const router = useRouter();   
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const placeholderTexts = [
-    "Search Shoes",
-    "Search WomensWear",
-    "Search Fashion",
-    "Search Sportswear",
+    " Shoes",
+    " Womens Wear",
+    " Fashion",
+    " Sportswear",
   ];
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -128,16 +130,24 @@ export default function Home() {
   const [selectedFilterSection, setSelectedFilterSection] = useState("Category");
   const [searchCategoryText, setSearchCategoryText] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
-<View style={styles.videoBannerContainer}>
-  {/* <Video
-  source={require('../assets/images/videobanner.mp4')}
-  style={styles.videoBanner}
-  resizeMode={ResizeMode.COVER}   // ✅ FIXED
-  shouldPlay
-  isLooping
-  isMuted
-/> */}
-</View>
+
+  const videoBannerPlayer = useVideoPlayer(
+    require("../assets/images/videobanner.mp4"),
+    (p) => {
+      p.loop = true;
+      p.muted = true;
+      p.play();
+    }
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      videoBannerPlayer.play();
+      return () => {
+        videoBannerPlayer.pause();
+      };
+    }, [videoBannerPlayer])
+  );
 
   const banners = [
     require("../assets/images/banner1.png"),
@@ -667,15 +677,6 @@ const brands = [
   },
 ];
 
-const player = useVideoPlayer(
-    require('../assets/images/videobanner.mp4'),
-    (player) => {
-      player.loop = true;
-      player.muted = true;
-      player.play();
-    }
-  );
-
 // seller gallary
 
 const sellerGallery = [
@@ -749,76 +750,34 @@ const categoryData = [
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 90 }}
+      <View
+        style={[
+          styles.headerSticky,
+          { paddingTop: insets.top },
+        ]}
       >
-        {/* HEADER */}
+        {/* HEADER — logo, location, search (fixed while scrolling) */}
         <View style={styles.header}>
-          <View style={styles.topRow}>
-            <View style={styles.greetingCol}>
-              <Text style={styles.helloText} numberOfLines={1}>
-                Hello, {userDisplayName} 👋
-              </Text>
-              <Text style={styles.shopText}>Let&apos;s shop</Text>
-            </View>
-
-            <View style={styles.locationSlot}>
+          <View style={styles.searchRow}>
+            <View style={styles.logoLocationCol}>
+              <Image
+                source={require("../assets/images/logo.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
               <TouchableOpacity
-                style={styles.locationBtn}
+                style={styles.locationBtnUnderLogo}
                 onPress={() => router.push("/loc")}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Location"
               >
-                <Ionicons name="location-outline" size={18} color="#ff6600" />
-                <Text style={styles.locationBtnText} numberOfLines={1}>
+                <Ionicons name="location-outline" size={21} color="#ff6600" />
+                <Text style={styles.locationBtnTextUnderLogo} numberOfLines={1}>
                   Location
                 </Text>
               </TouchableOpacity>
             </View>
-
-            {/* ICONS + PROFILE */}
-            <View style={styles.iconRow}>
-               <TouchableOpacity
-                onPress={() => router.push("/wishlist")}
-                style={styles.headerIconHit}
-              >
-                <Ionicons
-                  name="heart-outline"
-                  size={24}
-                  color="#000"
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => router.push("/notifications")}
-                style={[styles.headerIconHit, styles.headerIconHitCart]}
-              >
-                <Ionicons
-                  name="notifications-outline"
-                  size={24}
-                  color="#000"
-                />
-              </TouchableOpacity>
-
-               <TouchableOpacity
-                onPress={() => router.push("/account")}
-                style={styles.headerProfileBtn}
-              >
-                <Image
-                  source={{ uri: "https://i.pravatar.cc/150?img=12" }}
-                  style={styles.profileImage}
-                />
-               </TouchableOpacity> 
-            </View>
-          </View>
-
-          {/* Logo + Search */}
-          <View style={styles.searchRow}>
-            <Image
-              source={require("../assets/images/logo.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
 
             <View style={styles.searchContainer}>
               <Ionicons name="search-outline" size={18} color="#777" />
@@ -844,6 +803,39 @@ const categoryData = [
                 style={styles.searchBarIconBtn}
               >
                 <Ionicons name="mic-outline" size={24} color="#777" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 90 }}
+      >
+        <View style={styles.greetingBar}>
+          <View style={styles.topRow}>
+            <View style={styles.greetingCol}>
+              <Text style={styles.helloText} numberOfLines={1}>
+                Hello, {userDisplayName} 👋
+              </Text>
+              <Text style={styles.shopText}>Let&apos;s shop</Text>
+            </View>
+            <View style={styles.iconRow}>
+              <TouchableOpacity
+                onPress={() => router.push("/wishlist")}
+                style={styles.headerIconHit}
+                accessibilityLabel="Wishlist"
+              >
+                <Ionicons name="heart-outline" size={24} color="#000" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push("/notifications")}
+                style={styles.headerIconHit}
+                accessibilityLabel="Notifications"
+              >
+                <Ionicons name="notifications-outline" size={24} color="#000" />
               </TouchableOpacity>
             </View>
           </View>
@@ -1062,7 +1054,7 @@ const categoryData = [
         />
         {item.rating ? (
           <View style={styles.ratingBadge}>
-            <Text style={styles.ratingText}>{}</Text>
+            <Text style={styles.ratingText}>{item.rating}</Text>
           </View>
         ) : null}
       </View>
@@ -1087,13 +1079,14 @@ const categoryData = [
 
 {/* Video Banner Section */}
   <View style={styles.videoBannerContainer}>
-  <VideoView
-    player={player}
-    style={{ width: '100%', height: '100%' }}
-    contentFit="contain"
-    nativeControls={false}
-  />
-</View>
+    <VideoView
+      player={videoBannerPlayer}
+      style={styles.videoBanner}
+      contentFit="cover"
+      nativeControls={false}
+      allowsFullscreen={false}
+    />
+  </View>
 
 
 
@@ -1605,18 +1598,7 @@ const categoryData = [
 
       
 
-      {/* BOTTOM TAB */}
-      <View style={styles.bottomTab}>
-        <TabItem icon="home-outline" label="Home" onPress={() => {}} />
-        <TabItem icon="grid-outline" label="Categories" onPress={() => router.push("/categories")} />
-        <TabItem icon="clipboard-outline" label="Orders" onPress={() => router.push("/orders")} />
-        <TabItem
-          icon="person-outline"
-          label="Account"
-          onPress={() => router.push("/account")}
-        />
-        <TabItem icon="cart-outline" label="Cart" onPress={() => router.push("/cart")} />
-      </View>
+      <HomeBottomTabBar />
     </View>
 
 
@@ -1637,20 +1619,6 @@ const FilterItem = ({ icon, label, onPress }: FilterItemProps) => (
   </TouchableOpacity>
 );
 
-type TabItemProps = {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  label: string;
-  onPress: () => void; // Add this line
-};
-
-const TabItem = ({ icon, label, onPress }: TabItemProps) => (
-  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
-    <Ionicons name={icon} size={22} color="#000" />
-    <Text style={styles.tabLabel}>{label}</Text>
-  </TouchableOpacity>
-);
-
-
 
 
 
@@ -1658,68 +1626,57 @@ const TabItem = ({ icon, label, onPress }: TabItemProps) => (
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
 
+  headerSticky: {
+    backgroundColor: "#fff",
+    zIndex: 20,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+
   header: {
     backgroundColor: "#fff",
-    paddingTop: 50,
+    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 15,
   },
 
+  greetingBar: {
+    width: "100%",
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eee",
+  },
   topRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
-
   greetingCol: {
-    flexShrink: 0,
-  },
-
-  locationSlot: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
+    flexShrink: 1,
     minWidth: 0,
+    marginRight: 8,
   },
-
-  locationBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    maxWidth: "100%",
-  },
-
-  locationBtnText: {
-    fontSize: 13,
-    color: "#444",
-    fontWeight: "600",
-  },
-
   iconRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
     flexShrink: 0,
+    gap: 4,
   },
-
-  iconSpacing: {
-    marginRight: 12,
-  },
-
   headerIconHit: {
     width: 40,
     height: 40,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 0,
   },
-
-  headerIconHitCart: {
-    marginLeft: -10,
-  },
-
-  headerProfileBtn: {
-    marginLeft: 10,
-  },
+  helloText: { fontSize: 14, color: "#777" },
+  shopText: { fontSize: 18, fontWeight: "bold" },
 
   searchBarIconBtn: {
     width: 44,
@@ -1731,17 +1688,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
 
-  helloText: { fontSize: 14, color: "#777" },
-  shopText: { fontSize: 18, fontWeight: "bold" },
-  profileImage: { width: 40, height: 40, borderRadius: 20 },
-
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 15,
+    marginTop: 0,
+    gap: 4,
   },
 
-  logo: { width: 60, height: 35, marginRight: 8 },
+  logoLocationCol: {
+    alignItems: "center",
+    flexShrink: 0,
+    width: 64,
+    paddingRight: 0,
+  },
+
+  logo: { width: 60, height: 35 },
+
+  locationBtnUnderLogo: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: 5,
+    maxWidth: "100%",
+  },
+
+  locationBtnTextUnderLogo: {
+    fontSize: 12,
+    color: "#444",
+    fontWeight: "600",
+  },
 
   searchContainer: {
     flex: 1,
@@ -2010,23 +1986,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-
-  bottomTab: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: "#fff",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    borderTopWidth: 0.5,
-    borderColor: "#ccc",
-  },
-
-  tabItem: { alignItems: "center" },
-  tabLabel: { fontSize: 11, marginTop: 3 },
 
   modalOverlay: {
     flex: 1,
@@ -2402,24 +2361,24 @@ addCartText: {
 },
 
 videoBannerContainer: {
-  width: '100%',
-  height: 210,
-  marginVertical: 5,
+  width: width - 32,
+  alignSelf: "center",
   aspectRatio: 16 / 9,
+  maxHeight: 220,
+  marginTop: 12,
+  marginBottom: 24,
   borderRadius: 12,
-  overflow: 'hidden',
-  marginBottom: 40,
-  marginTop: -40,
+  overflow: "hidden",
+  backgroundColor: "#000",
 },
 
 videoBanner: {
-  width: '100%',
-  height: '100%',
+  ...StyleSheet.absoluteFillObject,
 },
 // premimum
 premiumSection: {
   marginHorizontal: 10,
-  marginTop: -30,
+  marginTop: 16,
   backgroundColor: '#ef7b1a',
   borderRadius: 26,
   paddingTop: 18,

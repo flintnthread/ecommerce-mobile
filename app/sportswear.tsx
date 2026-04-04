@@ -16,6 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Svg, { Path } from 'react-native-svg'; // add at top
+import HomeBottomTabBar from "@/components/HomeBottomTabBar";
 
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 
@@ -28,16 +29,10 @@ const HERO_TOP_H = 148;
 const HERO_BOTTOM_H = 132;
 
 /** Swap these `require(...)` paths when you add your own banner images. */
-const IMG_HERO_WORKOUT = require("../assets/images/sports2.png");
-const IMG_HERO_SOCCER = require("../assets/images/sports3.png");
-const IMG_HERO_TENNIS = require("../assets/images/sports4.png");
-const IMG_HERO = require("../assets/images/sports4.png");
-
-const HERO_BANNERS = [
-  require("../assets/images/sportswear.png"),
-  require("../assets/images/sportsbanner1.png"),
-  require("../assets/images/sportsbanner2.png"),
-];
+const IMG_HERO_WORKOUT = require("../assets/images/fntsportswear1.png");
+const IMG_HERO_SOCCER = require("../assets/images/fntsportswear2.png");
+const IMG_HERO_TENNIS = require("../assets/images/fntsportswear3.png");
+const IMG_HERO = require("../assets/images/fntsportswear4.png");
 
 const SPORTSWEAR_DEAL_CARDS: {
   id: string;
@@ -47,22 +42,22 @@ const SPORTSWEAR_DEAL_CARDS: {
   {
     id: "1",
     title: "Sports footwear",
-    image: require("../assets/images/sports1.png"),
+    image: require("../assets/images/SportsFootwear.png"),
   },
   {
     id: "2",
     title: "Women's sports wear",
-    image: require("../assets/images/sports2.png"),
+    image: require("../assets/images/WomenSportsWear.png"),
   },
   {
     id: "3",
     title: "Men's sports wear",
-    image: require("../assets/images/sports3.png"),
+    image: require("../assets/images/MenSportsWear.png"),
   },
   {
     id: "4",
     title: "Accessories",
-    image: require("../assets/images/sports4.png"),
+    image: require("../assets/images/SportsAccessories.png"),
   },
  
 ];
@@ -226,6 +221,75 @@ const banners = [
   require("../assets/images/sportsbanner6.png"),
 ];
 
+/** Full-width banners under “Sportswear deals” (new assets + fnt sportswear promos) */
+const SPORTSWEAR_DEALS_BANNERS: { id: string; image: ReturnType<typeof require> }[] = [
+  { id: "sd1", image: require("../assets/images/newsports.jpeg") },
+  { id: "sd2", image: require("../assets/images/newsports2.jpeg") },
+  { id: "sd3", image: require("../assets/images/fntsportswear5.png") },
+  { id: "sd4", image: require("../assets/images/fntsportswear6.png") },
+  { id: "sd5", image: require("../assets/images/fntsportswear1.png") },
+  { id: "sd6", image: require("../assets/images/fntsportswear2.png") },
+];
+
+const SPOTLIGHT_CARDS: {
+  id: string;
+  title: string;
+  image: ReturnType<typeof require>;
+}[] = [
+  {
+    id: "sp1",
+    title: "Running Essentials",
+    image: require("../assets/images/sports1.png"),
+  },
+  {
+    id: "sp2",
+    title: "Gym Wear",
+    image: require("../assets/images/sports2.png"),
+  },
+  {
+    id: "sp3",
+    title: "Shoes & Sneakers",
+    image: require("../assets/images/sports3.png"),
+  },
+  {
+    id: "sp4",
+    title: "Accessories",
+    image: require("../assets/images/sports4.png"),
+  },
+];
+
+const PRODUCTS_TO_BUY: {
+  id: string;
+  name: string;
+  price: string;
+  image: ReturnType<typeof require>;
+}[] = [
+  {
+    id: "ptb1",
+    name: "Training Shoes",
+    price: "₹2,499",
+    image: require("../assets/images/sports6.png"),
+  },
+  {
+    id: "ptb2",
+    name: "Gym T-shirt",
+    price: "₹799",
+    image: require("../assets/images/sports2.png"),
+  },
+  {
+    id: "ptb3",
+    name: "Running Shorts",
+    price: "₹999",
+    image: require("../assets/images/sports3.png"),
+  },
+  {
+    id: "ptb4",
+    name: "Sports Bottle",
+    price: "₹399",
+    image: require("../assets/images/sports4.png"),
+  },
+];
+
 const imagesByColor = {
   black: [
     require("../assets/images/blacksport2.png"),
@@ -288,7 +352,7 @@ function PlaybookPageGrid({
     <View style={styles.playbookPage}>
       <View style={styles.pbRowTop}>
         <TouchableOpacity
-          style={styles.pbTopLeft}
+          style={styles.pbTopFull}
           activeOpacity={0.9}
           onPress={onShop}
         >
@@ -302,26 +366,11 @@ function PlaybookPageGrid({
             </View>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.pbTopRight}
-          activeOpacity={0.9}
-          onPress={onShop}
-        >
-          <Image source={page.topRight} style={styles.pbCardImg} />
-          <View style={styles.pbCardFooter}>
-            <Text style={styles.pbBadge} numberOfLines={2}>
-              {badges[1]}
-            </Text>
-            <View style={styles.pbShopBtn}>
-              <Text style={styles.pbShopBtnText}>Shop now</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.pbRowBottom}>
         <TouchableOpacity
-          style={styles.pbBottomLeft}
+          style={styles.pbBottomFull}
           activeOpacity={0.9}
           onPress={onShop}
         >
@@ -335,23 +384,6 @@ function PlaybookPageGrid({
             </View>
           </View>
         </TouchableOpacity>
-        <View style={styles.pbMiniPair}>
-          <TouchableOpacity
-            style={styles.pbMini}
-            activeOpacity={0.9}
-            onPress={onShop}
-          >
-            <Image source={page.bottomMini1} style={styles.pbCardImg} />
-            <View style={styles.pbCardFooter}>
-              <Text style={styles.pbBadge} numberOfLines={2}>
-                {badges[3]}
-              </Text>
-              <View style={styles.pbShopBtn}>
-                <Text style={styles.pbShopBtnText}>Shop now</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
       </View>
     </View>
   );
@@ -363,40 +395,65 @@ function SportswearGlassDealCard({
   onOpen,
   onBag,
   onDetail,
+  index,
+  scrollY,
+  anchorY,
 }: {
   title: string;
   image: ReturnType<typeof require>;
   onOpen: () => void;
   onBag: () => void;
   onDetail: () => void;
+  index: number;
+  scrollY: Animated.Value;
+  anchorY: number;
 }) {
+  // Trigger while this card is entering the viewport (not earlier),
+  // so the movement is visible during scroll.
+  const fromX = index % 2 === 0 ? -140 : 140;
+  const start = Math.max(0, anchorY - height * 0.85);
+  const end = Math.max(0, anchorY - height * 0.55);
+  const inputRange = [start, end];
+  const translateX = scrollY.interpolate({
+    inputRange,
+    outputRange: [fromX, 0],
+    extrapolate: "clamp",
+  });
+  const opacity = scrollY.interpolate({
+    inputRange,
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+
   return (
-    <TouchableOpacity
-      style={styles.glassDealCard}
-      activeOpacity={0.95}
-      onPress={onOpen}
-    >
-      <ImageBackground
-        source={image}
-        style={styles.glassDealBg}
-        imageStyle={styles.glassDealBgImage}
+    <Animated.View style={{ transform: [{ translateX }], opacity }}>
+      <TouchableOpacity
+        style={styles.glassDealCard}
+        activeOpacity={0.95}
+        onPress={onOpen}
       >
-        <View style={styles.glassDealTopRow}>
-          <View style={styles.glassDealTopSpacer} />
-        </View>
-
-        <View style={styles.glassDealMiddle} />
-
-        <View style={styles.glassDealBar}>
-          <View style={styles.glassDealBarBlur} />
-          <View style={styles.glassDealBarInner}>
-            <Text style={styles.glassDealTitle} numberOfLines={2}>
-              {title}
-            </Text>
+        <ImageBackground
+          source={image}
+          style={styles.glassDealBg}
+          imageStyle={styles.glassDealBgImage}
+        >
+          <View style={styles.glassDealTopRow}>
+            <View style={styles.glassDealTopSpacer} />
           </View>
-        </View>
-      </ImageBackground>
-    </TouchableOpacity>
+
+          <View style={styles.glassDealMiddle} />
+
+          <View style={styles.glassDealBar}>
+            <View style={styles.glassDealBarBlur} />
+            <View style={styles.glassDealBarInner}>
+              <Text style={styles.glassDealTitle} numberOfLines={2}>
+                {title}
+              </Text>
+            </View>
+          </View>
+        </ImageBackground>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -405,16 +462,22 @@ export default function SportsWearSection() {
   const [searchQuery, setSearchQuery] = useState("");
   const [playbookPage, setPlaybookPage] = useState(0);
   const [selectedColor, setSelectedColor] = useState("white");
-  const [bannerIndex, setBannerIndex] = useState(0);
-  const [heroBannerIndex, setHeroBannerIndex] = useState(0);
+  const rootScrollY = useRef(new Animated.Value(0)).current;
+  const [browseCardYs, setBrowseCardYs] = useState<number[]>([]);
   const scrollRef = useRef<ScrollView>(null);
-  const sportswearDealsY = useRef(0);
+  const productsToBuyRef = useRef<View>(null);
+  const productsToBuyY = useRef(0);
+  const spotlightFootwearY = useRef(0);
   const shopByStoreY = useRef(0);
   const mensInterestY = useRef(0);
+  const mensSportsWearY = useRef(0);
   const athletesPlaybookY = useRef(0);
-  const womenSportsWearY = useRef(0);
-  const bannerScrollRef = useRef<ScrollView>(null);
-  const heroBannerScrollRef = useRef<ScrollView>(null);
+  const playbookScrollRef = useRef<ScrollView>(null);
+  const sportswearDealsBannerScrollRef = useRef<ScrollView>(null);
+  const [sportswearDealsBannerIndex, setSportswearDealsBannerIndex] = useState(0);
+  const lookbookScales = useRef(banners.map(() => new Animated.Value(1)));
+  /** One page per banner; scrollTo x = index * width */
+  const DEALS_BANNER_PAGE_W = width;
 
   const openCamera = useCallback(() => {
     Alert.alert(
@@ -432,7 +495,46 @@ export default function SportsWearSection() {
   }, [router]);
 
   const scrollToSportswearDeals = useCallback(() => {
-    scrollRef.current?.scrollTo({ y: sportswearDealsY.current, animated: true });
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+
+    const run = () => {
+      const inner = (
+        scroll as unknown as { getInnerViewRef?: () => View | null }
+      ).getInnerViewRef?.();
+      const target = productsToBuyRef.current;
+      if (inner && target) {
+        target.measureLayout(
+          inner,
+          (_x, y) => {
+            scroll.scrollTo({
+              x: 0,
+              y: Math.max(0, y - 16),
+              animated: true,
+            });
+          },
+          () => {
+            scroll.scrollTo({
+              x: 0,
+              y: Math.max(0, productsToBuyY.current),
+              animated: true,
+            });
+          }
+        );
+        return;
+      }
+      scroll.scrollTo({
+        x: 0,
+        y: Math.max(0, productsToBuyY.current),
+        animated: true,
+      });
+    };
+
+    requestAnimationFrame(run);
+  }, []);
+
+  const scrollToSpotlightFootwear = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: spotlightFootwearY.current, animated: true });
   }, []);
 
   const scrollToShopByStore = useCallback(() => {
@@ -443,13 +545,29 @@ export default function SportsWearSection() {
     scrollRef.current?.scrollTo({ y: mensInterestY.current, animated: true });
   }, []);
 
+  const scrollToMensSportsWear = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: mensSportsWearY.current, animated: true });
+  }, []);
+
   const scrollToAthletesPlaybook = useCallback(() => {
     scrollRef.current?.scrollTo({ y: athletesPlaybookY.current, animated: true });
   }, []);
 
-  const scrollToWomenSportsWear = useCallback(() => {
-    scrollRef.current?.scrollTo({ y: womenSportsWearY.current, animated: true });
-  }, []);
+  useEffect(() => {
+    const n = SPORTSWEAR_DEALS_BANNERS.length;
+    if (n === 0) return undefined;
+    const interval = setInterval(() => {
+      setSportswearDealsBannerIndex((prev) => {
+        const next = (prev + 1) % n;
+        sportswearDealsBannerScrollRef.current?.scrollTo({
+          x: next * DEALS_BANNER_PAGE_W,
+          animated: true,
+        });
+        return next;
+      });
+    }, 3200);
+    return () => clearInterval(interval);
+  }, [DEALS_BANNER_PAGE_W]);
 
 
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -464,48 +582,59 @@ useEffect(() => {
   ).start();
 }, []);
 
-useEffect(() => {
-  const cardWidth = width * 0.75;
-  const interval = setInterval(() => {
-    setBannerIndex((prev) => {
-      const next = (prev + 1) % banners.length;
-      bannerScrollRef.current?.scrollTo({
-        x: next * cardWidth,
-        animated: true,
-      });
-      return next;
-    });
-  }, 3000);
-
-  return () => clearInterval(interval);
-}, []);
-
-useEffect(() => {
-  const cardWidth = width;
-  const interval = setInterval(() => {
-    setHeroBannerIndex((prev) => {
-      const next = (prev + 1) % HERO_BANNERS.length;
-      heroBannerScrollRef.current?.scrollTo({
-        x: next * cardWidth,
-        animated: true,
-      });
-      return next;
-    });
-  }, 4000);
-
-  return () => clearInterval(interval);
-}, []);
-
 const rotate = rotateAnim.interpolate({
   inputRange: [0, 1],
   outputRange: ["0deg", "360deg"],
 });
 
+  const womensCardScale1 = useRef(new Animated.Value(1)).current;
+  const womensCardScale2 = useRef(new Animated.Value(1)).current;
+  const womensCardScale3 = useRef(new Animated.Value(1)).current;
+
+  const pressIn = (v: Animated.Value) => {
+    Animated.spring(v, {
+      toValue: 1.06,
+      useNativeDriver: true,
+      speed: 18,
+      bounciness: 6,
+    }).start();
+  };
+  const pressOut = (v: Animated.Value) => {
+    Animated.spring(v, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 18,
+      bounciness: 6,
+    }).start();
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaybookPage((prev) => {
+        const next = (prev + 1) % DIARY_SPREADS.length;
+        playbookScrollRef.current?.scrollTo({
+          x: next * DIARY_SPREAD_W,
+          animated: true,
+        });
+        return next;
+      });
+    }, 4200);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={styles.container}
+    <View style={styles.container}>
+    <Animated.ScrollView
+      ref={scrollRef as any}
+      style={{ flex: 1 }}
+      contentContainerStyle={{ flexGrow: 1 }}
       showsVerticalScrollIndicator={false}
+      scrollEventThrottle={16}
+      onScroll={Animated.event(
+        [{ nativeEvent: { contentOffset: { y: rootScrollY } } }],
+        { useNativeDriver: true }
+      )}
     >
       {/* HEADER */}
       <View style={styles.header}>
@@ -547,28 +676,52 @@ const rotate = rotateAnim.interpolate({
       </View>
 
     <View style={styles.bannerContainer}>
-      <ScrollView
-        ref={heroBannerScrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
+      <Image
+        source={require("../assets/images/sportswear.png")}
+        style={styles.bannerImage}
+      />
+
+      {/* top category buttons on banner */}
+      <View style={styles.bannerTopButtonsRow}>
+        <TouchableOpacity
+          style={styles.bannerTopBtn}
+          activeOpacity={0.9}
+          onPress={scrollToSpotlightFootwear}
+        >
+          <Text style={styles.bannerTopBtnText}>Sports footwear</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bannerTopBtn}
+          activeOpacity={0.9}
+          onPress={scrollToShopByStore}
+        >
+          <Text style={styles.bannerTopBtnText}>Women's sports wear</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bannerTopBtn}
+          activeOpacity={0.9}
+          onPress={scrollToMensSportsWear}
+        >
+          <Text style={styles.bannerTopBtnText}>Mens sports wear</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bannerTopBtn}
+          activeOpacity={0.9}
+          onPress={scrollToAthletesPlaybook}
+        >
+          <Text style={styles.bannerTopBtnText}>Accessories</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* explore deals button inside banner */}
+      <TouchableOpacity
+        style={styles.bannerExploreBtn}
+        activeOpacity={0.9}
+        onPress={scrollToSportswearDeals}
       >
-        {HERO_BANNERS.map((img, index) => (
-          <View key={index} style={{ width }}>
-            <Image
-              source={img}
-              style={styles.bannerImage}
-            />
-            <TouchableOpacity
-              style={styles.bannerShopAllBtn}
-              activeOpacity={0.9}
-              onPress={scrollToSportswearDeals}
-            >
-              <Text style={styles.bannerShopAllText}>Shop All</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-      </ScrollView>
+        <Text style={styles.bannerExploreText}>Explore deals</Text>
+        <Ionicons name="chevron-forward" size={18} color="#fff" />
+      </TouchableOpacity>
     </View>
 
 
@@ -576,118 +729,127 @@ const rotate = rotateAnim.interpolate({
 
       {/* SHOP BY CATEGORY */}
       <View style={styles.glassDealsSection}>
-        <Text style={styles.glassDealsSectionTitle}>Explore by category</Text>
-        {SPORTSWEAR_DEAL_CARDS.map((item) => (
-          <SportswearGlassDealCard
+        <Text style={styles.glassDealsSectionTitle}>Browse Collections</Text>
+        {SPORTSWEAR_DEAL_CARDS.map((item, index) => (
+          <View
             key={item.id}
-            title={item.title}
-            image={item.image}
-            onOpen={
-              item.id === "1"
-                ? scrollToSportswearDeals
-                : item.id === "2"
-                ? scrollToShopByStore
-                : item.id === "3"
-                ? scrollToMensInterest
-                : item.id === "4"
-                ? scrollToAthletesPlaybook
-                : goShop
-            }
-            onBag={() => router.push("/cart")}
-            onDetail={
-              item.id === "1"
-                ? scrollToSportswearDeals
-                : item.id === "2"
-                ? scrollToShopByStore
-                : item.id === "3"
-                ? scrollToMensInterest
-                : item.id === "4"
-                ? scrollToAthletesPlaybook
-                : goShop
-            }
-          />
+            onLayout={(e) => {
+              const y = e.nativeEvent.layout.y;
+              setBrowseCardYs((prev) => {
+                if (prev[index] === y) return prev;
+                const next = prev.slice();
+                next[index] = y;
+                return next;
+              });
+            }}
+          >
+            <SportswearGlassDealCard
+              title={item.title}
+              image={item.image}
+              index={index}
+              scrollY={rootScrollY}
+              anchorY={browseCardYs[index] ?? 0}
+              onOpen={
+                item.id === "1"
+                  ? scrollToSpotlightFootwear
+                  : item.id === "2"
+                  ? scrollToShopByStore
+                  : item.id === "3"
+                  ? scrollToMensSportsWear
+                  : item.id === "4"
+                  ? scrollToAthletesPlaybook
+                  : goShop
+              }
+              onBag={() => router.push("/cart")}
+              onDetail={
+                item.id === "1"
+                  ? scrollToSpotlightFootwear
+                  : item.id === "2"
+                  ? scrollToShopByStore
+                  : item.id === "3"
+                  ? scrollToMensSportsWear
+                  : item.id === "4"
+                  ? scrollToAthletesPlaybook
+                  : goShop
+              }
+            />
+          </View>
         ))}
       </View>
 
       <View style={{ height: 25 }} />
-
-      {/* according to color pick up */}
-
-
-      <View style={styles.colorcontainer}>
-      <Text style={styles.heading}>Which color would you Pick ?</Text>
-
-      {/* Color Buttons */}
-      <View style={styles.colorRow}>
-        {colorOptions.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            onPress={() => setSelectedColor(item.id)}
-            style={[
-              styles.colorCircle,
-              { backgroundColor: item.color },
-              selectedColor === item.id && styles.selectedCircle,
-            ]}
-          />
-        ))}
-      </View>
-
-      {/* Shoe Images */}
-      <View style={styles.imageRow}>
-        {imagesByColor[selectedColor].map((img, index) => (
-          <Image key={index} source={img} style={styles.shoeImage} />
-        ))}
-      </View>
-
-      {/* Offer Text */}
-      <Text style={styles.offerText}>Upto 80% Off*</Text>
-
-      {/* Button */}
-      <TouchableOpacity style={styles.button}>
-        <Text style={styles.buttonText}>SHOP NOW</Text>
-      </TouchableOpacity>
-    </View>
   
 
 
       {/* POWER PICKS */}
       <View style={styles.powerSection}>
-        <Text style={styles.powerTitle}>POWER PICKS</Text>
+        <View style={styles.powerTitleRow}>
+          <Text style={styles.powerTitle}>POWER PICKS</Text>
+          <View style={styles.powerTitleLine} />
+        </View>
 
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 10 }}
         >
-          <TouchableOpacity style={styles.powerCard}>
-            <Image
-              source={require("../assets/images/sports2.png")}
-              style={styles.powerImage}
-            />
-            <View style={styles.powerOverlay}>
-              <Text style={styles.powerText}>NEW DROP</Text>
-            </View>
-          </TouchableOpacity>
+          {[
+            {
+              id: "pp1",
+              img: require("../assets/images/fntsportswear2.png"),
+              label: "NEW DROP",
+              offer: "UP TO 40% OFF",
+            },
+            {
+              id: "pp2",
+              img: require("../assets/images/fntsportswear4.png"),
+              label: "BEST DEALS",
+              offer: "EXTRA 10% OFF",
+            },
+            {
+              id: "pp3",
+              img: require("../assets/images/fntsportswear3.png"),
+              label: "TRENDING",
+              offer: "MIN 30% OFF",
+            },
+          ].map((card) => {
+            const scale = new Animated.Value(1);
+            return (
+              <TouchableOpacity
+                key={card.id}
+                activeOpacity={0.95}
+                onPressIn={() => {
+                  Animated.spring(scale, {
+                    toValue: 1.05,
+                    useNativeDriver: true,
+                    speed: 18,
+                    bounciness: 6,
+                  }).start();
+                }}
+                onPressOut={() => {
+                  Animated.spring(scale, {
+                    toValue: 1,
+                    useNativeDriver: true,
+                    speed: 18,
+                    bounciness: 6,
+                  }).start();
+                }}
+                onPress={goShop}
+              >
+                <Animated.View style={[styles.powerCard, { transform: [{ scale }] }]}>
+                  <Image source={card.img} style={styles.powerImage} />
 
-          <TouchableOpacity style={styles.powerCard}>
-            <Image
-              source={require("../assets/images/sports4.png")}
-              style={styles.powerImage}
-            />
-            <View style={styles.powerOverlay}>
-              <Text style={styles.powerText}>BEST DEALS</Text>
-            </View>
-          </TouchableOpacity>
+                  <View style={styles.powerTagRow}>
+                    <Text style={styles.powerTag}>{card.label}</Text>
+                  </View>
 
-          <TouchableOpacity style={styles.powerCard}>
-            <Image
-              source={require("../assets/images/sports4.png")}
-              style={styles.powerImage}
-            />
-            <View style={styles.powerOverlay}>
-              <Text style={styles.powerText}>TRENDING</Text>
-            </View>
-          </TouchableOpacity>
+                  <View style={styles.powerOfferTag}>
+                    <Text style={styles.powerOfferText}>{card.offer}</Text>
+                  </View>
+                </Animated.View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -701,6 +863,7 @@ const rotate = rotateAnim.interpolate({
         <Text style={styles.diaryTitle}>The Athlete&apos;s Playbook</Text>
 
         <ScrollView
+          ref={playbookScrollRef}
           horizontal
           pagingEnabled
           decelerationRate="fast"
@@ -761,6 +924,7 @@ const rotate = rotateAnim.interpolate({
       </View>
 
      {/* sports footwear */}
+
 
 
      <View style={styles.trendsSection}>
@@ -832,7 +996,7 @@ const rotate = rotateAnim.interpolate({
     imageStyle={{ borderRadius: 14 }}
   >
     <View style={styles.storeOverlay}>
-      <Text style={styles.storeTitle}>SHOP BY STORE</Text>
+      <Text style={styles.storeTitle}>WOMEN SPORTS WEAR</Text>
 
       <TouchableOpacity>
         <Text style={styles.storeShopAll}>Shop All</Text>
@@ -864,16 +1028,14 @@ const rotate = rotateAnim.interpolate({
   </ScrollView>
 </View>
 {/* BANNER SECTION */}
+
+ 
+
 <View style={styles.lookbookWrapper}>
-  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-    <Text style={styles.lookbookTitle}>THE LOCAL LOOKBOOK</Text>
-    <TouchableOpacity onPress={scrollToWomenSportsWear}>
-      <Text style={styles.shopAll}>Shop All</Text>
-    </TouchableOpacity>
-  </View>
+
+  <Text style={styles.lookbookTitle}>THE LOCAL LOOKBOOK</Text>
 
   <ScrollView
-    ref={bannerScrollRef}
     horizontal
     showsHorizontalScrollIndicator={false}
     snapToInterval={width * 0.75}
@@ -881,15 +1043,43 @@ const rotate = rotateAnim.interpolate({
   >
     {banners.map((img, index) => (
       <View key={index} style={styles.cardWrapper}>
-        <View style={styles.redFrame}>
-          <Image
-            source={img}
-            style={styles.lookbookImage}
-          />
-        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.95}
+          onPressIn={() => {
+            Animated.spring(lookbookScales.current[index], {
+              toValue: 1.04,
+              useNativeDriver: true,
+              speed: 18,
+              bounciness: 6,
+            }).start();
+          }}
+          onPressOut={() => {
+            Animated.spring(lookbookScales.current[index], {
+              toValue: 1,
+              useNativeDriver: true,
+              speed: 18,
+              bounciness: 6,
+            }).start();
+          }}
+        >
+          <Animated.View
+            style={[
+              styles.redFrame,
+              { transform: [{ scale: lookbookScales.current[index] }] },
+            ]}
+          >
+            <Image
+              source={img}
+              style={styles.lookbookImage}
+            />
+          </Animated.View>
+        </TouchableOpacity>
+
       </View>
     ))}
   </ScrollView>
+
 </View>
 
 {/* womens sports wear */}
@@ -897,7 +1087,7 @@ const rotate = rotateAnim.interpolate({
 <View
   style={styles.westernSection}
   onLayout={(e) => {
-    womenSportsWearY.current = e.nativeEvent.layout.y;
+    mensSportsWearY.current = e.nativeEvent.layout.y;
   }}
 >
   
@@ -908,7 +1098,7 @@ const rotate = rotateAnim.interpolate({
     imageStyle={{ borderRadius: 12 }}
   >
     <View style={styles.bannerOverlay}>
-      <Text style={styles.bannerTitle}>WOMEN SPORTS WEAR</Text>
+      <Text style={styles.bannerTitle}>MEN'S SPORTS WEAR</Text>
 
       <TouchableOpacity>
         <Text style={styles.shopAll}>Shop All</Text>
@@ -925,40 +1115,61 @@ const rotate = rotateAnim.interpolate({
     contentContainerStyle={{ paddingHorizontal: 10 }}
   >
     {/* CARD 1 */}
-    <TouchableOpacity style={styles.productCard}>
-      <Image
-        source={require("../assets/images/greensport1.png")}
-        style={styles.productImage}
-      />
-      <View style={styles.productOverlay}>
-        <Text style={styles.productText}>Tops, T shirts & Shirts</Text>
-      </View>
-      <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale: womensCardScale1 }] }}>
+      <TouchableOpacity
+        style={styles.productCard}
+        onPressIn={() => pressIn(womensCardScale1)}
+        onPressOut={() => pressOut(womensCardScale1)}
+        activeOpacity={0.95}
+      >
+        <Image
+          source={require("../assets/images/greensport1.png")}
+          style={styles.productImage}
+        />
+        <View style={styles.productOverlay}>
+          <Text style={styles.productText}>Tops, T shirts & Shirts</Text>
+        </View>
+        <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
+      </TouchableOpacity>
+    </Animated.View>
 
     {/* CARD 2 */}
-    <TouchableOpacity style={styles.productCard}>
-      <Image
-        source={require("../assets/images/yellowsport2.png")}
-        style={styles.productImage}
-      />
-      <View style={styles.productOverlay}>
-        <Text style={styles.productText}>Jeans</Text>
-      </View>
-      <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale: womensCardScale2 }] }}>
+      <TouchableOpacity
+        style={styles.productCard}
+        onPressIn={() => pressIn(womensCardScale2)}
+        onPressOut={() => pressOut(womensCardScale2)}
+        activeOpacity={0.95}
+      >
+        <Image
+          source={require("../assets/images/yellowsport2.png")}
+          style={styles.productImage}
+        />
+        <View style={styles.productOverlay}>
+          <Text style={styles.productText}>Jeans</Text>
+        </View>
+        <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
+      </TouchableOpacity>
+    </Animated.View>
 
     {/* CARD 3 */}
-    <TouchableOpacity style={styles.productCard}>
-      <Image
-        source={require("../assets/images/whitesport2.png")}
-        style={styles.productImage}
-      />
-      <View style={styles.productOverlay}>
-        <Text style={styles.productText}>Trousers</Text>
-      </View>
-      <Text style={styles.productOffer}>MIN. 65% OFF*</Text>
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale: womensCardScale3 }] }}>
+      <TouchableOpacity
+        style={styles.productCard}
+        onPressIn={() => pressIn(womensCardScale3)}
+        onPressOut={() => pressOut(womensCardScale3)}
+        activeOpacity={0.95}
+      >
+        <Image
+          source={require("../assets/images/whitesport2.png")}
+          style={styles.productImage}
+        />
+        <View style={styles.productOverlay}>
+          <Text style={styles.productText}>Trousers</Text>
+        </View>
+        <Text style={styles.productOffer}>MIN. 65% OFF*</Text>
+      </TouchableOpacity>
+    </Animated.View>
   </ScrollView>
 </View>
 
@@ -1016,62 +1227,47 @@ const rotate = rotateAnim.interpolate({
     </View>
   </View>
 
+  {/* spotlight cards section (below interest) */}
+  <View
+    style={styles.spotlightSection}
+    onLayout={(e) => {
+      spotlightFootwearY.current = e.nativeEvent.layout.y;
+    }}
+  >
+    <View style={styles.spotlightTitleRow}>
+      <View style={styles.spotlightTitlePill}>
+        <Text style={styles.spotlightTitle}>SPORTS FOOTWEAR</Text>
+      </View>
+    </View>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      snapToInterval={width * 0.42 + 14}
+      decelerationRate="fast"
+      contentContainerStyle={styles.spotlightScroll}
+    >
+      {SPOTLIGHT_CARDS.map((item) => (
+        <TouchableOpacity
+          key={item.id}
+          activeOpacity={0.9}
+          style={styles.spotlightCard}
+          onPress={goShop}
+        >
+          <Image source={item.image} style={styles.spotlightImage} />
+          <Text style={styles.spotlightCardTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  </View>
+
 {/* trending cards */}
 
 
-{/* 🔥 CURVED BIG CARD SLIDER */}
-<View style={styles.curveSection}>
-  <Text style={styles.sectionTitle}>Sportswear Highlights</Text>
-  <ScrollView
-    horizontal
-    pagingEnabled
-    showsHorizontalScrollIndicator={false}
-  >
-    {data.map((item) => (
-      <View key={item.id} style={styles.curveCard}>
 
-        {/* IMAGE */}
-        <Image source={item.image} style={styles.curveImage} />
-
-       {/* 🔥 REAL TOP CURVE CUT */}
-<Svg
-  width="100%"
-  height={90}
-  viewBox="0 0 300 90"
-  style={styles.curveSvg}
->
-  <Path
-    d="M0,90 Q150,-40 300,90 L300,0 L0,0 Z"
-    fill="#fff"
-  />
-</Svg>
-
-        {/* TEXT OVERLAY */}
-        <View style={styles.curveOverlay}>
-          <Text style={styles.curveTitle}>{item.title}</Text>
-          <Text style={styles.curvePrice}>169.99</Text>
-        </View>
-
-        {/* ICONS */}
-        <TouchableOpacity style={styles.topIcon}>
-          <Ionicons name="heart-outline" size={20} color="#000" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.bottomIcon}>
-          <Ionicons name="cart-outline" size={22} color="#000" />
-        </TouchableOpacity>
-
-      </View>
-    ))}
-  </ScrollView>
-</View>
 {/* deals section */}
-<View
-  style={styles.heroDealsOnlyWrap}
-  onLayout={(e) => {
-    sportswearDealsY.current = e.nativeEvent.layout.y;
-  }}
->
+<View style={styles.heroDealsOnlyWrap}>
   <TouchableOpacity onPress={goShop} activeOpacity={0.9}>
     <View style={styles.sportswearDealsBtn}>
       <Text style={styles.sportswearDealsBtnText}>Sportswear deals</Text>
@@ -1080,105 +1276,136 @@ const rotate = rotateAnim.interpolate({
   </TouchableOpacity>
       </View>
 
-      {/* Promo grid — tap any tile; main CTA is the bar above */}
-      <View style={styles.heroSection}>
-        <View style={styles.heroRow}>
-          <View style={styles.heroLeftCol}>
-            <TouchableOpacity
-              activeOpacity={0.92}
-              onPress={goShop}
-              style={[styles.heroTopWide, { height: HERO_TOP_H }]}
-            >
-              <ImageBackground
-                source={IMG_HERO_WORKOUT}
-                style={styles.heroBgImageOnly}
-                imageStyle={styles.heroBgImage}
-              >
-                <View style={styles.heroDimLight} />
-              </ImageBackground>
-            </TouchableOpacity>
-
+      {/* Sportswear deals banners — full-width paging; back / forward scroll one image */}
+      <View style={styles.angledWrap}>
+        <ScrollView
+          ref={sportswearDealsBannerScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          keyboardShouldPersistTaps="handled"
+          onMomentumScrollEnd={(e) => {
+            const page = Math.round(
+              e.nativeEvent.contentOffset.x / DEALS_BANNER_PAGE_W
+            );
+            const max = SPORTSWEAR_DEALS_BANNERS.length - 1;
+            setSportswearDealsBannerIndex(Math.max(0, Math.min(page, max)));
+          }}
+        >
+          {SPORTSWEAR_DEALS_BANNERS.map((item) => (
             <View
-              style={[
-                styles.heroBottomRow,
-                { marginTop: HERO_GAP, height: HERO_BOTTOM_H },
-              ]}
+              key={item.id}
+              style={{
+                width: DEALS_BANNER_PAGE_W,
+                paddingHorizontal: 14,
+                justifyContent: "center",
+              }}
             >
               <TouchableOpacity
-                activeOpacity={0.92}
+                activeOpacity={0.95}
                 onPress={goShop}
-                style={styles.heroBottomCell}
+                accessibilityRole="button"
+                accessibilityLabel="Open sportswear deal"
               >
-                <ImageBackground
-                  source={IMG_HERO_SOCCER}
-                  style={styles.heroBgImageOnly}
-                  imageStyle={styles.heroBgImage}
-                >
-                  <View style={styles.heroDimLight} />
-                </ImageBackground>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.92}
-                onPress={goShop}
-                style={styles.heroBottomCell}
-              >
-                <ImageBackground
-                  source={IMG_HERO}
-                  style={styles.heroBgImageOnly}
-                  imageStyle={styles.heroBgImage}
-                >
-                  <View style={styles.heroDimLight} />
-                </ImageBackground>
+                <View style={styles.angledCard}>
+                  <Image source={item.image} style={styles.angledImage} />
+                </View>
               </TouchableOpacity>
             </View>
+          ))}
+        </ScrollView>
+
+        <View style={styles.angledNavRow}>
+          <TouchableOpacity
+            style={styles.angledNavBtn}
+            activeOpacity={0.85}
+            onPress={() => {
+              setSportswearDealsBannerIndex((prev) => {
+                const next = Math.max(0, prev - 1);
+                sportswearDealsBannerScrollRef.current?.scrollTo({
+                  x: next * DEALS_BANNER_PAGE_W,
+                  animated: true,
+                });
+                return next;
+              });
+            }}
+          >
+            <Ionicons name="chevron-back" size={18} color="#fff" />
+          </TouchableOpacity>
+
+          <View style={styles.angledDotsRow}>
+            {SPORTSWEAR_DEALS_BANNERS.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.angledDot,
+                  i === sportswearDealsBannerIndex ? styles.angledDotActive : null,
+                ]}
+              />
+            ))}
           </View>
 
           <TouchableOpacity
-            activeOpacity={0.92}
-            onPress={goShop}
-            style={styles.heroRightTall}
+            style={styles.angledNavBtn}
+            activeOpacity={0.85}
+            onPress={() => {
+              const last = SPORTSWEAR_DEALS_BANNERS.length - 1;
+              setSportswearDealsBannerIndex((prev) => {
+                const next = Math.min(last, prev + 1);
+                sportswearDealsBannerScrollRef.current?.scrollTo({
+                  x: next * DEALS_BANNER_PAGE_W,
+                  animated: true,
+                });
+                return next;
+              });
+            }}
           >
-            <ImageBackground
-              source={IMG_HERO_TENNIS}
-              style={styles.heroBgImageOnly}
-              imageStyle={styles.heroBgImage}
-            >
-              <View style={styles.heroDimLight} />
-            </ImageBackground>
+            <Ionicons name="chevron-forward" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* (removed old promo grid + L-shape section; replaced by angled carousel above) */}
 
-
-
-
-{/* L shape section  */}
-<View style={{ marginTop: 32 }}>
-  <ScrollView
-    horizontal
-    showsHorizontalScrollIndicator={false}
-    contentContainerStyle={{
-      paddingHorizontal: 12,
-      paddingBottom: 4,
-    }}
-  >
-    {data2.map((item) => (
-      <View key={item.id} style={styles.lSection}>
-        {/* BIG L-SHAPE LEFT BLOCK */}
-        <View style={styles.bigBox}>
-          <Image source={item.bigImage} style={styles.bigImage} />
+      {/* products to buy (bottom section) */}
+      <View
+        ref={productsToBuyRef}
+        style={styles.ptbSection}
+        onLayout={(e) => {
+          productsToBuyY.current = e.nativeEvent.layout.y;
+        }}
+      >
+        <View style={styles.ptbHeaderRow}>
+          <Text style={styles.ptbTitle}>Products to buy</Text>
+          <TouchableOpacity onPress={goShop} activeOpacity={0.9}>
+            <Text style={styles.ptbSeeAll}>See all</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* SMALL BLOCK BOTTOM-RIGHT TO COMPLETE L */}
-        <View style={styles.smallBox}>
-          <Image source={item.smallImage} style={styles.smallImage} />
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.ptbScroll}
+        >
+          {PRODUCTS_TO_BUY.map((p) => (
+            <View key={p.id} style={styles.ptbCard}>
+              <Image source={p.image} style={styles.ptbImage} />
+              <Text style={styles.ptbName} numberOfLines={1}>
+                {p.name}
+              </Text>
+              <Text style={styles.ptbPrice}>{p.price}</Text>
+              <TouchableOpacity
+                style={styles.ptbBtn}
+                activeOpacity={0.9}
+                onPress={() => router.push("/cart")}
+              >
+                <Text style={styles.ptbBtnText}>Buy</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
       </View>
-    ))}
-  </ScrollView>
-</View>
 
   
 
@@ -1186,7 +1413,9 @@ const rotate = rotateAnim.interpolate({
    
   
     
-    </ScrollView>
+    </Animated.ScrollView>
+    <HomeBottomTabBar variant="inline" />
+    </View>
   );
 }
 
@@ -1248,7 +1477,7 @@ const styles = StyleSheet.create({
 
   bannerContainer: {
     width: "100%",
-    height: height * 0.5,
+    height: height * 0.6,
     position: "relative",
   },
 
@@ -1258,21 +1487,75 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
   },
 
-  bannerShopAllBtn: {
+  bannerTopButtonsRow: {
     position: "absolute",
-    right: 20,
-    bottom: 24,
-    paddingHorizontal: 18,
+    top: 14,
+    left: 12,
+    right: 12,
+    zIndex: 3,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  bannerTopBtn: {
+    paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+  },
+  bannerTopBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#111",
+  },
+  bannerExploreBtn: {
+    position: "absolute",
+    bottom: 16,
+    left: 12,
+    right: 12,
+    zIndex: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ff6f00",
+    paddingVertical: 12,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "#e65100",
+  },
+  bannerExploreText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
 
-  bannerShopAllText: {
+  bannerCtaWrap: {
+    paddingHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  bannerCtaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ff6f00",
+    paddingVertical: 12,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "#e65100",
+  },
+  bannerCtaText: {
     color: "#fff",
-    fontSize: 13,
-    fontWeight: "600",
-    letterSpacing: 0.4,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
 
   heroDealsOnlyWrap: {
@@ -1420,16 +1703,32 @@ const styles = StyleSheet.create({
   powerSection: {
     marginTop: 20,
     paddingVertical: 20,
-    backgroundColor: "orange",
+    backgroundColor: "#ff6f00",
   },
 
+  powerTitleRow: {
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 15,
+  },
   powerTitle: {
     fontSize: 22,
-    fontWeight: "bold",
+    fontWeight: "900",
     color: "#fff",
     textAlign: "center",
-    marginBottom: 15,
     letterSpacing: 2,
+    textShadowColor: "rgba(0,0,0,0.25)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  powerTitleLine: {
+    height: 2,
+    width: 34,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.85)",
   },
 
   powerCard: {
@@ -1439,7 +1738,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     borderWidth: 2,
-    borderColor: "blue",
+    borderColor: "rgba(255,255,255,0.85)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
 
   powerImage: {
@@ -1448,20 +1748,36 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
   },
 
-  powerOverlay: {
+  powerTagRow: {
     position: "absolute",
-    bottom: 15,
-    left: 15,
+    left: 12,
+    top: 12,
   },
-
-  powerText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-    backgroundColor: "rgba(0,0,0,0.5)",
+  powerTag: {
+    color: "#111",
+    fontSize: 12,
+    fontWeight: "900",
+    backgroundColor: "rgba(255,255,255,0.92)",
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: "hidden",
+    letterSpacing: 0.4,
+  },
+  powerOfferTag: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  powerOfferText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.3,
   },
 
   /* The Athlete's Playbook */
@@ -1474,7 +1790,7 @@ const styles = StyleSheet.create({
   alignSelf: "center",
   width: "100%",
 
-  backgroundColor: "#cfe8f6",
+  backgroundColor: "skyblue",
   borderRadius: 20,
 
   paddingVertical: 22,        // 👉 height feel बढ़ाने के लिए
@@ -1498,6 +1814,13 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 2, height: 1 },
     textShadowRadius: 0,
     letterSpacing: 0.5,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    alignSelf: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "rgba(29, 50, 78, 0.25)",
   },
 
   diaryScroll: {
@@ -1544,6 +1867,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
+  pbTopFull: {
+    flex: 1,
+    height: "100%",
+    flexDirection: "column",
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#ececec",
+  },
+
   pbTopLeft: {
     width: "36%",
     height: "100%",
@@ -1566,6 +1898,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
     height: 200,
+  },
+
+  pbBottomFull: {
+    flex: 1,
+    height: "100%",
+    flexDirection: "column",
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#ececec",
   },
 
   pbBottomLeft: {
@@ -1726,7 +2067,7 @@ const styles = StyleSheet.create({
 
   /* Glass-style vertical deals (below playbook) */
   glassDealsSection: {
-    backgroundColor: "#d7a3a3",
+    backgroundColor: "#1d324e",
     marginTop: 6,
     paddingHorizontal: 14,
     paddingTop: 22,
@@ -1739,6 +2080,58 @@ const styles = StyleSheet.create({
     color: "#ece2d5",
     marginBottom: 16,
     letterSpacing: 0.3,
+  },
+
+  angledWrap: {
+    marginTop: 10,
+    paddingVertical: 22,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+  },
+  angledCard: {
+    width: "100%",
+    height: 210,
+    alignSelf: "center",
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#eee",
+    borderWidth: 1,
+    borderColor: "#eee",
+  },
+  angledImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  angledNavRow: {
+    marginTop: 14,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  angledNavBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#ff6f00",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  angledDotsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  angledDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,111,0,0.35)",
+  },
+  angledDotActive: {
+    width: 18,
+    backgroundColor: "#ff6f00",
   },
 
   glassDealCard: {
@@ -1917,12 +2310,20 @@ colorcontainer: {
 },
 
 trendsTitle: {
-  color: "#fff",
+  color: "#111",
   fontSize: 20,
-  fontWeight: "bold",
+  fontWeight: "900",
   textAlign: "center",
   marginBottom: 15,
   letterSpacing: 2,
+  paddingHorizontal: 14,
+  paddingVertical: 8,
+  alignSelf: "flex-start",
+  borderRadius: 999,
+  backgroundColor: "rgba(255,255,255,0.95)",
+  borderWidth: 2,
+  borderColor: "#ff6f00",
+  marginLeft: 12,
 },
 
 trendCard: {
@@ -1931,8 +2332,7 @@ trendCard: {
   marginRight: 15,
   borderRadius: 10,
   overflow: "hidden",
-  borderWidth: 2,
-  borderColor: "#ff2d2d",
+  borderWidth: 0,
 },
 
 trendImage: {
@@ -1945,16 +2345,21 @@ trendOverlay: {
   position: "absolute",
   bottom: 10,
   left: 10,
+  right: 10,
+  paddingHorizontal: 10,
+  paddingVertical: 8,
+  borderRadius: 10,
+  backgroundColor: "rgba(255,255,255,0.9)",
 },
 
 trendBrand: {
-  color: "#fff",
+  color: "#111",
   fontSize: 12,
   fontWeight: "600",
 },
 
 trendPrice: {
-  color: "#fff",
+  color: "#111",
   fontSize: 16,
   fontWeight: "bold",
 },
@@ -2114,9 +2519,16 @@ lookbookWrapper:{
 
 lookbookTitle:{
   textAlign:"center",
-  fontSize:20,
-  fontWeight:"700",
+  fontSize:18,
+  fontWeight:"900",
   marginBottom:15,
+  alignSelf: "center",
+  paddingHorizontal: 14,
+  paddingVertical: 8,
+  borderRadius: 999,
+  backgroundColor: "#111",
+  color: "#fff",
+  letterSpacing: 1,
 },
 
 cardWrapper:{
@@ -2125,12 +2537,12 @@ cardWrapper:{
 },
 
 redFrame:{
-  backgroundColor:"#ff3b30",
+  backgroundColor:"#fff",
   padding:6,
-  borderRadius:28,
+  borderRadius:16,
   shadowColor:"#000",
-  shadowOpacity:0.3,
-  shadowRadius:10,
+  shadowOpacity:0.12,
+  shadowRadius:8,
   elevation:8,
 },
 
@@ -2148,6 +2560,131 @@ container2: {
     backgroundColor: "#F5F5F5",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  spotlightSection: {
+    marginTop: 34,
+    marginHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: "#d9d9d9",
+    paddingTop: 16,
+    paddingBottom: 18,
+    paddingHorizontal: 14,
+  },
+  spotlightTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  spotlightTitlePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#ff6f00",
+  },
+  spotlightTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#ff6f00",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+  },
+  spotlightScroll: {
+    paddingRight: 10,
+    gap: 14,
+  },
+  spotlightCard: {
+    width: width * 0.46,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+    padding: 10,
+  },
+  spotlightImage: {
+    width: "100%",
+    height: 165,
+    borderRadius: 10,
+    resizeMode: "cover",
+    backgroundColor: "#f2f2f2",
+  },
+  spotlightCardTitle: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111",
+  },
+
+  ptbSection: {
+    marginTop: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+    backgroundColor: "#fff",
+  },
+  ptbHeaderRow: {
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  ptbTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111",
+    letterSpacing: 0.2,
+  },
+  ptbSeeAll: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ff6f00",
+  },
+  ptbScroll: {
+    paddingHorizontal: 14,
+    gap: 12,
+    paddingRight: 20,
+  },
+  ptbCard: {
+    width: 150,
+    borderRadius: 14,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eee",
+    padding: 10,
+  },
+  ptbImage: {
+    width: "100%",
+    height: 100,
+    borderRadius: 12,
+    resizeMode: "cover",
+    backgroundColor: "#f3f3f3",
+    marginBottom: 8,
+  },
+  ptbName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111",
+  },
+  ptbPrice: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 8,
+  },
+  ptbBtn: {
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#111",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ptbBtnText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 12,
+    letterSpacing: 0.3,
   },
 
   title: {
@@ -2291,18 +2828,18 @@ topBanner: {
 // L shape section
 
 lSection: {
-  width: width - 24,
+  width: 280,          // 👈 REQUIRED for scroll
   height: 260,
-  position: "relative",
-  marginHorizontal: 0,
-  marginBottom: 16,
+  position: 'relative',
+  marginHorizontal: 10,
 },
 
 bigBox: {
-  width: "68%",        // leaves gap for small box on the right
-  height: "100%",
+  width: '68%',        // 👈 leaves gap for small box
+  height: '100%',
   borderRadius: 12,
   overflow: 'hidden',
+  
 },
 
 bigImage: {
@@ -2312,20 +2849,15 @@ bigImage: {
 },
 
 smallBox: {
-  position: "absolute",
+  position: 'absolute',
   right: 0,
   bottom: 0,
+
   width: 120,
   height: 110,
+
   borderRadius: 12,
   overflow: 'hidden',
-},
-
-smallRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  gap: 12,
-  marginTop: 10,
 },
 
 smallImage: {

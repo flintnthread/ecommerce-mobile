@@ -6,8 +6,8 @@ export default function Index() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace("/language");
-    }, 1000); 
+      router.replace("/promote");
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [router]);

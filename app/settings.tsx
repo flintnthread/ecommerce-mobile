@@ -329,11 +329,11 @@ export default function SettingsScreen() {
                           {
                             backgroundColor:
                               address.type === "home"
-                                ? "#4CAF50"
+                                ? "#4CAF5020"
                                 : address.type === "work"
-                                ? "#2196F3"
-                                : "#9C27B0",
-                          } + "20",
+                                ? "#2196F320"
+                                : "#9C27B020",
+                          },
                         ]}
                       >
                         <Ionicons

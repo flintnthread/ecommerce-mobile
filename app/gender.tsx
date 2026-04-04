@@ -8,6 +8,7 @@ import {
   Image,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 // 7 floating animations created outside component to avoid hook rule violation
 const createAnimations = () =>
@@ -43,6 +44,10 @@ export default function GenderScreen() {
     router.replace("/age");
   };
 
+  const goBack = () => {
+    router.replace("/language");
+  };
+
   const floatingStyle = (anim: Animated.Value) => ({
     transform: [
       {
@@ -56,6 +61,24 @@ export default function GenderScreen() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        onPress={goBack}
+        style={styles.backBtnTop}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Ionicons name="arrow-back" size={24} color="#000" />
+      </TouchableOpacity>
+
+      <View style={styles.header}>
+        <Text style={styles.title}>Select Gender</Text>
+        <Text style={styles.titleAlt}>
+        
+        
+        </Text>
+      </View>
+
       {/* Floating Images */}
       <View style={styles.imageContainer}>
         {/* 1 */}
@@ -160,8 +183,51 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f2f2f2",
-    paddingTop: 60,
+    paddingTop: 52,
     alignItems: "center",
+  },
+
+  header: {
+    width: "100%",
+    paddingTop: 32,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    alignItems: "flex-start",
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111",
+    letterSpacing: 0.3,
+  },
+  titleAlt: {
+    marginTop: 6,
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#666",
+    letterSpacing: 0.2,
+    lineHeight: 22,
+  },
+
+  /** Upper-left back — just below top inset (paddingTop + small offset) */
+  backBtnTop: {
+    position: "absolute",
+    left: 10,
+    top: 35,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+    borderWidth: 1.5,
+    borderColor: "#FFA500",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 4,
   },
 
   imageContainer: {
@@ -178,13 +244,13 @@ const styles = StyleSheet.create({
   femaleButton: {
     position: "absolute",
     left: 14,
-    top: 554,
+    top: 612,
   },
 
   maleButton: {
     position: "absolute",
     left: 170,
-    top: 554,
+    top: 612,
   },
 
   button: {
@@ -220,7 +286,7 @@ const styles = StyleSheet.create({
   skipRow: {
     position: "absolute",
     left: 266,
-    top: 672,
+    top: 728,
     width: 70,
     height: 59,
     justifyContent: "center",
