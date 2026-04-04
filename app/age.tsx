@@ -5,10 +5,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
+  ScrollView,
 } from "react-native";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function AgeScreen() {
+  const insets = useSafeAreaInsets();
   const ageGroups = [
     "0-18 YEARS",
     "19-24 YEARS",
@@ -33,56 +37,96 @@ require("../assets/images/age6.png"),
   }, []);
 
   const goNext = () => {
-    router.replace("/promote"); 
+    router.replace("/login");
+  };
+
+  const goBack = () => {
+    router.replace("/gender");
   };
 
   return (
     <View style={styles.container}>
-      {/* Image Grid */}
-      <View style={styles.imageGrid}>
-        <Image
-          style={[styles.imageLarge, { marginTop: 40 }]}
-          source={require("../assets/images/age1.png")}
-        />
-        <Image
-          style={[styles.imageSmall, { marginTop: 40 }]}
-          source={require("../assets/images/age2.png")}
-        />
-        <Image
-          style={[styles.imageLarge, { marginTop: 40 }]}
-          source={require("../assets/images/age3.png")}
-        />
-        <Image
-          style={[styles.imageLarge, { marginTop: 10 }]}
-          source={require("../assets/images/age4.png")}
-        />
-        <Image
-          style={[styles.imageSmall, { marginTop: 10 }]}
-          source={require("../assets/images/age5.png")}
-        />
-        <Image
-          style={[styles.imageLarge, { marginTop: 10 }]}
-          source={require("../assets/images/age6.png")}
-        />
-      </View>
-
-      {/* Age Buttons */}
-      <View style={styles.buttonContainer}>
-        {ageGroups.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.button}
-            onPress={goNext}
-          >
-            <Text style={styles.buttonText}>{item}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Skip */}
-      <TouchableOpacity style={styles.skipContainer} onPress={goNext}>
-        <Text style={styles.skip}>SKIP &gt;</Text>
+      <TouchableOpacity
+        onPress={goBack}
+        style={styles.backBtnTop}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Ionicons name="arrow-back" size={24} color="#000" />
       </TouchableOpacity>
+
+      <View style={styles.header}>
+        <Text style={styles.title}>Select Age</Text>
+        <Text style={styles.titleAlt}>
+          
+        </Text>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Image Grid */}
+        <View style={styles.imageGrid}>
+          <Image
+            style={[styles.imageLarge, { marginTop: 16 }]}
+            source={require("../assets/images/age1.png")}
+          />
+          <Image
+            style={[styles.imageSmall, { marginTop: 16 }]}
+            source={require("../assets/images/age2.png")}
+          />
+          <Image
+            style={[styles.imageLarge, { marginTop: 16 }]}
+            source={require("../assets/images/age3.png")}
+          />
+          <Image
+            style={[styles.imageLarge, { marginTop: 10 }]}
+            source={require("../assets/images/age4.png")}
+          />
+          <Image
+            style={[styles.imageSmall, { marginTop: 10 }]}
+            source={require("../assets/images/age5.png")}
+          />
+          <Image
+            style={[styles.imageLarge, { marginTop: 10 }]}
+            source={require("../assets/images/age6.png")}
+          />
+        </View>
+
+        {/* Age Buttons */}
+        <View style={styles.buttonContainer}>
+          {ageGroups.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.button}
+              onPress={goNext}
+            >
+              <Text style={styles.buttonText}>{item}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+
+      <View
+        style={[
+          styles.skipFooter,
+          { paddingBottom: Math.max(insets.bottom, 12) + 8 },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={goNext}
+          style={styles.skipTouch}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Skip"
+        >
+          <Text style={styles.skip}>SKIP &gt;</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -91,8 +135,60 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f2f2f2",
-    paddingTop: 60,
+    paddingTop: 52,
     alignItems: "center",
+  },
+
+  scroll: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 12,
+  },
+
+  header: {
+    width: "100%",
+    paddingTop: 32,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    alignItems: "flex-start",
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111",
+    letterSpacing: 0.3,
+  },
+  titleAlt: {
+    marginTop: 6,
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#666",
+    letterSpacing: 0.2,
+    lineHeight: 22,
+  },
+
+  /** Upper-left back — same pattern as gender.tsx */
+  backBtnTop: {
+    position: "absolute",
+    left: 10,
+    top: 35,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+    borderWidth: 1.5,
+    borderColor: "#FFA500",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 4,
   },
 
   /* Image Grid */
@@ -142,17 +238,23 @@ const styles = StyleSheet.create({
     color: "#000",
   },
 
-  /* Skip */
-  skipContainer: {
-    position: "absolute",
-    left: 266,
-    top: 672,
-    width: 70,
-    height: 59,
-    justifyContent: "center",
-    alignItems: "center",
+  skipFooter: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 24,
+    paddingTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#ddd",
+    backgroundColor: "#f2f2f2",
   },
-
+  skipTouch: {
+    minWidth: 72,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   skip: {
     fontSize: 14,
     fontWeight: "600",

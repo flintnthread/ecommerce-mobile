@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Modal,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { requestForegroundLocation } from "@/lib/requestForegroundLocation";
 
 interface LocationPermissionProps {
   visible: boolean;
@@ -21,6 +22,25 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
   onOnlyThisTime,
   onDontAllow,
 }) => {
+  /** Android: requests foreground location via PermissionsAndroid. */
+  const requestNativeLocation = useCallback(async () => {
+    await requestForegroundLocation();
+  }, []);
+
+  const handleWhileUsing = useCallback(async () => {
+    await requestNativeLocation();
+    onWhileUsing();
+  }, [onWhileUsing, requestNativeLocation]);
+
+  const handleOnlyThisTime = useCallback(async () => {
+    await requestNativeLocation();
+    onOnlyThisTime();
+  }, [onOnlyThisTime, requestNativeLocation]);
+
+  const handleDontAllow = useCallback(() => {
+    onDontAllow();
+  }, [onDontAllow]);
+
   return (
     <Modal transparent visible={visible} animationType="fade">
       <View style={styles.overlay}>
@@ -69,7 +89,9 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
             
             <TouchableOpacity
               style={styles.button}
-              onPress={onWhileUsing}
+              onPress={() => {
+                void handleWhileUsing();
+              }}
             >
               <Text style={styles.primaryText}>
                 While using the app
@@ -78,7 +100,9 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
 
             <TouchableOpacity
               style={styles.button}
-              onPress={onOnlyThisTime}
+              onPress={() => {
+                void handleOnlyThisTime();
+              }}
             >
               <Text style={styles.primaryText}>
                 Only this time
@@ -87,7 +111,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
 
             <TouchableOpacity
               style={[styles.button, styles.dontAllowButton]}
-              onPress={onDontAllow}
+              onPress={handleDontAllow}
             >
               <Text style={styles.dontAllowText}>
                 Don’t allow

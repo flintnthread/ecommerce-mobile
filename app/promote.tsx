@@ -52,8 +52,8 @@ export default function PromoteScreen() {
     setCurrentIndex(index);
   };
 
-  const goLogin = () => {
-    router.replace("/login");
+  const goToLanguage = () => {
+    router.replace("/language");
   };
 
   return (
@@ -63,7 +63,7 @@ export default function PromoteScreen() {
       <Text style={styles.subtitle}>Today top deals</Text>
 
       {/* Button */}
-      <TouchableOpacity style={styles.button} onPress={goLogin}>
+      <TouchableOpacity style={styles.button} onPress={goToLanguage}>
         <Text style={styles.buttonText}>Get Started</Text>
       </TouchableOpacity>
 
