@@ -1,14 +1,15 @@
 import React from "react";
-import {
-  View,
+import { View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   Image,
+  ImageBackground,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 
 type GiftCategory = {
   id: string;
@@ -24,13 +25,133 @@ type GiftItem = {
   image: any;
 };
 
+type TrendingProduct = {
+  id: string;
+  name: string;
+  price: string;
+  mrp?: string;
+  badge?: string;
+  image: any;
+};
+
+type ArtSubCategory = {
+  id: string;
+  title: string;
+  image: any;
+  /** When true, no scrim / label on card (art is in the image) */
+  hideTitle?: boolean;
+  /** Large title centered right; topLeft = compact heading top-left on image */
+  titleLayout?: "default" | "topLeft";
+  /** Small caps line above title when titleLayout is topLeft */
+  topLeftEyebrow?: string;
+};
+
+type CorporateSubCategory = {
+  id: string;
+  title: string;
+  image: any;
+};
+
+type EventSubCategory = {
+  id: string;
+  title: string;
+  emoji: string;
+  bg: string;
+  /** Optional photo inside the occasion circle */
+  image?: any;
+};
+
+type UtilitySubCategory = {
+  id: string;
+  title: string;
+  icon: string;
+  bg: string;
+};
+
+type CoupleSubCategory = {
+  id: string;
+  title: string;
+  emoji: string;
+  bg: string;
+};
+
 const GIFT_CATEGORIES: GiftCategory[] = [
   { id: "gc1", title: "Art & Creative Gifts", emoji: "🎨", bg: "#F8E7ED" },
-  { id: "gc2", title: "Corporate Gifts", emoji: "🏢", bg: "#EAF1FC" },
-  { id: "gc3", title: "Event-Based Gifts", emoji: "🎉", bg: "#F8F1DE" },
+  { id: "gc2", title: "Corporate Gifts", emoji: "🏢", bg: "#E0E7FF" },
+  { id: "gc3", title: "Event-Based Gifts", emoji: "🎉", bg: "#FFE4E6" },
   { id: "gc4", title: "Everyday Utility", emoji: "🏠", bg: "#EAF7E8" },
   { id: "gc5", title: "Couple Gifts", emoji: "💞", bg: "#FCEBF1" },
 ];
+
+type CategoryHeroBanner = {
+  image: any;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  cta: string;
+  gradient: readonly [string, string];
+  /** Optional — default top-left → bottom-right diagonal */
+  gradientStart?: { x: number; y: number };
+  gradientEnd?: { x: number; y: number };
+};
+
+const DEFAULT_GIFT_HERO: CategoryHeroBanner = {
+  image: require("../assets/images/homecate.png"),
+  eyebrow: "GIFTING SEASON",
+  title: "Make Moments Special",
+  subtitle: "Curated gifts for every occasion",
+  cta: "Shop Now",
+  gradient: ["rgba(17,24,39,0.15)", "rgba(17,24,39,0.72)"],
+};
+
+/** Top banner content switches when user picks a category circle */
+const GIFT_CATEGORY_HERO: Record<string, CategoryHeroBanner> = {
+  gc1: {
+    image: require("../assets/images/artBanner.png"),
+    eyebrow: "ART & CREATIVE",
+    title: "Handmade & One‑of‑a‑Kind",
+    subtitle: "Line art, prints & personalized creative gifts",
+    cta: "Browse Art",
+    /* Light bottom scrim so bannerArt.png stays visible (was washed out by pink/purple tint) */
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
+  },
+  gc2: {
+    image: require("../assets/images/CoporateGiftBaner.jpg"),
+    eyebrow: "CORPORATE & B2B",
+    title: "Branded Gifts That Impress",
+    subtitle: "Diaries, trophies & welcome kits for teams",
+    cta: "See Business Picks",
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
+  },
+  gc3: {
+    image: require("../assets/images/eventBanner.webp"),
+    eyebrow: "EVENTS & CELEBRATIONS",
+    title: "Gifts for Every Occasion",
+    subtitle: "Birthdays, weddings, anniversaries & hampers",
+    cta: "Shop Occasions",
+    gradient: ["rgba(245,158,11,0.30)", "rgba(67,20,7,0.80)"],
+  },
+  gc4: {
+    image: require("../assets/images/EverydayU.jpg"),
+    eyebrow: "EVERYDAY UTILITY",
+    title: "Useful & Personalized",
+    subtitle: "Mugs, cushions, name plates & home essentials",
+    cta: "View Utilities",
+    gradient: ["rgba(34,197,94,0.26)", "rgba(15,23,42,0.80)"],
+  },
+  gc5: {
+    image: require("../assets/images/couple.jpg"),
+    eyebrow: "COUPLE GIFTS",
+    title: "Made for Two",
+    subtitle: "Romantic boxes, keepsakes & surprise ideas",
+    cta: "For Couples",
+    gradient: ["rgba(244,114,182,0.28)", "rgba(49,13,37,0.82)"],
+  },
+};
 
 const TRENDING_GIFTS: GiftItem[] = [
   {
@@ -53,23 +174,337 @@ const TRENDING_GIFTS: GiftItem[] = [
   },
 ];
 
+const ART_SUB_CATEGORIES: ArtSubCategory[] = [
+  {
+    id: "a1",
+    title: "Minimalist Line Art",
+    image: require("../assets/images/minimalist_138.png"),
+    titleLayout: "topLeft",
+    topLeftEyebrow: "MINIMAL ART",
+  },
+  {
+    id: "a2",
+    title: "Canvas Painting Prints",
+    image: require("../assets/images/canvaPaint.jpg"),
+    titleLayout: "topLeft",
+    topLeftEyebrow: "CANVAS & PRINT",
+  },
+  {
+    id: "a3",
+    title: "Pencil Sketches",
+    image: require("../assets/images/Pencilscketch.jpg"),
+    titleLayout: "topLeft",
+    topLeftEyebrow: "HAND DRAWN",
+  },
+];
+
+const CORPORATE_SUB_CATEGORIES: CorporateSubCategory[] = [
+  {
+    id: "c1",
+    title: "Company Logo Frames",
+    image: require("../assets/images/logoFrames.jpg"),
+  },
+  {
+    id: "c2",
+    title: "Diaries",
+    image: require("../assets/images/Diaries.jpg"),
+  },
+  {
+    id: "c3",
+    title: "Medal",
+    image: require("../assets/images/medals.jpg"),
+  },
+  {
+    id: "c4",
+    title: "Pens",
+    image: require("../assets/images/Pen.jpg"),
+  },
+  {
+    id: "c5",
+    title: "Trophies",
+    image: require("../assets/images/trophies.jpg"),
+  },
+  {
+    id: "c6",
+    title: "Welcome Combo Kits",
+    image: require("../assets/images/wel.jpg"),
+  },
+];
+
+const EVENT_SUB_CATEGORIES: EventSubCategory[] = [
+  {
+    id: "e1",
+    title: "Birthday Combo Hampers",
+    emoji: "🎂",
+    bg: "#FEE2E2",
+    image: require("../assets/images/hamper.jpg"),
+  },
+  {
+    id: "e2",
+    title: "Anniversary Gifts",
+    emoji: "💑",
+    bg: "#FECACA",
+    image: require("../assets/images/annvier.jpg"),
+  },
+  {
+    id: "e3",
+    title: "Wedding Gifts",
+    emoji: "💒",
+    bg: "#FED7AA",
+    image: require("../assets/images/wedding.webp"),
+  },
+  {
+    id: "e4",
+    title: "Engagement Gifts",
+    emoji: "💍",
+    bg: "#E9D5FF",
+    image: require("../assets/images/engement.jpg"),
+  },
+  {
+    id: "e5",
+    title: "Baby Shower Gifts",
+    emoji: "👶",
+    bg: "#DBEAFE",
+    image: require("../assets/images/baby.jpg"),
+  },
+  {
+    id: "e6",
+    title: "Gifts Hampers",
+    emoji: "🎁",
+    bg: "#DBEAFE",
+    image: require("../assets/images/gifts.jpg"),
+  },
+];
+
+const UTILITY_SUB_CATEGORIES: UtilitySubCategory[] = [
+  { id: "u1", title: "Cushion Covers", icon: "🛋️", bg: "#DCFCE7" },
+  { id: "u2", title: "Customized Mugs", icon: "☕", bg: "#FFEDD5" },
+  { id: "u3", title: "Desk Name Plates", icon: "🪪", bg: "#E0E7FF" },
+  { id: "u4", title: "Keychains", icon: "🔑", bg: "#FCE7F3" },
+  { id: "u5", title: "Printed Cushions", icon: "🧸", bg: "#EDE9FE" },
+  { id: "u6", title: "Water Bottle", icon: "🚰", bg: "#DBEAFE" },
+];
+
+const COUPLE_SUB_CATEGORIES: CoupleSubCategory[] = [
+  {
+    id: "cp1",
+    title: "Explosion Gift Boxes",
+    emoji: "🎁",
+    bg: "#FCE7F3",
+  },
+  {
+    id: "cp2",
+    title: "Gift Items Novelties",
+    emoji: "✨",
+    bg: "#E0E7FF",
+  },
+  {
+    id: "cp3",
+    title: "Love Scrapbooks",
+    emoji: "📖",
+    bg: "#FDF4FF",
+  },
+];
+
+const TRENDING_PRODUCTS: TrendingProduct[] = [
+  {
+    id: "tp1",
+    name: "Personalized Photo Frame",
+    price: "$18",
+    mrp: "$30",
+    badge: "40% OFF",
+    image: require("../assets/images/homecate.png"),
+  },
+  {
+    id: "tp2",
+    name: "Customized Name Plate",
+    price: "$22",
+    mrp: "$35",
+    badge: "HOT",
+    image: require("../assets/images/menscate.png"),
+  },
+  {
+    id: "tp3",
+    name: "Luxury Gift Hamper",
+    price: "$49",
+    mrp: "$70",
+    badge: "DEAL",
+    image: require("../assets/images/sweetscate.png"),
+  },
+  {
+    id: "tp4",
+    name: "Couple LED Lamp",
+    price: "$25",
+    mrp: "$40",
+    badge: "BEST",
+    image: require("../assets/images/womencate.png"),
+  },
+];
+
+const TRENDING_GIFTS_AS_PRODUCTS: TrendingProduct[] = TRENDING_GIFTS.map((g, i) => ({
+  id: `tg-row-${g.id}`,
+  name: g.name,
+  price: g.price,
+  mrp: i === 1 ? "$58" : undefined,
+  badge: i === 0 ? "Hot" : i === 2 ? "New" : undefined,
+  image: g.image,
+}));
+
+const RECOMMENDED_FOR_YOU_PRODUCTS: TrendingProduct[] = [
+  { ...TRENDING_PRODUCTS[2], id: "rfy-1", badge: "Editors' pick" },
+  { ...TRENDING_PRODUCTS[3], id: "rfy-2", badge: "Popular" },
+  { ...TRENDING_PRODUCTS[0], id: "rfy-3", badge: "Deal" },
+  { ...TRENDING_PRODUCTS[1], id: "rfy-4", badge: "Staff pick" },
+];
+
+const RECENTLY_VIEWED_PRODUCTS: TrendingProduct[] = [
+  { ...TRENDING_PRODUCTS[1], id: "rv-1", badge: undefined },
+  { ...TRENDING_PRODUCTS[0], id: "rv-2", badge: undefined },
+  { ...TRENDING_PRODUCTS[3], id: "rv-3", badge: undefined },
+  { ...TRENDING_PRODUCTS[2], id: "rv-4", badge: undefined },
+];
+
+const BEST_SELLER_PRODUCTS: TrendingProduct[] = [
+  { ...TRENDING_PRODUCTS[0], id: "bs-1", badge: "#1 Seller" },
+  { ...TRENDING_PRODUCTS[1], id: "bs-2", badge: "#2 Seller" },
+  { ...TRENDING_PRODUCTS[2], id: "bs-3", badge: "Best rated" },
+  { ...TRENDING_PRODUCTS[3], id: "bs-4", badge: "Top gift" },
+];
+
 export default function GiftsScreen() {
   const router = useRouter();
+  const [selectedCategoryId, setSelectedCategoryId] = React.useState<string | null>(
+    null
+  );
+  const [selectedSubCategory, setSelectedSubCategory] = React.useState<string | null>(null);
+  const isArtCreativeView = selectedCategoryId === "gc1";
+  const isCorporateView = selectedCategoryId === "gc2";
+  const isEventBasedView = selectedCategoryId === "gc3";
+  const isUtilityView = selectedCategoryId === "gc4";
+  const isCoupleView = selectedCategoryId === "gc5";
+
+  React.useEffect(() => {
+    if (selectedSubCategory) setSelectedSubCategory(null);
+  }, [selectedCategoryId]);
+
+  const activeHero = React.useMemo(() => {
+    if (selectedCategoryId && GIFT_CATEGORY_HERO[selectedCategoryId]) {
+      return GIFT_CATEGORY_HERO[selectedCategoryId];
+    }
+    return DEFAULT_GIFT_HERO;
+  }, [selectedCategoryId]);
+
+  const renderTrendingProductRow = (sectionTitle: string, products: TrendingProduct[]) => (
+    <View style={styles.homeProductRowBlock}>
+      <View style={styles.homeRowHeader}>
+        <View style={styles.homeRowTitleWrap}>
+          <Text style={styles.homeRowTitle}>{sectionTitle}</Text>
+          <View style={styles.homeRowAccentDot} />
+        </View>
+        <TouchableOpacity activeOpacity={0.7} hitSlop={10} style={styles.homeRowSeeAllBtn}>
+          <Text style={styles.homeRowSeeAll}>See all</Text>
+          <Ionicons name="chevron-forward" size={16} color="#ea580c" />
+        </TouchableOpacity>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.trendingRow}
+      >
+        {products.map((item) => {
+          const rating = (4.2 + (item.id.length % 8) / 10).toFixed(1);
+          const reviews = 320 + (item.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 9800);
+          return (
+            <TouchableOpacity key={item.id} style={styles.trendingProductCard} activeOpacity={0.9}>
+              <View style={styles.trendingProductImageWrap}>
+                <Image source={item.image} style={styles.trendingProductImage} resizeMode="cover" />
+                {item.badge ? (
+                  <View style={styles.trendingProductBadge}>
+                    <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
+                  </View>
+                ) : null}
+                <TouchableOpacity style={styles.productWishlistHit} activeOpacity={0.85}>
+                  <View style={styles.productWishlistBubble}>
+                    <Ionicons name="heart-outline" size={17} color="#b91c1c" />
+                  </View>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.trendingProductMeta}>
+                <Text style={styles.trendingProductName} numberOfLines={2}>
+                  {item.name}
+                </Text>
+                <View style={styles.trendingProductPriceRow}>
+                  <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                  {item.mrp ? <Text style={styles.trendingProductMrp}>{item.mrp}</Text> : null}
+                </View>
+                <View style={styles.productRatingRow}>
+                  <Ionicons name="star" size={13} color="#f59e0b" />
+                  <Text style={styles.productRatingValue}>{rating}</Text>
+                  <Text style={styles.productRatingCount}>({reviews >= 1000 ? `${(reviews / 1000).toFixed(1)}k` : reviews})</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
+      <LinearGradient
+        colors={
+          isCorporateView
+            ? (["#F4F6FC", "#E8EDF8", "#DDE5F5", "#F1F4FB"] as const)
+            : isEventBasedView
+              ? (["#FFFCFA", "#FFF5F3", "#FFEBEE", "#FFF7EF"] as const)
+              : (["#FFFBF7", "#FFF2E6", "#FFE8D4", "#FFF0E5"] as const)
+        }
+        locations={[0, 0.38, 0.7, 1]}
+        start={{ x: 0.08, y: 0 }}
+        end={{ x: 0.92, y: 1 }}
+        style={styles.screenBgGradient}
+        pointerEvents="none"
+      />
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (selectedSubCategory) {
+              setSelectedSubCategory(null);
+              return;
+            }
+            if (isArtCreativeView || isCorporateView || isEventBasedView || isUtilityView || isCoupleView) {
+              setSelectedCategoryId(null);
+              return;
+            }
+            router.back();
+          }}
           style={styles.backButton}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={22} color="#1d324e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Homely Hub</Text>
+        <View style={styles.headerSpacer} />
         <TouchableOpacity style={styles.searchButton}>
           <Ionicons name="search-outline" size={20} color="#1d324e" />
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.trustStrip}>
+        <View style={styles.trustStripItem}>
+          <Ionicons name="car-outline" size={18} color="#15803d" />
+          <Text style={styles.trustStripText}>Free delivery</Text>
+        </View>
+        <View style={styles.trustStripDivider} />
+        <View style={styles.trustStripItem}>
+          <Ionicons name="shield-checkmark-outline" size={18} color="#1d4ed8" />
+          <Text style={styles.trustStripText}>Secure pay</Text>
+        </View>
+        <View style={styles.trustStripDivider} />
+        <View style={styles.trustStripItem}>
+          <Ionicons name="refresh-outline" size={18} color="#c2410c" />
+          <Text style={styles.trustStripText}>Easy returns</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -77,76 +512,1015 @@ export default function GiftsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity style={styles.heroBanner} activeOpacity={0.9}>
-          <Image
-            source={require("../assets/images/homecate.png")}
-            style={styles.heroBannerImage}
+        {/* Main categories — warm card (cool indigo when Corporate is active) */}
+        <View
+          style={[
+            styles.shopByCategorySection,
+            isCorporateView && styles.shopByCategorySectionCorporate,
+            isEventBasedView && styles.shopByCategorySectionEvent,
+          ]}
+        >
+          <LinearGradient
+            colors={
+              isCorporateView
+                ? (["#FFFFFF", "#E8EDFC"] as const)
+                : isEventBasedView
+                  ? (["#FFFFFF", "#FFE8EC"] as const)
+                  : (["#FFFFFF", "#FFEFDC"] as const)
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[
+              styles.shopByCategoryBanner,
+              isCorporateView && styles.shopByCategoryBannerCorporate,
+              isEventBasedView && styles.shopByCategoryBannerEvent,
+            ]}
+          >
+            <View style={styles.shopByCategoryBannerRow}>
+              <View
+                style={[
+                  styles.shopByCategoryIconWrap,
+                  isCorporateView && styles.shopByCategoryIconWrapCorporate,
+                  isEventBasedView && styles.shopByCategoryIconWrapEvent,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    isCorporateView
+                      ? "briefcase-outline"
+                      : isEventBasedView
+                        ? "sparkles"
+                        : "gift"
+                  }
+                  size={22}
+                  color={
+                    isCorporateView ? "#4338ca" : isEventBasedView ? "#be123c" : "#c2410c"
+                  }
+                />
+              </View>
+              <View style={styles.shopByCategoryBannerText}>
+                <Text
+                  style={[
+                    styles.shopByCategoryEyebrow,
+                    isCorporateView && styles.shopByCategoryEyebrowCorporate,
+                    isEventBasedView && styles.shopByCategoryEyebrowEvent,
+                  ]}
+                >
+                  {isCorporateView
+                    ? "B2B & TEAMS"
+                    : isEventBasedView
+                      ? "CELEBRATIONS"
+                      : "FIND YOUR PERFECT GIFT"}
+                </Text>
+                <Text style={styles.shopByCategoryTitle}>Shop by Category</Text>
+              </View>
+            </View>
+          </LinearGradient>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryCircleRow}
+          >
+            {GIFT_CATEGORIES.map((category) => {
+              const isSelected = selectedCategoryId === category.id;
+              const circleColors: readonly [string, string] =
+                isCorporateView && category.id === "gc2"
+                  ? ["#C7D2FE", "#FFFFFF"]
+                  : isEventBasedView && category.id === "gc3"
+                    ? ["#FECDD3", "#FFFBFB"]
+                    : [category.bg, "#FFFFFF"];
+              return (
+                <TouchableOpacity
+                  key={`circle-${category.id}`}
+                  activeOpacity={0.85}
+                  onPress={() => setSelectedCategoryId(category.id)}
+                  style={styles.categoryCircleItem}
+                >
+                  <LinearGradient
+                    colors={circleColors as [string, string]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[
+                      styles.categoryCircle,
+                      isSelected &&
+                        (isCorporateView
+                          ? styles.categoryCircleSelectedCorporate
+                          : isEventBasedView
+                            ? styles.categoryCircleSelectedEvent
+                            : styles.categoryCircleSelected),
+                    ]}
+                  >
+                    <Text style={styles.categoryCircleEmoji}>{category.emoji}</Text>
+                  </LinearGradient>
+                  <Text
+                    style={[
+                      styles.categoryCircleLabel,
+                      isSelected &&
+                        (isCorporateView
+                          ? styles.categoryCircleLabelSelectedCorporate
+                          : isEventBasedView
+                            ? styles.categoryCircleLabelSelectedEvent
+                            : styles.categoryCircleLabelSelected),
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {category.title}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Hero below categories — full-width spotlight */}
+        <TouchableOpacity activeOpacity={0.92} style={styles.heroBannerOuter}>
+          <ImageBackground
+            key={`hero-bg-${selectedCategoryId ?? "default"}`}
+            source={activeHero.image}
+            style={styles.heroBanner}
+            imageStyle={styles.heroBannerImageBg}
             resizeMode="cover"
           />
-          <View style={styles.heroOverlay} />
-          <View style={styles.heroContent}>
-            <Text style={styles.heroEyebrow}>GIFTING SEASON</Text>
-            <Text style={styles.heroTitle}>Make Moments Special</Text>
-            <Text style={styles.heroSubTitle}>Curated gifts for every occasion</Text>
-            <View style={styles.heroCta}>
-              <Text style={styles.heroCtaText}>Shop Now</Text>
-            </View>
-          </View>
+          {selectedCategoryId ? (
+            <LinearGradient
+              colors={["transparent", "rgba(15,23,42,0.82)"]}
+              start={{ x: 0.5, y: 0.35 }}
+              end={{ x: 0.5, y: 1 }}
+              style={styles.heroCategoryTagGradient}
+              pointerEvents="none"
+            >
+              <Text style={styles.heroCategoryTagEyebrow}>CATEGORY SPOTLIGHT</Text>
+              <Text style={styles.heroCategoryTagTitle} numberOfLines={2}>
+                {GIFT_CATEGORIES.find((c) => c.id === selectedCategoryId)?.title ?? "Gifts"}
+              </Text>
+            </LinearGradient>
+          ) : null}
         </TouchableOpacity>
 
-        <View style={styles.grid}>
-          {GIFT_CATEGORIES.map((category, index) => (
-            <TouchableOpacity
-              key={category.id}
+        {selectedCategoryId ? (
+          <View style={styles.bannerToCollectionsBridge}>
+            <View
               style={[
-                styles.categoryCard,
-                { backgroundColor: category.bg },
-                index === GIFT_CATEGORIES.length - 1 && styles.coupleCard,
+                styles.bannerToCollectionsLine,
+                isCorporateView && styles.bannerToCollectionsLineCorporate,
+                isEventBasedView && styles.bannerToCollectionsLineEvent,
               ]}
-              activeOpacity={0.85}
+            />
+            <View
+              style={[
+                styles.bannerToCollectionsPill,
+                isCorporateView && styles.bannerToCollectionsPillCorporate,
+                isEventBasedView && styles.bannerToCollectionsPillEvent,
+              ]}
             >
-              <Text style={styles.categoryEmoji}>{category.emoji}</Text>
-              <Text style={styles.categoryTitle}>{category.title}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              <Ionicons
+                name="albums-outline"
+                size={15}
+                color={
+                  isCorporateView ? "#4338ca" : isEventBasedView ? "#be123c" : "#c2410c"
+                }
+              />
+              <Text
+                style={[
+                  styles.bannerToCollectionsText,
+                  isCorporateView && styles.bannerToCollectionsTextCorporate,
+                  isEventBasedView && styles.bannerToCollectionsTextEvent,
+                ]}
+              >
+                SHOP COLLECTIONS
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.bannerToCollectionsLine,
+                isCorporateView && styles.bannerToCollectionsLineCorporate,
+                isEventBasedView && styles.bannerToCollectionsLineEvent,
+              ]}
+            />
+          </View>
+        ) : null}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Trending Gifts</Text>
-          <Ionicons name="arrow-forward" size={18} color="#4b5563" />
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.trendingRow}
-        >
-          {TRENDING_GIFTS.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.productCard} activeOpacity={0.9}>
-              <Image source={item.image} style={styles.productImage} resizeMode="cover" />
-              <View style={styles.productMeta}>
-                <Text style={styles.productName} numberOfLines={1}>
-                  {item.name}
+        {isArtCreativeView ? (
+          <View style={[styles.subCategorySection, styles.subCategoryShelfArt]}>
+            <View style={styles.subCategorySectionHeader}>
+              <LinearGradient
+                colors={["#1d324e", "#2d4a6f"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.subCategorySectionAccent}
+              />
+              <View style={styles.subCategorySectionHeaderText}>
+                <Text style={styles.subCategorySectionEyebrow}>ART & CREATIVE</Text>
+                <Text style={styles.subCategorySectionTitle}>Explore styles</Text>
+                <Text style={styles.subCategorySectionHint}>
+                  Banner above = hero · Here = shoppable collections · Tap row or → for products
                 </Text>
-                <Text style={styles.productPrice}>{item.price}</Text>
+              </View>
+            </View>
+            {ART_SUB_CATEGORIES.map((item) => (
+              <View key={item.id} style={[styles.subCard, styles.subCardExplore]}>
+                <TouchableOpacity
+                  style={styles.subCardMainTap}
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedSubCategory(item.title)}
+                >
+                  <ImageBackground
+                    source={item.image}
+                    style={styles.subCardImageBgFill}
+                    imageStyle={styles.subCardImageStyleRounded}
+                    resizeMode="cover"
+                  >
+                    {item.hideTitle ? null : item.titleLayout === "topLeft" ? (
+                      <>
+                        <LinearGradient
+                          colors={["rgba(15,23,42,0.82)", "rgba(15,23,42,0.45)", "transparent"]}
+                          locations={[0, 0.45, 1]}
+                          start={{ x: 0, y: 0.5 }}
+                          end={{ x: 1, y: 0.5 }}
+                          style={styles.subCardTopLeftScrim}
+                        />
+                        <View style={styles.subCardTitleTopLeftBox}>
+                          <Text style={styles.subCardTitleTopLeftEyebrow}>
+                            {item.topLeftEyebrow ?? "HAND DRAWN"}
+                          </Text>
+                          <Text style={styles.subCardTitleTopLeft}>{item.title}</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        <View style={styles.subCardOverlay} />
+                        <View style={styles.subCardTextWrap}>
+                          <Text style={styles.subCardTitle}>{item.title}</Text>
+                        </View>
+                      </>
+                    )}
+                  </ImageBackground>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.arrowWrap}
+                  activeOpacity={0.85}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        mainCat: "homelyHub",
+                        subCategory: item.title,
+                      },
+                    })
+                  }
+                >
+                  <Ionicons name="chevron-forward" size={22} color="#1d324e" />
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {selectedSubCategory ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.trendingRow}
+                >
+                  {TRENDING_PRODUCTS.map((item) => (
+                    <TouchableOpacity
+                      key={`art-${selectedSubCategory}-${item.id}`}
+                      style={styles.trendingProductCard}
+                      activeOpacity={0.9}
+                    >
+                      <View style={styles.trendingProductImageWrap}>
+                        <Image
+                          source={item.image}
+                          style={styles.trendingProductImage}
+                          resizeMode="cover"
+                        />
+                        {item.badge ? (
+                          <View style={styles.trendingProductBadge}>
+                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.trendingProductMeta}>
+                        <Text style={styles.trendingProductName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.trendingProductPriceRow}>
+                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                          {item.mrp ? (
+                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        ) : isCorporateView ? (
+          <View style={[styles.subCategorySection, styles.subCategoryShelfCorporate]}>
+            <View style={styles.subCategorySectionHeader}>
+              <LinearGradient
+                colors={["#312e81", "#6366f1"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.subCategorySectionAccent}
+              />
+              <View style={styles.subCategorySectionHeaderText}>
+                <Text style={styles.subCategorySectionEyebrow}>CORPORATE & B2B</Text>
+                <Text style={styles.subCategorySectionTitle}>Shop by collection</Text>
+                <Text style={styles.subCategorySectionHint}>
+                  Hero above shows your category · Here = product-style tiles for teams & clients
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.corpGrid}>
+              {CORPORATE_SUB_CATEGORIES.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.corpCard, styles.corpCardShelf]}
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedSubCategory(item.title)}
+                >
+                  <View style={styles.corpImageWrap}>
+                    <Image source={item.image} style={styles.corpImage} resizeMode="cover" />
+                    <View style={styles.corpImageScrim} />
+                  </View>
+                  <View style={styles.corpLabelRow}>
+                    <Text style={styles.corpLabel} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {selectedSubCategory ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.trendingRow}
+                >
+                  {TRENDING_PRODUCTS.map((item) => (
+                    <TouchableOpacity
+                      key={`corp-${selectedSubCategory}-${item.id}`}
+                      style={styles.trendingProductCard}
+                      activeOpacity={0.9}
+                    >
+                      <View style={styles.trendingProductImageWrap}>
+                        <Image
+                          source={item.image}
+                          style={styles.trendingProductImage}
+                          resizeMode="cover"
+                        />
+                        {item.badge ? (
+                          <View style={styles.trendingProductBadge}>
+                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.trendingProductMeta}>
+                        <Text style={styles.trendingProductName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.trendingProductPriceRow}>
+                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                          {item.mrp ? (
+                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        ) : isEventBasedView ? (
+          <View style={[styles.subCategorySection, styles.subCategoryShelfEvent]}>
+            <View style={styles.subCategorySectionHeader}>
+              <LinearGradient
+                colors={["#991b1b", "#dc2626"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.subCategorySectionAccent}
+              />
+              <View style={styles.subCategorySectionHeaderText}>
+                <Text style={styles.subCategorySectionEyebrow}>EVENTS & MILESTONES</Text>
+                <Text style={styles.subCategorySectionTitle}>Occasions & offers</Text>
+                <Text style={styles.subCategorySectionHint}>
+                  Promos + circles below are collections · Hero above sets the mood
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.eventBanner} activeOpacity={0.9}>
+              <Image
+                source={require("../assets/images/homecate.png")}
+                style={styles.eventBannerImage}
+                resizeMode="cover"
+              />
+              <View style={styles.eventBannerOverlay} />
+              <View style={styles.eventBannerContent}>
+                <Text style={styles.eventBannerEyebrow}>GIFTING SEASON</Text>
+                <Text style={styles.eventBannerTitle}>Make Moments Special</Text>
+                <Text style={styles.eventBannerSubTitle}>Curated gifts for every occasion</Text>
+                <View style={styles.eventBannerCta}>
+                  <Text style={styles.eventBannerCtaText}>Shop Now</Text>
+                </View>
               </View>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
 
-        <View style={styles.offerBanner}>
-          <Text style={styles.offerMain}>🎉 Flat 50% OFF</Text>
-          <Text style={styles.offerSub}>On Birthday Gifts</Text>
+            <TouchableOpacity style={styles.eventBanner2} activeOpacity={0.9}>
+              <Image
+                source={require("../assets/images/homecate.png")}
+                style={styles.eventBanner2Image}
+                resizeMode="cover"
+              />
+              <View style={styles.eventBanner2Overlay} />
+              <View style={styles.eventBanner2Content}>
+                <Text style={styles.eventBanner2Eyebrow}>LIMITED TIME OFFER</Text>
+                <Text style={styles.eventBanner2Title}>50% Off Selected Items</Text>
+                <Text style={styles.eventBanner2SubTitle}>Don't miss out on amazing deals</Text>
+                <View style={styles.eventBanner2Cta}>
+                  <Text style={styles.eventBanner2CtaText}>Shop Now</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.eventCircleContainer}>
+              {EVENT_SUB_CATEGORIES.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.eventCircle,
+                    styles.eventCircleShelf,
+                    !item.image && { backgroundColor: item.bg },
+                    item.image && styles.eventCircleWithImage,
+                  ]}
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedSubCategory(item.title)}
+                >
+                  {item.image ? (
+                    <ImageBackground
+                      source={item.image}
+                      style={styles.eventCircleImageBg}
+                      imageStyle={styles.eventCircleImageRadius}
+                      resizeMode="cover"
+                    >
+                      <LinearGradient
+                        colors={["transparent", "rgba(15,23,42,0.2)", "rgba(15,23,42,0.78)"]}
+                        locations={[0, 0.45, 1]}
+                        style={styles.eventCircleImageGradient}
+                        pointerEvents="none"
+                      />
+                      <Text style={styles.eventCircleEmojiBadge}>{item.emoji}</Text>
+                      <View style={styles.eventCircleImageFooter}>
+                        <Text style={styles.eventCircleTitleOnImage} numberOfLines={2}>
+                          {item.title}
+                        </Text>
+                      </View>
+                    </ImageBackground>
+                  ) : (
+                    <>
+                      <Text style={styles.eventEmoji}>{item.emoji}</Text>
+                      <Text style={styles.eventCircleTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {selectedSubCategory ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.trendingRow}
+                >
+                  {TRENDING_PRODUCTS.map((item) => (
+                    <TouchableOpacity
+                      key={`event-${selectedSubCategory}-${item.id}`}
+                      style={styles.trendingProductCard}
+                      activeOpacity={0.9}
+                    >
+                      <View style={styles.trendingProductImageWrap}>
+                        <Image
+                          source={item.image}
+                          style={styles.trendingProductImage}
+                          resizeMode="cover"
+                        />
+                        {item.badge ? (
+                          <View style={styles.trendingProductBadge}>
+                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.trendingProductMeta}>
+                        <Text style={styles.trendingProductName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.trendingProductPriceRow}>
+                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                          {item.mrp ? (
+                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        ) : isUtilityView ? (
+          <View style={[styles.subCategorySection, styles.subCategoryShelfUtility]}>
+            <View style={styles.subCategorySectionHeader}>
+              <LinearGradient
+                colors={["#047857", "#10b981"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.subCategorySectionAccent}
+              />
+              <View style={styles.subCategorySectionHeaderText}>
+                <Text style={styles.subCategorySectionEyebrow}>EVERYDAY UTILITY</Text>
+                <Text style={styles.subCategorySectionTitle}>Useful gifts grid</Text>
+                <Text style={styles.subCategorySectionHint}>
+                  Bold cards = quick SKUs · Use banner for seasonal story
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.utilityGrid}>
+              {UTILITY_SUB_CATEGORIES.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.utilityCard, styles.utilityCardShelf, { backgroundColor: item.bg }]}
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedSubCategory(item.title)}
+                >
+                  <View style={styles.utilityIconWrap}>
+                    <Text style={styles.utilityIcon}>{item.icon}</Text>
+                  </View>
+                  <Text style={styles.utilityCardTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {selectedSubCategory ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.trendingRow}
+                >
+                  {TRENDING_PRODUCTS.map((item) => (
+                    <TouchableOpacity
+                      key={`utility-${selectedSubCategory}-${item.id}`}
+                      style={styles.trendingProductCard}
+                      activeOpacity={0.9}
+                    >
+                      <View style={styles.trendingProductImageWrap}>
+                        <Image
+                          source={item.image}
+                          style={styles.trendingProductImage}
+                          resizeMode="cover"
+                        />
+                        {item.badge ? (
+                          <View style={styles.trendingProductBadge}>
+                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.trendingProductMeta}>
+                        <Text style={styles.trendingProductName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.trendingProductPriceRow}>
+                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                          {item.mrp ? (
+                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+
+            <TouchableOpacity style={styles.offerBannerAlt} activeOpacity={0.9}>
+              <View style={styles.offerAltGlowOne} />
+              <View style={styles.offerAltGlowTwo} />
+              <Text style={styles.offerAltEyebrow}>UTILITY DEALS</Text>
+              <Text style={styles.offerAltTitle}>Daily Essentials Sale</Text>
+              <Text style={styles.offerAltSub}>Cushions, mugs, bottles & more</Text>
+              <View style={styles.offerAltCta}>
+                <Text style={styles.offerAltCtaText}>Explore</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Trending Products</Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.trendingRow}
+            >
+              {TRENDING_PRODUCTS.map((item) => (
+                <TouchableOpacity
+                  key={`utility-${item.id}`}
+                  style={styles.trendingProductCard}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.trendingProductImageWrap}>
+                    <Image
+                      source={item.image}
+                      style={styles.trendingProductImage}
+                      resizeMode="cover"
+                    />
+                    {item.badge ? (
+                      <View style={styles.trendingProductBadge}>
+                        <Text style={styles.trendingProductBadgeText}>
+                          {item.badge}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.trendingProductMeta}>
+                    <Text style={styles.trendingProductName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    <View style={styles.trendingProductPriceRow}>
+                      <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                      {item.mrp ? (
+                        <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : isCoupleView ? (
+          <View style={[styles.subCategorySection, styles.subCategoryShelfCouple]}>
+            <View style={styles.subCategorySectionHeader}>
+              <LinearGradient
+                colors={["#9d174d", "#ec4899"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.subCategorySectionAccent}
+              />
+              <View style={styles.subCategorySectionHeaderText}>
+                <Text style={styles.subCategorySectionEyebrow}>COUPLE & ROMANCE</Text>
+                <Text style={styles.subCategorySectionTitle}>Moments for two</Text>
+                <Text style={styles.subCategorySectionHint}>
+                  In-hero story + shelf cards · Same pattern as other categories
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.coupleTopBanner} activeOpacity={0.92}>
+              <Image
+                source={require("../assets/images/homecate.png")}
+                style={styles.coupleTopBannerImage}
+                resizeMode="cover"
+              />
+              <View style={styles.coupleTopBannerOverlay} />
+              <View style={styles.coupleTopBannerContent}>
+                <Text style={styles.coupleTopBannerEyebrow}>COUPLE GIFTS</Text>
+                <Text style={styles.coupleTopBannerTitle}>Made for Two</Text>
+                <Text style={styles.coupleTopBannerSubTitle}>
+                  Explosion boxes • Novelties • Scrapbooks
+                </Text>
+                <View style={styles.coupleTopBannerCta}>
+                  <Text style={styles.coupleTopBannerCtaText}>Explore</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.coupleContainer}>
+              {COUPLE_SUB_CATEGORIES.map((item, index) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.coupleCard,
+                    styles.coupleCardShelf,
+                    { backgroundColor: item.bg },
+                  ]}
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedSubCategory(item.title)}
+                >
+                  <View style={styles.coupleHeartContainer}>
+                    <Text style={styles.coupleEmoji}>{item.emoji}</Text>
+                  </View>
+                  <Text style={styles.coupleCardTitle}>{item.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {selectedSubCategory ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.trendingRow}
+                >
+                  {TRENDING_PRODUCTS.map((item) => (
+                    <TouchableOpacity
+                      key={`couple-${selectedSubCategory}-${item.id}`}
+                      style={styles.trendingProductCard}
+                      activeOpacity={0.9}
+                    >
+                      <View style={styles.trendingProductImageWrap}>
+                        <Image
+                          source={item.image}
+                          style={styles.trendingProductImage}
+                          resizeMode="cover"
+                        />
+                        {item.badge ? (
+                          <View style={styles.trendingProductBadge}>
+                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.trendingProductMeta}>
+                        <Text style={styles.trendingProductName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.trendingProductPriceRow}>
+                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                          {item.mrp ? (
+                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Trending Products</Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.trendingRow}
+            >
+              {TRENDING_PRODUCTS.map((item) => (
+                <TouchableOpacity
+                  key={`couple-${item.id}`}
+                  style={styles.trendingProductCard}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.trendingProductImageWrap}>
+                    <Image
+                      source={item.image}
+                      style={styles.trendingProductImage}
+                      resizeMode="cover"
+                    />
+                    {item.badge ? (
+                      <View style={styles.trendingProductBadge}>
+                        <Text style={styles.trendingProductBadgeText}>
+                          {item.badge}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.trendingProductMeta}>
+                    <Text style={styles.trendingProductName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    <View style={styles.trendingProductPriceRow}>
+                      <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                      {item.mrp ? (
+                        <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity style={styles.offerBannerAlt} activeOpacity={0.9}>
+              <View style={styles.offerAltGlowOne} />
+              <View style={styles.offerAltGlowTwo} />
+              <Text style={styles.offerAltEyebrow}>LIMITED TIME</Text>
+              <Text style={styles.offerAltTitle}>Couple Specials</Text>
+              <Text style={styles.offerAltSub}>Extra savings on best picks</Text>
+              <View style={styles.offerAltCta}>
+                <Text style={styles.offerAltCtaText}>Grab Deal</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recommended For You</Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.trendingRow}
+            >
+              {[...TRENDING_PRODUCTS].reverse().map((item) => (
+                <TouchableOpacity
+                  key={`couple-rec-${item.id}`}
+                  style={styles.trendingProductCard}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.trendingProductImageWrap}>
+                    <Image
+                      source={item.image}
+                      style={styles.trendingProductImage}
+                      resizeMode="cover"
+                    />
+                    {item.badge ? (
+                      <View style={styles.trendingProductBadge}>
+                        <Text style={styles.trendingProductBadgeText}>
+                          {item.badge}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.trendingProductMeta}>
+                    <Text style={styles.trendingProductName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    <View style={styles.trendingProductPriceRow}>
+                      <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                      {item.mrp ? (
+                        <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Occasion Ideas</Text>
+            </View>
+
+            <View style={styles.occasionGrid}>
+              {[
+                { id: "oc1", title: "Anniversary", icon: "💍", bg: "#FDF2F8" },
+                { id: "oc2", title: "Birthday", icon: "🎂", bg: "#FFF7ED" },
+                { id: "oc3", title: "Date Night", icon: "🌙", bg: "#EEF2FF" },
+                { id: "oc4", title: "Surprise", icon: "🎁", bg: "#ECFDF5" },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.occasionCard, { backgroundColor: item.bg }]}
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedSubCategory(item.title)}
+                >
+                  <View style={styles.occasionIconWrap}>
+                    <Text style={styles.occasionIcon}>{item.icon}</Text>
+                  </View>
+                  <Text style={styles.occasionTitle}>{item.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Quick Picks</Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickPicksRow}
+            >
+              {[
+                { id: "qp1", title: "Under $20", icon: "💸" },
+                { id: "qp2", title: "Same Day", icon: "⚡" },
+                { id: "qp3", title: "Handmade", icon: "🧵" },
+                { id: "qp4", title: "Personalized", icon: "🖊️" },
+                { id: "qp5", title: "Luxury", icon: "👑" },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.quickPickChip}
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedSubCategory(item.title)}
+                >
+                  <Text style={styles.quickPickIcon}>{item.icon}</Text>
+                  <Text style={styles.quickPickText}>{item.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        <View style={styles.giftDiscoverySection}>
+          <View style={styles.giftDiscoveryHeader}>
+            <Ionicons name="sparkles" size={18} color="#c2410c" />
+            <Text style={styles.giftDiscoveryHeaderTitle}>More to explore</Text>
+          </View>
+
+          <TouchableOpacity activeOpacity={0.92} style={styles.middlePromoOuter}>
+            <View style={styles.middlePromoFlashRibbon}>
+              <Ionicons name="flash" size={13} color="#FFFFFF" />
+              <Text style={styles.middlePromoFlashRibbonText}>FLASH DEAL</Text>
+            </View>
+            <LinearGradient
+              colors={["#fb923c", "#f97316", "#ea580c"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.middlePromoGradient}
+            >
+              <View style={styles.middlePromoTextCol}>
+                <Text style={styles.middlePromoEyebrow}>MID-SEASON SALE</Text>
+                <Text style={styles.middlePromoTitle}>Up to 40% off gift hampers</Text>
+                <Text style={styles.middlePromoSub}>Use code GIFTJOY at checkout · Ends soon</Text>
+                <View style={styles.middlePromoCta}>
+                  <Text style={styles.middlePromoCtaText}>Shop the sale</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#c2410c" />
+                </View>
+              </View>
+              <Text style={styles.middlePromoEmoji}>🎁</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {renderTrendingProductRow("Trending gifts", TRENDING_GIFTS_AS_PRODUCTS)}
+          {renderTrendingProductRow("Recommended For You", RECOMMENDED_FOR_YOU_PRODUCTS)}
+          {renderTrendingProductRow("Recently Viewed", RECENTLY_VIEWED_PRODUCTS)}
+          {renderTrendingProductRow("Best Sellers", BEST_SELLER_PRODUCTS)}
         </View>
+
       </ScrollView>
+
+      <View style={styles.bottomTab}>
+        <TabItem icon="home-outline" label="Home" onPress={() => router.push("/home")} />
+        <TabItem icon="grid-outline" label="Categories" onPress={() => router.push("/categories")} />
+        <TabItem
+          icon="clipboard-outline"
+          label="Orders"
+          onPress={() => router.push("/orders")}
+        />
+        <TabItem
+          icon="person-outline"
+          label="Account"
+          onPress={() => router.push("/account")}
+        />
+        <TabItem icon="cart-outline" label="Cart" onPress={() => router.push("/cart")} />
+      </View>
     </View>
   );
 }
 
+type TabItemProps = {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+};
+
+const TabItem = ({ icon, label, onPress }: TabItemProps) => (
+  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
+    <Ionicons name={icon} size={22} color="#000" />
+    <Text style={styles.tabLabel}>{label}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F4F5F7",
+    backgroundColor: "#FFF0E5",
+  },
+  screenBgGradient: {
+    ...StyleSheet.absoluteFillObject,
   },
   header: {
     flexDirection: "row",
@@ -154,9 +1528,9 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingBottom: 12,
     paddingHorizontal: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 251, 247, 0.94)",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: "rgba(246, 199, 149, 0.55)",
   },
   backButton: {
     paddingVertical: 4,
@@ -168,106 +1542,768 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1d324e",
   },
+  headerSpacer: {
+    flex: 1,
+  },
   searchButton: {
     padding: 6,
   },
+  trustStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.88)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(251, 146, 60, 0.25)",
+  },
+  trustStripItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  trustStripDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 28,
+    backgroundColor: "rgba(148, 163, 184, 0.4)",
+  },
+  trustStripText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#475569",
+    maxWidth: 72,
+    textAlign: "center",
+    lineHeight: 13,
+  },
   scroll: {
     flex: 1,
+    backgroundColor: "transparent",
   },
   scrollContent: {
     paddingHorizontal: 14,
     paddingTop: 12,
-    paddingBottom: 24,
+    paddingBottom: 88,
   },
-  heroBanner: {
-    height: 186,
+  giftDiscoverySection: {
+    marginTop: 8,
+    paddingTop: 18,
+    paddingBottom: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(194, 65, 12, 0.22)",
+  },
+  giftDiscoveryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+    gap: 8,
+  },
+  giftDiscoveryHeaderTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#1d324e",
+    letterSpacing: 0.2,
+  },
+  middlePromoOuter: {
+    position: "relative",
     borderRadius: 18,
     overflow: "hidden",
+    marginBottom: 22,
+    shadowColor: "#c2410c",
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  middlePromoFlashRibbon: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    zIndex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#dc2626",
+    borderBottomRightRadius: 12,
+    gap: 5,
+  },
+  middlePromoFlashRibbonText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 0.8,
+  },
+  middlePromoGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    paddingRight: 12,
+  },
+  middlePromoTextCol: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  middlePromoEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "rgba(255,255,255,0.92)",
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  middlePromoTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    lineHeight: 25,
+    letterSpacing: 0.2,
+  },
+  middlePromoSub: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.88)",
+    lineHeight: 16,
+  },
+  middlePromoCta: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    gap: 6,
+  },
+  middlePromoCtaText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#c2410c",
+  },
+  middlePromoEmoji: {
+    fontSize: 44,
+    marginLeft: 4,
+  },
+  homeProductRowBlock: {
+    marginBottom: 20,
+  },
+  homeRowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    paddingRight: 2,
+  },
+  homeRowTitleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  homeRowTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1d324e",
+    letterSpacing: 0.15,
+  },
+  homeRowAccentDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#f97316",
+    marginLeft: 8,
+  },
+  homeRowSeeAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  homeRowSeeAll: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ea580c",
+  },
+  shopByCategorySection: {
+    borderRadius: 22,
+    padding: 12,
+    marginBottom: 18,
+    backgroundColor: "rgba(255, 250, 245, 0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(251, 146, 60, 0.38)",
+    shadowColor: "#c2410c",
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4,
+  },
+  shopByCategorySectionCorporate: {
+    backgroundColor: "rgba(248, 250, 252, 0.97)",
+    borderColor: "rgba(99, 102, 241, 0.4)",
+    shadowColor: "#4338ca",
+    shadowOpacity: 0.11,
+  },
+  shopByCategorySectionEvent: {
+    backgroundColor: "rgba(255, 251, 250, 0.97)",
+    borderColor: "rgba(225, 29, 72, 0.35)",
+    shadowColor: "#be123c",
+    shadowOpacity: 0.1,
+  },
+  shopByCategoryBanner: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239, 123, 26, 0.35)",
+    shadowColor: "#b45309",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  shopByCategoryBannerCorporate: {
+    borderColor: "rgba(99, 102, 241, 0.34)",
+    shadowColor: "#6366f1",
+    shadowOpacity: 0.1,
+  },
+  shopByCategoryBannerEvent: {
+    borderColor: "rgba(244, 63, 94, 0.32)",
+    shadowColor: "#e11d48",
+    shadowOpacity: 0.1,
+  },
+  shopByCategoryBannerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  shopByCategoryIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(194, 65, 12, 0.2)",
+  },
+  shopByCategoryIconWrapCorporate: {
+    borderColor: "rgba(79, 70, 229, 0.32)",
+    backgroundColor: "rgba(255, 255, 255, 0.98)",
+  },
+  shopByCategoryIconWrapEvent: {
+    borderColor: "rgba(225, 29, 72, 0.32)",
+    backgroundColor: "rgba(255, 255, 255, 0.99)",
+  },
+  shopByCategoryBannerText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  shopByCategoryEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#9a3412",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  shopByCategoryEyebrowCorporate: {
+    color: "#4338ca",
+    letterSpacing: 1.1,
+  },
+  shopByCategoryEyebrowEvent: {
+    color: "#be123c",
+    letterSpacing: 1.15,
+  },
+  shopByCategoryTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#1d324e",
+    letterSpacing: 0.2,
+  },
+  categoryCircleRow: {
+    paddingRight: 10,
+    paddingLeft: 2,
+    paddingBottom: 4,
+  },
+  subCategorySection: {
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 16,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(29, 50, 78, 0.12)",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  subCategoryShelfArt: {
+    backgroundColor: "rgba(255, 253, 250, 0.9)",
+    borderColor: "rgba(29, 50, 78, 0.14)",
+  },
+  subCategoryShelfCorporate: {
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    borderColor: "rgba(79, 70, 229, 0.32)",
+    shadowColor: "#3730a3",
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  subCategoryShelfEvent: {
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    borderColor: "rgba(190, 18, 60, 0.28)",
+    shadowColor: "#9f1239",
+    shadowOpacity: 0.11,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+  },
+  subCategoryShelfUtility: {
+    backgroundColor: "rgba(236, 253, 245, 0.9)",
+    borderColor: "rgba(5, 150, 105, 0.25)",
+  },
+  subCategoryShelfCouple: {
+    backgroundColor: "rgba(253, 242, 248, 0.92)",
+    borderColor: "rgba(236, 72, 153, 0.28)",
+  },
+  subCategorySectionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginBottom: 14,
-    backgroundColor: "#D9E1EF",
+    paddingRight: 4,
+  },
+  subCategorySectionAccent: {
+    width: 4,
+    minHeight: 56,
+    borderRadius: 4,
+    marginRight: 12,
+    marginTop: 2,
+  },
+  subCategorySectionHeaderText: {
+    flex: 1,
+  },
+  subCategorySectionEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  subCategorySectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1d324e",
+    letterSpacing: 0.2,
+  },
+  subCategorySectionHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#94a3b8",
+    lineHeight: 15,
+  },
+  categoryCircleItem: {
+    width: 86,
+    marginRight: 12,
+    alignItems: "center",
+  },
+  categoryCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.10)",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+    backgroundColor: "#fff",
+  },
+  categoryCircleSelected: {
+    borderWidth: 2,
+    borderColor: "#ef7b1a",
+    shadowOpacity: 0.12,
+    elevation: 6,
+  },
+  categoryCircleSelectedCorporate: {
+    borderWidth: 2,
+    borderColor: "#6366f1",
+    shadowColor: "#6366f1",
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+  },
+  categoryCircleLabelSelectedCorporate: {
+    color: "#312e81",
+    fontWeight: "900",
+  },
+  categoryCircleSelectedEvent: {
+    borderWidth: 2,
+    borderColor: "#e11d48",
+    shadowColor: "#f43f5e",
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+  },
+  categoryCircleLabelSelectedEvent: {
+    color: "#881337",
+    fontWeight: "900",
+  },
+  categoryCircleEmoji: {
+    fontSize: 28,
+  },
+  categoryCircleLabel: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#334155",
+    textAlign: "center",
+  },
+  categoryCircleLabelSelected: {
+    color: "#0F172A",
+  },
+  heroBannerOuter: {
+    position: "relative",
+    width: "100%",
+    marginBottom: 14,
+    borderRadius: 18,
+    overflow: "hidden",
     shadowColor: "#111827",
     shadowOpacity: 0.15,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 5,
   },
-  heroBannerImage: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(30, 41, 59, 0.35)",
-  },
-  heroContent: {
-    flex: 1,
-    justifyContent: "flex-end",
+  heroCategoryTagGradient: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 14,
-    paddingBottom: 14,
+    paddingTop: 28,
+    paddingBottom: 12,
   },
-  heroEyebrow: {
-    color: "#FBCFE8",
-    fontSize: 11,
+  heroCategoryTagEyebrow: {
+    fontSize: 9,
     fontWeight: "800",
-    letterSpacing: 1.3,
-    marginBottom: 3,
+    color: "rgba(255,255,255,0.85)",
+    letterSpacing: 1.4,
+    marginBottom: 4,
   },
-  heroTitle: {
+  heroCategoryTagTitle: {
+    fontSize: 17,
+    fontWeight: "900",
     color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "800",
+    letterSpacing: 0.2,
+    lineHeight: 22,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
-  heroSubTitle: {
-    color: "#F8FAFC",
-    fontSize: 14,
-    fontWeight: "500",
-    marginTop: 3,
+  bannerToCollectionsBridge: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+    marginTop: 2,
+    paddingHorizontal: 2,
   },
-  heroCta: {
-    marginTop: 10,
-    alignSelf: "flex-start",
+  bannerToCollectionsLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(194, 65, 12, 0.35)",
+  },
+  bannerToCollectionsPill: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
+    marginHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(249, 115, 22, 0.35)",
+    shadowColor: "#c2410c",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    gap: 6,
   },
-  heroCtaText: {
-    color: "#1d324e",
+  bannerToCollectionsText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#c2410c",
+    letterSpacing: 0.9,
+  },
+  bannerToCollectionsLineCorporate: {
+    backgroundColor: "rgba(79, 70, 229, 0.35)",
+  },
+  bannerToCollectionsPillCorporate: {
+    borderColor: "rgba(99, 102, 241, 0.42)",
+    backgroundColor: "rgba(255, 255, 255, 0.98)",
+    shadowColor: "#4338ca",
+    shadowOpacity: 0.12,
+  },
+  bannerToCollectionsTextCorporate: {
+    color: "#3730a3",
+    letterSpacing: 1,
+  },
+  bannerToCollectionsLineEvent: {
+    backgroundColor: "rgba(190, 18, 60, 0.38)",
+  },
+  bannerToCollectionsPillEvent: {
+    borderColor: "rgba(244, 63, 94, 0.45)",
+    backgroundColor: "rgba(255, 255, 255, 0.98)",
+    shadowColor: "#be123c",
+    shadowOpacity: 0.11,
+  },
+  bannerToCollectionsTextEvent: {
+    color: "#9f1239",
+    letterSpacing: 1,
+  },
+  heroBanner: {
+    width: "100%",
+    height: 240,
+    backgroundColor: "#111827",
+  },
+  heroBannerImageBg: {
+    borderRadius: 18,
+  },
+  subCard: {
+    width: "100%",
+    height: 172,
+    borderRadius: 18,
+    overflow: "hidden",
+    marginBottom: 16,
+    backgroundColor: "#D6D3D1",
+    position: "relative",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
+  },
+  subCardExplore: {
+    borderWidth: 1,
+    borderColor: "rgba(29, 50, 78, 0.12)",
+    shadowColor: "#1d324e",
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  subCardMainTap: {
+    flex: 1,
+    width: "100%",
+  },
+  subCardImageBgFill: {
+    width: "100%",
+    height: "100%",
+    minHeight: 172,
+    justifyContent: "center",
+  },
+  subCardImageStyleRounded: {
+    borderRadius: 18,
+  },
+  subCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255, 255, 255, 0.72)",
+  },
+  subCardTextWrap: {
+    flex: 1,
+    justifyContent: "center",
+    paddingLeft: 170,
+    paddingRight: 56,
+  },
+  subCardTitle: {
+    fontSize: 34,
+    lineHeight: 40,
     fontWeight: "700",
-    fontSize: 12,
+    color: "#374151",
   },
-  grid: {
+  subCardTopLeftScrim: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: "62%",
+  },
+  subCardTitleTopLeftBox: {
+    position: "absolute",
+    left: 12,
+    top: 12,
+    maxWidth: "58%",
+    zIndex: 1,
+    paddingRight: 8,
+  },
+  subCardTitleTopLeftEyebrow: {
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    marginBottom: 4,
+  },
+  subCardTitleTopLeft: {
+    color: "#FFFFFF",
+    fontSize: 21,
+    fontWeight: "800",
+    lineHeight: 25,
+    letterSpacing: 0.2,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
+  arrowWrap: {
+    position: "absolute",
+    right: 12,
+    top: "50%",
+    marginTop: -18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    zIndex: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15,23,42,0.12)",
+  },
+  corpTitleWrap: {
+    marginBottom: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#DDE3FF",
+    overflow: "hidden",
+    position: "relative",
+  },
+  corpGlowOne: {
+    position: "absolute",
+    top: -26,
+    right: -18,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(129, 140, 248, 0.20)",
+  },
+  corpGlowTwo: {
+    position: "absolute",
+    bottom: -30,
+    left: -26,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "rgba(125, 211, 252, 0.18)",
+  },
+  corpTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  corpIconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#D5DBFF",
+  },
+  corpTitleTextWrap: {
+    flex: 1,
+  },
+  corpBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#6366F1",
+    marginBottom: 6,
+  },
+  corpBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+  },
+  corpTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#312E81",
+    lineHeight: 28,
+  },
+  corpSubTitle: {
+    marginTop: 3,
+    fontSize: 14,
+    color: "#4C4F6B",
+    fontWeight: "600",
+  },
+  corpGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginBottom: 12,
   },
-  categoryCard: {
-    width: "48%",
-    minHeight: 108,
-    borderRadius: 14,
-    marginBottom: 12,
-    alignItems: "center",
-    justifyContent: "center",
+  corpCard: {
+    width: "48.5%",
+    backgroundColor: "#EEF2FF",
+    borderRadius: 18,
+    marginBottom: 15,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#DDE4FF",
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-    paddingHorizontal: 10,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
-  coupleCard: {
-    width: "72%",
-    marginHorizontal: "14%",
+  corpCardShelf: {
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: "rgba(99, 102, 241, 0.28)",
+    shadowColor: "#6366F1",
+    shadowOpacity: 0.09,
   },
-  categoryEmoji: {
-    fontSize: 38,
-    marginBottom: 6,
+  corpImageWrap: {
+    width: "100%",
+    aspectRatio: 1.08,
+    backgroundColor: "#D9E1EF",
+    position: "relative",
   },
-  categoryTitle: {
-    textAlign: "center",
-    fontSize: 20,
+  corpImage: {
+    width: "100%",
+    height: "100%",
+  },
+  corpImageScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+  corpLabelRow: {
+    minHeight: 56,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  corpLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
     color: "#374151",
-    fontWeight: "500",
+    paddingRight: 8,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -331,5 +2367,831 @@ const styles = StyleSheet.create({
     color: "#FDF2F8",
     fontSize: 24,
     fontWeight: "600",
+  },
+  offerBannerAlt: {
+    marginTop: 12,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: "#111827",
+    overflow: "hidden",
+  },
+  offerAltGlowOne: {
+    position: "absolute",
+    top: -28,
+    right: -18,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(99, 102, 241, 0.28)",
+  },
+  offerAltGlowTwo: {
+    position: "absolute",
+    bottom: -30,
+    left: -24,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(236, 72, 153, 0.22)",
+  },
+  offerAltEyebrow: {
+    color: "#A5B4FC",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+  },
+  offerAltTitle: {
+    marginTop: 6,
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  offerAltSub: {
+    marginTop: 4,
+    color: "#E5E7EB",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  offerAltCta: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+  },
+  offerAltCtaText: {
+    color: "#111827",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  trendingProductCard: {
+    width: 178,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    overflow: "hidden",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "rgba(249, 115, 22, 0.22)",
+    shadowColor: "#c2410c",
+    shadowOpacity: 0.09,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
+  },
+  trendingProductImageWrap: {
+    width: "100%",
+    height: 128,
+    backgroundColor: "#F1F5F9",
+    position: "relative",
+  },
+  productWishlistHit: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 2,
+  },
+  productWishlistBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(185, 28, 28, 0.15)",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  trendingProductImage: {
+    width: "100%",
+    height: "100%",
+  },
+  trendingProductBadge: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#111827",
+  },
+  trendingProductBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  trendingProductMeta: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  trendingProductName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111827",
+    lineHeight: 17,
+    minHeight: 34,
+  },
+  trendingProductPriceRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  trendingProductPrice: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#111827",
+    marginRight: 8,
+  },
+  trendingProductMrp: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#9CA3AF",
+    textDecorationLine: "line-through",
+  },
+  productRatingRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  productRatingValue: {
+    marginLeft: 4,
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  productRatingCount: {
+    marginLeft: 4,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  occasionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  occasionCard: {
+    width: "48.5%",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(17, 24, 39, 0.06)",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  occasionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  occasionIcon: {
+    fontSize: 22,
+  },
+  occasionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  quickPicksRow: {
+    paddingRight: 6,
+    paddingBottom: 6,
+  },
+  quickPickChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginRight: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  quickPickIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  quickPickText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  eventTitleWrap: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    overflow: "hidden",
+    position: "relative",
+  },
+  eventGlowOne: {
+    position: "absolute",
+    top: -26,
+    right: -18,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(252, 165, 165, 0.20)",
+  },
+  eventGlowTwo: {
+    position: "absolute",
+    bottom: -30,
+    left: -26,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "rgba(254, 240, 138, 0.18)",
+  },
+  eventTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  eventIconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  eventTitleTextWrap: {
+    flex: 1,
+  },
+  eventBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#DC2626",
+    marginBottom: 6,
+  },
+  eventBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+  },
+  eventTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#991B1B",
+    lineHeight: 28,
+  },
+  eventSubTitle: {
+    marginTop: 3,
+    fontSize: 14,
+    color: "#7F1D1D",
+    fontWeight: "600",
+  },
+  eventCircleContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+    rowGap: 14,
+  },
+  eventCircle: {
+    width: "48.5%",
+    aspectRatio: 1.06,
+    /** Event subcategory grid: slightly taller than aspect-only (~+50px vs baseline on typical widths) */
+    minHeight: 220,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    shadowColor: "#1f2937",
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 7,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    position: "relative",
+    marginBottom: 0,
+  },
+  eventCircleShelf: {
+    marginBottom: 0,
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.98)",
+    shadowColor: "#B91C1C",
+    shadowOpacity: 0.1,
+  },
+  eventCircleWithImage: {
+    overflow: "hidden",
+    backgroundColor: "#111827",
+  },
+  eventCircleImageBg: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "flex-end",
+  },
+  eventCircleImageRadius: {
+    borderRadius: 18,
+  },
+  eventCircleImageGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  eventCircleEmojiBadge: {
+    position: "absolute",
+    top: 12,
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    fontSize: 30,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  eventCircleImageFooter: {
+    paddingHorizontal: 12,
+    paddingBottom: 14,
+    paddingTop: 8,
+  },
+  eventCircleTitleOnImage: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    textAlign: "center",
+    lineHeight: 18,
+    letterSpacing: 0.15,
+    textShadowColor: "rgba(0,0,0,0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  eventEmoji: {
+    fontSize: 38,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  eventCircleTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#374151",
+    textAlign: "center",
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+    lineHeight: 20,
+    marginBottom: 0,
+  },
+  eventArrowCircle: {
+    position: "absolute",
+    bottom: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#374151",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  utilityTitleWrap: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
+    overflow: "hidden",
+    position: "relative",
+  },
+  utilityGlowOne: {
+    position: "absolute",
+    top: -26,
+    right: -18,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+  },
+  utilityGlowTwo: {
+    position: "absolute",
+    bottom: -30,
+    left: -26,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "rgba(251, 146, 60, 0.12)",
+  },
+  utilityTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  utilityIconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  utilityTitleTextWrap: {
+    flex: 1,
+  },
+  utilityBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#059669",
+    marginBottom: 6,
+  },
+  utilityBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+  },
+  utilityTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#064E3B",
+    lineHeight: 28,
+  },
+  utilitySubTitle: {
+    marginTop: 3,
+    fontSize: 14,
+    color: "#047857",
+    fontWeight: "600",
+  },
+  utilityGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  utilityCard: {
+    width: "48.5%",
+    minHeight: 158,
+    borderRadius: 18,
+    marginBottom: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  utilityCardShelf: {
+    marginBottom: 12,
+    borderColor: "rgba(255, 255, 255, 0.95)",
+    shadowColor: "#059669",
+    shadowOpacity: 0.08,
+  },
+  utilityIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  utilityIcon: {
+    fontSize: 24,
+  },
+  utilityCardTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#374151",
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  coupleTitleWrap: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: "#FDF2F8",
+    borderWidth: 1,
+    borderColor: "#FBCFE8",
+    overflow: "hidden",
+    position: "relative",
+  },
+  coupleGlowOne: {
+    position: "absolute",
+    top: -26,
+    right: -18,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(236, 72, 153, 0.15)",
+  },
+  coupleGlowTwo: {
+    position: "absolute",
+    bottom: -30,
+    left: -26,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "rgba(244, 114, 182, 0.12)",
+  },
+  coupleTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  coupleIconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#F9A8D4",
+  },
+  coupleTitleTextWrap: {
+    flex: 1,
+  },
+  coupleBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#EC4899",
+    marginBottom: 6,
+  },
+  coupleBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+  },
+  coupleTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#831843",
+    lineHeight: 28,
+  },
+  coupleSubTitle: {
+    marginTop: 3,
+    fontSize: 14,
+    color: "#9F1239",
+    fontWeight: "600",
+  },
+  coupleTopBanner: {
+    height: 190,
+    borderRadius: 18,
+    overflow: "hidden",
+    marginHorizontal: 4,
+    marginBottom: 14,
+    backgroundColor: "#111827",
+    shadowColor: "#000",
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  coupleTopBannerImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  coupleTopBannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(17, 24, 39, 0.40)",
+  },
+  coupleTopBannerContent: {
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  coupleTopBannerEyebrow: {
+    color: "#FBCFE8",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2.2,
+  },
+  coupleTopBannerTitle: {
+    marginTop: 6,
+    color: "#FFFFFF",
+    fontSize: 26,
+    fontWeight: "900",
+    lineHeight: 30,
+  },
+  coupleTopBannerSubTitle: {
+    marginTop: 4,
+    color: "#E5E7EB",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  coupleTopBannerCta: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+  },
+  coupleTopBannerCtaText: {
+    color: "#111827",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  coupleContainer: {
+    paddingHorizontal: 4,
+  },
+  coupleCard: {
+    minHeight: 108,
+    width: "100%",
+    borderRadius: 18,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  coupleCardShelf: {
+    marginBottom: 12,
+    borderColor: "rgba(255, 255, 255, 0.96)",
+    shadowColor: "#EC4899",
+    shadowOpacity: 0.09,
+  },
+  coupleHeartContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  coupleEmoji: {
+    fontSize: 28,
+  },
+  coupleCardTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  eventBanner: {
+    height: 140,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 16,
+    backgroundColor: "#FEE2E2",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  eventBannerImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  eventBannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(220, 38, 38, 0.2)",
+  },
+  eventBannerContent: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  eventBannerEyebrow: {
+    color: "#991B1B",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.3,
+    marginBottom: 4,
+  },
+  eventBannerTitle: {
+    color: "#7F1D1D",
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  eventBannerSubTitle: {
+    color: "#991B1B",
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 12,
+  },
+  eventBannerCta: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#DC2626",
+  },
+  eventBannerCtaText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  eventBanner2: {
+    height: 120,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 20,
+    backgroundColor: "#FEF3C7",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  eventBanner2Image: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  eventBanner2Overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+  },
+  eventBanner2Content: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  eventBanner2Eyebrow: {
+    color: "#92400E",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    marginBottom: 3,
+  },
+  eventBanner2Title: {
+    color: "#78350F",
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 3,
+  },
+  eventBanner2SubTitle: {
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: 10,
+  },
+  eventBanner2Cta: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#F59E0B",
+  },
+  eventBanner2CtaText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 11,
+  },
+  bottomTab: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 70,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: "#ccc",
+  },
+  tabItem: {
+    alignItems: "center",
+  },
+  tabLabel: {
+    fontSize: 11,
+    marginTop: 3,
   },
 });
