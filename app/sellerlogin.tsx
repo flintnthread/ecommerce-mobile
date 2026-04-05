@@ -9,7 +9,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -62,7 +62,7 @@ export default function LoginScreen() {
 
 
     if (emailValid && passwordValid && agree) {
-      router.push("/sellerdashboard");
+      router.push("/sellerdashboard" as Href);
     }
   };
 
@@ -135,7 +135,7 @@ export default function LoginScreen() {
               <Text style={styles.remember}>Remember me</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push("/forgotpassword")}>
+            <TouchableOpacity onPress={() => router.push("/forgotpassword" as Href)}>
               <Text style={styles.forgot}>Forgot password?</Text>
             </TouchableOpacity>
           </View>
@@ -146,14 +146,14 @@ export default function LoginScreen() {
          
 <TouchableOpacity
   style={styles.loginBtn}
-  onPress={() => router.push("/sellerdashboard")}
+  onPress={() => router.push("/sellerdashboard" as Href)}
 >
   <Text style={styles.loginText}>LOGIN</Text>
 </TouchableOpacity>
 
           <View style={styles.bottomRow}>
             <Text>Don't have a seller account? </Text>
-            <TouchableOpacity onPress={() => router.push("/seller_register")}>
+            <TouchableOpacity onPress={() => router.push("/seller_register" as Href)}>
               <Text style={styles.register}>Register Now</Text>
             </TouchableOpacity>
           </View>
