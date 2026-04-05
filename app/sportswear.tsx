@@ -1,4 +1,4 @@
-import React, { useCallback, useState,useRef, useEffect  } from "react";
+import React, { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,12 +11,14 @@ import {
   Dimensions,
   StatusBar,
   Alert,
-   Animated,
+  Animated,
+  ActivityIndicator,
+  type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import Svg, { Path } from 'react-native-svg'; // add at top
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api, { getPublicImageUrl } from "../services/api";
 
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 
@@ -63,11 +65,17 @@ const SPORTSWEAR_DEAL_CARDS: {
 ];
 
 type PlaybookPageAssets = {
-  topLeft: ReturnType<typeof require>;
-  topRight: ReturnType<typeof require>;
-  bottomLeft: ReturnType<typeof require>;
-  bottomMini1: ReturnType<typeof require>;
-  bottomMini2: ReturnType<typeof require>;
+  topLeft: ImageSourcePropType;
+  topRight: ImageSourcePropType;
+  bottomLeft: ImageSourcePropType;
+  bottomMini1: ImageSourcePropType;
+  bottomMini2: ImageSourcePropType;
+};
+
+type ApiSubcategory = { id: number; name: string; image: string };
+type ApiCategoryResponse = {
+  categoryName: string;
+  subcategories: ApiSubcategory[];
 };
 
 const DEFAULT_PAGE_BADGES: [string, string, string, string, string] = [
@@ -159,6 +167,61 @@ const DIARY_SPREADS: {
     },
   },
 ];
+
+type DiarySpreadEntry = (typeof DIARY_SPREADS)[number];
+
+function padBadgesFromNames(names: string[]): [string, string, string, string, string] {
+  const n = [...names];
+  while (n.length < 5) {
+    n.push(n[n.length - 1] ?? "Shop");
+  }
+  return n.slice(0, 5) as [string, string, string, string, string];
+}
+
+function buildPlaybookPageFromFiles(topFile: string, bottomFile: string): PlaybookPageAssets {
+  const top: ImageSourcePropType = { uri: getPublicImageUrl(topFile) };
+  const bottom: ImageSourcePropType = { uri: getPublicImageUrl(bottomFile) };
+  return {
+    topLeft: top,
+    topRight: top,
+    bottomLeft: bottom,
+    bottomMini1: bottom,
+    bottomMini2: bottom,
+  };
+}
+
+/** Builds one playbook spread from Accessories subcategories (first half of API list). */
+function buildAccessoryPlaybookSpreads(subs: ApiSubcategory[]): DiarySpreadEntry[] {
+  if (subs.length === 0) return [];
+  const pickFile = (i: number) =>
+    subs[Math.min(Math.max(0, i), subs.length - 1)]!.image;
+  const names = subs.map((s) => s.name);
+  const a0 = pickFile(0);
+  const a1 = pickFile(1);
+  const a2 = pickFile(2);
+  const a3 = subs.length >= 4 ? pickFile(3) : pickFile(0);
+  return [
+    {
+      left: buildPlaybookPageFromFiles(a0, a1),
+      right: buildPlaybookPageFromFiles(a2, a3),
+      leftBadges: padBadgesFromNames([
+        names[0] ?? "",
+        names[1] ?? names[0] ?? "",
+        names[2] ?? names[0] ?? "",
+        names[0] ?? "",
+        names[1] ?? "",
+      ]),
+      rightBadges: padBadgesFromNames([
+        names[2] ?? names[0] ?? "",
+        names[3] ?? names[0] ?? "",
+        names[0] ?? "",
+        names[1] ?? "",
+        names[2] ?? "",
+      ]),
+    },
+  ];
+}
+
 // banner section
 
 const SHOP_STORE_DATA = [
@@ -209,6 +272,8 @@ const interests = [
   { name: "Sports wear", size: 80, img: require("../assets/images/sports8.png") },
 ];
 
+/** Orbit circle sizes when mapping API subcategories (category 67) */
+const MENS_INTEREST_ORBIT_SIZES = [170, 120, 100, 90, 90, 90, 80, 80];
 
   
 
@@ -475,6 +540,255 @@ export default function SportsWearSection() {
   const playbookScrollRef = useRef<ScrollView>(null);
   const sportswearDealsBannerScrollRef = useRef<ScrollView>(null);
   const [sportswearDealsBannerIndex, setSportswearDealsBannerIndex] = useState(0);
+  const [accessoryApiLoading, setAccessoryApiLoading] = useState(true);
+  const [accessoryApiError, setAccessoryApiError] = useState<string | null>(null);
+  const [accessoryApiPayload, setAccessoryApiPayload] = useState<{
+    playbookSpreads: DiarySpreadEntry[];
+    accessoriesSubs: ApiSubcategory[];
+  } | null>(null);
+
+  const [footwearApiLoading, setFootwearApiLoading] = useState(true);
+  const [footwearApiError, setFootwearApiError] = useState<string | null>(null);
+  const [footwearApiPayload, setFootwearApiPayload] = useState<{
+    spotlightSubs: ApiSubcategory[];
+    dealsSubs: ApiSubcategory[];
+  } | null>(null);
+
+  const [womensApiLoading, setWomensApiLoading] = useState(true);
+  const [womensApiError, setWomensApiError] = useState<string | null>(null);
+  const [womensApiPayload, setWomensApiPayload] = useState<{
+    womenSectionSubs: ApiSubcategory[];
+    lookbookSubs: ApiSubcategory[];
+  } | null>(null);
+
+  const [mensApiLoading, setMensApiLoading] = useState(true);
+  const [mensApiError, setMensApiError] = useState<string | null>(null);
+  const [mensApiPayload, setMensApiPayload] = useState<{
+    mensSectionSubs: ApiSubcategory[];
+    interestSubs: ApiSubcategory[];
+  } | null>(null);
+
+  const spreadsForPlaybook = useMemo(() => {
+    if (accessoryApiPayload?.playbookSpreads?.length) {
+      return accessoryApiPayload.playbookSpreads;
+    }
+    return DIARY_SPREADS;
+  }, [accessoryApiPayload]);
+
+  const accessoriesFromApi = accessoryApiPayload?.accessoriesSubs ?? null;
+
+  /** Category 47 — first half → SPORTS FOOTWEAR spotlight; second half → Sportswear deals carousel */
+  const spotlightSectionItems = useMemo(() => {
+    if (footwearApiPayload?.spotlightSubs?.length) {
+      return footwearApiPayload.spotlightSubs.map((s) => ({
+        id: String(s.id),
+        title: s.name,
+        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
+      }));
+    }
+    return SPOTLIGHT_CARDS.map((c) => ({
+      id: c.id,
+      title: c.title,
+      image: c.image,
+    }));
+  }, [footwearApiPayload]);
+
+  const dealsCarouselItems = useMemo(() => {
+    if (footwearApiPayload?.dealsSubs?.length) {
+      return footwearApiPayload.dealsSubs.map((s) => ({
+        id: String(s.id),
+        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
+      }));
+    }
+    return SPORTSWEAR_DEALS_BANNERS.map((b) => ({
+      id: b.id,
+      image: b.image,
+    }));
+  }, [footwearApiPayload]);
+
+  /** Category 68 — first half → WOMEN SPORTS WEAR store row; second half → THE LOCAL LOOKBOOK */
+  const womenStoreSectionItems = useMemo(() => {
+    if (womensApiPayload?.womenSectionSubs?.length) {
+      return womensApiPayload.womenSectionSubs.map((s) => ({
+        id: String(s.id),
+        title: s.name,
+        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
+      }));
+    }
+    return SHOP_STORE_DATA;
+  }, [womensApiPayload]);
+
+  const lookbookSectionItems = useMemo(() => {
+    if (womensApiPayload?.lookbookSubs?.length) {
+      return womensApiPayload.lookbookSubs.map((s) => ({
+        id: String(s.id),
+        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
+      }));
+    }
+    return banners.map((img, index) => ({
+      id: `lookbook-fallback-${index}`,
+      image: img as ImageSourcePropType,
+    }));
+  }, [womensApiPayload]);
+
+  /** Category 67 — first half → MEN'S SPORTS WEAR cards; second half → What's your interest orbit */
+  const mensWesternProductItems = useMemo(() => {
+    if (mensApiPayload?.mensSectionSubs?.length) {
+      return mensApiPayload.mensSectionSubs.map((s) => ({
+        id: String(s.id),
+        title: s.name,
+        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
+      }));
+    }
+    return null;
+  }, [mensApiPayload]);
+
+  const mensInterestsList = useMemo(() => {
+    if (mensApiPayload?.interestSubs?.length) {
+      return mensApiPayload.interestSubs.map((s, i) => ({
+        name: s.name,
+        size:
+          MENS_INTEREST_ORBIT_SIZES[i % MENS_INTEREST_ORBIT_SIZES.length] ?? 90,
+        img: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
+      }));
+    }
+    return interests;
+  }, [mensApiPayload]);
+
+  useEffect(() => {
+    const max = Math.max(0, dealsCarouselItems.length - 1);
+    setSportswearDealsBannerIndex((prev) => Math.min(prev, max));
+  }, [dealsCarouselItems.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAccessoryCategory = async () => {
+      setAccessoryApiLoading(true);
+      setAccessoryApiError(null);
+      try {
+        const { data } = await api.get<ApiCategoryResponse[]>(
+          "/api/categories/70/subcategories-table"
+        );
+        if (cancelled) return;
+        const subs = Array.isArray(data) ? data[0]?.subcategories ?? [] : [];
+        if (subs.length === 0) {
+          setAccessoryApiPayload(null);
+          return;
+        }
+        const mid = Math.ceil(subs.length / 2);
+        const playbookSubs = subs.slice(0, mid);
+        const accessoriesSubs = subs.slice(mid);
+        const spreads = buildAccessoryPlaybookSpreads(playbookSubs);
+        setAccessoryApiPayload({
+          playbookSpreads: spreads.length > 0 ? spreads : [],
+          accessoriesSubs,
+        });
+      } catch {
+        if (!cancelled) {
+          setAccessoryApiError("Could not load accessories");
+          setAccessoryApiPayload(null);
+        }
+      } finally {
+        if (!cancelled) setAccessoryApiLoading(false);
+      }
+    };
+
+    const loadFootwearCategory = async () => {
+      setFootwearApiLoading(true);
+      setFootwearApiError(null);
+      try {
+        const { data } = await api.get<ApiCategoryResponse[]>(
+          "/api/categories/47/subcategories-table"
+        );
+        if (cancelled) return;
+        const subs = Array.isArray(data) ? data[0]?.subcategories ?? [] : [];
+        if (subs.length === 0) {
+          setFootwearApiPayload(null);
+          return;
+        }
+        const mid = Math.ceil(subs.length / 2);
+        setFootwearApiPayload({
+          spotlightSubs: subs.slice(0, mid),
+          dealsSubs: subs.slice(mid),
+        });
+      } catch {
+        if (!cancelled) {
+          setFootwearApiError("Could not load sports footwear");
+          setFootwearApiPayload(null);
+        }
+      } finally {
+        if (!cancelled) setFootwearApiLoading(false);
+      }
+    };
+
+    const loadWomensSportswearCategory = async () => {
+      setWomensApiLoading(true);
+      setWomensApiError(null);
+      try {
+        const { data } = await api.get<ApiCategoryResponse[]>(
+          "/api/categories/68/subcategories-table"
+        );
+        if (cancelled) return;
+        const subs = Array.isArray(data) ? data[0]?.subcategories ?? [] : [];
+        if (subs.length === 0) {
+          setWomensApiPayload(null);
+          return;
+        }
+        const mid = Math.ceil(subs.length / 2);
+        setWomensApiPayload({
+          womenSectionSubs: subs.slice(0, mid),
+          lookbookSubs: subs.slice(mid),
+        });
+      } catch {
+        if (!cancelled) {
+          setWomensApiError("Could not load women's sportswear");
+          setWomensApiPayload(null);
+        }
+      } finally {
+        if (!cancelled) setWomensApiLoading(false);
+      }
+    };
+
+    const loadMensSportswearCategory = async () => {
+      setMensApiLoading(true);
+      setMensApiError(null);
+      try {
+        const { data } = await api.get<ApiCategoryResponse[]>(
+          "/api/categories/67/subcategories-table"
+        );
+        if (cancelled) return;
+        const subs = Array.isArray(data) ? data[0]?.subcategories ?? [] : [];
+        if (subs.length === 0) {
+          setMensApiPayload(null);
+          return;
+        }
+        const mid = Math.ceil(subs.length / 2);
+        setMensApiPayload({
+          mensSectionSubs: subs.slice(0, mid),
+          interestSubs: subs.slice(mid),
+        });
+      } catch {
+        if (!cancelled) {
+          setMensApiError("Could not load men's sportswear");
+          setMensApiPayload(null);
+        }
+      } finally {
+        if (!cancelled) setMensApiLoading(false);
+      }
+    };
+
+    void Promise.all([
+      loadAccessoryCategory(),
+      loadFootwearCategory(),
+      loadWomensSportswearCategory(),
+      loadMensSportswearCategory(),
+    ]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const lookbookScales = useRef(banners.map(() => new Animated.Value(1)));
   /** One page per banner; scrollTo x = index * width */
   const DEALS_BANNER_PAGE_W = width;
@@ -554,7 +868,7 @@ export default function SportsWearSection() {
   }, []);
 
   useEffect(() => {
-    const n = SPORTSWEAR_DEALS_BANNERS.length;
+    const n = dealsCarouselItems.length;
     if (n === 0) return undefined;
     const interval = setInterval(() => {
       setSportswearDealsBannerIndex((prev) => {
@@ -567,7 +881,7 @@ export default function SportsWearSection() {
       });
     }, 3200);
     return () => clearInterval(interval);
-  }, [DEALS_BANNER_PAGE_W]);
+  }, [DEALS_BANNER_PAGE_W, dealsCarouselItems.length]);
 
 
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -609,9 +923,11 @@ const rotate = rotateAnim.interpolate({
   };
 
   useEffect(() => {
+    const n = spreadsForPlaybook.length;
+    if (n <= 1) return undefined;
     const interval = setInterval(() => {
       setPlaybookPage((prev) => {
-        const next = (prev + 1) % DIARY_SPREADS.length;
+        const next = (prev + 1) % n;
         playbookScrollRef.current?.scrollTo({
           x: next * DIARY_SPREAD_W,
           animated: true,
@@ -621,7 +937,7 @@ const rotate = rotateAnim.interpolate({
     }, 4200);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [spreadsForPlaybook.length]);
 
   return (
     <View style={styles.container}>
@@ -876,12 +1192,12 @@ const rotate = rotateAnim.interpolate({
             setPlaybookPage(
               Math.min(
                 Math.max(0, next),
-                Math.max(0, DIARY_SPREADS.length - 1)
+                Math.max(0, spreadsForPlaybook.length - 1)
               )
             );
           }}
         >
-          {DIARY_SPREADS.map((spread, spreadIndex) => {
+          {spreadsForPlaybook.map((spread, spreadIndex) => {
             const leftB = spread.leftBadges ?? DEFAULT_PAGE_BADGES;
             const rightB = spread.rightBadges ?? DEFAULT_PAGE_BADGES;
             return (
@@ -911,7 +1227,7 @@ const rotate = rotateAnim.interpolate({
           })}
         </ScrollView>
         <View style={styles.diaryPageDots}>
-          {DIARY_SPREADS.map((_, i) => (
+          {spreadsForPlaybook.map((_, i) => (
             <View
               key={i}
               style={[
@@ -928,7 +1244,15 @@ const rotate = rotateAnim.interpolate({
 
 
      <View style={styles.trendsSection}>
-  <Text style={styles.trendsTitle}>Accessories</Text>
+  <View style={styles.trendsTitleRow}>
+    <Text style={styles.trendsTitle}>Accessories</Text>
+    {accessoryApiLoading ? (
+      <ActivityIndicator size="small" color="#666" style={{ marginLeft: 8 }} />
+    ) : null}
+  </View>
+  {accessoryApiError ? (
+    <Text style={styles.accessoryApiErrorText}>{accessoryApiError}</Text>
+  ) : null}
 
   <ScrollView
     horizontal
@@ -939,40 +1263,61 @@ const rotate = rotateAnim.interpolate({
     disableIntervalMomentum={true}
     contentContainerStyle={{ paddingHorizontal: 10 }}
   >
-    {/* CARD 1 */}
-    <TouchableOpacity style={styles.trendCard}>
-      <Image
-        source={require("../assets/images/sports2.png")}
-        style={styles.trendImage}
-      />
-      <View style={styles.trendOverlay}>
-        <Text style={styles.trendBrand}>DNMX • NETPLAY</Text>
-        <Text style={styles.trendPrice}>UNDER ₹399*</Text>
-      </View>
-    </TouchableOpacity>
+    {accessoriesFromApi && accessoriesFromApi.length > 0 ? (
+      accessoriesFromApi.map((item) => (
+        <TouchableOpacity
+          key={item.id}
+          style={styles.trendCard}
+          activeOpacity={0.9}
+          onPress={goShop}
+        >
+          <Image
+            source={{ uri: getPublicImageUrl(item.image) }}
+            style={styles.trendImage}
+          />
+          <View style={styles.trendOverlay}>
+            <Text style={styles.trendBrand} numberOfLines={2}>
+              {item.name}
+            </Text>
+            <Text style={styles.trendPrice}>Shop now</Text>
+          </View>
+        </TouchableOpacity>
+      ))
+    ) : (
+      <>
+        <TouchableOpacity style={styles.trendCard} onPress={goShop}>
+          <Image
+            source={require("../assets/images/sports2.png")}
+            style={styles.trendImage}
+          />
+          <View style={styles.trendOverlay}>
+            <Text style={styles.trendBrand}>DNMX • NETPLAY</Text>
+            <Text style={styles.trendPrice}>UNDER ₹399*</Text>
+          </View>
+        </TouchableOpacity>
 
-    {/* CARD 2 */}
-    <TouchableOpacity style={styles.trendCard}>
-      <Image
-        source={require("../assets/images/sports4.png")}
-        style={styles.trendImage}
-      />
-      <View style={styles.trendOverlay}>
-        <Text style={styles.trendBrand}>YOUSTA</Text>
-        <Text style={styles.trendPrice}>UNDER ₹399*</Text>
-      </View>
-    </TouchableOpacity>
-    {/* CARD 3 */}
-    <TouchableOpacity style={styles.trendCard}>
-      <Image
-        source={require("../assets/images/sports1.png")}
-        style={styles.trendImage}
-      />
-      <View style={styles.trendOverlay}>
-        <Text style={styles.trendBrand}>JOHN PLAYERS</Text>
-        <Text style={styles.trendPrice}>MIN. 65% OFF</Text>
-      </View>
-    </TouchableOpacity>
+        <TouchableOpacity style={styles.trendCard} onPress={goShop}>
+          <Image
+            source={require("../assets/images/sports4.png")}
+            style={styles.trendImage}
+          />
+          <View style={styles.trendOverlay}>
+            <Text style={styles.trendBrand}>YOUSTA</Text>
+            <Text style={styles.trendPrice}>UNDER ₹399*</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.trendCard} onPress={goShop}>
+          <Image
+            source={require("../assets/images/sports1.png")}
+            style={styles.trendImage}
+          />
+          <View style={styles.trendOverlay}>
+            <Text style={styles.trendBrand}>JOHN PLAYERS</Text>
+            <Text style={styles.trendPrice}>MIN. 65% OFF</Text>
+          </View>
+        </TouchableOpacity>
+      </>
+    )}
   </ScrollView>
 </View>
 
@@ -996,13 +1341,26 @@ const rotate = rotateAnim.interpolate({
     imageStyle={{ borderRadius: 14 }}
   >
     <View style={styles.storeOverlay}>
-      <Text style={styles.storeTitle}>WOMEN SPORTS WEAR</Text>
+      <View style={styles.storeTitleRow}>
+        <Text style={styles.storeTitle}>WOMEN SPORTS WEAR</Text>
+        {womensApiLoading ? (
+          <ActivityIndicator
+            size="small"
+            color="#fff"
+            style={{ marginLeft: 10 }}
+          />
+        ) : null}
+      </View>
 
-      <TouchableOpacity>
+      <TouchableOpacity onPress={goShop}>
         <Text style={styles.storeShopAll}>Shop All</Text>
       </TouchableOpacity>
     </View>
   </ImageBackground>
+
+  {womensApiError ? (
+    <Text style={styles.womensApiErrorText}>{womensApiError}</Text>
+  ) : null}
 
   {/* 🔶 HORIZONTAL SCROLL */}
   <ScrollView
@@ -1012,17 +1370,19 @@ const rotate = rotateAnim.interpolate({
     decelerationRate="fast"
     contentContainerStyle={{ paddingHorizontal: 10 }}
   >
-    {SHOP_STORE_DATA.map((item) => (
-      <TouchableOpacity key={item.id} style={styles.storeCard}>
-        
-        {/* 🔥 HALF ROUND CARD */}
+    {womenStoreSectionItems.map((item) => (
+      <TouchableOpacity
+        key={item.id}
+        style={styles.storeCard}
+        onPress={goShop}
+        activeOpacity={0.9}
+      >
         <View style={styles.storeImageWrapper}>
           <Image source={item.image} style={styles.storeImage} />
         </View>
 
         <Text style={styles.storeText}>{item.title}</Text>
         <Text style={styles.storeOffer}>UP TO 50% OFF</Text>
-
       </TouchableOpacity>
     ))}
   </ScrollView>
@@ -1033,7 +1393,16 @@ const rotate = rotateAnim.interpolate({
 
 <View style={styles.lookbookWrapper}>
 
-  <Text style={styles.lookbookTitle}>THE LOCAL LOOKBOOK</Text>
+  <View style={styles.lookbookTitleRow}>
+    <Text style={styles.lookbookTitle}>THE LOCAL LOOKBOOK</Text>
+    {womensApiLoading ? (
+      <ActivityIndicator
+        size="small"
+        color="#333"
+        style={{ marginLeft: 8 }}
+      />
+    ) : null}
+  </View>
 
   <ScrollView
     horizontal
@@ -1041,43 +1410,50 @@ const rotate = rotateAnim.interpolate({
     snapToInterval={width * 0.75}
     decelerationRate="fast"
   >
-    {banners.map((img, index) => (
-      <View key={index} style={styles.cardWrapper}>
-
-        <TouchableOpacity
-          activeOpacity={0.95}
-          onPressIn={() => {
-            Animated.spring(lookbookScales.current[index], {
-              toValue: 1.04,
-              useNativeDriver: true,
-              speed: 18,
-              bounciness: 6,
-            }).start();
-          }}
-          onPressOut={() => {
-            Animated.spring(lookbookScales.current[index], {
-              toValue: 1,
-              useNativeDriver: true,
-              speed: 18,
-              bounciness: 6,
-            }).start();
-          }}
-        >
-          <Animated.View
-            style={[
-              styles.redFrame,
-              { transform: [{ scale: lookbookScales.current[index] }] },
-            ]}
+    {womensApiPayload?.lookbookSubs?.length ? (
+      lookbookSectionItems.map((item) => (
+        <View key={item.id} style={styles.cardWrapper}>
+          <TouchableOpacity activeOpacity={0.95} onPress={goShop}>
+            <View style={styles.redFrame}>
+              <Image source={item.image} style={styles.lookbookImage} />
+            </View>
+          </TouchableOpacity>
+        </View>
+      ))
+    ) : (
+      banners.map((img, index) => (
+        <View key={index} style={styles.cardWrapper}>
+          <TouchableOpacity
+            activeOpacity={0.95}
+            onPressIn={() => {
+              Animated.spring(lookbookScales.current[index], {
+                toValue: 1.04,
+                useNativeDriver: true,
+                speed: 18,
+                bounciness: 6,
+              }).start();
+            }}
+            onPressOut={() => {
+              Animated.spring(lookbookScales.current[index], {
+                toValue: 1,
+                useNativeDriver: true,
+                speed: 18,
+                bounciness: 6,
+              }).start();
+            }}
           >
-            <Image
-              source={img}
-              style={styles.lookbookImage}
-            />
-          </Animated.View>
-        </TouchableOpacity>
-
-      </View>
-    ))}
+            <Animated.View
+              style={[
+                styles.redFrame,
+                { transform: [{ scale: lookbookScales.current[index] }] },
+              ]}
+            >
+              <Image source={img} style={styles.lookbookImage} />
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
+      ))
+    )}
   </ScrollView>
 
 </View>
@@ -1098,13 +1474,26 @@ const rotate = rotateAnim.interpolate({
     imageStyle={{ borderRadius: 12 }}
   >
     <View style={styles.bannerOverlay}>
-      <Text style={styles.bannerTitle}>MEN'S SPORTS WEAR</Text>
+      <View style={styles.bannerTitleRow}>
+        <Text style={styles.bannerTitle}>MEN&apos;S SPORTS WEAR</Text>
+        {mensApiLoading ? (
+          <ActivityIndicator
+            size="small"
+            color="#fff"
+            style={{ marginLeft: 10 }}
+          />
+        ) : null}
+      </View>
 
-      <TouchableOpacity>
+      <TouchableOpacity onPress={goShop}>
         <Text style={styles.shopAll}>Shop All</Text>
       </TouchableOpacity>
     </View>
   </ImageBackground>
+
+  {mensApiError ? (
+    <Text style={styles.mensApiErrorText}>{mensApiError}</Text>
+  ) : null}
 
   {/* 🔶 SCROLLING PRODUCTS */}
   <ScrollView
@@ -1114,62 +1503,92 @@ const rotate = rotateAnim.interpolate({
     decelerationRate="fast"
     contentContainerStyle={{ paddingHorizontal: 10 }}
   >
-    {/* CARD 1 */}
-    <Animated.View style={{ transform: [{ scale: womensCardScale1 }] }}>
-      <TouchableOpacity
-        style={styles.productCard}
-        onPressIn={() => pressIn(womensCardScale1)}
-        onPressOut={() => pressOut(womensCardScale1)}
-        activeOpacity={0.95}
-      >
-        <Image
-          source={require("../assets/images/greensport1.png")}
-          style={styles.productImage}
-        />
-        <View style={styles.productOverlay}>
-          <Text style={styles.productText}>Tops, T shirts & Shirts</Text>
-        </View>
-        <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
-      </TouchableOpacity>
-    </Animated.View>
+    {mensWesternProductItems ? (
+      mensWesternProductItems.map((item, index) => {
+        const scale = [womensCardScale1, womensCardScale2, womensCardScale3][
+          index % 3
+        ];
+        return (
+          <Animated.View
+            key={item.id}
+            style={{ transform: [{ scale }] }}
+          >
+            <TouchableOpacity
+              style={styles.productCard}
+              onPressIn={() => pressIn(scale)}
+              onPressOut={() => pressOut(scale)}
+              activeOpacity={0.95}
+              onPress={goShop}
+            >
+              <Image source={item.image} style={styles.productImage} />
+              <View style={styles.productOverlay}>
+                <Text style={styles.productText}>{item.title}</Text>
+              </View>
+              <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        );
+      })
+    ) : (
+      <>
+        <Animated.View style={{ transform: [{ scale: womensCardScale1 }] }}>
+          <TouchableOpacity
+            style={styles.productCard}
+            onPressIn={() => pressIn(womensCardScale1)}
+            onPressOut={() => pressOut(womensCardScale1)}
+            activeOpacity={0.95}
+            onPress={goShop}
+          >
+            <Image
+              source={require("../assets/images/greensport1.png")}
+              style={styles.productImage}
+            />
+            <View style={styles.productOverlay}>
+              <Text style={styles.productText}>Tops, T shirts & Shirts</Text>
+            </View>
+            <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
+          </TouchableOpacity>
+        </Animated.View>
 
-    {/* CARD 2 */}
-    <Animated.View style={{ transform: [{ scale: womensCardScale2 }] }}>
-      <TouchableOpacity
-        style={styles.productCard}
-        onPressIn={() => pressIn(womensCardScale2)}
-        onPressOut={() => pressOut(womensCardScale2)}
-        activeOpacity={0.95}
-      >
-        <Image
-          source={require("../assets/images/yellowsport2.png")}
-          style={styles.productImage}
-        />
-        <View style={styles.productOverlay}>
-          <Text style={styles.productText}>Jeans</Text>
-        </View>
-        <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
-      </TouchableOpacity>
-    </Animated.View>
+        <Animated.View style={{ transform: [{ scale: womensCardScale2 }] }}>
+          <TouchableOpacity
+            style={styles.productCard}
+            onPressIn={() => pressIn(womensCardScale2)}
+            onPressOut={() => pressOut(womensCardScale2)}
+            activeOpacity={0.95}
+            onPress={goShop}
+          >
+            <Image
+              source={require("../assets/images/yellowsport2.png")}
+              style={styles.productImage}
+            />
+            <View style={styles.productOverlay}>
+              <Text style={styles.productText}>Jeans</Text>
+            </View>
+            <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
+          </TouchableOpacity>
+        </Animated.View>
 
-    {/* CARD 3 */}
-    <Animated.View style={{ transform: [{ scale: womensCardScale3 }] }}>
-      <TouchableOpacity
-        style={styles.productCard}
-        onPressIn={() => pressIn(womensCardScale3)}
-        onPressOut={() => pressOut(womensCardScale3)}
-        activeOpacity={0.95}
-      >
-        <Image
-          source={require("../assets/images/whitesport2.png")}
-          style={styles.productImage}
-        />
-        <View style={styles.productOverlay}>
-          <Text style={styles.productText}>Trousers</Text>
-        </View>
-        <Text style={styles.productOffer}>MIN. 65% OFF*</Text>
-      </TouchableOpacity>
-    </Animated.View>
+        <Animated.View style={{ transform: [{ scale: womensCardScale3 }] }}>
+          <TouchableOpacity
+            style={styles.productCard}
+            onPressIn={() => pressIn(womensCardScale3)}
+            onPressOut={() => pressOut(womensCardScale3)}
+            activeOpacity={0.95}
+            onPress={goShop}
+          >
+            <Image
+              source={require("../assets/images/whitesport2.png")}
+              style={styles.productImage}
+            />
+            <View style={styles.productOverlay}>
+              <Text style={styles.productText}>Trousers</Text>
+            </View>
+            <Text style={styles.productOffer}>MIN. 65% OFF*</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </>
+    )}
   </ScrollView>
 </View>
 
@@ -1182,13 +1601,25 @@ const rotate = rotateAnim.interpolate({
      mensInterestY.current = e.nativeEvent.layout.y;
    }}
  >
-    <Text style={styles.title}>What's your interest in?</Text>
+    <View style={styles.interestTitleRow}>
+      <Text style={styles.title}>What&apos;s your interest in?</Text>
+      {mensApiLoading ? (
+        <ActivityIndicator
+          size="small"
+          color="#333"
+          style={{ marginLeft: 10 }}
+        />
+      ) : null}
+    </View>
 
     <View style={styles.centerWrapper}>
       {/* CENTER CIRCLE */}
       <View style={[styles.circle, styles.centerCircle]}>
-        <Image source={interests[0].img} style={styles.circleImage} />
-        <Text style={styles.circleText}>{interests[0].name}</Text>
+        <Image
+          source={mensInterestsList[0]!.img}
+          style={styles.circleImage}
+        />
+        <Text style={styles.circleText}>{mensInterestsList[0]!.name}</Text>
       </View>
 
       {/* ORBITING CIRCLES */}
@@ -1198,8 +1629,10 @@ const rotate = rotateAnim.interpolate({
           { transform: [{ rotate }] },
         ]}
       >
-        {interests.slice(1).map((item, index) => {
-          const angle = (index / (interests.length - 1)) * (2 * Math.PI);
+        {mensInterestsList.slice(1).map((item, index) => {
+          const total = mensInterestsList.length;
+          const denom = Math.max(1, total - 1);
+          const angle = (index / denom) * (2 * Math.PI);
           const radius = 140;
 
           const x = radius * Math.cos(angle);
@@ -1207,7 +1640,7 @@ const rotate = rotateAnim.interpolate({
 
           return (
             <View
-              key={index}
+              key={`${item.name}-${index}`}
               style={[
                 styles.circle,
                 {
@@ -1238,7 +1671,17 @@ const rotate = rotateAnim.interpolate({
       <View style={styles.spotlightTitlePill}>
         <Text style={styles.spotlightTitle}>SPORTS FOOTWEAR</Text>
       </View>
+      {footwearApiLoading ? (
+        <ActivityIndicator
+          size="small"
+          color="#ff6f00"
+          style={{ marginLeft: 10 }}
+        />
+      ) : null}
     </View>
+    {footwearApiError ? (
+      <Text style={styles.footwearApiErrorText}>{footwearApiError}</Text>
+    ) : null}
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
@@ -1246,7 +1689,7 @@ const rotate = rotateAnim.interpolate({
       decelerationRate="fast"
       contentContainerStyle={styles.spotlightScroll}
     >
-      {SPOTLIGHT_CARDS.map((item) => (
+      {spotlightSectionItems.map((item) => (
         <TouchableOpacity
           key={item.id}
           activeOpacity={0.9}
@@ -1289,11 +1732,11 @@ const rotate = rotateAnim.interpolate({
             const page = Math.round(
               e.nativeEvent.contentOffset.x / DEALS_BANNER_PAGE_W
             );
-            const max = SPORTSWEAR_DEALS_BANNERS.length - 1;
+            const max = dealsCarouselItems.length - 1;
             setSportswearDealsBannerIndex(Math.max(0, Math.min(page, max)));
           }}
         >
-          {SPORTSWEAR_DEALS_BANNERS.map((item) => (
+          {dealsCarouselItems.map((item) => (
             <View
               key={item.id}
               style={{
@@ -1335,7 +1778,7 @@ const rotate = rotateAnim.interpolate({
           </TouchableOpacity>
 
           <View style={styles.angledDotsRow}>
-            {SPORTSWEAR_DEALS_BANNERS.map((_, i) => (
+            {dealsCarouselItems.map((_, i) => (
               <View
                 key={i}
                 style={[
@@ -1350,7 +1793,7 @@ const rotate = rotateAnim.interpolate({
             style={styles.angledNavBtn}
             activeOpacity={0.85}
             onPress={() => {
-              const last = SPORTSWEAR_DEALS_BANNERS.length - 1;
+              const last = dealsCarouselItems.length - 1;
               setSportswearDealsBannerIndex((prev) => {
                 const next = Math.min(last, prev + 1);
                 sportswearDealsBannerScrollRef.current?.scrollTo({
@@ -2309,12 +2752,18 @@ colorcontainer: {
   backgroundColor: "#1a0000",
 },
 
+  trendsTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+    marginLeft: 12,
+  },
+
 trendsTitle: {
   color: "#111",
   fontSize: 20,
   fontWeight: "900",
   textAlign: "center",
-  marginBottom: 15,
   letterSpacing: 2,
   paddingHorizontal: 14,
   paddingVertical: 8,
@@ -2323,8 +2772,14 @@ trendsTitle: {
   backgroundColor: "rgba(255,255,255,0.95)",
   borderWidth: 2,
   borderColor: "#ff6f00",
-  marginLeft: 12,
 },
+
+  accessoryApiErrorText: {
+    color: "#ffcdd2",
+    fontSize: 12,
+    marginLeft: 16,
+    marginBottom: 10,
+  },
 
 trendCard: {
   width: 180,
@@ -2385,11 +2840,25 @@ bannerOverlay: {
   alignItems: "center",
 },
 
+bannerTitleRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
 bannerTitle: {
   fontSize: 22,
   fontWeight: "bold",
   color: "white",
   letterSpacing: 2,
+},
+
+mensApiErrorText: {
+  color: "#b71c1c",
+  fontSize: 12,
+  marginHorizontal: 16,
+  marginBottom: 8,
+  textAlign: "center",
 },
 
 shopAll: {
@@ -2459,11 +2928,25 @@ storeOverlay: {
   alignItems: "center",
 },
 
+storeTitleRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
 storeTitle: {
   fontSize: 22,
   fontWeight: "bold",
   color: "#fff",
   letterSpacing: 2,
+},
+
+womensApiErrorText: {
+  color: "#b71c1c",
+  fontSize: 12,
+  marginHorizontal: 16,
+  marginBottom: 8,
+  textAlign: "center",
 },
 
 storeShopAll: {
@@ -2517,11 +3000,17 @@ lookbookWrapper:{
   marginTop:20,
 },
 
+lookbookTitleRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  alignSelf: "center",
+  marginBottom: 15,
+},
+
 lookbookTitle:{
   textAlign:"center",
   fontSize:18,
   fontWeight:"900",
-  marginBottom:15,
   alignSelf: "center",
   paddingHorizontal: 14,
   paddingVertical: 8,
@@ -2590,6 +3079,12 @@ container2: {
     color: "#ff6f00",
     letterSpacing: 1.1,
     textTransform: "uppercase",
+  },
+  footwearApiErrorText: {
+    color: "#b71c1c",
+    fontSize: 12,
+    marginBottom: 10,
+    marginLeft: 4,
   },
   spotlightScroll: {
     paddingRight: 10,
@@ -2691,6 +3186,13 @@ container2: {
     fontSize: 26,
     fontWeight: "bold",
     color: "#1B1B5F",
+    marginBottom: 0,
+  },
+
+  interestTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 40,
   },
 
