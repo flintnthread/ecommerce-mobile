@@ -16,7 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Svg, { Path } from 'react-native-svg'; // add at top
-import HomeBottomTabBar from "@/components/HomeBottomTabBar";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 

@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import * as IntentLauncher from "expo-intent-launcher";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import HomeBottomTabBar from "@/components/HomeBottomTabBar";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.6;
@@ -844,14 +844,8 @@ const categoryData = [
         {/* ALL CATEGORIES (NO SLIDE) */}
       <View style={styles.categoryPage}>
   {categories.map((cat, index) => (
-    <TouchableOpacity
-      key={index}
-      style={styles.categoryBox}
-      onPress={() => router.push(cat.href)}
-    >
-      <Image source={cat.image} style={styles.categoryImage} />
-      <Text style={styles.categoryText}>{cat.name}</Text>
-    </TouchableOpacity>
+    <Image source={cat.image as any} style={styles.categoryImage} />
+  
   ))}
 </View>
 

@@ -1,8 +1,10 @@
+import * as Linking from "expo-linking";
 import { PermissionsAndroid, Platform } from "react-native";
 
 /**
  * Android: system location permission dialog via PermissionsAndroid.
- * iOS / Web: no-op here (no expo-location).
+ * iOS: opens the app’s page in Settings so the user can enable Location (no expo-location).
+ * Web: no-op.
  */
 export async function requestForegroundLocation(): Promise<void> {
   if (Platform.OS === "web") return;
@@ -21,6 +23,15 @@ export async function requestForegroundLocation(): Promise<void> {
       );
     } catch {
       // Ignore — continue onboarding
+    }
+    return;
+  }
+
+  if (Platform.OS === "ios") {
+    try {
+      await Linking.openSettings();
+    } catch {
+      /* ignore */
     }
   }
 }
