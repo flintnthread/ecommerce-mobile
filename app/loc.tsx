@@ -5,9 +5,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Alert,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { requestForegroundLocation } from "@/lib/requestForegroundLocation";
+import { requestForegroundLocation } from "../lib/requestForegroundLocation";
 
 interface LocationPermissionProps {
   visible: boolean;
@@ -22,20 +24,37 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
   onOnlyThisTime,
   onDontAllow,
 }) => {
-  /** Android: requests foreground location via PermissionsAndroid. */
-  const requestNativeLocation = useCallback(async () => {
-    await requestForegroundLocation();
-  }, []);
+  const locationAlertMessage =
+    Platform.OS === "ios"
+      ? "We use your location for delivery and nearby offers. Tap OK to open Settings, then turn on Location for this app."
+      : "We use your location for delivery and nearby offers. Tap OK to continue — your phone will show the system location permission next.";
 
-  const handleWhileUsing = useCallback(async () => {
-    await requestNativeLocation();
-    onWhileUsing();
-  }, [onWhileUsing, requestNativeLocation]);
+  /** First an in-app alert; on OK, Android shows the real permission dialog; iOS opens Settings. */
+  const showLocationAlertThenSystem = useCallback(
+    (onContinue: () => void) => {
+      Alert.alert("Allow location access", locationAlertMessage, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "OK",
+          onPress: () => {
+            void (async () => {
+              await requestForegroundLocation();
+              onContinue();
+            })();
+          },
+        },
+      ]);
+    },
+    [locationAlertMessage]
+  );
 
-  const handleOnlyThisTime = useCallback(async () => {
-    await requestNativeLocation();
-    onOnlyThisTime();
-  }, [onOnlyThisTime, requestNativeLocation]);
+  const handleWhileUsing = useCallback(() => {
+    showLocationAlertThenSystem(onWhileUsing);
+  }, [onWhileUsing, showLocationAlertThenSystem]);
+
+  const handleOnlyThisTime = useCallback(() => {
+    showLocationAlertThenSystem(onOnlyThisTime);
+  }, [onOnlyThisTime, showLocationAlertThenSystem]);
 
   const handleDontAllow = useCallback(() => {
     onDontAllow();
@@ -89,9 +108,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
             
             <TouchableOpacity
               style={styles.button}
-              onPress={() => {
-                void handleWhileUsing();
-              }}
+              onPress={handleWhileUsing}
             >
               <Text style={styles.primaryText}>
                 While using the app
@@ -100,9 +117,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
 
             <TouchableOpacity
               style={styles.button}
-              onPress={() => {
-                void handleOnlyThisTime();
-              }}
+              onPress={handleOnlyThisTime}
             >
               <Text style={styles.primaryText}>
                 Only this time

@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import * as IntentLauncher from "expo-intent-launcher";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import HomeBottomTabBar from "@/components/HomeBottomTabBar";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.6;
