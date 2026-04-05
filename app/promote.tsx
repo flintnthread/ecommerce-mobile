@@ -9,29 +9,27 @@ import {
   FlatList,
 } from "react-native";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width } = Dimensions.get("window");
+const { width, height: SCREEN_H } = Dimensions.get("window");
 
 export default function PromoteScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const insets = useSafeAreaInsets();
 
   const images = [
-    require("../assets/images/promote1.png"),
-    require("../assets/images/promote2.png"),
-    require("../assets/images/promote3.png"),
-    require("../assets/images/promote4.png"),
-    require("../assets/images/promote5.png"),
-    require("../assets/images/image8.png"),
+    require("../assets/images/getpromoting1.png"),
+    require("../assets/images/getpromoting2.png"),
+    require("../assets/images/getpromoting3.png"),
   ];
 
-  // 🔥 AUTO SCROLL
   useEffect(() => {
     const interval = setInterval(() => {
       let nextIndex = currentIndex + 1;
 
       if (nextIndex >= images.length) {
-        nextIndex = 0; // loop back
+        nextIndex = 0;
       }
 
       flatListRef.current?.scrollToIndex({
@@ -40,15 +38,15 @@ export default function PromoteScreen() {
       });
 
       setCurrentIndex(nextIndex);
-    }, 3000); // 3 seconds
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [currentIndex, images.length]);
 
-  const onScroll = (event: any) => {
-    const index = Math.round(
-      event.nativeEvent.contentOffset.x / width
-    );
+  const onScroll = (event: {
+    nativeEvent: { contentOffset: { x: number } };
+  }) => {
+    const index = Math.round(event.nativeEvent.contentOffset.x / width);
     setCurrentIndex(index);
   };
 
@@ -57,66 +55,117 @@ export default function PromoteScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Title */}
-      <Text style={styles.title}>Checkout</Text>
-      <Text style={styles.subtitle}>Today top deals</Text>
-
-      {/* Button */}
-      <TouchableOpacity style={styles.button} onPress={goToLanguage}>
-        <Text style={styles.buttonText}>Get Started</Text>
-      </TouchableOpacity>
-
-      {/* Slider */}
+    <View style={styles.root}>
       <FlatList
         ref={flatListRef}
+        style={styles.list}
         data={images}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScroll}
         keyExtractor={(_, index) => index.toString()}
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
         renderItem={({ item }) => (
-          <View style={styles.imageContainer}>
-            <Image source={item} style={styles.image} resizeMode="contain" />
+          <View style={styles.slide}>
+            <Image
+              source={item}
+              style={styles.fullImage}
+              resizeMode="cover"
+            />
           </View>
         )}
       />
 
-      {/* Dots */}
-      <View style={styles.dotsContainer}>
-        {images.map((_, index) => (
-          <View
-            key={index}
-            style={
-              index === currentIndex
-                ? styles.dotActive
-                : styles.dot
-            }
-          />
-        ))}
+      <View
+        style={[
+          styles.overlay,
+          {
+            paddingTop: insets.top + 24,
+            paddingBottom: insets.bottom + 20,
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.topContent}>
+          <Text style={styles.title}>Checkout</Text>
+          <Text style={styles.subtitle}>Today top deals</Text>
+
+          <TouchableOpacity style={styles.button} onPress={goToLanguage}>
+            <Text style={styles.buttonText}>Get Started</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.dotsContainer}>
+          {images.map((_, index) => (
+            <View
+              key={index}
+              style={
+                index === currentIndex ? styles.dotActive : styles.dot
+              }
+            />
+          ))}
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: "#eaeaea",
+    backgroundColor: "#000",
+  },
+
+  list: {
+    flex: 1,
+  },
+
+  slide: {
+    width: width,
+    height: SCREEN_H,
+  },
+
+  fullImage: {
+    width: width,
+    height: SCREEN_H,
+  },
+
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 80,
+    paddingHorizontal: 24,
+  },
+
+  topContent: {
+    alignItems: "center",
+    width: "100%",
   },
 
   title: {
     fontSize: 32,
     fontWeight: "bold",
+    color: "#fff",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
 
   subtitle: {
     fontSize: 28,
     fontWeight: "bold",
     marginTop: 5,
+    color: "#fff",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
 
   button: {
@@ -133,36 +182,25 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
-  imageContainer: {
-    width: width,
-    alignItems: "center",
-    marginTop: 40,
-  },
-
-  image: {
-    width: width * 1,   
-    height: 370,          
-  },
-
   dotsContainer: {
     flexDirection: "row",
-    marginTop: 70,
+    alignItems: "flex-end",
   },
 
   dot: {
     width: 8,
     height: 10,
     borderRadius: 4,
-    backgroundColor: "#000",
+    backgroundColor: "#fff",
     marginHorizontal: 4,
-    opacity: 0.3,
+    opacity: 0.45,
   },
 
   dotActive: {
     width: 8,
     height: 20,
     borderRadius: 4,
-    backgroundColor: "#000",
+    backgroundColor: "#fff",
     marginHorizontal: 4,
   },
 });
