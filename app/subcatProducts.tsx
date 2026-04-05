@@ -165,6 +165,22 @@ const genderOptions = [
   },
 ];
 
+/** Subcategory labels from `subcate` accessories hub tiles — used for Shop All → full grid. */
+const ACCESSORIES_SHOP_ALL_LABELS = [
+  "JEWELLERY",
+  "BAGS",
+  "BELTS",
+  "WATCHES",
+] as const;
+
+/** Accessories hub “Top Collection” — four tiles: jewellery, watches, bags, beauty. */
+const ACCESSORIES_TOP_COLLECTION_LABELS = [
+  "JEWELLERY",
+  "WATCHES",
+  "BAGS",
+  "Hair Accessories",
+] as const;
+
 const categoryOptions = [
   "Women Bra",
   "Hair Accessories",
@@ -612,7 +628,26 @@ export default function SubcategoriesScreen() {
   /** Products for the subcategory opened from subcate (tile tap). */
   const routedSubcategoryProducts = React.useMemo(() => {
     if (!selectedSubCategory?.trim()) return [];
-    const needle = selectedSubCategory.trim().toLowerCase();
+    const subNorm = selectedSubCategory.trim().toLowerCase();
+    if (mainCat === "accessories" && subNorm === "all accessories") {
+      return ACCESSORIES_SHOP_ALL_LABELS.flatMap((label) =>
+        buildProductsForCategory(
+          label,
+          mainCat ?? undefined,
+          selectedGender || undefined
+        )
+      );
+    }
+    if (mainCat === "accessories" && subNorm === "top collection") {
+      return ACCESSORIES_TOP_COLLECTION_LABELS.flatMap((label) =>
+        buildProductsForCategory(
+          label,
+          mainCat ?? undefined,
+          selectedGender || undefined
+        )
+      );
+    }
+    const needle = subNorm;
     const matchedCat = categoryOptions.find(
       (c) => c.toLowerCase() === needle
     );
