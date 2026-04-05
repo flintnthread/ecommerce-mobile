@@ -61,14 +61,14 @@ const topCollectionItems: CollectionItem[] = [
     title: "Everyday Elegance",
     subtitle: "Jewellery & Charms",
     tag: "Top Rated",
-    image: require("../assets/images/top rated.png"),
+    image: require("../assets/images/toprated.png"),
   },
   {
     id: "c2",
     title: "Signature Watches",
     subtitle: "Premium timepieces",
     tag: "New Drop",
-    image: require("../assets/images/Men Watch.png"),
+    image: require("../assets/images/menwatch.png"),
   },
   {
     id: "c3",
@@ -1562,7 +1562,7 @@ export default function Accessories() {
             ]}
           >
             <Image
-              source={require("../assets/images/application banner.png")}
+              source={require("../assets/images/applicationbanner.png")}
               style={styles.videoAdPlayer}
               resizeMode="contain"
               onLoad={(e) => {
