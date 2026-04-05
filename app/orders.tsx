@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -346,6 +347,7 @@ export default function OrdersScreen() {
         <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 90 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           {filteredOrders.length === 0 ? (
@@ -454,6 +456,8 @@ export default function OrdersScreen() {
         onCancel={() => setShowReturnModal(false)}
         onConfirm={handleReturn}
       />
+
+      <HomeBottomTabBar />
     </View>
   );
 }
@@ -476,7 +480,11 @@ function OrderDetailsView({
   const statusConfig = getStatusConfig(order.status);
 
   return (
-    <ScrollView style={styles.detailsContainer} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.detailsContainer}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 90 }}
+    >
       {/* Details Header */}
       <View style={styles.detailsHeader}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>

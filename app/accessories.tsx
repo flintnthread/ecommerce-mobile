@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import "react-native-gesture-handler";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -6,6 +7,7 @@ import {
   ImageBackground,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Pressable,
   Platform,
   ScrollView,
   StyleSheet,
@@ -19,7 +21,209 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { VideoView, useVideoPlayer } from "expo-video";
+import api from "../services/api";
+import {
+  GestureHandlerRootView,
+  TouchableOpacity as GestureTouchableOpacity,
+} from "react-native-gesture-handler";
+
+type BagsSubcategoryApi = {
+  id: number;
+  name: string;
+  image: string;
+};
+
+type BagsSubcategoryTableRow = {
+  categoryName: string;
+  subcategories: BagsSubcategoryApi[];
+};
+
+/** Backend category id for Bags (GET /api/categories/:id/subcategories-table). */
+const BAGS_CATEGORY_ID = 39;
+
+/**
+ * Maps each Bags showcase card to API subcategory ids so chips reflect live data.
+ * Covers all subcategories from the Bags response across the four lanes.
+ */
+const BAGS_CARD_SUBCATEGORY_IDS: Record<string, number[]> = {
+  w1: [72, 71, 266],
+  w2: [67],
+  w3: [69, 68],
+  w4: [70],
+};
+
+function getSubcategoryTableImageUri(filename: string): string {
+  const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  if (!filename?.trim()) return `${base}/uploads/`;
+  if (/^https?:\/\//i.test(filename)) return filename;
+  return `${base}/uploads/${filename}`;
+}
+
+function getSubcategoriesForBagsCard(
+  cardId: string,
+  all: BagsSubcategoryApi[]
+): BagsSubcategoryApi[] {
+  const wanted = BAGS_CARD_SUBCATEGORY_IDS[cardId];
+  if (!wanted?.length || !all.length) return [];
+  const byId = new Map(all.map((s) => [s.id, s]));
+  return wanted.map((id) => byId.get(id)).filter((s): s is BagsSubcategoryApi => Boolean(s));
+}
+
+/** Backend category id for Belts & Caps (GET /api/categories/:id/subcategories-table). */
+const BELTS_CAPS_CATEGORY_ID = 42;
+
+/**
+ * Maps each Belts & Caps showcase card to API subcategory ids.
+ * Sample ids: Belts 83, Caps 84, Sunglasses 85, Gloves 87, Goggles 348, Hats 349.
+ */
+const BELTS_CAPS_CARD_SUBCATEGORY_IDS: Record<string, number[]> = {
+  m1: [83],
+  m2: [83],
+  m3: [84, 85],
+  m4: [349, 87, 348],
+};
+
+function getSubcategoriesForBeltsCapsCard(
+  cardId: string,
+  all: BagsSubcategoryApi[]
+): BagsSubcategoryApi[] {
+  const wanted = BELTS_CAPS_CARD_SUBCATEGORY_IDS[cardId];
+  if (!wanted?.length || !all.length) return [];
+  const byId = new Map(all.map((s) => [s.id, s]));
+  return wanted.map((id) => byId.get(id)).filter((s): s is BagsSubcategoryApi => Boolean(s));
+}
+
+/** Backend category id for Jewellery (GET /api/categories/:id/subcategories-table). */
+const JEWELLERY_CATEGORY_ID = 28;
+
+/** Watches category subcategories table (GET /api/categories/:id/subcategories-table). Postman uses 41. */
+const WATCHES_SUBCATEGORIES_CATEGORY_ID = 41;
+
+/**
+ * Maps each jewellery carousel card index (0–6, aligned with womanYouAreCardFooters) to API subcategory ids.
+ */
+const JEWELLERY_CAROUSEL_SUBCATEGORY_IDS: Record<number, number[]> = {
+  0: [74, 271, 272, 250, 251, 273],
+  1: [73, 78],
+  2: [254, 338],
+  3: [93, 340],
+  4: [75, 275],
+  5: [287, 337],
+  6: [77],
+};
+
+function getSubcategoriesForJewelleryCarouselIndex(
+  carouselIndex: number,
+  all: BagsSubcategoryApi[]
+): BagsSubcategoryApi[] {
+  const wanted = JEWELLERY_CAROUSEL_SUBCATEGORY_IDS[carouselIndex];
+  if (!wanted?.length || !all.length) return [];
+  const byId = new Map(all.map((s) => [s.id, s]));
+  return wanted.map((id) => byId.get(id)).filter((s): s is BagsSubcategoryApi => Boolean(s));
+}
+
+/** Backend category id for Other Accessories (GET /api/categories/:id/subcategories-table). */
+const OTHER_ACCESSORIES_CATEGORY_ID = 43;
+
+/** Single source of truth for hero card titles = API subcategory names (5 rows). */
+const OTHER_ACCESSORIES_DEAL_TITLES: Record<string, string> = {
+  ad1: "Hair Accessories",
+  ad2: "Brooches",
+  ad3: "Cufflinks",
+  ad4: "Scarves",
+  ad5: "Mufflers",
+};
+
+/** Maps each ACCESSORIES hero card to API subcategory ids (related chips only for that card). */
+const OTHER_ACCESSORIES_DEAL_SUBCATEGORY_IDS: Record<string, number[]> = {
+  ad1: [89],
+  ad2: [91],
+  ad3: [92],
+  ad4: [330],
+  ad5: [335],
+};
+
+function dedupeOtherAccessoriesSubcategories(
+  list: BagsSubcategoryApi[]
+): BagsSubcategoryApi[] {
+  const seen = new Set<number>();
+  const out: BagsSubcategoryApi[] = [];
+  for (const s of list) {
+    if (!seen.has(s.id)) {
+      seen.add(s.id);
+      out.push(s);
+    }
+  }
+  return out.sort((a, b) => a.id - b.id);
+}
+
+function getSubcategoriesForOtherAccessoriesDeal(
+  dealId: string,
+  all: BagsSubcategoryApi[]
+): BagsSubcategoryApi[] {
+  const wanted = OTHER_ACCESSORIES_DEAL_SUBCATEGORY_IDS[dealId];
+  if (!wanted?.length || !all.length) return [];
+  const byId = new Map(all.map((s) => [s.id, s]));
+  return wanted.map((id) => byId.get(id)).filter((s): s is BagsSubcategoryApi => Boolean(s));
+}
+
+/** Related rows for the selected deal: by id, else match API name to card title. */
+function getOtherAccessoriesSubcategoriesForSelectedDeal(
+  dealId: string,
+  all: BagsSubcategoryApi[]
+): BagsSubcategoryApi[] {
+  const deduped = dedupeOtherAccessoriesSubcategories(all);
+  const byId = getSubcategoriesForOtherAccessoriesDeal(dealId, deduped);
+  if (byId.length > 0) return byId;
+  const title = OTHER_ACCESSORIES_DEAL_TITLES[dealId]?.trim();
+  if (!title || deduped.length === 0) return [];
+  const lower = title.toLowerCase();
+  const hit = deduped.find((s) => s.name.trim().toLowerCase() === lower);
+  return hit ? [hit] : [];
+}
+
+/**
+ * Offline fallback only — same 17 subcategory names as the API, split across 7 carousel slots
+ * (6+2+2+2+2+2+1). Avoids 7×4=28 placeholder labels that did not match the real catalogue count.
+ */
+const jewelleryCarouselFallbackCategories: Record<number, string[]> = {
+  0: [
+    "Necklaces",
+    "Pearl Necklace Set",
+    "Bridal Necklace",
+    "Chains",
+    "Anti Tarnish Chains",
+    "Jewellery Set",
+  ],
+  1: ["Earrings", "Nose Pins"],
+  2: ["Bracelet", "Couple Bracelets"],
+  3: ["Rings", "Key-lock Couple Sets"],
+  4: ["Bangles", "Vaddanam"],
+  5: ["Pendants", "Customized Name Pendants"],
+  6: ["Anklets"],
+};
+
+const jewelleryCarouselFallbackImages: Record<string, any> = {
+  Necklaces: require("../assets/images/latest3.png"),
+  "Pearl Necklace Set": require("../assets/images/latest1.png"),
+  "Bridal Necklace": require("../assets/images/latest2.png"),
+  Chains: require("../assets/images/look3.png"),
+  "Anti Tarnish Chains": require("../assets/images/look3.png"),
+  "Jewellery Set": require("../assets/images/latest1.png"),
+  Earrings: require("../assets/images/latest3.png"),
+  "Nose Pins": require("../assets/images/latest1.png"),
+  Bracelet: require("../assets/images/accessariescate.png"),
+  "Couple Bracelets": require("../assets/images/look2.png"),
+  Rings: require("../assets/images/look1.png"),
+  "Key-lock Couple Sets": require("../assets/images/latest3.png"),
+  Bangles: require("../assets/images/latest2.png"),
+  Vaddanam: require("../assets/images/latest3.png"),
+  Pendants: require("../assets/images/look3.png"),
+  "Customized Name Pendants": require("../assets/images/product5.png"),
+  Anklets: require("../assets/images/latest4.png"),
+};
 
 type TopCategory = {
   id: string;
@@ -48,107 +252,101 @@ type SplitProductItem = {
 };
 
 const topCategories: TopCategory[] = [
-  { id: "men", label: "MEN", image: require("../assets/images/menscate.png") },
-  { id: "women", label: "WOMEN", image: require("../assets/images/womencate.png") },
-  { id: "kids", label: "KIDS", image: require("../assets/images/kidscate.png") },
-  {
-    id: "beauty",
-    label: "BEAUTY",
-    image: require("../assets/images/accessoriescate.png"),
-  },
-  {
-    id: "accessories",
-    label: "ACCESSORIES",
-    image: require("../assets/images/accessariescate.png"),
-  },
+  { id: "bags", label: "Bags", image: require("../assets/images/handbag.png") },
+  { id: "belts_caps", label: "Belts & Caps", image: require("../assets/images/product6.png") },
+  { id: "gadgets", label: "Gadgets Accessories", image: require("../assets/images/product2.png") },
+  { id: "jewellery", label: "Jewellery", image: require("../assets/images/latest3.png") },
+  { id: "other_accessories", label: "Other Accessories", image: require("../assets/images/accessariescate.png") },
+  { id: "watches", label: "Watches", image: require("../assets/images/menwatch.png") },
 ];
 
 const topCollectionItems: CollectionItem[] = [
   {
     id: "c1",
     title: "Everyday Elegance",
-    subtitle: "Jewellery & charms",
+    subtitle: "Jewellery & Charms",
     tag: "Top Rated",
-    image: require("../assets/images/latest1.png"),
+    image: require("../assets/images/toprated.png"),
   },
   {
     id: "c2",
     title: "Signature Watches",
     subtitle: "Premium timepieces",
     tag: "New Drop",
-    image: require("../assets/images/accessoriescate.png"),
+    image: require("../assets/images/menwatch.png"),
   },
   {
     id: "c3",
     title: "Festive Handbags",
     subtitle: "Party-ready bags",
     tag: "Limited",
-    image: require("../assets/images/look3.png"),
+    image: require("../assets/images/handbag.png"),
   },
   {
     id: "c4",
     title: "Beauty Must-haves",
     subtitle: "Glow essentials",
     tag: "Trending",
-    image: require("../assets/images/product6.png"),
+    image: require("../assets/images/bangles.png"),
   },
 ];
 
 const womenAccessoriesItems: CollectionItem[] = [
   {
     id: "w1",
-    title: "Elegant Earrings",
-    subtitle: "Party & festive styles",
-    tag: "Women",
-    image: require("../assets/images/latest2.png"),
+    title: "Tote Bags",
+    subtitle: "Work, travel & everyday",
+    tag: "Bags",
+    image: require("../assets/images/look3.png"),
   },
   {
     id: "w2",
     title: "Chic Handbags",
-    subtitle: "Daily carry picks",
-    tag: "Women",
+    subtitle: "Party & daily carry",
+    tag: "Bags",
     image: require("../assets/images/look4.png"),
   },
   {
     id: "w3",
-    title: "Statement Watches",
-    subtitle: "Classic and modern",
-    tag: "Women",
-    image: require("../assets/images/accessoriescate.png"),
+    title: "Sling & Crossbody",
+    subtitle: "Hands-free everyday",
+    tag: "Bags",
+    image: require("../assets/images/look2.png"),
   },
   {
     id: "w4",
-    title: "Beauty Essentials",
-    subtitle: "Glow-ready accessories",
-    tag: "Women",
-    image: require("../assets/images/product5.png"),
+    title: "Clutches & Evening",
+    subtitle: "Occasion-ready picks",
+    tag: "Bags",
+    image: require("../assets/images/product2.png"),
   },
 ];
 
-const womenRelatedCategories: Record<string, string[]> = {
-  w1: ["Stud Earrings", "Hoop Earrings", "Drop Earrings", "Pearl Sets"],
-  w2: ["Tote Bags", "Sling Bags", "Clutches", "Shoulder Bags"],
-  w3: ["Analog Watches", "Bracelet Watches", "Party Watches", "Casual Watches"],
-  w4: ["Makeup Organizers", "Travel Pouches", "Beauty Tools", "Vanity Kits"],
+/** Fallback chips if the Bags subcategories API is unavailable. */
+const bagsRelatedCategoriesFallback: Record<string, string[]> = {
+  w1: ["Leather totes", "Canvas totes", "Work totes", "Weekender totes"],
+  w2: ["Satchels", "Hobo bags", "Quilted bags", "Shoulder bags"],
+  w3: ["Crossbody bags", "Sling bags", "Belt bags", "Mini slings"],
+  w4: ["Clutches", "Evening bags", "Envelope bags", "Wristlets"],
 };
 
-const relatedCategoryImages: Record<string, any> = {
-  "Stud Earrings": require("../assets/images/latest1.png"),
-  "Hoop Earrings": require("../assets/images/latest2.png"),
-  "Drop Earrings": require("../assets/images/latest3.png"),
-  "Pearl Sets": require("../assets/images/latest4.png"),
-  "Tote Bags": require("../assets/images/look3.png"),
-  "Sling Bags": require("../assets/images/look4.png"),
+const bagsRelatedCategoryImagesFallback: Record<string, any> = {
+  "Leather totes": require("../assets/images/look3.png"),
+  "Canvas totes": require("../assets/images/look4.png"),
+  "Work totes": require("../assets/images/product5.png"),
+  "Weekender totes": require("../assets/images/kidscate.png"),
+  Satchels: require("../assets/images/look3.png"),
+  "Hobo bags": require("../assets/images/look4.png"),
+  "Quilted bags": require("../assets/images/product2.png"),
+  "Shoulder bags": require("../assets/images/product5.png"),
+  "Crossbody bags": require("../assets/images/look2.png"),
+  "Sling bags": require("../assets/images/look4.png"),
+  "Belt bags": require("../assets/images/product6.png"),
+  "Mini slings": require("../assets/images/accessariescate.png"),
   Clutches: require("../assets/images/product2.png"),
-  "Shoulder Bags": require("../assets/images/product5.png"),
-  "Analog Watches": require("../assets/images/accessoriescate.png"),
-  "Bracelet Watches": require("../assets/images/product6.png"),
-  "Party Watches": require("../assets/images/accessariescate.png"),
-  "Casual Watches": require("../assets/images/look2.png"),
-  "Makeup Organizers": require("../assets/images/homecate.png"),
-  "Travel Pouches": require("../assets/images/product1.png"),
-  "Beauty Tools": require("../assets/images/product3.png"),
-  "Vanity Kits": require("../assets/images/product4.png"),
+  "Evening bags": require("../assets/images/latest3.png"),
+  "Envelope bags": require("../assets/images/look3.png"),
+  Wristlets: require("../assets/images/product4.png"),
 };
 
 const styleLabItems: CollectionItem[] = [
@@ -178,58 +376,59 @@ const styleLabItems: CollectionItem[] = [
 const menAccessoriesItems: CollectionItem[] = [
   {
     id: "m1",
-    title: "Classic Wallets",
-    subtitle: "Daily carry essentials",
-    tag: "Men",
-    image: require("../assets/images/product1.png"),
-  },
-  {
-    id: "m2",
-    title: "Premium Belts",
-    subtitle: "Formal and casual styles",
-    tag: "Men",
+    title: "Dress & Leather Belts",
+    subtitle: "Formal fits & slim profiles",
+    tag: "Belts & Caps",
     image: require("../assets/images/product6.png"),
   },
   {
+    id: "m2",
+    title: "Premium Casual Belts",
+    subtitle: "Canvas, web & everyday",
+    tag: "Belts & Caps",
+    image: require("../assets/images/product1.png"),
+  },
+  {
     id: "m3",
-    title: "Statement Watches",
-    subtitle: "Bold and elegant timepieces",
-    tag: "Men",
-    image: require("../assets/images/accessoriescate.png"),
+    title: "Caps & Snapbacks",
+    subtitle: "Street, sport & everyday",
+    tag: "Belts & Caps",
+    image: require("../assets/images/look2.png"),
   },
   {
     id: "m4",
-    title: "Sunglasses Edit",
-    subtitle: "UV protection with style",
-    tag: "Men",
-    image: require("../assets/images/look2.png"),
+    title: "Beanies & Bucket Hats",
+    subtitle: "Seasonal headwear picks",
+    tag: "Belts & Caps",
+    image: require("../assets/images/look4.png"),
   },
 ];
 
-const menRelatedCategories: Record<string, string[]> = {
-  m1: ["Bi-fold Wallets", "Leather Wallets", "Card Holders", "Travel Wallets"],
-  m2: ["Formal Belts", "Casual Belts", "Reversible Belts", "Buckle Belts"],
-  m3: ["Analog Watches", "Smart Watches", "Sport Watches", "Leather Strap Watches"],
-  m4: ["Aviator Sunglasses", "Wayfarer Sunglasses", "Polarized Sunglasses", "Sport Shades"],
+/** Fallback chips if the Belts & Caps subcategories API is unavailable. */
+const menRelatedCategoriesFallback: Record<string, string[]> = {
+  m1: ["Formal belts", "Leather belts", "Dress belts", "Slim belts"],
+  m2: ["Canvas belts", "Web belts", "Reversible belts", "Buckle belts"],
+  m3: ["Baseball caps", "Snapbacks", "Trucker caps", "Dad caps"],
+  m4: ["Beanies", "Bucket hats", "Winter caps", "Visors"],
 };
 
-const menRelatedCategoryImages: Record<string, any> = {
-  "Bi-fold Wallets": require("../assets/images/product1.png"),
-  "Leather Wallets": require("../assets/images/product6.png"),
-  "Card Holders": require("../assets/images/product2.png"),
-  "Travel Wallets": require("../assets/images/product3.png"),
-  "Formal Belts": require("../assets/images/product6.png"),
-  "Casual Belts": require("../assets/images/look2.png"),
-  "Reversible Belts": require("../assets/images/look3.png"),
-  "Buckle Belts": require("../assets/images/product4.png"),
-  "Analog Watches": require("../assets/images/accessoriescate.png"),
-  "Smart Watches": require("../assets/images/accessariescate.png"),
-  "Sport Watches": require("../assets/images/sportscate.png"),
-  "Leather Strap Watches": require("../assets/images/product5.png"),
-  "Aviator Sunglasses": require("../assets/images/look2.png"),
-  "Wayfarer Sunglasses": require("../assets/images/look3.png"),
-  "Polarized Sunglasses": require("../assets/images/look4.png"),
-  "Sport Shades": require("../assets/images/sportscate.png"),
+const menRelatedCategoryImagesFallback: Record<string, any> = {
+  "Formal belts": require("../assets/images/product6.png"),
+  "Leather belts": require("../assets/images/product4.png"),
+  "Dress belts": require("../assets/images/product6.png"),
+  "Slim belts": require("../assets/images/look3.png"),
+  "Canvas belts": require("../assets/images/look2.png"),
+  "Web belts": require("../assets/images/product1.png"),
+  "Reversible belts": require("../assets/images/look3.png"),
+  "Buckle belts": require("../assets/images/product4.png"),
+  "Baseball caps": require("../assets/images/look2.png"),
+  Snapbacks: require("../assets/images/look3.png"),
+  "Trucker caps": require("../assets/images/look4.png"),
+  "Dad caps": require("../assets/images/accessariescate.png"),
+  Beanies: require("../assets/images/latest3.png"),
+  "Bucket hats": require("../assets/images/look4.png"),
+  "Winter caps": require("../assets/images/latest4.png"),
+  Visors: require("../assets/images/sportscate.png"),
 };
 
 const kidsAccessoriesItems: CollectionItem[] = [
@@ -291,13 +490,6 @@ const kidsRelatedCategoryImages: Record<string, any> = {
 
 /** Default lane for horizontal “tear-off” kids ideas (no tile picker UI). */
 const KIDS_RELATED_SECTION_ITEM_ID = "k1";
-const KIDS_RELATED_LANE_IDS = ["k1", "k2", "k3", "k4"] as const;
-
-function getKidsRelatedItemIdForCarouselIndex(index: number) {
-  const safeIndex = ((index % KIDS_RELATED_LANE_IDS.length) + KIDS_RELATED_LANE_IDS.length) %
-    KIDS_RELATED_LANE_IDS.length;
-  return KIDS_RELATED_LANE_IDS[safeIndex];
-}
 
 function getDefaultKidsCategoryForLane(laneId: string) {
   return kidsRelatedCategories[laneId]?.[0] ?? null;
@@ -320,6 +512,55 @@ const splitShowcaseProducts: SplitProductItem[] = [
     rating: 4.8,
     reviewCount: 312,
   },
+];
+
+const gadgetsAccessoryQuickLinks = [
+  { id: "gq1", label: "Audio accessories", icon: "headset" as const },
+  { id: "gq2", label: "Wearable gadgets", icon: "watch-outline" as const },
+  { id: "gq3", label: "Charging & power", icon: "battery-charging-outline" as const },
+  { id: "gq4", label: "Cases & protection", icon: "phone-portrait-outline" as const },
+];
+
+/** Subcategories for each gadgets-accessories quick link (ids gq1–gq4 unchanged). */
+const gadgetsQuickLinkSubcategories: Record<string, string[]> = {
+  gq1: ["Wireless earbuds", "Bluetooth headphones", "Neckband earphones", "Mini speakers"],
+  gq2: ["Smartwatches", "Fitness trackers", "Smart bands", "Smart glasses"],
+  gq3: ["Power banks", "USB-C & lightning cables", "Wireless chargers", "GaN wall adapters"],
+  gq4: ["Phone cases & covers", "Tablet cases", "Tempered glass", "Skins & lens protectors"],
+};
+
+const gadgetsSubcategoryImages: Record<string, any> = {
+  "Wireless earbuds": require("../assets/images/product2.png"),
+  "Bluetooth headphones": require("../assets/images/product2.png"),
+  "Neckband earphones": require("../assets/images/accessariescate.png"),
+  "Mini speakers": require("../assets/images/product3.png"),
+  Smartwatches: require("../assets/images/accessoriescate.png"),
+  "Fitness trackers": require("../assets/images/accessariescate.png"),
+  "Smart bands": require("../assets/images/latest3.png"),
+  "Smart glasses": require("../assets/images/look2.png"),
+  "Power banks": require("../assets/images/product1.png"),
+  "USB-C & lightning cables": require("../assets/images/product6.png"),
+  "Wireless chargers": require("../assets/images/product4.png"),
+  "GaN wall adapters": require("../assets/images/product5.png"),
+  "Phone cases & covers": require("../assets/images/product2.png"),
+  "Tablet cases": require("../assets/images/look3.png"),
+  "Tempered glass": require("../assets/images/product3.png"),
+  "Skins & lens protectors": require("../assets/images/look4.png"),
+};
+
+const gadgetsHighlightTileLabels = [
+  "Gadget picks",
+  "Tech add-ons",
+  "Desk & travel",
+  "New tech drops",
+];
+
+/** Dummy hero images for the Gadget highlights strip (separate from split-showcase carousel assets). */
+const gadgetsHighlightImages = [
+  require("../assets/images/product2.png"),
+  require("../assets/images/product3.png"),
+  require("../assets/images/menwatch.png"),
+  require("../assets/images/product1.png"),
 ];
 
 type SpotlightFooterAdBanner = {
@@ -357,8 +598,8 @@ type AccessoriesHeroDeal = {
   image: any;
 };
 
-const KIDS_YOU_ARE_QUOTE =
-  "We create pieces that celebrate how you move, imagine, and shine — because growing up should still feel like fun.";
+const JEWELLERY_SECTION_QUOTE =
+  "We create pieces that celebrate how you move, imagine, and shine — timeless sparkle for every moment.";
 
 /** Staggered editorial carousel (jewellery on velvet — Sorellé-style layout) */
 const womanYouAreCarouselItems: WomanYouAreCarouselItem[] = [
@@ -372,13 +613,13 @@ const womanYouAreCarouselItems: WomanYouAreCarouselItem[] = [
 ];
 
 const womanYouAreCardFooters = [
-  "NEW DROP",
-  "SIGNATURE",
-  "LAYERED",
-  "EVENING",
-  "DAILY",
-  "CURATED",
-  "EXCLUSIVE",
+  "NECKLACES",
+  "EARRINGS",
+  "BRACELETS",
+  "RINGS",
+  "BANGLES",
+  "PENDANTS",
+  "ANKLETS",
 ] as const;
 
 const kidsAccessoryShowcaseRows: KidsAccessoryShowcaseRow[] = [
@@ -417,45 +658,53 @@ const kidsAccessoryShowcaseRows: KidsAccessoryShowcaseRow[] = [
 const accessoriesHeroDeals: AccessoriesHeroDeal[] = [
   {
     id: "ad1",
-    title: "Handbags",
-    brand: "DAMIANO",
-    subtitle: "HIDESIGN",
-    offer: "MIN. 50% OFF",
-    image: require("../assets/images/accessoriescate.png"),
-  },
-  {
-    id: "ad2",
-    title: "Sunglass & Frames",
-    brand: "FOSSIL",
-    subtitle: "MENSWEAR",
-    offer: "MIN. 60% OFF",
+    title: OTHER_ACCESSORIES_DEAL_TITLES.ad1,
+    brand: "Pins & bands",
+    subtitle: "Clips, ties & more",
+    offer: "Shop",
     image: require("../assets/images/latest1.png"),
   },
   {
+    id: "ad2",
+    title: OTHER_ACCESSORIES_DEAL_TITLES.ad2,
+    brand: "Statement pins",
+    subtitle: "Coats & drapes",
+    offer: "Shop",
+    image: require("../assets/images/latest3.png"),
+  },
+  {
     id: "ad3",
-    title: "Watches",
-    brand: "FOSSIL",
-    subtitle: "GREY",
-    offer: "UP TO 50% OFF",
-    image: require("../assets/images/look2.png"),
+    title: OTHER_ACCESSORIES_DEAL_TITLES.ad3,
+    brand: "Formal finish",
+    subtitle: "Shirts & suits",
+    offer: "Shop",
+    image: require("../assets/images/product6.png"),
   },
   {
     id: "ad4",
-    title: "Jewellery",
-    brand: "TITAN",
-    subtitle: "WOMEN",
-    offer: "MIN. 40% OFF",
-    image: require("../assets/images/accessariescate.png"),
+    title: OTHER_ACCESSORIES_DEAL_TITLES.ad4,
+    brand: "Soft layers",
+    subtitle: "Wraps & stoles",
+    offer: "Shop",
+    image: require("../assets/images/look3.png"),
   },
   {
     id: "ad5",
-    title: "Rings",
-    brand: "KALINI",
-    subtitle: "FASHION",
-    offer: "UP TO 55% OFF",
-    image: require("../assets/images/look1.png"),
+    title: OTHER_ACCESSORIES_DEAL_TITLES.ad5,
+    brand: "Warm accents",
+    subtitle: "Cold-weather",
+    offer: "Shop",
+    image: require("../assets/images/look4.png"),
   },
 ];
+
+const accessoriesRelatedCategoryImagesFallback: Record<string, any> = {
+  "Hair Accessories": require("../assets/images/latest1.png"),
+  Brooches: require("../assets/images/latest3.png"),
+  Cufflinks: require("../assets/images/product6.png"),
+  Scarves: require("../assets/images/look3.png"),
+  Mufflers: require("../assets/images/look4.png"),
+};
 
 function womanYouAreCardEnterOpacityTranslate(reveal: Animated.Value, index: number) {
   const start = 0.26 + index * 0.068;
@@ -651,21 +900,154 @@ const spotlightFooterAdBanners: SpotlightFooterAdBanner[] = [
   },
 ];
 
+type WatchesShowcaseCard = {
+  id: string;
+  title: string;
+  offer: string;
+  brandsLine: string;
+  image: any;
+};
+
+/**
+ * Five distinct watch shopping lanes (wc1–wc5). Each lane has its own subcategory list below when selected.
+ */
+const watchesShowcaseCards: WatchesShowcaseCard[] = [
+  {
+    id: "wc1",
+    title: "Men's Watches",
+    offer: "UP TO 70% OFF",
+    brandsLine: "Fastrack · Sonata",
+    image: require("../assets/images/accessoriescate.png"),
+  },
+  {
+    id: "wc2",
+    title: "Women's Watches",
+    offer: "UP TO 60% OFF",
+    brandsLine: "Titan · Fossil",
+    image: require("../assets/images/latest3.png"),
+  },
+  {
+    id: "wc3",
+    title: "Smartwatches",
+    offer: "MIN. 50% OFF",
+    brandsLine: "Noise · boAt",
+    image: require("../assets/images/accessariescate.png"),
+  },
+  {
+    id: "wc4",
+    title: "Sports & Chronograph",
+    offer: "UP TO 55% OFF",
+    brandsLine: "Casio · G-Shock",
+    image: require("../assets/images/sportscate.png"),
+  },
+  {
+    id: "wc5",
+    title: "Luxury & Dress",
+    offer: "MIN. 40% OFF",
+    brandsLine: "Premium dials",
+    image: require("../assets/images/menwatch.png"),
+  },
+];
+
+/** Subcategories shown only for the matching lane id (wc1–wc5). */
+const watchesCardSubcategories: Record<string, string[]> = {
+  wc1: ["Men analog", "Men digital", "Men chronograph", "Men leather strap"],
+  wc2: ["Women analog", "Women rose gold", "Women minimal", "Women mesh band"],
+  wc3: ["Fitness bands", "Activity tracking", "Heart rate", "Sleep tracking"],
+  wc4: ["Sports dive", "Sports chronograph", "Sports rubber strap", "Sports water resist"],
+  wc5: ["Luxury dress", "Luxury skeleton", "Luxury gold tone", "Luxury automatic"],
+};
+
+const watchesSubcategoryThumbImages: Record<string, any> = {
+  "Men analog": require("../assets/images/accessoriescate.png"),
+  "Men digital": require("../assets/images/accessariescate.png"),
+  "Men chronograph": require("../assets/images/menwatch.png"),
+  "Men leather strap": require("../assets/images/product6.png"),
+  "Women analog": require("../assets/images/latest3.png"),
+  "Women rose gold": require("../assets/images/latest4.png"),
+  "Women minimal": require("../assets/images/latest1.png"),
+  "Women mesh band": require("../assets/images/latest2.png"),
+  "Fitness bands": require("../assets/images/accessariescate.png"),
+  "Activity tracking": require("../assets/images/product2.png"),
+  "Heart rate": require("../assets/images/menwatch.png"),
+  "Sleep tracking": require("../assets/images/sportscate.png"),
+  "Sports dive": require("../assets/images/sportscate.png"),
+  "Sports chronograph": require("../assets/images/accessoriescate.png"),
+  "Sports rubber strap": require("../assets/images/look2.png"),
+  "Sports water resist": require("../assets/images/look4.png"),
+  "Luxury dress": require("../assets/images/latest3.png"),
+  "Luxury skeleton": require("../assets/images/accessoriescate.png"),
+  "Luxury gold tone": require("../assets/images/latest4.png"),
+  "Luxury automatic": require("../assets/images/menwatch.png"),
+};
+
+const finalUniquePicks: CollectionItem[] = [
+  {
+    id: "fu1",
+    title: "Party Clutches",
+    subtitle: "Elegant evening essentials",
+    tag: "Best Seller",
+    image: require("../assets/images/look3.png"),
+  },
+  {
+    id: "fu2",
+    title: "Dial & Bracelet",
+    subtitle: "Statement watch combos",
+    tag: "Editor Pick",
+    image: require("../assets/images/accessoriescate.png"),
+  },
+  {
+    id: "fu3",
+    title: "Charm Layers",
+    subtitle: "Minimal necklace stacks",
+    tag: "New",
+    image: require("../assets/images/latest4.png"),
+  },
+];
+
 export default function Accessories() {
   const router = useRouter();
   const params = useLocalSearchParams<{ focus?: string | string[] }>();
   const { width: windowWidth } = useWindowDimensions();
-  const [activeTopCategory, setActiveTopCategory] = useState("accessories");
+  const [topCollectionBannerAspectRatio, setTopCollectionBannerAspectRatio] = useState(16 / 9);
+  const [spotlightBannerAspectRatio, setSpotlightBannerAspectRatio] = useState(2.2);
+  const kidsAccessoryBoardCardWidth = Math.round(
+    Math.min(118, Math.max(86, windowWidth * 0.24))
+  );
+  const [activeTopCategory, setActiveTopCategory] = useState("other_accessories");
   const [womenSectionY, setWomenSectionY] = useState(0);
   const [menSectionY, setMenSectionY] = useState(0);
   const [kidsYouAreSectionY, setKidsYouAreSectionY] = useState(0);
   const [everyoneSectionY, setEveryoneSectionY] = useState(0);
+  const [collectionSectionY, setCollectionSectionY] = useState(0);
+  const [splitShowcaseSectionY, setSplitShowcaseSectionY] = useState(0);
+  const [watchesSectionY, setWatchesSectionY] = useState(0);
   const womenSectionYRef = useRef<number | null>(null);
   const menSectionYRef = useRef<number | null>(null);
   const kidsYouAreSectionYRef = useRef<number | null>(null);
   const everyoneSectionYRef = useRef<number | null>(null);
+  const collectionSectionYRef = useRef<number | null>(null);
+  const splitShowcaseSectionYRef = useRef<number | null>(null);
+  const watchesSectionYRef = useRef<number | null>(null);
   const [selectedWomenItemId, setSelectedWomenItemId] = useState("w1");
+  const [bagsSubcategoriesFromApi, setBagsSubcategoriesFromApi] = useState<BagsSubcategoryApi[]>(
+    []
+  );
+  const [beltsCapsSubcategoriesFromApi, setBeltsCapsSubcategoriesFromApi] = useState<
+    BagsSubcategoryApi[]
+  >([]);
+  const [jewellerySubcategoriesFromApi, setJewellerySubcategoriesFromApi] = useState<
+    BagsSubcategoryApi[]
+  >([]);
+  const [otherAccessoriesSubcategoriesFromApi, setOtherAccessoriesSubcategoriesFromApi] = useState<
+    BagsSubcategoryApi[]
+  >([]);
+  const [watchesSubcategoriesFromApi, setWatchesSubcategoriesFromApi] = useState<BagsSubcategoryApi[]>(
+    []
+  );
+  const [selectedJewelleryCarouselIndex, setSelectedJewelleryCarouselIndex] = useState(0);
   const [selectedMenItemId, setSelectedMenItemId] = useState("m1");
+  const [selectedAccessoriesDealId, setSelectedAccessoriesDealId] = useState("ad1");
   const [selectedKidsRelatedItemId, setSelectedKidsRelatedItemId] = useState(
     KIDS_RELATED_SECTION_ITEM_ID
   );
@@ -681,10 +1063,48 @@ export default function Accessories() {
   const leftShowcaseOffsetRef = useRef(0);
   const leftShowcaseContentHeightRef = useRef(0);
   const leftShowcaseViewportHeightRef = useRef(0);
+  const [selectedGadgetsQuickLinkId, setSelectedGadgetsQuickLinkId] = useState("gq1");
+  const [selectedWatchesShowcaseCardId, setSelectedWatchesShowcaseCardId] = useState("wc1");
+  const watchesSubcategoriesScrollRef = useRef<ScrollView | null>(null);
+
+  const watchesShowcaseCardsResolved = useMemo((): WatchesShowcaseCard[] => {
+    if (watchesSubcategoriesFromApi.length > 0) {
+      return watchesSubcategoriesFromApi.slice(0, 5).map((s, i) => ({
+        id: `wc${i + 1}`,
+        title: s.name,
+        offer: "UP TO 60% OFF",
+        brandsLine: "Titan · Fossil · Fastrack",
+        image: { uri: getSubcategoryTableImageUri(s.image) },
+      }));
+    }
+    return watchesShowcaseCards;
+  }, [watchesSubcategoriesFromApi]);
+
+  const watchLaneSubcategoriesList = useMemo(() => {
+    const list = watchesCardSubcategories[selectedWatchesShowcaseCardId];
+    return Array.isArray(list) ? list : [];
+  }, [selectedWatchesShowcaseCardId]);
+
+  const selectedWatchCategoryTitle = useMemo(
+    () =>
+      watchesShowcaseCardsResolved.find((c) => c.id === selectedWatchesShowcaseCardId)?.title ??
+      "category",
+    [selectedWatchesShowcaseCardId, watchesShowcaseCardsResolved]
+  );
+
+  const onWatchShowcaseLanePress = useCallback((laneId: string) => {
+    setSelectedWatchesShowcaseCardId(laneId);
+    requestAnimationFrame(() => {
+      watchesSubcategoriesScrollRef.current?.scrollTo({ x: 0, y: 0, animated: true });
+    });
+  }, []);
+
   const sparkleFloat = useRef(new Animated.Value(0)).current;
   const tintPulse = useRef(new Animated.Value(0)).current;
-  const lightSweepX = useRef(new Animated.Value(-260)).current;
   const ctaPulse = useRef(new Animated.Value(1)).current;
+  const heroStarOp1 = useRef(new Animated.Value(1)).current;
+  const heroStarOp2 = useRef(new Animated.Value(1)).current;
+  const heroStarOp3 = useRef(new Animated.Value(1)).current;
   const bottomAdPlayer = useVideoPlayer(require("../assets/images/videobanner.mp4"), (player) => {
     player.loop = true;
     player.muted = true;
@@ -864,7 +1284,7 @@ export default function Accessories() {
       scrolledToKidsFromParamRef.current = false;
       return;
     }
-    setActiveTopCategory("kids");
+    setActiveTopCategory("jewellery");
     const y = kidsYouAreSectionYRef.current ?? kidsYouAreSectionY;
     if (y <= 0 || scrolledToKidsFromParamRef.current) return;
     scrolledToKidsFromParamRef.current = true;
@@ -912,15 +1332,6 @@ export default function Accessories() {
       ])
     );
 
-    const sweepLoop = Animated.loop(
-      Animated.timing(lightSweepX, {
-        toValue: 460,
-        duration: 3200,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
     const ctaLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(ctaPulse, {
@@ -940,16 +1351,51 @@ export default function Accessories() {
 
     sparkleLoop.start();
     tintLoop.start();
-    sweepLoop.start();
     ctaLoop.start();
 
     return () => {
       sparkleLoop.stop();
       tintLoop.stop();
-      sweepLoop.stop();
       ctaLoop.stop();
     };
-  }, [ctaPulse, lightSweepX, sparkleFloat, tintPulse]);
+  }, [ctaPulse, sparkleFloat, tintPulse]);
+
+  useEffect(() => {
+    const blinkLoop = (v: Animated.Value) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(v, {
+            toValue: 0.32,
+            duration: 520,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(v, {
+            toValue: 1,
+            duration: 520,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.delay(140),
+        ])
+      );
+
+    const l1 = blinkLoop(heroStarOp1);
+    const l2 = blinkLoop(heroStarOp2);
+    const l3 = blinkLoop(heroStarOp3);
+    const t1 = setTimeout(() => l1.start(), 0);
+    const t2 = setTimeout(() => l2.start(), 280);
+    const t3 = setTimeout(() => l3.start(), 560);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      l1.stop();
+      l2.stop();
+      l3.stop();
+    };
+  }, [heroStarOp1, heroStarOp2, heroStarOp3]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -998,12 +1444,203 @@ export default function Accessories() {
     return () => clearInterval(t);
   }, [spotlightFooterAdPageWidth]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<BagsSubcategoryTableRow[]>(
+          `/api/categories/${BAGS_CATEGORY_ID}/subcategories-table`
+        );
+        if (cancelled) return;
+        const first = Array.isArray(data) ? data[0] : undefined;
+        setBagsSubcategoriesFromApi(first?.subcategories ?? []);
+      } catch {
+        if (!cancelled) setBagsSubcategoriesFromApi([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const bagsRelatedChips = useMemo(() => {
+    const fromApi = getSubcategoriesForBagsCard(selectedWomenItemId, bagsSubcategoriesFromApi);
+    if (fromApi.length > 0) {
+      return fromApi.map((s) => ({
+        key: `bag-sub-${s.id}`,
+        label: s.name,
+        source: { uri: getSubcategoryTableImageUri(s.image) } as const,
+      }));
+    }
+    const fallback = bagsRelatedCategoriesFallback[selectedWomenItemId] ?? [];
+    return fallback.map((label) => ({
+      key: `bag-fb-${label}`,
+      label,
+      source:
+        bagsRelatedCategoryImagesFallback[label] ?? require("../assets/images/accessoriescate.png"),
+    }));
+  }, [selectedWomenItemId, bagsSubcategoriesFromApi]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<BagsSubcategoryTableRow[]>(
+          `/api/categories/${BELTS_CAPS_CATEGORY_ID}/subcategories-table`
+        );
+        if (cancelled) return;
+        const first = Array.isArray(data) ? data[0] : undefined;
+        setBeltsCapsSubcategoriesFromApi(first?.subcategories ?? []);
+      } catch {
+        if (!cancelled) setBeltsCapsSubcategoriesFromApi([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<BagsSubcategoryTableRow[]>(
+          `/api/categories/${JEWELLERY_CATEGORY_ID}/subcategories-table`
+        );
+        if (cancelled) return;
+        const first = Array.isArray(data) ? data[0] : undefined;
+        setJewellerySubcategoriesFromApi(first?.subcategories ?? []);
+      } catch {
+        if (!cancelled) setJewellerySubcategoriesFromApi([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<BagsSubcategoryTableRow[]>(
+          `/api/categories/${OTHER_ACCESSORIES_CATEGORY_ID}/subcategories-table`
+        );
+        if (cancelled) return;
+        const first = Array.isArray(data) ? data[0] : undefined;
+        setOtherAccessoriesSubcategoriesFromApi(first?.subcategories ?? []);
+      } catch {
+        if (!cancelled) setOtherAccessoriesSubcategoriesFromApi([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<BagsSubcategoryTableRow[]>(
+          `/api/categories/${WATCHES_SUBCATEGORIES_CATEGORY_ID}/subcategories-table`
+        );
+        if (cancelled) return;
+        const first = Array.isArray(data) ? data[0] : undefined;
+        setWatchesSubcategoriesFromApi(first?.subcategories ?? []);
+      } catch {
+        if (!cancelled) setWatchesSubcategoriesFromApi([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (watchesSubcategoriesFromApi.length === 0) return;
+    const n = Math.min(watchesSubcategoriesFromApi.length, 5);
+    const valid = new Set(Array.from({ length: n }, (_, i) => `wc${i + 1}`));
+    if (!valid.has(selectedWatchesShowcaseCardId)) {
+      setSelectedWatchesShowcaseCardId("wc1");
+    }
+  }, [watchesSubcategoriesFromApi, selectedWatchesShowcaseCardId]);
+
+  const beltsCapsRelatedChips = useMemo(() => {
+    const fromApi = getSubcategoriesForBeltsCapsCard(selectedMenItemId, beltsCapsSubcategoriesFromApi);
+    if (fromApi.length > 0) {
+      return fromApi.map((s) => ({
+        key: `belts-caps-sub-${s.id}`,
+        label: s.name,
+        source: { uri: getSubcategoryTableImageUri(s.image) } as const,
+      }));
+    }
+    const fallback = menRelatedCategoriesFallback[selectedMenItemId] ?? [];
+    return fallback.map((label) => ({
+      key: `belts-caps-fb-${label}`,
+      label,
+      source:
+        menRelatedCategoryImagesFallback[label] ?? require("../assets/images/accessoriescate.png"),
+    }));
+  }, [selectedMenItemId, beltsCapsSubcategoriesFromApi]);
+
+  const jewelleryRelatedChips = useMemo(() => {
+    const fromApi = getSubcategoriesForJewelleryCarouselIndex(
+      selectedJewelleryCarouselIndex,
+      jewellerySubcategoriesFromApi
+    );
+    if (fromApi.length > 0) {
+      return fromApi.map((s) => ({
+        key: `jewellery-sub-${s.id}`,
+        label: s.name,
+        source: { uri: getSubcategoryTableImageUri(s.image) } as const,
+      }));
+    }
+    const fallback =
+      jewelleryCarouselFallbackCategories[selectedJewelleryCarouselIndex] ?? [];
+    return fallback.map((label) => ({
+      key: `jewellery-fb-${selectedJewelleryCarouselIndex}-${label}`,
+      label,
+      source:
+        jewelleryCarouselFallbackImages[label] ?? require("../assets/images/latest3.png"),
+    }));
+  }, [selectedJewelleryCarouselIndex, jewellerySubcategoriesFromApi]);
+
+  const otherAccessoriesRelatedChips = useMemo(() => {
+    const fromApi = getOtherAccessoriesSubcategoriesForSelectedDeal(
+      selectedAccessoriesDealId,
+      otherAccessoriesSubcategoriesFromApi
+    );
+    if (fromApi.length > 0) {
+      return fromApi.map((s) => ({
+        key: `other-acc-sub-${s.id}`,
+        label: s.name,
+        source: { uri: getSubcategoryTableImageUri(s.image) } as const,
+      }));
+    }
+    const label = OTHER_ACCESSORIES_DEAL_TITLES[selectedAccessoriesDealId];
+    if (!label) return [];
+    return [
+      {
+        key: `other-acc-fb-${selectedAccessoriesDealId}`,
+        label,
+        source:
+          accessoriesRelatedCategoryImagesFallback[label] ??
+          require("../assets/images/accessariescate.png"),
+      },
+    ];
+  }, [selectedAccessoriesDealId, otherAccessoriesSubcategoriesFromApi]);
+
   const handleWomenItemPress = (itemId: string) => {
     setSelectedWomenItemId(itemId);
   };
 
   const handleMenItemPress = (itemId: string) => {
     setSelectedMenItemId(itemId);
+  };
+
+  const handleAccessoriesDealPress = (dealId: string) => {
+    setSelectedAccessoriesDealId(dealId);
   };
 
   const onFooterAdMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -1078,31 +1715,29 @@ export default function Accessories() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-        removeClippedSubviews={false}
-      >
+      <View style={styles.topFixedArea}>
         <View style={styles.header}>
+          <View style={styles.headerBrand}>
+            <Text style={styles.brandF}>F</Text>
+            <Text style={styles.brandT}>T</Text>
+          </View>
           <View style={styles.searchBox}>
-            <Ionicons name="search-outline" size={18} color="#69798c" />
+            <Ionicons name="search-outline" size={18} color="#9aa0a6" />
             <TextInput
-              placeholder="Search accessories"
-              placeholderTextColor="#69798c"
+              placeholder="Search.."
+              placeholderTextColor="#b0b5ba"
               style={styles.searchInput}
             />
-            <Ionicons name="camera-outline" size={20} color="#69798c" />
+            <TouchableOpacity activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="camera-outline" size={20} color="#9aa0a6" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.headerIcons}>
-            <TouchableOpacity>
-              <Ionicons name="notifications-outline" size={23} color="#1d324e" />
-            </TouchableOpacity>
-            <TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7}>
               <Ionicons name="heart-outline" size={23} color="#1d324e" />
             </TouchableOpacity>
-            <TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7}>
               <Ionicons name="bag-outline" size={23} color="#1d324e" />
             </TouchableOpacity>
           </View>
@@ -1113,7 +1748,6 @@ export default function Accessories() {
           style={styles.topStrip}
           imageStyle={styles.topStripBgImage}
         >
-         
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1122,10 +1756,8 @@ export default function Accessories() {
             {topCategories.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={[
-                  styles.topCategoryItem,
-                  activeTopCategory === item.id && styles.topCategoryItemActive,
-                ]}
+                style={styles.topCategoryItem}
+                hitSlop={{ top: 8, bottom: 10, left: 8, right: 8 }}
                 onPress={() => {
                   setActiveTopCategory(item.id);
                   const scrollToSectionY = (y: number) => {
@@ -1136,15 +1768,19 @@ export default function Accessories() {
                       });
                     });
                   };
-                  if (item.id === "women") {
+                  if (item.id === "bags") {
                     scrollToSectionY(womenSectionYRef.current ?? womenSectionY);
-                  } else if (item.id === "men") {
+                  } else if (item.id === "belts_caps") {
                     scrollToSectionY(menSectionYRef.current ?? menSectionY);
-                  } else if (item.id === "kids") {
+                  } else if (item.id === "gadgets") {
+                    scrollToSectionY(
+                      splitShowcaseSectionYRef.current ?? splitShowcaseSectionY
+                    );
+                  } else if (item.id === "jewellery") {
                     scrollToSectionY(
                       kidsYouAreSectionYRef.current ?? kidsYouAreSectionY
                     );
-                  } else if (item.id === "accessories") {
+                  } else if (item.id === "other_accessories") {
                     setSelectedKidsRelatedItemId(KIDS_RELATED_SECTION_ITEM_ID);
                     setSelectedKidsAccessoryCategory(
                       getDefaultKidsCategoryForLane(KIDS_RELATED_SECTION_ITEM_ID)
@@ -1156,33 +1792,56 @@ export default function Accessories() {
                         );
                       });
                     });
+                  } else if (item.id === "watches") {
+                    scrollToSectionY(
+                      watchesSectionYRef.current ?? watchesSectionY
+                    );
                   }
                 }}
               >
-                <View
-                  style={[
-                    styles.topCategoryImageWrap,
-                    activeTopCategory === item.id && styles.topCategoryImageWrapActive,
-                  ]}
-                >
-                  <Image source={item.image} style={styles.topCategoryImage} resizeMode="cover" />
+                <View style={styles.topCategoryColumn}>
+                  <View
+                    style={[
+                      styles.topCategoryMediaFrame,
+                      activeTopCategory === item.id && styles.topCategoryMediaFrameActive,
+                    ]}
+                  >
+                    <Image source={item.image} style={styles.topCategoryImage} resizeMode="cover" />
+                  </View>
+                  <Text
+                    numberOfLines={2}
+                    style={[
+                      styles.topCategoryText,
+                      activeTopCategory === item.id && styles.topCategoryTextActive,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.topCategoryActiveBar,
+                      activeTopCategory === item.id && styles.topCategoryActiveBarOn,
+                    ]}
+                  />
                 </View>
-                <Text
-                  style={[
-                    styles.topCategoryText,
-                    activeTopCategory === item.id && styles.topCategoryTextActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </ImageBackground>
+      </View>
 
+      <ScrollView
+        ref={scrollRef}
+        style={styles.mainScroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        removeClippedSubviews={false}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.heroSection}>
           <Image
-            source={require("../assets/images/accessariescate.png")}
+            source={require("../assets/images/accessariescates.png")}
             style={styles.heroImage}
             resizeMode="cover"
           />
@@ -1197,71 +1856,68 @@ export default function Accessories() {
               },
             ]}
           />
-          <Animated.View
-            style={[
-              styles.heroLightSweep,
-              {
-                transform: [{ translateX: lightSweepX }, { rotate: "-18deg" }],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.heroSparkleOne,
-              {
-                opacity: sparkleFloat.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.45, 0.9],
-                }),
-                transform: [
-                  {
-                    translateY: sparkleFloat.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, -8],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.heroSparkleTwo,
-              {
-                opacity: sparkleFloat.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.85, 0.35],
-                }),
-                transform: [
-                  {
-                    translateY: sparkleFloat.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 10],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.heroSparkleThree,
-              {
-                opacity: sparkleFloat.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.5, 0.95],
-                }),
-                transform: [
-                  {
-                    translateX: sparkleFloat.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 5],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
+          <View style={styles.heroStarCluster} pointerEvents="none">
+            <Animated.View
+              style={[
+                styles.heroStarNode,
+                styles.heroStarNodeA,
+                {
+                  opacity: heroStarOp1,
+                  transform: [
+                    {
+                      scale: heroStarOp1.interpolate({
+                        inputRange: [0.32, 1],
+                        outputRange: [0.9, 1.12],
+                      }),
+                    },
+                    { rotate: "-16deg" },
+                  ],
+                },
+              ]}
+            >
+              <Ionicons name="star" size={34} color="#FFD700" />
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.heroStarNode,
+                styles.heroStarNodeB,
+                {
+                  opacity: heroStarOp2,
+                  transform: [
+                    {
+                      scale: heroStarOp2.interpolate({
+                        inputRange: [0.32, 1],
+                        outputRange: [0.92, 1.08],
+                      }),
+                    },
+                    { rotate: "6deg" },
+                  ],
+                },
+              ]}
+            >
+              <Ionicons name="star" size={26} color="#FFC82C" />
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.heroStarNode,
+                styles.heroStarNodeC,
+                {
+                  opacity: heroStarOp3,
+                  transform: [
+                    {
+                      scale: heroStarOp3.interpolate({
+                        inputRange: [0.32, 1],
+                        outputRange: [0.88, 1.06],
+                      }),
+                    },
+                    { rotate: "18deg" },
+                  ],
+                },
+              ]}
+            >
+              <Ionicons name="star" size={18} color="#FFE566" />
+            </Animated.View>
+          </View>
           <Animated.View
             style={[
               styles.heroBadgeRow,
@@ -1299,72 +1955,141 @@ export default function Accessories() {
         </View>
 
         <View style={styles.glamSection}>
-          {/* <Text style={styles.glamTitle}>GLOW, GLAM & GAME ON</Text> */}
-          <Text style={styles.glamSubtitle}>Festivities, but make it stylish</Text>
+          <View style={styles.glamHeadingRow}>
+            <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+            <Text style={styles.glamHeadingLabel}>FESTIVE EDIT</Text>
+            <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+          </View>
+          <Text style={styles.glamSubtitle}>
+            Festivities, but make it <Text style={styles.glamSubtitleHighlight}>stylish</Text>
+          </Text>
         </View>
 
         <View style={styles.tileSection}>
           <View style={styles.tileRow}>
             <TouchableOpacity style={[styles.tileCard, styles.leftTile]} activeOpacity={0.9}>
-              <View style={styles.tileBadge}>
-                <Text style={styles.tileBadgeText}>HOME GLOW</Text>
+              <View style={styles.tileTextContent}>
+                <View style={styles.tileBadge}>
+                  <Text style={styles.tileBadgeText}>HOME GLOW</Text>
+                </View>
+                <Text style={styles.tileHeading}>Light up Home</Text>
+                <Text style={styles.tileSubHeading}>
+                  Warm lamps and festive decor picks
+                </Text>
               </View>
-              <Text style={styles.tileHeading}>Light up Home</Text>
-              <Text style={styles.tileSubHeading}>Warm lamps and festive decor picks</Text>
-              <Image
-                source={require("../assets/images/homecate.png")}
-                style={styles.tileImage}
-                resizeMode="contain"
-              />
+              <View style={styles.tileImageWrap}>
+                <Image
+                  source={require("../assets/images/homecate.png")}
+                  style={styles.tileImage}
+                  resizeMode="cover"
+                />
+              </View>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.tileCard, styles.rightTile]} activeOpacity={0.9}>
-              <View style={styles.tileBadge}>
-                <Text style={styles.tileBadgeText}>STYLE DROP</Text>
+              <View style={styles.tileTextContent}>
+                <View style={styles.tileBadge}>
+                  <Text style={styles.tileBadgeText}>STYLE DROP</Text>
+                </View>
+                <Text style={styles.tileHeading}>Festive Glam</Text>
+                <Text style={styles.tileSubHeading}>
+                  Statement accessories for celebrations
+                </Text>
               </View>
-              <Text style={styles.tileHeading}>Festive Glam</Text>
-              <Text style={styles.tileSubHeading}>Statement accessories for celebrations</Text>
-              <Image
-                source={require("../assets/images/accessoriescate.png")}
-                style={styles.tileImage}
-                resizeMode="contain"
-              />
+              <View style={styles.tileImageWrap}>
+                <Image
+                  source={require("../assets/images/accessoriescate.png")}
+                  style={styles.tileImage}
+                  resizeMode="cover"
+                />
+              </View>
             </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.collectionSection}>
+        <View
+          collapsable={false}
+          style={styles.collectionSection}
+          onLayout={(event) => {
+            const y = event.nativeEvent.layout.y;
+            collectionSectionYRef.current = y;
+            setCollectionSectionY(y);
+          }}
+        >
           <View style={styles.collectionHeader}>
-            <View>
-              <Text style={styles.collectionTitle}>Top Collection</Text>
+            <View style={styles.collectionHeaderContent}>
+              
+              <View style={styles.collectionTitleAccentWrap}>
+                
+                <View style={styles.collectionTitleRow}>
+                  <View style={styles.collectionTitleBar} />
+                  <Text style={styles.collectionTitle}>Top Collection</Text>
+                </View>
+              </View>
               <Text style={styles.collectionSubtitle}>Accessories you will love</Text>
             </View>
-            <TouchableOpacity style={styles.collectionViewAll}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.collectionViewAll}
+              onPress={() =>
+                router.push({
+                  pathname: "/subcatProducts",
+                  params: {
+                    mainCat: "accessories",
+                    subCategory: "Top Collection",
+                  },
+                })
+              }
+            >
               <Text style={styles.collectionViewAllText}>View all</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.collectionFeaturedCard}
-            activeOpacity={0.9}
+          <Pressable
+            style={[styles.collectionFeaturedCard, { aspectRatio: topCollectionBannerAspectRatio }]}
             onPress={() => router.push("/productdetail")}
           >
-            <Image
-              source={topCollectionItems[0].image}
-              style={styles.collectionFeaturedImage}
-              resizeMode="cover"
-            />
-            <View style={styles.collectionFeaturedTag}>
-              <Text style={styles.collectionFeaturedTagText}>{topCollectionItems[0].tag}</Text>
-            </View>
-            <View style={styles.collectionFeaturedOverlay}>
-              <Text style={styles.collectionFeaturedTitle} numberOfLines={1}>
-                {topCollectionItems[0].title}
-              </Text>
-              <Text style={styles.collectionFeaturedSubtitle} numberOfLines={1}>
-                {topCollectionItems[0].subtitle}
-              </Text>
-            </View>
-          </TouchableOpacity>
+            {({ hovered, pressed }) => {
+              const showOverlay = hovered || pressed;
+
+              return (
+                <>
+                  <Image
+                    source={topCollectionItems[0].image}
+                    style={styles.collectionFeaturedImage}
+                    resizeMode="contain"
+                    onLoad={(e) => {
+                      const { width, height } = e.nativeEvent.source;
+                      if (
+                        typeof width === "number" &&
+                        typeof height === "number" &&
+                        height > 0
+                      ) {
+                        setTopCollectionBannerAspectRatio(width / height);
+                      }
+                    }}
+                  />
+                  <View style={styles.collectionFeaturedTag}>
+                    <Text style={styles.collectionFeaturedTagText}>{topCollectionItems[0].tag}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.collectionFeaturedOverlay,
+                      showOverlay
+                        ? styles.collectionFeaturedOverlayVisible
+                        : styles.collectionFeaturedOverlayHidden,
+                    ]}
+                  >
+                    <Text style={styles.collectionFeaturedTitle} numberOfLines={1}>
+                      {topCollectionItems[0].title}
+                    </Text>
+                    <Text style={styles.collectionFeaturedSubtitle} numberOfLines={1}>
+                      {topCollectionItems[0].subtitle}
+                    </Text>
+                  </View>
+                </>
+              );
+            }}
+          </Pressable>
 
           <View style={styles.collectionMiniGrid}>
             {topCollectionItems.slice(1).map((item) => (
@@ -1374,7 +2099,7 @@ export default function Accessories() {
                 activeOpacity={0.9}
                 onPress={() => router.push("/productdetail")}
               >
-                <Image source={item.image} style={styles.collectionMiniImage} resizeMode="contain" />
+                <Image source={item.image} style={styles.collectionMiniImage} resizeMode="cover" />
                 <View style={styles.collectionMiniTag}>
                   <Text style={styles.collectionMiniTagText}>{item.tag}</Text>
                 </View>
@@ -1392,26 +2117,60 @@ export default function Accessories() {
         </View>
 
         <View style={styles.videoAdSection}>
-          <View style={styles.videoAdHeader}>
-            <Text style={styles.videoAdTitle}>Accessories Spotlight</Text>
-            <Text style={styles.videoAdSubtitle}>Exclusive festive ad</Text>
-          </View>
-          <View style={[styles.videoAdCard, styles.videoAdCardSpotlight]}>
-            <Image
-              source={require("../assets/images/accessariescate.png")}
-              style={styles.videoAdPlayer}
-              resizeMode="cover"
-            />
-            <View style={styles.videoAdOverlay}>
-              <Text style={styles.videoAdOverlayTitle}>Style the Season with Accessories</Text>
-              <TouchableOpacity
-                style={styles.videoAdButton}
-                onPress={() => router.push("/productdetail")}
-              >
-                <Text style={styles.videoAdButtonText}>Shop the look</Text>
-              </TouchableOpacity>
+          <View style={styles.spotlightHeaderCard}>
+            <View style={styles.spotlightHeaderTitleRow}>
+              <Ionicons name="star" size={16} color="#ef7b1a" />
+              <Text style={styles.spotlightHeaderTitle}>Accessories Spotlight</Text>
+              <Ionicons name="star" size={16} color="#ef7b1a" />
+              {/* <Text style={styles.spotlightHeaderSubtitle}>Exclusive festive ad</Text> */}
             </View>
           </View>
+          <Pressable
+            style={[
+              styles.videoAdCard,
+              styles.videoAdCardSpotlight,
+              { aspectRatio: spotlightBannerAspectRatio },
+            ]}
+            onPress={() => router.push("/productdetail")}
+          >
+            {({ hovered, pressed }) => {
+              const showOverlay = hovered || pressed;
+              return (
+                <>
+                  <Image
+                    source={require("../assets/images/applicationbanner.png")}
+                    style={styles.videoAdPlayer}
+                    resizeMode="contain"
+                    onLoad={(e) => {
+                      const { width, height } = e.nativeEvent.source;
+                      if (
+                        typeof width === "number" &&
+                        typeof height === "number" &&
+                        height > 0
+                      ) {
+                        setSpotlightBannerAspectRatio(width / height);
+                      }
+                    }}
+                  />
+                  <View
+                    style={[
+                      styles.videoAdOverlay,
+                      showOverlay
+                        ? styles.collectionFeaturedOverlayVisible
+                        : styles.collectionFeaturedOverlayHidden,
+                    ]}
+                  >
+                    <Text style={styles.videoAdOverlayTitle}>
+                      Style the Season with Accessories
+                    </Text>
+                    <View style={styles.videoAdButton} accessibilityRole="button">
+                      <Text style={styles.videoAdButtonText}>Shop the look</Text>
+                    </View>
+                  </View>
+                </>
+              );
+            }}
+          </Pressable>
         </View>
 
         <View
@@ -1425,8 +2184,12 @@ export default function Accessories() {
         >
           <View style={styles.womenHeader}>
             <View style={styles.womenTitleWrap}>
-              <Text style={styles.womenTitle}>Women Accessories</Text>
-              <Text style={styles.womenSubtitle}>Curated picks for her style</Text>
+              <View style={styles.womenTitleRow}>
+                <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+                <Text style={styles.womenTitleWord}>Bags</Text>
+              </View>
+              <View style={styles.womenTitleUnderline} />
+              <Text style={styles.womenSubtitle}>Handbags, totes & everyday style</Text>
             </View>
             <TouchableOpacity
               style={styles.womenViewAll}
@@ -1447,9 +2210,6 @@ export default function Accessories() {
                 style={styles.womenCardImage}
                 resizeMode="cover"
               />
-              <View style={styles.womenTag}>
-                <Text style={styles.womenTagText}>{womenAccessoriesItems[0].tag}</Text>
-              </View>
               <View style={styles.womenCardOverlay}>
                 <Text style={styles.womenCardTitle} numberOfLines={1}>
                   {womenAccessoriesItems[0].title}
@@ -1471,9 +2231,6 @@ export default function Accessories() {
                   style={styles.womenCardImage}
                   resizeMode="contain"
                 />
-                <View style={styles.womenTag}>
-                  <Text style={styles.womenTagText}>{womenAccessoriesItems[1].tag}</Text>
-                </View>
                 <View style={styles.womenCardOverlay}>
                   <Text style={styles.womenCardTitle} numberOfLines={1}>
                     {womenAccessoriesItems[1].title}
@@ -1494,9 +2251,6 @@ export default function Accessories() {
                   style={styles.womenCardImage}
                   resizeMode="contain"
                 />
-                <View style={styles.womenTag}>
-                  <Text style={styles.womenTagText}>{womenAccessoriesItems[2].tag}</Text>
-                </View>
                 <View style={styles.womenCardOverlay}>
                   <Text style={styles.womenCardTitle} numberOfLines={1}>
                     {womenAccessoriesItems[2].title}
@@ -1519,14 +2273,11 @@ export default function Accessories() {
               style={styles.womenCardImage}
               resizeMode="cover"
             />
-            <View style={styles.womenTag}>
-              <Text style={styles.womenTagText}>{womenAccessoriesItems[3].tag}</Text>
-            </View>
             <View style={styles.womenCardOverlay}>
               <Text style={styles.womenCardTitle} numberOfLines={1}>
                 {womenAccessoriesItems[3].title}
               </Text>
-              <Text style={styles.womenCardSubtitle} numberOfLines={1}>
+              <Text style={[styles.womenCardSubtitle, styles.womenCardSubtitleRight]} numberOfLines={1}>
                 {womenAccessoriesItems[3].subtitle}
               </Text>
             </View>
@@ -1534,29 +2285,37 @@ export default function Accessories() {
         </View>
 
         <View style={styles.womenRelatedSection}>
-          <Text style={styles.womenRelatedTitle}>
-            Related categories for{" "}
-            {womenAccessoriesItems.find((item) => item.id === selectedWomenItemId)?.title ??
-              "Women Accessories"}
-          </Text>
-          <View style={styles.womenRelatedChips}>
-            {(womenRelatedCategories[selectedWomenItemId] || []).map((category) => (
+          <View style={styles.womenRelatedTitleRow}>
+            <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+            <Text style={styles.womenRelatedTitle}>
+              Related categories for{" "}
+              {womenAccessoriesItems.find((item) => item.id === selectedWomenItemId)?.title ??
+                "Bags"}
+            </Text>
+          </View>
+          <View style={styles.womenRelatedTitleUnderline} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.womenRelatedChips}
+          >
+            {bagsRelatedChips.map((chip) => (
               <TouchableOpacity
-                key={category}
+                key={chip.key}
                 style={styles.womenRelatedChip}
                 onPress={() => router.push("/productdetail")}
               >
                 <View style={styles.womenRelatedImageWrap}>
                   <Image
-                    source={relatedCategoryImages[category] ?? require("../assets/images/accessoriescate.png")}
+                    source={chip.source}
                     style={styles.womenRelatedImage}
                     resizeMode="cover"
                   />
                 </View>
-                <Text style={styles.womenRelatedChipText}>{category}</Text>
+                <Text style={styles.womenRelatedChipText}>{chip.label}</Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
         <View style={styles.styleLabSection}>
@@ -1607,10 +2366,25 @@ export default function Accessories() {
 
         <View style={styles.videoAdSection}>
           <View style={styles.videoAdHeader}>
-            <Text style={styles.videoAdTitle}>Style Lab Ad</Text>
-            <Text style={styles.videoAdSubtitle}>Watch and shop accessories</Text>
+            <View style={styles.styleLabAdHeadingCard}>
+              <View style={styles.styleLabAdHeadingIconWrap}>
+                <Ionicons name="color-wand" size={22} color="#ef7b1a" />
+              </View>
+              <View style={styles.styleLabAdHeadingTextCol}>
+                <View style={styles.styleLabAdHeadingTitleRow}>
+                  <Text style={styles.styleLabAdHeadingTitle}>
+                    <Text style={styles.styleLabAdHeadingTitleLead}>Style </Text>
+                    <Text style={styles.styleLabAdHeadingTitleAccent}>Lab</Text>
+                  </Text>
+                  <View style={styles.styleLabAdHeadingAdMark}>
+                    <Text style={styles.styleLabAdHeadingAdMarkText}>Ad</Text>
+                  </View>
+                </View>
+                <Text style={styles.styleLabAdHeadingSub}>Watch and shop accessories</Text>
+              </View>
+            </View>
           </View>
-          <View style={styles.videoAdCard}>
+          <View style={[styles.videoAdCard, styles.videoAdCardFixedHeight]}>
             <VideoView
               player={bottomAdPlayer}
               style={styles.videoAdPlayer}
@@ -1640,8 +2414,12 @@ export default function Accessories() {
         >
           <View style={styles.menHeader}>
             <View style={styles.menTitleWrap}>
-              <Text style={styles.menTitle}>Men Accessories</Text>
-              <Text style={styles.menSubtitle}>Essentials curated for him</Text>
+              <View style={styles.menTitleRow}>
+                <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+                <Text style={styles.menTitle}>Belts & Caps</Text>
+              </View>
+              <View style={styles.menTitleUnderline} />
+              <Text style={styles.menSubtitle}>Leather belts, buckles & headwear</Text>
             </View>
             <TouchableOpacity
               style={styles.menViewAll}
@@ -1664,9 +2442,6 @@ export default function Accessories() {
                 onPress={() => handleMenItemPress(item.id)}
               >
                 <Image source={item.image} style={styles.menCardImage} resizeMode="contain" />
-                <View style={styles.menTag}>
-                  <Text style={styles.menTagText}>{item.tag}</Text>
-                </View>
                 <View style={styles.menCardOverlay}>
                   <Text style={styles.menCardTitle} numberOfLines={1}>
                     {item.title}
@@ -1681,29 +2456,26 @@ export default function Accessories() {
         </View>
 
         <View style={styles.menRelatedSection}>
-          <Text style={styles.menRelatedTitle}>
-            Related categories for{" "}
-            {menAccessoriesItems.find((item) => item.id === selectedMenItemId)?.title ??
-              "Men Accessories"}
-          </Text>
+          <View style={styles.menRelatedTitleRow}>
+            <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+            <Text style={styles.menRelatedTitle}>
+              Related categories for{" "}
+              {menAccessoriesItems.find((item) => item.id === selectedMenItemId)?.title ??
+                "Belts & Caps"}
+            </Text>
+          </View>
+          <View style={styles.menRelatedTitleUnderline} />
           <View style={styles.menRelatedChips}>
-            {(menRelatedCategories[selectedMenItemId] || []).map((category) => (
+            {beltsCapsRelatedChips.map((chip) => (
               <TouchableOpacity
-                key={category}
+                key={chip.key}
                 style={styles.menRelatedChip}
                 onPress={() => router.push("/productdetail")}
               >
                 <View style={styles.menRelatedImageWrap}>
-                  <Image
-                    source={
-                      menRelatedCategoryImages[category] ??
-                      require("../assets/images/accessoriescate.png")
-                    }
-                    style={styles.menRelatedImage}
-                    resizeMode="cover"
-                  />
+                  <Image source={chip.source} style={styles.menRelatedImage} resizeMode="cover" />
                 </View>
-                <Text style={styles.menRelatedChipText}>{category}</Text>
+                <Text style={styles.menRelatedChipText}>{chip.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1773,13 +2545,13 @@ export default function Accessories() {
                         ) : null}
                       </View>
 
-                      <View>
+                      <View style={styles.splitProductCopyBlock}>
                         <Text style={styles.splitProductTitle} numberOfLines={2}>
                           {product.title}
                         </Text>
 
                         <View style={styles.splitProductRatingPill}>
-                          <Ionicons name="star" size={11} color="#f6c795" />
+                          <Ionicons name="star" size={11} color="#16a34a" />
                           <Text style={styles.splitProductRatingPillValue}>
                             {product.rating.toFixed(1)}
                           </Text>
@@ -1801,16 +2573,16 @@ export default function Accessories() {
                             </Text>
                           </View>
                         </View>
-
-                        <TouchableOpacity
-                          style={styles.splitAddButton}
-                          activeOpacity={0.88}
-                          onPress={() => router.push("/productdetail")}
-                        >
-                          <Ionicons name="bag-add-outline" size={17} color="#f7fbf9" />
-                          <Text style={styles.splitAddButtonText}>Add to Cart</Text>
-                        </TouchableOpacity>
                       </View>
+
+                      <TouchableOpacity
+                        style={styles.splitAddButton}
+                        activeOpacity={0.88}
+                        onPress={() => router.push("/productdetail")}
+                      >
+                        <Ionicons name="bag-add-outline" size={17} color="#f7fbf9" />
+                        <Text style={styles.splitAddButtonText}>Add to Cart</Text>
+                      </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
                 );
@@ -1818,6 +2590,186 @@ export default function Accessories() {
             </View>
           </View>
         </ImageBackground>
+
+        <View
+          style={styles.gadgetsAccessoriesSection}
+          onLayout={(event) => {
+            const y = event.nativeEvent.layout.y;
+            splitShowcaseSectionYRef.current = y;
+            setSplitShowcaseSectionY(y);
+          }}
+        >
+          <View style={styles.gadgetsWarmBgDecor} pointerEvents="none">
+            <View style={[styles.gadgetsWarmBlob, styles.gadgetsWarmBlobA]} />
+            <View style={[styles.gadgetsWarmBlob, styles.gadgetsWarmBlobB]} />
+            <View style={[styles.gadgetsWarmBlob, styles.gadgetsWarmBlobC]} />
+            <View style={[styles.gadgetsWarmBlob, styles.gadgetsWarmBlobD]} />
+          </View>
+          <View style={styles.gadgetsAccessoriesContent}>
+          <View style={styles.gadgetsAccessoriesHeader}>
+            <View style={styles.gadgetsAccessoriesHeaderLeft}>
+              <View style={styles.gadgetsAccessoriesIconTile}>
+                <Ionicons name="hardware-chip-outline" size={22} color="#C2410C" />
+              </View>
+              <View style={styles.gadgetsAccessoriesHeaderTitles}>
+                <Text style={styles.gadgetsAccessoriesKicker}>GADGETS & ADD-ONS</Text>
+                <Text style={styles.gadgetsAccessoriesHeading}>Gadgets Accessories</Text>
+                <Text style={styles.gadgetsAccessoriesTagline}>
+                  Audio, wearables, charging & protection for your devices
+                </Text>
+              </View>
+            </View>
+            <View style={styles.gadgetsAccessoriesHeaderBadge}>
+              <Text style={styles.gadgetsAccessoriesHeaderBadgeText}>HOT PICKS</Text>
+            </View>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled
+            contentContainerStyle={styles.gadgetsQuickLinksContent}
+          >
+            {gadgetsAccessoryQuickLinks.map((link) => {
+              const isActive = selectedGadgetsQuickLinkId === link.id;
+              return (
+                <TouchableOpacity
+                  key={link.id}
+                  style={[styles.gadgetsQuickLinkChip, isActive && styles.gadgetsQuickLinkChipActive]}
+                  activeOpacity={0.88}
+                  onPress={() => setSelectedGadgetsQuickLinkId(link.id)}
+                >
+                  <Ionicons
+                    name={link.icon}
+                    size={16}
+                    color={isActive ? "#7F1D1D" : "#C2410C"}
+                  />
+                  <Text
+                    style={[
+                      styles.gadgetsQuickLinkChipText,
+                      isActive && styles.gadgetsQuickLinkChipTextActive,
+                    ]}
+                  >
+                    {link.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.gadgetsSubcategoriesShell}>
+            <LinearGradient
+              colors={["#FF9A8B", "#FFB4A8", "#FECACA"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gadgetsSubcategoriesBorderGlow}
+            >
+              <LinearGradient
+                colors={["#FFFFFF", "#FFF8F6", "#FFE8E4", "#FFF5F5"]}
+                locations={[0, 0.35, 0.72, 1]}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={styles.gadgetsSubcategoriesGradientFill}
+              >
+                <View style={styles.gadgetsSubcategoriesNoise} pointerEvents="none" />
+                <View style={styles.gadgetsSubcategoriesAccentBar} pointerEvents="none" />
+                <View style={styles.gadgetsSubcategoriesInner}>
+                  <View style={styles.gadgetsSubcategoriesTitleRow}>
+                    <LinearGradient
+                      colors={["#FFE4E6", "#FECDD3"]}
+                      style={styles.gadgetsSubcategoriesIconBadge}
+                    >
+                      <Ionicons name="layers-outline" size={18} color="#C2410C" />
+                    </LinearGradient>
+                    <View style={styles.gadgetsSubcategoriesTitleTextCol}>
+                      <Text style={styles.gadgetsSubcategoriesEyebrow}>GADGET SUBCATEGORIES</Text>
+                      <Text style={styles.gadgetsSubcategoriesTitle} numberOfLines={2}>
+                        {gadgetsAccessoryQuickLinks.find((l) => l.id === selectedGadgetsQuickLinkId)
+                          ?.label ?? "Gadgets accessories"}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.gadgetsSubcategoriesDivider} />
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    nestedScrollEnabled
+                    contentContainerStyle={styles.gadgetsSubcategoriesScroll}
+                  >
+                    {(gadgetsQuickLinkSubcategories[selectedGadgetsQuickLinkId] || []).map((sub) => (
+                      <TouchableOpacity
+                        key={sub}
+                        style={styles.gadgetsSubcategoryCard}
+                        activeOpacity={0.88}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/subcatProducts",
+                            params: {
+                              mainCat: "accessories",
+                              subCategory: sub,
+                            },
+                          })
+                        }
+                      >
+                        <LinearGradient
+                          colors={["#FFFFFF", "#FFF0F0", "#FFB6B1"]}
+                          start={{ x: 0.5, y: 0 }}
+                          end={{ x: 0.5, y: 1 }}
+                          style={styles.gadgetsSubcategoryCardGlass}
+                        >
+                          <View style={styles.gadgetsSubcategoryImageWrap}>
+                            <Image
+                              source={
+                                gadgetsSubcategoryImages[sub] ??
+                                require("../assets/images/accessoriescate.png")
+                              }
+                              style={styles.gadgetsSubcategoryImage}
+                              resizeMode="cover"
+                            />
+                            <LinearGradient
+                              colors={["transparent", "rgba(255,182,177,0.55)"]}
+                              style={styles.gadgetsSubcategoryImageShade}
+                              pointerEvents="none"
+                            />
+                          </View>
+                          <Text style={styles.gadgetsSubcategoryLabel} numberOfLines={2}>
+                            {sub}
+                          </Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </LinearGradient>
+            </LinearGradient>
+          </View>
+
+          <Text style={styles.gadgetsHighlightStripTitle}>Gadget highlights</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled
+            contentContainerStyle={styles.gadgetsHighlightScrollContent}
+          >
+            {gadgetsHighlightImages.map((img, index) => (
+              <TouchableOpacity
+                key={`gadget-highlight-${index}`}
+                style={styles.gadgetsHighlightTile}
+                activeOpacity={0.9}
+                onPress={() => router.push("/productdetail")}
+              >
+                <View style={styles.gadgetsHighlightImageWrap} collapsable={false}>
+                  <Image source={img} style={styles.gadgetsHighlightImage} resizeMode="cover" />
+                </View>
+                <View style={styles.gadgetsHighlightGradient} pointerEvents="none" />
+                <Text style={styles.gadgetsHighlightLabel}>
+                  {gadgetsHighlightTileLabels[index] ?? `Pick ${index + 1}`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          </View>
+        </View>
 
         <View style={styles.spotlightFooterAdSection}>
           <ScrollView
@@ -1900,12 +2852,11 @@ export default function Accessories() {
             <View style={styles.womanYouAreHeaderRow}>
               <View style={styles.womanYouAreTitleCol}>
                 <Text style={styles.womanYouAreForThe}>For the</Text>
-                <Text style={styles.womanYouAreMainOrange}>KIDS</Text>
-                <Text style={styles.womanYouAreMainNavy}>YOU ARE</Text>
+                <Text style={styles.womanYouAreMainJewellery}>Jewellery</Text>
               </View>
               <View style={styles.womanYouAreQuoteCol}>
                 <View style={styles.womanYouAreQuoteAccent} pointerEvents="none" />
-                <Text style={styles.womanYouAreQuote}>{KIDS_YOU_ARE_QUOTE}</Text>
+                <Text style={styles.womanYouAreQuote}>{JEWELLERY_SECTION_QUOTE}</Text>
               </View>
             </View>
           </Animated.View>
@@ -1936,7 +2887,6 @@ export default function Accessories() {
                 const cardHeight = getWomanYouAreCardHeight(index);
                 const isLast = index === womanYouAreCarouselItems.length - 1;
                 const r = { tl: 0, tr: 0, bl: 0, br: 0 };
-                const kidsLaneItemId = getKidsRelatedItemIdForCarouselIndex(index);
                 const innerR = {
                   borderTopLeftRadius: 0,
                   borderTopRightRadius: 0,
@@ -1994,8 +2944,7 @@ export default function Accessories() {
                               <TouchableOpacity
                                 activeOpacity={0.9}
                                 onPress={() => {
-                                  setSelectedKidsRelatedItemId(kidsLaneItemId);
-                                  setSelectedKidsAccessoryCategory(getDefaultKidsCategoryForLane(kidsLaneItemId));
+                                  setSelectedJewelleryCarouselIndex(index);
                                 }}
                                 style={[styles.womanYouAreCardInner, innerR]}
                               >
@@ -2045,36 +2994,37 @@ export default function Accessories() {
               <Ionicons name="pricetags" size={16} color="#1d324e" />
             </View>
             <Text style={styles.kidsRelatedTitle} numberOfLines={3}>
-              Tear-off ideas · More in this kids lane for{" "}
-              {kidsAccessoriesItems.find((item) => item.id === selectedKidsRelatedItemId)?.title ??
-                "Kids Accessories"}
+              Jewellery subcategories for{" "}
+              {womanYouAreCardFooters[selectedJewelleryCarouselIndex] ?? "Jewellery"}
             </Text>
           </View>
+          <View style={styles.kidsRelatedTitleUnderline} />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             nestedScrollEnabled
             contentContainerStyle={styles.kidsRelatedScroll}
           >
-            {(kidsRelatedCategories[selectedKidsRelatedItemId] || []).map((category) => (
+            {jewelleryRelatedChips.map((chip) => (
               <TouchableOpacity
-                key={category}
+                key={chip.key}
                 style={styles.kidsRelatedPill}
                 activeOpacity={0.88}
-                onPress={() => setSelectedKidsAccessoryCategory(category)}
+                onPress={() =>
+                  router.push({
+                    pathname: "/subcatProducts",
+                    params: {
+                      mainCat: "accessories",
+                      subCategory: chip.label,
+                    },
+                  })
+                }
               >
                 <View style={styles.kidsRelatedPillImageWrap}>
-                  <Image
-                    source={
-                      kidsRelatedCategoryImages[category] ??
-                      require("../assets/images/kidscate.png")
-                    }
-                    style={styles.kidsRelatedPillImage}
-                    resizeMode="cover"
-                  />
+                  <Image source={chip.source} style={styles.kidsRelatedPillImage} resizeMode="cover" />
                 </View>
                 <Text style={styles.kidsRelatedPillText} numberOfLines={2}>
-                  {category}
+                  {chip.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -2092,7 +3042,7 @@ export default function Accessories() {
             style={styles.kidsInterstitialAdCard}
           >
             <View style={styles.kidsInterstitialAdOverlay}>
-              /* <Text style={styles.kidsInterstitialAdTag}>Ad</Text> */
+              {/* <Text style={styles.kidsInterstitialAdTag}>Ad</Text> */}
               <Text style={styles.kidsInterstitialAdTitle}>Accessories Spotlight</Text>
             </View>
           </ImageBackground>
@@ -2106,11 +3056,7 @@ export default function Accessories() {
             setEveryoneSectionY(y);
           }}
         >
-          <TouchableOpacity
-            activeOpacity={0.92}
-            style={styles.accessoriesReplicaHero}
-            onPress={() => router.push("/promote")}
-          >
+          <View style={styles.accessoriesReplicaHero}>
                 <View style={styles.accessoriesReplicaHeroImage}>
                   <View style={styles.accessoriesReplicaHeroGrid} pointerEvents="none" />
                   <View style={styles.accessoriesReplicaHeroGlowLeft} pointerEvents="none" />
@@ -2130,34 +3076,116 @@ export default function Accessories() {
                     ))}
                   </View>
                   <Text style={styles.accessoriesReplicaHeroTitle}>ACCESSORIES</Text>
-                  <Image
-                    source={require("../assets/images/sportsbanner1.png")}
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad1")}
                     style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceTopLeft]}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require("../assets/images/sportsbanner2.png")}
+                  >
+                    <Image
+                      source={require("../assets/images/sportsbanner1.png")}
+                      style={styles.accessoriesReplicaHeroPieceImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad2")}
                     style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceTopRight]}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require("../assets/images/sportsbanner3.png")}
+                  >
+                    <Image
+                      source={require("../assets/images/sportsbanner2.png")}
+                      style={styles.accessoriesReplicaHeroPieceImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad3")}
                     style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceBottomLeft]}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require("../assets/images/sportsbanner4.png")}
+                  >
+                    <Image
+                      source={require("../assets/images/sportsbanner3.png")}
+                      style={styles.accessoriesReplicaHeroPieceImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad4")}
                     style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceBottomRight]}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require("../assets/images/latest1.png")}
+                  >
+                    <Image
+                      source={require("../assets/images/sportsbanner4.png")}
+                      style={styles.accessoriesReplicaHeroPieceImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad5")}
                     style={styles.accessoriesReplicaHeroCenterBag}
-                    resizeMode="contain"
-                  />
-                  <Text style={styles.accessoriesReplicaHeroCta}>Shop All</Text>
+                  >
+                    <Image
+                      source={require("../assets/images/latest1.png")}
+                      style={styles.accessoriesReplicaHeroCenterBagImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/subcatProducts",
+                        params: {
+                          mainCat: "accessories",
+                          subCategory: "All Accessories",
+                        },
+                      })
+                    }
+                    style={styles.accessoriesReplicaHeroCtaWrap}
+                  >
+                    <Text style={styles.accessoriesReplicaHeroCta}>Shop All</Text>
+                  </TouchableOpacity>
                 </View>
-          </TouchableOpacity>
+          </View>
+
+          <View style={styles.accessoriesReplicaRelatedSection}>
+            <View style={styles.accessoriesReplicaRelatedTitleRow}>
+              <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+              <Text style={styles.accessoriesReplicaRelatedTitle}>
+                Related categories for{" "}
+                {accessoriesHeroDeals.find((deal) => deal.id === selectedAccessoriesDealId)?.title ??
+                  "Accessories"}
+              </Text>
+            </View>
+            <View style={styles.accessoriesReplicaRelatedTitleUnderline} />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.accessoriesReplicaRelatedChips}
+            >
+              {otherAccessoriesRelatedChips.map((chip) => (
+                <TouchableOpacity
+                  key={chip.key}
+                  style={styles.accessoriesReplicaRelatedChip}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        mainCat: "accessories",
+                        subCategory: chip.label,
+                      },
+                    })
+                  }
+                >
+                  <View style={styles.accessoriesReplicaRelatedImageWrap}>
+                    <Image source={chip.source} style={styles.accessoriesReplicaRelatedImage} resizeMode="cover" />
+                  </View>
+                  <Text style={styles.accessoriesReplicaRelatedChipText}>{chip.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
 
           <ScrollView
             horizontal
@@ -2168,8 +3196,11 @@ export default function Accessories() {
               <TouchableOpacity
                 key={deal.id}
                 activeOpacity={0.9}
-                style={styles.accessoriesReplicaDealCard}
-                onPress={() => router.push("/productdetail")}
+                style={[
+                  styles.accessoriesReplicaDealCard,
+                  selectedAccessoriesDealId === deal.id && styles.accessoriesReplicaDealCardActive,
+                ]}
+                onPress={() => handleAccessoriesDealPress(deal.id)}
               >
                 <View style={styles.accessoriesReplicaDealImageWrap}>
                   <Image source={deal.image} style={styles.accessoriesReplicaDealImage} resizeMode="cover" />
@@ -2200,11 +3231,20 @@ export default function Accessories() {
                 <Text style={styles.kidsAccessoryBoardRowTitle}>{row.title}</Text>
                 <View style={styles.kidsAccessoryBoardRowTitleLine} />
               </View>
-              <View style={styles.kidsAccessoryBoardRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                nestedScrollEnabled
+                style={styles.kidsAccessoryBoardRowScroll}
+                contentContainerStyle={styles.kidsAccessoryBoardRowScrollContent}
+              >
                 {row.items.map((item) => (
                   <TouchableOpacity
                     key={item.id}
-                    style={styles.kidsAccessoryBoardCard}
+                    style={[
+                      styles.kidsAccessoryBoardCard,
+                      { width: kidsAccessoryBoardCardWidth },
+                    ]}
                     activeOpacity={0.9}
                     onPress={() => router.push("/productdetail")}
                   >
@@ -2226,12 +3266,284 @@ export default function Accessories() {
                     </View>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
               {index < kidsAccessoryShowcaseRows.length - 1 ? (
                 <View style={styles.kidsAccessoryBoardRowDivider} />
               ) : null}
             </View>
           ))}
+        </View>
+
+        <View
+          collapsable={false}
+          style={styles.watchesEditorialSection}
+          onLayout={(event) => {
+            const y = event.nativeEvent.layout.y;
+            watchesSectionYRef.current = y;
+            setWatchesSectionY(y);
+          }}
+        >
+          <LinearGradient
+            colors={["#FFF5F0", "#FCE8E4", "#F5D0C8"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.watchesEditorialGradient}
+          >
+            <View style={styles.watchesHeroGridPattern} pointerEvents="none">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <View
+                  key={`wgh-${i}`}
+                  style={[styles.watchesHeroGridLineH, { top: 8 + i * 26 }]}
+                />
+              ))}
+              {Array.from({ length: 8 }).map((_, i) => (
+                <View
+                  key={`wgv-${i}`}
+                  style={[styles.watchesHeroGridLineV, { left: 6 + i * 48 }]}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.watchesHeroTitle}>WATCHES</Text>
+
+            <View style={styles.watchesHeroStage}>
+              <View style={[styles.watchesHeroFloat, styles.watchesHeroFloatTL]}>
+                <Image
+                  source={require("../assets/images/sportscate.png")}
+                  style={styles.watchesHeroFloatImg}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={[styles.watchesHeroFloat, styles.watchesHeroFloatTR]}>
+                <Image
+                  source={require("../assets/images/look2.png")}
+                  style={styles.watchesHeroFloatImg}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={[styles.watchesHeroFloat, styles.watchesHeroFloatBL]}>
+                <Image
+                  source={require("../assets/images/product6.png")}
+                  style={styles.watchesHeroFloatImg}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={[styles.watchesHeroFloat, styles.watchesHeroFloatBR]}>
+                <Image
+                  source={require("../assets/images/product1.png")}
+                  style={styles.watchesHeroFloatImg}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={styles.watchesHeroCenter}>
+                <Image
+                  source={require("../assets/images/menwatch.png")}
+                  style={styles.watchesHeroCenterImg}
+                  resizeMode="contain"
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() =>
+                router.push({
+                  pathname: "/subcatProducts",
+                  params: {
+                    mainCat: "accessories",
+                    subCategory: "Watches",
+                  },
+                })
+              }
+              style={styles.watchesShopAllBtn}
+            >
+              <Text style={styles.watchesShopAllText}>Shop All</Text>
+              <View style={styles.watchesShopAllUnderline} />
+            </TouchableOpacity>
+          </LinearGradient>
+
+          <GestureHandlerRootView style={styles.watchesShowcaseGestureRoot}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              style={styles.watchesShowcaseRowScroll}
+              contentContainerStyle={styles.watchesShowcaseRow}
+            >
+              {watchesShowcaseCardsResolved.map((card) => {
+                const isWatchesCardSelected = selectedWatchesShowcaseCardId === card.id;
+                return (
+              <GestureTouchableOpacity
+                key={card.id}
+                activeOpacity={0.9}
+                style={[
+                  styles.watchesShowcaseCardOuter,
+                  isWatchesCardSelected && styles.watchesShowcaseCardOuterSelected,
+                ]}
+                onPress={() => onWatchShowcaseLanePress(card.id)}
+              >
+                <LinearGradient
+                  colors={["#D4AF7A", "#F0E6C8", "#C9A961", "#B8860B"]}
+                  locations={[0, 0.4, 0.75, 1]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.watchesShowcaseCardBorder}
+                >
+                  <LinearGradient
+                    colors={[
+                      "#FFFFFF",
+                      "#F7F7F7",
+                      "#E8E8E8",
+                      "#B8B8B8",
+                      "#6B6B6B",
+                      "#3A3A3A",
+                      "#1C1C1C",
+                      "#0A0A0A",
+                      "#000000",
+                    ]}
+                    locations={[0, 0.1, 0.22, 0.38, 0.52, 0.66, 0.78, 0.9, 1]}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={styles.watchesShowcaseCardFace}
+                  >
+                    <View style={styles.watchesShowcaseCardImageWrap}>
+                      <Image
+                        source={card.image}
+                        style={styles.watchesShowcaseCardProductImg}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <View style={styles.watchesShowcaseCardTextWrap}>
+                      <Text style={styles.watchesShowcaseCardLabel} numberOfLines={2}>
+                        {card.title}
+                      </Text>
+                      <Text style={styles.watchesShowcaseCardBrands} numberOfLines={1}>
+                        {card.brandsLine}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </LinearGradient>
+                <Text style={styles.watchesShowcaseCardOffer}>{card.offer}</Text>
+              </GestureTouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </GestureHandlerRootView>
+
+          <View style={styles.watchesCardSubcategoriesWrap}>
+            <View style={styles.watchesCardSubcategoriesHeader}>
+              <Ionicons name="list-outline" size={16} color="#9A3412" />
+              <Text style={styles.watchesCardSubcategoriesTitle} numberOfLines={2}>
+                Related subcategories for {selectedWatchCategoryTitle}
+              </Text>
+            </View>
+            <ScrollView
+              ref={watchesSubcategoriesScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              style={styles.watchesCardSubcategoriesHorizontalScroll}
+              contentContainerStyle={styles.watchesCardSubcategoriesScroll}
+            >
+              {watchLaneSubcategoriesList.map((sub) => (
+                <TouchableOpacity
+                  key={`${selectedWatchesShowcaseCardId}-${sub}`}
+                  style={styles.watchesCardSubcategoryChip}
+                  activeOpacity={0.88}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        mainCat: "accessories",
+                        subCategory: sub,
+                        watchLaneId: selectedWatchesShowcaseCardId,
+                        watchCategory:
+                          watchesShowcaseCardsResolved.find(
+                            (c) => c.id === selectedWatchesShowcaseCardId
+                          )?.title ?? "",
+                      },
+                    })
+                  }
+                >
+                  <View style={styles.watchesCardSubcategoryThumb}>
+                    <Image
+                      source={
+                        watchesSubcategoryThumbImages[sub] ??
+                        require("../assets/images/accessoriescate.png")
+                      }
+                      style={styles.watchesCardSubcategoryThumbImg}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <Text style={styles.watchesCardSubcategoryLabel} numberOfLines={2}>
+                    {sub}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+
+        <View style={styles.finalUniqueSection}>
+          <View style={styles.finalUniqueHeader}>
+            <View style={styles.finalUniqueTitleWrap}>
+              <View style={styles.finalUniqueTitleRow}>
+                <Ionicons name="sparkles" size={15} color="#ef7b1a" />
+                <Text style={styles.finalUniqueTitle}>
+                  <Text style={styles.finalUniqueTitleLead}>Unique </Text>
+                  <Text style={styles.finalUniqueTitleAccent}>Picks</Text>
+                </Text>
+              </View>
+              <View style={styles.finalUniqueTitleUnderline} />
+              <Text style={styles.finalUniqueSubtitle}>Fresh accessories to finish your look</Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.finalUniqueViewAll}
+              onPress={() =>
+                router.push({
+                  pathname: "/subcatProducts",
+                  params: {
+                    mainCat: "accessories",
+                    subCategory: "Unique Picks",
+                  },
+                })
+              }
+            >
+              <Text style={styles.finalUniqueViewAllText}>View All</Text>
+              <Ionicons name="chevron-forward" size={16} color="#9a3412" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.finalUniqueRow}
+          >
+            {finalUniquePicks.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.finalUniqueCard}
+                activeOpacity={0.9}
+                onPress={() => router.push("/productdetail")}
+              >
+                <Image source={item.image} style={styles.finalUniqueCardImage} resizeMode="cover" />
+                <View style={styles.finalUniqueTagPill}>
+                  <Text style={styles.finalUniqueTagText}>{item.tag}</Text>
+                </View>
+                <View style={styles.finalUniqueCardContent}>
+                  <Text style={styles.finalUniqueCardTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.finalUniqueCardSubtitle} numberOfLines={1}>
+                    {item.subtitle}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       </ScrollView>
 
@@ -2264,29 +3576,61 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff4fb",
   },
+  topFixedArea: {
+    backgroundColor: "#fff9f2",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(29, 50, 78, 0.12)",
+    zIndex: 2,
+    ...Platform.select({
+      android: { elevation: 3 },
+      default: {},
+    }),
+  },
+  mainScroll: {
+    flex: 1,
+  },
   content: {
-    paddingBottom: 90,
+    paddingBottom: 70,
   },
   header: {
     paddingTop: 50,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    backgroundColor: "#fff9f2",
     flexDirection: "row",
     alignItems: "center",
   },
+  headerBrand: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginRight: 8,
+    paddingBottom: 1,
+  },
+  brandF: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#1d324e",
+    letterSpacing: -0.5,
+  },
+  brandT: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#ef7b1a",
+    letterSpacing: -0.5,
+    marginLeft: 1,
+  },
   searchBox: {
     flex: 1,
-    height: 42,
-    borderRadius: 10,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#ffffff",
-    borderWidth: 1.0,
-    borderColor: "#222125",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e2e6",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    marginRight: 12,
+    paddingHorizontal: 12,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
@@ -2294,21 +3638,22 @@ const styles = StyleSheet.create({
     marginRight: 8,
     color: "#1d324e",
     fontSize: 14,
+    paddingVertical: Platform.OS === "ios" ? 10 : 6,
   },
   headerIcons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
   },
   topStrip: {
-    backgroundColor: "#5B4B8A",
-    paddingBottom: 10,
-    paddingTop: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#3b3a41",
+    backgroundColor: "transparent",
+    paddingBottom: 0,
+    paddingTop: 2,
+    borderBottomWidth: 0,
+    borderBottomColor: "transparent",
   },
   topStripBgImage: {
-    opacity: 0.22,
+    opacity: 0,
   },
   topStripHeader: {
     paddingHorizontal: 12,
@@ -2326,56 +3671,74 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   topStripContent: {
-    paddingHorizontal: 0,
-    paddingVertical: 2,
+    flexDirection: "row",
+    flexWrap: "nowrap",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 6,
+    paddingTop: 8,
+    paddingBottom: 2,
   },
+  /** Fixed width + overflow: long labels must wrap; otherwise each row grows with text and leaves huge gaps between thumbnails. */
   topCategoryItem: {
-    width: 84,
-    marginHorizontal: 5,
-    borderRadius: 12,
-    paddingVertical: 6,
-    alignItems: "center",
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  topCategoryItemActive: {
-    backgroundColor: "transparent",
-    borderColor: "#ffea00",
-  },
-  topCategoryImageWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#f3f3f3",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 78,
+    marginRight: 0,
+    padding: 0,
+    flexShrink: 0,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#e2e2e2",
   },
-  topCategoryImageWrapActive: {
-    borderColor: "#ffea00",
+  topCategoryColumn: {
+    alignItems: "center",
+    width: 78,
+    overflow: "hidden",
+  },
+  topCategoryMediaFrame: {
+    width: 78,
+    height: 52,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#d7e0e8",
+    backgroundColor: "#ffffff",
+  },
+  topCategoryMediaFrameActive: {
+    borderColor: "#ef7b1a",
   },
   topCategoryImage: {
     width: "100%",
     height: "100%",
   },
   topCategoryText: {
-    marginTop: 6,
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#d1d1d6",
+    marginTop: 8,
+    width: 78,
+    maxWidth: 78,
+    alignSelf: "center",
+    fontSize: 8.5,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    lineHeight: 11,
+    color: "#1d324e",
     textAlign: "center",
   },
   topCategoryTextActive: {
-    color: "#ffffff",
+    color: "#ef7b1a",
+  },
+  topCategoryActiveBar: {
+    marginTop: 6,
+    width: 32,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "transparent",
+  },
+  topCategoryActiveBarOn: {
+    backgroundColor: "#ef7b1a",
   },
   heroSection: {
     width: "100%",
     height: 500,
     position: "relative",
     backgroundColor: "#504f56",
+    marginTop: -2,
   },
   heroImage: {
     width: "100%",
@@ -2385,46 +3748,29 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(29,50,78,0.16)",
   },
-  heroLightSweep: {
+  heroStarCluster: {
     position: "absolute",
-    top: -60,
-    left: -150,
-    width: 140,
-    height: 700,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    top: 44,
+    right: 8,
+    width: 132,
+    height: 168,
   },
-  heroSparkleOne: {
+  heroStarNode: {
     position: "absolute",
-    top: 70,
-    right: 30,
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "rgba(246,199,149,0.4)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  heroSparkleTwo: {
-    position: "absolute",
-    top: 140,
-    left: 24,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(239,123,26,0.35)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.55)",
+  heroStarNodeA: {
+    top: 2,
+    right: 2,
   },
-  heroSparkleThree: {
-    position: "absolute",
-    top: 220,
-    right: 75,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "rgba(121,65,28,0.35)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.5)",
+  heroStarNodeB: {
+    top: 58,
+    right: 44,
+  },
+  heroStarNodeC: {
+    top: 118,
+    right: 6,
   },
   heroBadgeRow: {
     position: "absolute",
@@ -2501,8 +3847,25 @@ const styles = StyleSheet.create({
   glamSection: {
     backgroundColor: "#ffffff",
     paddingTop: 10,
-    paddingBottom: 8,
+    paddingBottom: 10,
     alignItems: "center",
+  },
+  glamHeadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#fff4e7",
+    borderWidth: 1,
+    borderColor: "#f6c795",
+  },
+  glamHeadingLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#79411c",
+    letterSpacing: 0.8,
   },
   glamTitle: {
     fontSize: 32,
@@ -2511,10 +3874,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   glamSubtitle: {
-    marginTop: 2,
+    marginTop: 8,
     fontSize: 18,
-    color: "#6c8494",
+    color: "#445f73",
     textAlign: "center",
+    fontWeight: "700",
+  },
+  glamSubtitleHighlight: {
+    color: "#ef7b1a",
+    fontWeight: "900",
   },
   tileSection: {
     paddingHorizontal: 0,
@@ -2527,11 +3895,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   tileCard: {
-    width: "48.5%",
+    flex: 1,
+    minWidth: 0,
     minHeight: 240,
-    borderRadius: 16,
+    borderRadius: 0,
     paddingTop: 12,
-    paddingHorizontal: 10,
     alignItems: "center",
     borderWidth: 1,
     overflow: "hidden",
@@ -2543,6 +3911,7 @@ const styles = StyleSheet.create({
   rightTile: {
     backgroundColor: "#79411c",
     borderColor: "#5f3013",
+    marginLeft: 8,
   },
   tileBadge: {
     alignSelf: "flex-start",
@@ -2558,6 +3927,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.4,
   },
+  tileTextContent: {
+    width: "100%",
+    paddingHorizontal: 10,
+    alignItems: "flex-start",
+  },
   tileHeading: {
     color: "#ffffff",
     fontSize: 22,
@@ -2572,9 +3946,17 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginBottom: 8,
   },
-  tileImage: {
+  tileImageWrap: {
     width: "100%",
     height: 130,
+    alignSelf: "stretch",
+    flexShrink: 0,
+    borderRadius: 0,
+    overflow: "hidden",
+  },
+  tileImage: {
+    width: "100%",
+    height: "100%",
   },
   collectionSection: {
     backgroundColor: "#e9edf5",
@@ -2589,13 +3971,64 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 12,
   },
+  collectionHeaderContent: {
+    flex: 1,
+  },
+  collectionEyebrow: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fff6ec",
+    borderColor: "#ffd6b0",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  collectionEyebrowText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#8b4a1a",
+    letterSpacing: 0.4,
+  },
+  collectionTitleAccentWrap: {
+    alignSelf: "flex-start",
+  },
+  collectionTitleBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#1d324e",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 5,
+  },
+  collectionTitleBadgeText: {
+    color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  collectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  collectionTitleBar: {
+    width: 4,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: "#ef7b1a",
+  },
   collectionTitle: {
     fontSize: 22,
-    fontWeight: "800",
+    fontWeight: "900",
     color: "#1d324e",
+    letterSpacing: 0.2,
   },
   collectionSubtitle: {
-    marginTop: 2,
+    marginTop: 5,
     fontSize: 12,
     color: "#6c8494",
     fontWeight: "600",
@@ -2615,12 +4048,11 @@ const styles = StyleSheet.create({
   },
   collectionFeaturedCard: {
     width: "100%",
-    height: 190,
-    borderRadius: 16,
+    borderRadius: 0,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#d5dbe7",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#e9edf5",
     marginBottom: 12,
   },
   collectionFeaturedImage: {
@@ -2650,17 +4082,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 9,
     paddingBottom: 11,
+    alignItems: "stretch",
+  },
+  collectionFeaturedOverlayVisible: {
+    opacity: 1,
+  },
+  collectionFeaturedOverlayHidden: {
+    opacity: 0,
   },
   collectionFeaturedTitle: {
     color: "#f6c795",
     fontSize: 16,
     fontWeight: "800",
+    textAlign: "left",
   },
   collectionFeaturedSubtitle: {
     marginTop: 2,
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "right",
   },
   collectionMiniGrid: {
     flexDirection: "row",
@@ -2722,25 +4163,115 @@ const styles = StyleSheet.create({
   },
   videoAdHeader: {
     marginBottom: 8,
+    paddingHorizontal: 0,
+  },
+  spotlightHeaderCard: {
+    marginBottom: 10,
+    marginHorizontal: 12,
+    borderRadius: 0,
     paddingHorizontal: 12,
+    paddingTop: 11,
+    paddingBottom: 11,
+    backgroundColor: "#eef4ff",
+    borderWidth: 1,
+    borderColor: "#cddcff",
+  },
+  spotlightHeaderTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  spotlightHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1d324e",
+  },
+  spotlightHeaderSubtitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#4a5f78",
+    textAlign: "right",
+    marginLeft: 10,
   },
   videoAdTitle: {
     fontSize: 20,
     fontWeight: "800",
     color: "#311b92",
   },
-  videoAdSubtitle: {
-    marginTop: 2,
+  styleLabAdHeadingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 0,
+    backgroundColor: "#faf7ff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#dfd5f0",
+  },
+  styleLabAdHeadingIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(239, 123, 26, 0.35)",
+  },
+  styleLabAdHeadingTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  styleLabAdHeadingTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  styleLabAdHeadingTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+  },
+  styleLabAdHeadingTitleLead: {
+    color: "#1d324e",
+  },
+  styleLabAdHeadingTitleAccent: {
+    color: "#ef7b1a",
+  },
+  styleLabAdHeadingAdMark: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "rgba(49, 27, 146, 0.08)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(49, 27, 146, 0.22)",
+  },
+  styleLabAdHeadingAdMarkText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#311b92",
+    letterSpacing: 0.6,
+  },
+  styleLabAdHeadingSub: {
+    marginTop: 4,
     fontSize: 12,
     fontWeight: "600",
-    color: "#4a148c",
+    color: "#5c4a78",
+    letterSpacing: 0.1,
   },
   videoAdCard: {
-    height: 220,
+    width: "100%",
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 0,
     backgroundColor: "#504f56",
+  },
+  videoAdCardFixedHeight: {
+    height: 220,
   },
   videoAdCardSpotlight: {
     borderRadius: 0,
@@ -2800,28 +4331,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
+    paddingVertical: 10,
     marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: "#f5f8ff",
+    borderWidth: 1,
+    borderColor: "#d7e2fb",
   },
   womenTitleWrap: {
     flex: 1,
     marginRight: 8,
   },
-  womenTitle: {
+  womenTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  womenTitleWord: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#311b92",
+    color: "#1d324e",
+  },
+  womenTitleUnderline: {
+    marginTop: 4,
+    marginBottom: 2,
+    marginLeft: 28,
+    width: 156,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
   },
   womenSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: "#4a148c",
+    color: "#4f657b",
     fontWeight: "600",
   },
   womenViewAll: {
-    backgroundColor: "#ef7b1a",
-    borderRadius: 14,
+    backgroundColor: "#1d324e",
+    borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#f6c795",
   },
   womenViewAllText: {
     color: "#fff",
@@ -2902,26 +4454,12 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  womenTag: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "#79411c",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  womenTagText: {
-    color: "#f6c795",
-    fontSize: 10,
-    fontWeight: "800",
-  },
   womenCardOverlay: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(29,50,78,0.78)",
+    backgroundColor: "rgba(29,50,78,0.48)",
     paddingHorizontal: 9,
     paddingVertical: 8,
   },
@@ -2935,6 +4473,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "600",
+  },
+  womenCardSubtitleRight: {
+    alignSelf: "flex-end",
+    textAlign: "right",
   },
   womenRelatedSection: {
     marginHorizontal: 0,
@@ -2950,16 +4492,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#1d324e",
+    flexShrink: 1,
+  },
+  womenRelatedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  womenRelatedTitleUnderline: {
+    marginTop: 6,
     marginBottom: 10,
+    marginLeft: 58,
+    width: 170,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
   },
   womenRelatedChips: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "flex-start",
+    paddingRight: 8,
   },
   womenRelatedChip: {
-    width: "25%",
+    width: 88,
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 0,
+    marginRight: 8,
     paddingHorizontal: 4,
   },
   womenRelatedImageWrap: {
@@ -3018,7 +4576,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 6,
     paddingRight: 8,
   },
   kidsRelatedIconBadge: {
@@ -3038,6 +4596,14 @@ const styles = StyleSheet.create({
     color: "#1d324e",
     lineHeight: 18,
     fontStyle: "italic",
+  },
+  kidsRelatedTitleUnderline: {
+    marginLeft: 48,
+    marginBottom: 12,
+    width: 160,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
   },
   kidsRelatedScroll: {
     flexDirection: "row",
@@ -3213,9 +4779,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   accessoriesReplicaSection: {
-    marginHorizontal: 8,
+    marginHorizontal: 0,
     marginBottom: 10,
-    paddingHorizontal: 1,
+    paddingHorizontal: 0,
   },
   accessoriesReplicaHero: {
     borderWidth: 1,
@@ -3299,6 +4865,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  accessoriesReplicaHeroPieceImage: {
+    width: "100%",
+    height: "100%",
+  },
   accessoriesReplicaHeroPieceTopLeft: {
     width: 88,
     height: 56,
@@ -3334,13 +4904,19 @@ const styles = StyleSheet.create({
     top: 72,
     zIndex: 2,
   },
+  accessoriesReplicaHeroCenterBagImage: {
+    width: "100%",
+    height: "100%",
+  },
+  accessoriesReplicaHeroCtaWrap: {
+    zIndex: 6,
+    marginBottom: 4,
+  },
   accessoriesReplicaHeroCta: {
     fontSize: 20,
     fontWeight: "600",
     color: "#111111",
     textDecorationLine: "underline",
-    marginBottom: 4,
-    zIndex: 5,
   },
   accessoriesReplicaDealsRow: {
     marginTop: 6,
@@ -3350,6 +4926,9 @@ const styles = StyleSheet.create({
   },
   accessoriesReplicaDealCard: {
     width: 122,
+  },
+  accessoriesReplicaDealCardActive: {
+    transform: [{ scale: 1.02 }],
   },
   accessoriesReplicaDealImageWrap: {
     borderRadius: 8,
@@ -3406,9 +4985,67 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
 
   },
+  accessoriesReplicaRelatedSection: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d6c1b7",
+    backgroundColor: "#fffdfb",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  accessoriesReplicaRelatedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  accessoriesReplicaRelatedTitle: {
+    color: "#1d324e",
+    fontSize: 13,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+  accessoriesReplicaRelatedTitleUnderline: {
+    width: 176,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
+    marginBottom: 10,
+    marginLeft: 18,
+  },
+  accessoriesReplicaRelatedChips: {
+    flexDirection: "row",
+    gap: 10,
+    paddingRight: 6,
+  },
+  accessoriesReplicaRelatedChip: {
+    width: 86,
+    alignItems: "center",
+  },
+  accessoriesReplicaRelatedImageWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#d6c1b7",
+    backgroundColor: "#f5efea",
+    marginBottom: 6,
+  },
+  accessoriesReplicaRelatedImage: {
+    width: "100%",
+    height: "100%",
+  },
+  accessoriesReplicaRelatedChipText: {
+    color: "#4a3a33",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   kidsAccessoryBoardSection: {
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 6,
     paddingTop: 3,
     paddingBottom: 5,
     paddingHorizontal: 3,
@@ -3446,10 +5083,14 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,
   },
-  kidsAccessoryBoardRow: {
+  kidsAccessoryBoardRowScroll: {
+    flexGrow: 0,
+  },
+  kidsAccessoryBoardRowScrollContent: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
     paddingHorizontal: 3,
+    paddingRight: 12,
     gap: 3,
   },
   kidsAccessoryBoardRowDivider: {
@@ -3459,7 +5100,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   kidsAccessoryBoardCard: {
-    width: "24.25%",
     backgroundColor: "#ffffff",
     borderRadius: 0,
     overflow: "hidden",
@@ -3488,25 +5128,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#1d324e",
     borderTopWidth: 1,
     borderTopColor: "#ef7b1a",
-    paddingTop: 2,
-    paddingBottom: 3,
-    paddingHorizontal: 3,
-    minHeight: 34,
+    paddingTop: 4,
+    paddingBottom: 4,
+    paddingHorizontal: 2,
+    minHeight: 44,
     justifyContent: "space-between",
   },
   kidsAccessoryBoardCardTitle: {
     color: "#f6c795",
-    fontSize: 7,
+    fontSize: 10,
     fontWeight: "800",
     textAlign: "center",
-    lineHeight: 8,
+    lineHeight: 12,
   },
   kidsAccessoryBoardCardOffer: {
     color: "#ef7b1a",
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "900",
     textAlign: "center",
-    lineHeight: 8,
+    lineHeight: 11,
+    marginTop: 1,
   },
   womanYouAreSection: {
     marginHorizontal: 0,
@@ -3607,6 +5248,13 @@ const styles = StyleSheet.create({
     letterSpacing: 5,
     lineHeight: 36,
     marginTop: -2,
+  },
+  womanYouAreMainJewellery: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#ef7b1a",
+    letterSpacing: 1.5,
+    lineHeight: 34,
   },
   womanYouAreQuote: {
     fontSize: 13,
@@ -3901,28 +5549,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
+    paddingVertical: 10,
     marginBottom: 10,
+    borderRadius: 14,
+    backgroundColor: "#f5f8ff",
+    borderWidth: 1,
+    borderColor: "#d7e2fb",
   },
   menTitleWrap: {
     flex: 1,
     marginRight: 8,
+  },
+  menTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   menTitle: {
     fontSize: 20,
     fontWeight: "800",
     color: "#1d324e",
   },
+  menTitleUnderline: {
+    marginTop: 4,
+    marginBottom: 2,
+    marginLeft: 18,
+    width: 138,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
+  },
   menSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: "#5f6f8c",
+    color: "#4f657b",
     fontWeight: "600",
   },
   menViewAll: {
     backgroundColor: "#1d324e",
-    borderRadius: 14,
+    borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#f6c795",
   },
   menViewAllText: {
     color: "#fff",
@@ -3945,20 +5614,6 @@ const styles = StyleSheet.create({
   menCardImage: {
     width: "100%",
     height: "100%",
-  },
-  menTag: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "#0f766e",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  menTagText: {
-    color: "#d1fae5",
-    fontSize: 10,
-    fontWeight: "800",
   },
   menCardOverlay: {
     position: "absolute",
@@ -3994,7 +5649,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#1d324e",
+    flexShrink: 1,
+  },
+  menRelatedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  menRelatedTitleUnderline: {
+    marginTop: 6,
     marginBottom: 10,
+    marginLeft: 18,
+    width: 170,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
   },
   menRelatedChips: {
     flexDirection: "row",
@@ -4025,6 +5694,319 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#0f766e",
     textAlign: "center",
+  },
+  gadgetsAccessoriesSection: {
+    marginHorizontal: 0,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 14,
+    backgroundColor: "#FFF5F5",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(240,128,128,0.35)",
+    position: "relative",
+    overflow: "hidden",
+  },
+  gadgetsWarmBgDecor: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  gadgetsWarmBlob: {
+    position: "absolute",
+    borderRadius: 999,
+    opacity: 0.42,
+  },
+  gadgetsWarmBlobA: {
+    width: 200,
+    height: 200,
+    backgroundColor: "#FFB4A8",
+    top: -50,
+    right: -40,
+  },
+  gadgetsWarmBlobB: {
+    width: 260,
+    height: 260,
+    backgroundColor: "#FCA5A5",
+    bottom: 40,
+    left: -80,
+  },
+  gadgetsWarmBlobC: {
+    width: 160,
+    height: 160,
+    backgroundColor: "#FECACA",
+    top: 100,
+    left: 10,
+  },
+  gadgetsWarmBlobD: {
+    width: 120,
+    height: 120,
+    backgroundColor: "#FDA4AF",
+    top: 200,
+    right: 30,
+  },
+  gadgetsAccessoriesContent: {
+    position: "relative",
+    zIndex: 1,
+  },
+  gadgetsAccessoriesHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    gap: 10,
+  },
+  gadgetsAccessoriesHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flex: 1,
+    gap: 12,
+  },
+  gadgetsAccessoriesIconTile: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,228,230,0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(240,128,128,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gadgetsAccessoriesHeaderTitles: {
+    flex: 1,
+    minWidth: 0,
+  },
+  gadgetsAccessoriesKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    color: "#9A3412",
+    marginBottom: 4,
+  },
+  gadgetsAccessoriesHeading: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#C2410C",
+    letterSpacing: -0.3,
+  },
+  gadgetsAccessoriesTagline: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#57534E",
+    lineHeight: 16,
+  },
+  gadgetsAccessoriesHeaderBadge: {
+    backgroundColor: "rgba(254,215,170,0.85)",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(234,88,12,0.35)",
+  },
+  gadgetsAccessoriesHeaderBadgeText: {
+    color: "#C2410C",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  gadgetsQuickLinksContent: {
+    paddingBottom: 12,
+    gap: 8,
+    alignItems: "center",
+  },
+  gadgetsQuickLinkChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(240,128,128,0.55)",
+  },
+  gadgetsQuickLinkChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#C2410C",
+  },
+  gadgetsQuickLinkChipActive: {
+    backgroundColor: "#FECACA",
+    borderColor: "#F08080",
+  },
+  gadgetsQuickLinkChipTextActive: {
+    color: "#7F1D1D",
+  },
+  gadgetsSubcategoriesShell: {
+    marginTop: 10,
+    marginBottom: 10,
+    marginHorizontal: -4,
+    borderRadius: 22,
+    overflow: "hidden",
+    shadowColor: "#F97316",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  gadgetsSubcategoriesBorderGlow: {
+    borderRadius: 22,
+    padding: 2,
+  },
+  gadgetsSubcategoriesGradientFill: {
+    borderRadius: 20,
+    overflow: "hidden",
+    position: "relative",
+  },
+  gadgetsSubcategoriesNoise: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.35)",
+    opacity: 0.45,
+  },
+  gadgetsSubcategoriesAccentBar: {
+    position: "absolute",
+    left: 0,
+    top: 24,
+    bottom: 24,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: "rgba(248,113,113,0.75)",
+  },
+  gadgetsSubcategoriesInner: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  gadgetsSubcategoriesTitleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingRight: 4,
+  },
+  gadgetsSubcategoriesIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(240,128,128,0.5)",
+  },
+  gadgetsSubcategoriesTitleTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  gadgetsSubcategoriesEyebrow: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.6,
+    color: "#EA580C",
+    marginBottom: 4,
+  },
+  gadgetsSubcategoriesTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1f2937",
+    lineHeight: 18,
+    letterSpacing: -0.2,
+  },
+  gadgetsSubcategoriesDivider: {
+    marginTop: 12,
+    marginBottom: 12,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(240,128,128,0.4)",
+  },
+  gadgetsSubcategoriesScroll: {
+    paddingBottom: 6,
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  gadgetsSubcategoryCard: {
+    width: 108,
+    marginRight: 4,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  gadgetsSubcategoryCardGlass: {
+    borderRadius: 16,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#F08080",
+    alignItems: "center",
+  },
+  gadgetsSubcategoryImageWrap: {
+    width: "100%",
+    height: 76,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#FFF5F5",
+  },
+  gadgetsSubcategoryImage: {
+    width: "100%",
+    height: "100%",
+  },
+  gadgetsSubcategoryImageShade: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gadgetsSubcategoryLabel: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#111827",
+    textAlign: "center",
+    lineHeight: 13,
+    letterSpacing: 0.2,
+  },
+  gadgetsHighlightStripTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    color: "#C2410C",
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  gadgetsHighlightScrollContent: {
+    paddingBottom: 4,
+    gap: 10,
+    alignItems: "stretch",
+  },
+  gadgetsHighlightTile: {
+    position: "relative",
+    width: 132,
+    height: 168,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginRight: 10,
+    backgroundColor: "#FFE4E6",
+    borderWidth: 1,
+    borderColor: "rgba(240,128,128,0.55)",
+  },
+  /** Plain View + width/height 100% Image — absoluteFill on Image inside TouchableOpacity often renders blank on Android. */
+  gadgetsHighlightImageWrap: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#f3f4f6",
+  },
+  gadgetsHighlightImage: {
+    width: "100%",
+    height: "100%",
+  },
+  gadgetsHighlightGradient: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,182,177,0.28)",
+  },
+  gadgetsHighlightLabel: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#1f2937",
+    letterSpacing: 0.2,
   },
   splitShowcaseSection: {
     marginHorizontal: 0,
@@ -4073,7 +6055,7 @@ const styles = StyleSheet.create({
   },
   splitShowcaseRow: {
     flexDirection: "row",
-    height: 364,
+    height: 400,
   },
   splitLeftPane: {
     width: "42%",
@@ -4126,10 +6108,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 11,
     paddingBottom: 11,
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+  },
+  splitProductCopyBlock: {
+    flexGrow: 0,
+    flexShrink: 0,
   },
   splitProductImageStage: {
-    height: 132,
+    height: 168,
     borderRadius: 14,
     overflow: "hidden",
     position: "relative",
@@ -4188,19 +6174,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#1d324e",
+    backgroundColor: "#ecfdf3",
     borderWidth: 1,
-    borderColor: "#2d4a63",
+    borderColor: "#bbf7d0",
   },
   splitProductRatingPillValue: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#f7fbf9",
+    color: "#15803d",
   },
   splitProductRatingPillCount: {
     fontSize: 9,
     fontWeight: "600",
-    color: "#9eb5cc",
+    color: "#4ade80",
   },
   splitProductPriceBlock: {
     marginTop: 9,
@@ -4235,7 +6221,7 @@ const styles = StyleSheet.create({
     textDecorationLine: "line-through",
   },
   splitAddButton: {
-    marginTop: 10,
+    marginTop: "auto",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -4372,6 +6358,382 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  watchesEditorialSection: {
+    marginHorizontal: 0,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  watchesEditorialGradient: {
+    paddingTop: 16,
+    paddingBottom: 14,
+    paddingHorizontal: 14,
+    position: "relative",
+    overflow: "hidden",
+  },
+  watchesHeroGridPattern: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.14,
+  },
+  watchesHeroGridLineH: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "#8B4513",
+  },
+  watchesHeroGridLineV: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: "#8B4513",
+  },
+  watchesHeroTitle: {
+    textAlign: "center",
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#111827",
+    letterSpacing: 3,
+    marginBottom: 10,
+    zIndex: 1,
+  },
+  watchesHeroStage: {
+    height: 200,
+    marginBottom: 12,
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  watchesHeroCenter: {
+    width: 150,
+    height: 150,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  watchesHeroCenterImg: {
+    width: "100%",
+    height: "100%",
+  },
+  watchesHeroFloat: {
+    position: "absolute",
+    width: 64,
+    height: 64,
+    zIndex: 2,
+  },
+  watchesHeroFloatImg: {
+    width: "100%",
+    height: "100%",
+  },
+  watchesHeroFloatTL: {
+    top: 8,
+    left: 4,
+  },
+  watchesHeroFloatTR: {
+    top: 12,
+    right: 8,
+  },
+  watchesHeroFloatBL: {
+    bottom: 16,
+    left: 12,
+  },
+  watchesHeroFloatBR: {
+    bottom: 12,
+    right: 10,
+  },
+  watchesShopAllBtn: {
+    alignSelf: "center",
+    alignItems: "center",
+    paddingVertical: 4,
+    marginBottom: 4,
+    zIndex: 1,
+  },
+  watchesShopAllText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+    letterSpacing: 0.3,
+  },
+  watchesShopAllUnderline: {
+    marginTop: 2,
+    height: 2,
+    width: "100%",
+    minWidth: 72,
+    backgroundColor: "#111827",
+    borderRadius: 1,
+  },
+  watchesShowcaseRowScroll: {
+    flexGrow: 0,
+  },
+  watchesShowcaseGestureRoot: {
+    width: "100%",
+    flexGrow: 0,
+  },
+  watchesShowcaseRow: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 16,
+    gap: 10,
+    backgroundColor: "#FADADD",
+    alignItems: "flex-start",
+  },
+  watchesShowcaseCardOuter: {
+    width: 132,
+    marginRight: 10,
+  },
+  watchesShowcaseCardBorder: {
+    borderRadius: 16,
+    padding: 2,
+  },
+  watchesShowcaseCardFace: {
+    borderRadius: 14,
+    overflow: "hidden",
+    minHeight: 182,
+  },
+  watchesShowcaseCardImageWrap: {
+    flexGrow: 1,
+    minHeight: 108,
+    paddingHorizontal: 8,
+    paddingTop: 10,
+    paddingBottom: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  watchesShowcaseCardProductImg: {
+    width: "100%",
+    height: 96,
+  },
+  watchesShowcaseCardTextWrap: {
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 12,
+    justifyContent: "flex-end",
+  },
+  watchesShowcaseCardLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    textAlign: "center",
+    lineHeight: 14,
+    letterSpacing: 0.2,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  watchesShowcaseCardBrands: {
+    marginTop: 4,
+    fontSize: 8,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    letterSpacing: 0.6,
+    textShadowColor: "rgba(0,0,0,0.4)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  watchesShowcaseCardOffer: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#000000",
+    textAlign: "center",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  watchesShowcaseCardOuterSelected: {
+    shadowColor: "#C2410C",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  watchesCardSubcategoriesWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    backgroundColor: "#FADADD",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(194,65,12,0.15)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(194,65,12,0.12)",
+    flexShrink: 0,
+    zIndex: 2,
+  },
+  /** Nested horizontal ScrollView needs bounded height inside vertical ScrollView (Android). */
+  watchesCardSubcategoriesHorizontalScroll: {
+    minHeight: 118,
+    flexGrow: 0,
+  },
+  watchesCardSubcategoriesHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+    paddingRight: 8,
+  },
+  watchesCardSubcategoriesTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#431407",
+    lineHeight: 18,
+  },
+  watchesCardSubcategoriesScroll: {
+    gap: 10,
+    alignItems: "flex-start",
+    paddingBottom: 4,
+    minHeight: 110,
+  },
+  watchesCardSubcategoryChip: {
+    width: 92,
+    marginRight: 10,
+    alignItems: "center",
+  },
+  watchesCardSubcategoryThumb: {
+    width: "100%",
+    height: 72,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#FFF5F5",
+    borderWidth: 1,
+    borderColor: "rgba(194,65,12,0.35)",
+  },
+  watchesCardSubcategoryThumbImg: {
+    width: "100%",
+    height: "100%",
+  },
+  watchesCardSubcategoryLabel: {
+    marginTop: 6,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#1f2937",
+    textAlign: "center",
+    lineHeight: 13,
+  },
+  finalUniqueSection: {
+    marginHorizontal: 0,
+    marginBottom: 8,
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#d7e0e8",
+    shadowColor: "#1d324e",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  finalUniqueHeader: {
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  finalUniqueTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  finalUniqueTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  finalUniqueTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  finalUniqueTitleLead: {
+    color: "#1d324e",
+  },
+  finalUniqueTitleAccent: {
+    color: "#ef7b1a",
+  },
+  finalUniqueTitleUnderline: {
+    marginTop: 6,
+    marginLeft: 50,
+    width: 52,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#ef7b1a",
+  },
+  finalUniqueSubtitle: {
+    marginTop: 8,
+    color: "#4a5f78",
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.15,
+    lineHeight: 16,
+  },
+  finalUniqueViewAll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fff9f2",
+    borderWidth: 1,
+    borderColor: "#e8c4a8",
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    marginTop: 2,
+  },
+  finalUniqueViewAllText: {
+    color: "#9a3412",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  finalUniqueRow: {
+    paddingLeft: 12,
+    paddingRight: 4,
+  },
+  finalUniqueCard: {
+    width: 156,
+    marginRight: 8,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#d9d9de",
+    backgroundColor: "#fff9f2",
+  },
+  finalUniqueCardImage: {
+    width: "100%",
+    height: 112,
+    backgroundColor: "#f1f1f5",
+  },
+  finalUniqueTagPill: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(29,50,78,0.92)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  finalUniqueTagText: {
+    color: "#f6c795",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  finalUniqueCardContent: {
+    paddingHorizontal: 9,
+    paddingTop: 8,
+    paddingBottom: 10,
+  },
+  finalUniqueCardTitle: {
+    color: "#1d324e",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  finalUniqueCardSubtitle: {
+    marginTop: 3,
+    color: "#69798c",
+    fontSize: 11,
+    fontWeight: "600",
   },
   bottomTab: {
     position: "absolute",
