@@ -8,6 +8,7 @@ import {
   Animated,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import NotificationPermission from "./notification";
 import LocationPermission from "./loc";
 
@@ -73,12 +74,36 @@ export default function LanguageScreen() {
     router.replace("/gender");
   };
 
+  const handleBack = () => {
+    if (showLocation) {
+      setShowLocation(false);
+      setShowNotification(true);
+      return;
+    }
+    if (showNotification) {
+      setShowNotification(false);
+      return;
+    }
+    router.replace("/promote");
+  };
+
   return (
     <View style={styles.container}>
-      {/* Title */}
-      <Text style={styles.title}>Select Language</Text>
+      <TouchableOpacity
+        onPress={handleBack}
+        style={styles.backBtnTop}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Ionicons name="arrow-back" size={24} color="#000" />
+      </TouchableOpacity>
 
-      {/* Grid */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Select Language</Text>
+        <Text style={styles.titleAlt}>Choose your preferred language</Text>
+      </View>
+
       <View style={styles.grid}>
         {languages.map((item, index) => (
           <TouchableOpacity
@@ -92,7 +117,9 @@ export default function LanguageScreen() {
                 { transform: [{ scale: scales[index] }] },
               ]}
             >
-              <Image source={item.image} style={styles.image} />
+              <View style={styles.imageFrame}>
+                <Image source={item.image} style={styles.image} />
+              </View>
               <Text style={styles.text}>{item.name}</Text>
             </Animated.View>
           </TouchableOpacity>
@@ -121,27 +148,54 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f2f2f2",
+    paddingTop: 52,
   },
 
-  // Title (Exact Position)
-  title: {
+  backBtnTop: {
     position: "absolute",
-    left: 48,      // x-48
-    top: 79,       // y-79
-    width: 246,
-    height: 45,
-    fontSize: 32,
-    fontWeight: "600",
-    lineHeight: 32 * 1.4, // 140%
-    color: "#000",
+    left: 10,
+    top: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+    borderWidth: 1.5,
+    borderColor: "#FFA500",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 4,
   },
 
-  // Grid Layout
+  header: {
+    paddingTop: 66,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111",
+    letterSpacing: 0.3,
+  },
+  titleAlt: {
+    marginTop: 6,
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#666",
+    letterSpacing: 0.2,
+  },
+
   grid: {
-    marginTop: 160,
+    marginTop: 4,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-evenly",
+    paddingHorizontal: 6,
   },
 
   // Card Style
@@ -154,7 +208,7 @@ const styles = StyleSheet.create({
     borderColor: "#FFA500",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 25,
+    marginBottom: 18,
 
     // Shadow (iOS)
     shadowColor: "#000",
@@ -166,11 +220,18 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
-  image: {
-    width: 50,
-    height: 50,
-    resizeMode: "contain",
+  imageFrame: {
+    width: 52,
+    height: 52,
     marginBottom: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  image: {
+    width: 52,
+    height: 52,
+    resizeMode: "contain",
   },
 
   text: {

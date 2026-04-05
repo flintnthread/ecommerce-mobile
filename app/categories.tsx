@@ -688,7 +688,6 @@ const styles = StyleSheet.create({
   sideImageActive: {
     borderWidth: 2,
     borderColor: "#ef7b1a",
-
   },
   sideLabel: {
     fontSize: 11,
