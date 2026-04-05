@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -10,9 +10,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 type CategoryKey =
-  | "trending"
   | "womenswear"
   | "menswear"
   | "kidswear"
@@ -20,8 +20,10 @@ type CategoryKey =
   | "sportswear"
   | "footwear"
   | "accessories"
-  | "fitnessPro"
-  | "sweets";
+  | "sweets"
+  | "beautyPersonalCare"
+  | "gaargi"
+  | "indoorPlayEquipments";
 
 type SideCategory = {
   key: CategoryKey;
@@ -31,54 +33,59 @@ type SideCategory = {
 
 const SIDE_CATEGORIES: SideCategory[] = [
   {
-    key: "trending",
-    label: "New Season",
-    image: require("../assets/images/womencate.png"),
-  },
-  {
     key: "womenswear",
     label: "Women",
-    image: require("../assets/images/womencate.png"),
+    image: require("../assets/MainCatImages/images/Women.png"),
   },
   {
     key: "menswear",
     label: "Men",
-    image: require("../assets/images/menscate.png"),
+    image: require("../assets/MainCatImages/images/Men.png"),
   },
   {
     key: "kidswear",
     label: "Kids",
-    image: require("../assets/images/kidscate.png"),
+    image: require("../assets/MainCatImages/images/Kids.png"),
   },
   {
     key: "homelyHub",
     label: "Homely Hub",
-    image: require("../assets/images/homecate.png"),
+    image: require("../assets/MainCatImages/images/HomelyHub.png"),
   },
   {
     key: "sportswear",
     label: "Sportswear",
-    image: require("../assets/images/sportscate.png"),
+    image: require("../assets/MainCatImages/images/Sportswear.png"),
   },
   {
     key: "footwear",
     label: "Footwear",
-    image: require("../assets/images/footwearcate.png"),
+    image: require("../assets/MainCatImages/images/Footwear.png"),
   },
   {
     key: "accessories",
     label: "Accessories",
-    image: require("../assets/images/accessariescate.png"),
-  },
-  {
-    key: "fitnessPro",
-    label: "Fitness Pro",
-    image: require("../assets/images/sportscate.png"),
+    image: require("../assets/MainCatImages/images/Accessories.png"),
   },
   {
     key: "sweets",
     label: "Sweets",
-    image: require("../assets/images/sweetscate.png"),
+    image: require("../assets/MainCatImages/images/Sweets.png"),
+  },
+  {
+    key: "beautyPersonalCare",
+    label: "Beauty & Personal Care",
+    image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+  },
+  {
+    key: "gaargi",
+    label: "Gaargi",
+    image: require("../assets/MainCatImages/images/Gaargi.png"),
+  },
+  {
+    key: "indoorPlayEquipments",
+    label: "Indoor play Equipments",
+    image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
   },
 ];
 
@@ -94,43 +101,6 @@ type Section = {
 };
 
 const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
-  trending: [
-    {
-      title: "popular items",
-      items: [
-        {
-          id: "t1",
-          name: "Trending styles",
-          image: require("../assets/images/womencate.png"),
-        },
-        {
-          id: "t2",
-          name: "Best sellers",
-          image: require("../assets/images/menscate.png"),
-        },
-        {
-          id: "t3",
-          name: "New arrivals",
-          image: require("../assets/images/kidscate.png"),
-        },
-        {
-          id: "t4",
-          name: "Season picks",
-          image: require("../assets/images/sportscate.png"),
-        },
-        {
-          id: "t5",
-          name: "Daily essentials",
-          image: require("../assets/images/homecate.png"),
-        },
-        {
-          id: "t6",
-          name: "Limited offers",
-          image: require("../assets/images/sweetscate.png"),
-        },
-      ],
-    },
-  ],
   womenswear: [
     {
       title: "Ethnic wear",
@@ -138,22 +108,22 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "w1",
           name: "Sarees",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w2",
           name: "Kurtas & Kurtis",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w3",
           name: "Lehengas",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w13",
           name: "Gowns",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
       ],
     },
@@ -163,17 +133,17 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "w4",
           name: "Bras",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w5",
           name: "Briefs",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w6",
           name: "Nightwear",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
       ],
     },
@@ -183,17 +153,17 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "w7",
           name: "Tops & Tees",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w8",
           name: "Dresses",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w9",
           name: "Jeans",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
       ],
     },
@@ -203,17 +173,17 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "w10",
           name: "Sweaters",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w11",
           name: "Jackets",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
         {
           id: "w12",
           name: "Co-ords",
-          image: require("../assets/images/womencate.png"),
+          image: require("../assets/MainCatImages/images/Women.png"),
         },
       ],
     },
@@ -225,17 +195,17 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "m1",
           name: "Casual shirts",
-          image: require("../assets/images/menscate.png"),
+          image: require("../assets/MainCatImages/images/Men.png"),
         },
         {
           id: "m2",
           name: "T-shirts",
-          image: require("../assets/images/menscate.png"),
+          image: require("../assets/MainCatImages/images/Men.png"),
         },
         {
           id: "m3",
           name: "Jeans & Trousers",
-          image: require("../assets/images/menscate.png"),
+          image: require("../assets/MainCatImages/images/Men.png"),
         },
       ],
     },
@@ -247,17 +217,17 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "k1",
           name: "Boys clothing",
-          image: require("../assets/images/kidscate.png"),
+          image: require("../assets/MainCatImages/images/Kids.png"),
         },
         {
           id: "k2",
           name: "Girls clothing",
-          image: require("../assets/images/kidscate.png"),
+          image: require("../assets/MainCatImages/images/Kids.png"),
         },
         {
           id: "k3",
           name: "Infant wear",
-          image: require("../assets/images/kidscate.png"),
+          image: require("../assets/MainCatImages/images/Kids.png"),
         },
       ],
     },
@@ -269,17 +239,37 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "h1",
           name: "Gift Hampers",
-          image: require("../assets/images/homecate.png"),
+          image: require("../assets/MainCatImages/images/HomelyHub.png"),
         },
         {
           id: "h2",
           name: "Personalized Gifts",
-          image: require("../assets/images/homecate.png"),
+          image: require("../assets/MainCatImages/images/HomelyHub.png"),
         },
         {
           id: "h3",
           name: "Festival Gifts",
-          image: require("../assets/images/sweetscate.png"),
+          image: require("../assets/MainCatImages/images/HomelyHub.png"),
+        },
+        {
+          id: "h4",
+          name: "Home Decor Gifts",
+          image: require("../assets/MainCatImages/images/HomelyHub.png"),
+        },
+        {
+          id: "h5",
+          name: "Kids & Baby Gifts",
+          image: require("../assets/MainCatImages/images/HomelyHub.png"),
+        },
+        {
+          id: "h6",
+          name: "Spiritual & Festival Gifts",
+          image: require("../assets/MainCatImages/images/HomelyHub.png"),
+        },
+        {
+          id: "h7",
+          name: "Wearable & Personal Gifts",
+          image: require("../assets/MainCatImages/images/HomelyHub.png"),
         },
       ],
     },
@@ -291,17 +281,17 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "s1",
           name: "Activewear",
-          image: require("../assets/images/sportscate.png"),
+          image: require("../assets/MainCatImages/images/Sportswear.png"),
         },
         {
           id: "s2",
           name: "Tracksuits",
-          image: require("../assets/images/sportscate.png"),
+          image: require("../assets/MainCatImages/images/Sportswear.png"),
         },
         {
           id: "s3",
           name: "Jerseys",
-          image: require("../assets/images/sportscate.png"),
+          image: require("../assets/MainCatImages/images/Sportswear.png"),
         },
       ],
     },
@@ -313,44 +303,22 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "f1",
           name: "Sneakers",
-          image: require("../assets/images/footwearcate.png"),
+          image: require("../assets/MainCatImages/images/Footwear.png"),
         },
         {
           id: "f2",
           name: "Sandals",
-          image: require("../assets/images/footwearcate.png"),
+          image: require("../assets/MainCatImages/images/Footwear.png"),
         },
         {
           id: "f3",
           name: "Formals",
-          image: require("../assets/images/footwearcate.png"),
+          image: require("../assets/MainCatImages/images/Footwear.png"),
         },
       ],
     },
   ],
   accessories: [],
-  fitnessPro: [
-    {
-      title: "f&t pro",
-      items: [
-        {
-          id: "fp1",
-          name: "Gym wear",
-          image: require("../assets/images/sportscate.png"),
-        },
-        {
-          id: "fp2",
-          name: "Fitness gear",
-          image: require("../assets/images/sportscate.png"),
-        },
-        {
-          id: "fp3",
-          name: "Yoga essentials",
-          image: require("../assets/images/sportscate.png"),
-        },
-      ],
-    },
-  ],
   sweets: [
     {
       title: "sweets",
@@ -358,17 +326,83 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
         {
           id: "sw1",
           name: "Traditional sweets",
-          image: require("../assets/images/sweetscate.png"),
+          image: require("../assets/MainCatImages/images/Sweets.png"),
         },
         {
           id: "sw2",
           name: "Chocolates",
-          image: require("../assets/images/sweetscate.png"),
+          image: require("../assets/MainCatImages/images/Sweets.png"),
         },
         {
           id: "sw3",
           name: "Dry fruits",
-          image: require("../assets/images/sweetscate.png"),
+          image: require("../assets/MainCatImages/images/Sweets.png"),
+        },
+      ],
+    },
+  ],
+  beautyPersonalCare: [
+    {
+      title: "Beauty & care",
+      items: [
+        {
+          id: "bc1",
+          name: "Skincare",
+          image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+        },
+        {
+          id: "bc2",
+          name: "Hair care",
+          image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+        },
+        {
+          id: "bc3",
+          name: "Bath & body",
+          image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+        },
+      ],
+    },
+  ],
+  gaargi: [
+    {
+      title: "Gaargi",
+      items: [
+        {
+          id: "g1",
+          name: "Featured picks",
+          image: require("../assets/MainCatImages/images/Gaargi.png"),
+        },
+        {
+          id: "g2",
+          name: "New arrivals",
+          image: require("../assets/MainCatImages/images/Gaargi.png"),
+        },
+        {
+          id: "g3",
+          name: "Bestsellers",
+          image: require("../assets/MainCatImages/images/Gaargi.png"),
+        },
+      ],
+    },
+  ],
+  indoorPlayEquipments: [
+    {
+      title: "Indoor play",
+      items: [
+        {
+          id: "ip1",
+          name: "Play mats & gyms",
+          image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
+        },
+        {
+          id: "ip2",
+          name: "Slides & climbers",
+          image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
+        },
+        {
+          id: "ip3",
+          name: "Indoor games",
+          image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
         },
       ],
     },
@@ -377,7 +411,7 @@ const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
 
 export default function Categories() {
   const router = useRouter();
-  const [activeCategory, setActiveCategory] = useState<CategoryKey>("trending");
+  const [activeCategory, setActiveCategory] = useState<CategoryKey>("womenswear");
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSideBarOpen, setIsSideBarOpen] = useState(false);
@@ -437,8 +471,14 @@ export default function Categories() {
           onPress={handleCategoriesHeaderBack}
           style={styles.backButton}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={22} color="#1d324e" />
+          <Image
+            source={require("../assets/MainCatImages/images/fntfav.png")}
+            style={styles.headerFavicon}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
         {isSearchVisible ? (
           <View style={styles.headerSearchWrapper}>
@@ -469,7 +509,19 @@ export default function Categories() {
             color="red"
             style={styles.headerIcon}
           />
-          <Ionicons name="cart-outline" size={20} color="#1d324e" />
+          <TouchableOpacity
+            onPress={() => router.push("/notifications")}
+            style={styles.headerIcon}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={24}
+              color="#000"
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -495,7 +547,7 @@ export default function Categories() {
                 >
                   <Image
                     source={cat.image}
-                    style={[styles.sideImage, isActive && styles.sideImageActive]}
+                    style={styles.sideImage}
                     resizeMode="cover"
                   />
                   <Text
@@ -512,7 +564,7 @@ export default function Categories() {
         {/* RIGHT SIDE SECTIONS & SUBCATEGORIES */}
         <ScrollView
           style={styles.sectionContainer}
-          contentContainerStyle={{ paddingBottom: 90 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.sectionBlock}>
@@ -567,43 +619,15 @@ export default function Categories() {
         </ScrollView>
       </View>
 
-      {/* BOTTOM TAB */}
-      <View style={styles.bottomTab}>
-        <TabItem icon="home-outline" label="Home" onPress={() => router.push("/home")} />
-        <TabItem icon="grid" label="Categories" onPress={() => router.push("/categories")} />
-        <TabItem
-          icon="clipboard-outline"
-          label="Orders"
-          onPress={() => router.push("/orders")}
-        />
-        <TabItem
-          icon="person-outline"
-          label="Account"
-          onPress={() => router.push("/account")}
-        />
-        <TabItem icon="cart-outline" label="Cart" onPress={() => router.push("/cart")} />
-      </View>
+      <HomeBottomTabBar />
     </View>
   );
 }
 
-type TabItemProps = {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  label: string;
-  onPress: () => void;
-};
-
-const TabItem = ({ icon, label, onPress }: TabItemProps) => (
-  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
-    <Ionicons name={icon} size={22} color="#000" />
-    <Text style={styles.tabLabel}>{label}</Text>
-  </TouchableOpacity>
-);
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFF7F0",
+    backgroundColor: "#ffffff",
   },
   header: {
     flexDirection: "row",
@@ -611,13 +635,17 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingHorizontal: 16,
     paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#f6c795",
-    backgroundColor: "#f6c795",
+    backgroundColor: "#ffffff",
   },
   backButton: {
     paddingRight: 8,
     paddingVertical: 4,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerFavicon: {
+    width: 36,
+    height: 36,
   },
   headerTitle: {
     fontSize: 18,
@@ -647,7 +675,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
-    backgroundColor: "#FFEBD3",
+    backgroundColor: "#ffffff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e5e5e5",
   },
   searchIcon: {
     marginRight: 6,
@@ -661,9 +691,7 @@ const styles = StyleSheet.create({
   sideBar: {
     flexShrink: 0,
     width: 0.1,
-    backgroundColor: "#FFF0E0",
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: "#f6c795",
+    backgroundColor: "#ffffff",
   },
   sideBarContent: {
     paddingVertical: 16,
@@ -683,11 +711,7 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 8,
     marginBottom: 3,
-    backgroundColor: "#D8D8E2",
-  },
-  sideImageActive: {
-    borderWidth: 2,
-    borderColor: "#ef7b1a",
+    backgroundColor: "transparent",
   },
   sideLabel: {
     fontSize: 11,
@@ -714,11 +738,11 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#F6F6F9",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E0E0E0",
+    borderColor: "#e5e5e5",
   },
   sectionBlock: {
     marginBottom: 24,
@@ -739,7 +763,7 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     width: "48%",
-    backgroundColor: "#F1F1F6",
+    backgroundColor: "transparent",
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 10,
@@ -751,7 +775,7 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: "#E9E9F2",
+    backgroundColor: "transparent",
   },
   itemImage: {
     width: "100%",
@@ -764,25 +788,4 @@ const styles = StyleSheet.create({
     color: "#1d324e",
     textAlign: "center",
   },
-  bottomTab: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: "#fff",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ccc",
-  },
-  tabItem: {
-    alignItems: "center",
-  },
-  tabLabel: {
-    fontSize: 11,
-    marginTop: 3,
-  },
-  
 });

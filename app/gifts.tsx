@@ -10,12 +10,15 @@ import { View,
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 type GiftCategory = {
   id: string;
   title: string;
   emoji: string;
   bg: string;
+  /** When set, shown inside the category circle instead of the emoji */
+  circleImage?: any;
 };
 
 type GiftItem = {
@@ -76,11 +79,69 @@ type CoupleSubCategory = {
 };
 
 const GIFT_CATEGORIES: GiftCategory[] = [
-  { id: "gc1", title: "Art & Creative Gifts", emoji: "🎨", bg: "#F8E7ED" },
-  { id: "gc2", title: "Corporate Gifts", emoji: "🏢", bg: "#E0E7FF" },
-  { id: "gc3", title: "Event-Based Gifts", emoji: "🎉", bg: "#FFE4E6" },
-  { id: "gc4", title: "Everyday Utility", emoji: "🏠", bg: "#EAF7E8" },
-  { id: "gc5", title: "Couple Gifts", emoji: "💞", bg: "#FCEBF1" },
+  {
+    id: "gc1",
+    title: "Art & Creative Gifts",
+    emoji: "🎨",
+    bg: "#F8E7ED",
+    circleImage: require("../assets/homelyhub/ArtCreativeGifts.png"),
+  },
+  {
+    id: "gc2",
+    title: "Corporate Gifts",
+    emoji: "🏢",
+    bg: "#E0E7FF",
+    circleImage: require("../assets/homelyhub/CorporatePromotionalGifts.png"),
+  },
+  {
+    id: "gc3",
+    title: "Event-Based Gifts",
+    emoji: "🎉",
+    bg: "#FFE4E6",
+    circleImage: require("../assets/homelyhub/EventBasedGifts.png"),
+  },
+  {
+    id: "gc4",
+    title: "Everyday Utility",
+    emoji: "🏠",
+    bg: "#EAF7E8",
+    circleImage: require("../assets/homelyhub/EverydayUtility.png"),
+  },
+  {
+    id: "gc5",
+    title: "Couple Gifts",
+    emoji: "💞",
+    bg: "#FCEBF1",
+    circleImage: require("../assets/homelyhub/GiftsforCouples.png"),
+  },
+  {
+    id: "gc6",
+    title: "Home Decor Gifts",
+    emoji: "🛋️",
+    bg: "#F0F4FF",
+    circleImage: require("../assets/homelyhub/HomeDecorGifits.png"),
+  },
+  {
+    id: "gc7",
+    title: "Kids & Baby Gifts",
+    emoji: "👶",
+    bg: "#FEF3C7",
+    circleImage: require("../assets/homelyhub/KidsBabyGifts.png"),
+  },
+  {
+    id: "gc8",
+    title: "Spiritual & Festival Gifts",
+    emoji: "🪔",
+    bg: "#FEE2E2",
+    circleImage: require("../assets/homelyhub/Spiritual&FestivalGifts.png"),
+  },
+  {
+    id: "gc9",
+    title: "Wearable & Personal Gifts",
+    emoji: "🎀",
+    bg: "#EDE9FE",
+    circleImage: require("../assets/homelyhub/Wearable&PersonalGifts.png"),
+  },
 ];
 
 type CategoryHeroBanner = {
@@ -96,29 +157,30 @@ type CategoryHeroBanner = {
 };
 
 const DEFAULT_GIFT_HERO: CategoryHeroBanner = {
-  image: require("../assets/images/homecate.png"),
+  image: require("../assets/homelyhub/HomelyHubBanner.png"),
   eyebrow: "GIFTING SEASON",
   title: "Make Moments Special",
   subtitle: "Curated gifts for every occasion",
   cta: "Shop Now",
-  gradient: ["rgba(17,24,39,0.15)", "rgba(17,24,39,0.72)"],
+  gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+  gradientStart: { x: 0.5, y: 0.15 },
+  gradientEnd: { x: 0.5, y: 1 },
 };
 
 /** Top banner content switches when user picks a category circle */
 const GIFT_CATEGORY_HERO: Record<string, CategoryHeroBanner> = {
   gc1: {
-    image: require("../assets/images/artBanner.png"),
+    image: require("../assets/homelyhub/ArtCreativeGifts.png"),
     eyebrow: "ART & CREATIVE",
     title: "Handmade & One‑of‑a‑Kind",
     subtitle: "Line art, prints & personalized creative gifts",
     cta: "Browse Art",
-    /* Light bottom scrim so bannerArt.png stays visible (was washed out by pink/purple tint) */
     gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
     gradientStart: { x: 0.5, y: 0.15 },
     gradientEnd: { x: 0.5, y: 1 },
   },
   gc2: {
-    image: require("../assets/images/CoporateGiftBaner.jpg"),
+    image: require("../assets/homelyhub/CorporatePromotionalGifts.png"),
     eyebrow: "CORPORATE & B2B",
     title: "Branded Gifts That Impress",
     subtitle: "Diaries, trophies & welcome kits for teams",
@@ -128,28 +190,74 @@ const GIFT_CATEGORY_HERO: Record<string, CategoryHeroBanner> = {
     gradientEnd: { x: 0.5, y: 1 },
   },
   gc3: {
-    image: require("../assets/images/eventBanner.webp"),
+    image: require("../assets/homelyhub/EventBasedGifts.png"),
     eyebrow: "EVENTS & CELEBRATIONS",
     title: "Gifts for Every Occasion",
     subtitle: "Birthdays, weddings, anniversaries & hampers",
     cta: "Shop Occasions",
-    gradient: ["rgba(245,158,11,0.30)", "rgba(67,20,7,0.80)"],
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
   },
   gc4: {
-    image: require("../assets/images/EverydayU.jpg"),
+    image: require("../assets/homelyhub/EverydayUtility.png"),
     eyebrow: "EVERYDAY UTILITY",
     title: "Useful & Personalized",
     subtitle: "Mugs, cushions, name plates & home essentials",
     cta: "View Utilities",
-    gradient: ["rgba(34,197,94,0.26)", "rgba(15,23,42,0.80)"],
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
   },
   gc5: {
-    image: require("../assets/images/couple.jpg"),
+    image: require("../assets/homelyhub/GiftsforCouples.png"),
     eyebrow: "COUPLE GIFTS",
     title: "Made for Two",
     subtitle: "Romantic boxes, keepsakes & surprise ideas",
     cta: "For Couples",
-    gradient: ["rgba(244,114,182,0.28)", "rgba(49,13,37,0.82)"],
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
+  },
+  gc6: {
+    image: require("../assets/homelyhub/HomeDecorGifits.png"),
+    eyebrow: "HOMELY HUB",
+    title: "Home Decor Gifts",
+    subtitle: "Frames, accents & cozy touches for every room",
+    cta: "Explore decor",
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
+  },
+  gc7: {
+    image: require("../assets/homelyhub/KidsBabyGifts.png"),
+    eyebrow: "HOMELY HUB",
+    title: "Kids & Baby Gifts",
+    subtitle: "Toys, hampers & essentials for little ones",
+    cta: "Shop kids",
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
+  },
+  gc8: {
+    image: require("../assets/homelyhub/Spiritual&FestivalGifts.png"),
+    eyebrow: "HOMELY HUB",
+    title: "Spiritual & Festival Gifts",
+    subtitle: "Festive hampers, rituals & celebration picks",
+    cta: "View festival",
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
+  },
+  gc9: {
+    image: require("../assets/homelyhub/Wearable&PersonalGifts.png"),
+    eyebrow: "HOMELY HUB",
+    title: "Wearable & Personal Gifts",
+    subtitle: "Scarves, jewelry & personalized keepsakes",
+    cta: "See wearable",
+    gradient: ["rgba(0,0,0,0)", "rgba(15,23,42,0.78)"],
+    gradientStart: { x: 0.5, y: 0.15 },
+    gradientEnd: { x: 0.5, y: 1 },
   },
 };
 
@@ -285,6 +393,34 @@ const UTILITY_SUB_CATEGORIES: UtilitySubCategory[] = [
   { id: "u6", title: "Water Bottle", icon: "🚰", bg: "#DBEAFE" },
 ];
 
+/** Homely Hub — extra gift circles (gc6–gc9) */
+const HOMELY_HUB_GIFT_SUBS: Record<string, UtilitySubCategory[]> = {
+  gc6: [
+    { id: "hd1", title: "Wall & Table Decor", icon: "🖼️", bg: "#E8EEF9" },
+    { id: "hd2", title: "Cushions & Throws", icon: "🛋️", bg: "#FCE7F3" },
+    { id: "hd3", title: "Vases & Centerpieces", icon: "🏺", bg: "#ECFDF5" },
+    { id: "hd4", title: "Lighting & Accents", icon: "💡", bg: "#FFF7ED" },
+  ],
+  gc7: [
+    { id: "kb1", title: "Toys & Games", icon: "🧸", bg: "#FEF9C3" },
+    { id: "kb2", title: "Kids Clothing Sets", icon: "👕", bg: "#DBEAFE" },
+    { id: "kb3", title: "Baby Hampers", icon: "🎁", bg: "#FCE7F3" },
+    { id: "kb4", title: "Nursery & Essentials", icon: "🍼", bg: "#E0E7FF" },
+  ],
+  gc8: [
+    { id: "sf1", title: "Idols & Diyas", icon: "🪔", bg: "#FFEDD5" },
+    { id: "sf2", title: "Puja Essentials", icon: "🙏", bg: "#FEE2E2" },
+    { id: "sf3", title: "Festive Hampers", icon: "🎊", bg: "#FEF3C7" },
+    { id: "sf4", title: "Seasonal Decor", icon: "✨", bg: "#EDE9FE" },
+  ],
+  gc9: [
+    { id: "wp1", title: "Jewelry & Watches", icon: "⌚", bg: "#FDF4FF" },
+    { id: "wp2", title: "Scarves & Wraps", icon: "🧣", bg: "#E0F2FE" },
+    { id: "wp3", title: "Personalized Apparel", icon: "👔", bg: "#F1F5F9" },
+    { id: "wp4", title: "Gift Sets & Bundles", icon: "🎀", bg: "#FFF1F2" },
+  ],
+};
+
 const COUPLE_SUB_CATEGORIES: CoupleSubCategory[] = [
   {
     id: "cp1",
@@ -382,6 +518,11 @@ export default function GiftsScreen() {
   const isEventBasedView = selectedCategoryId === "gc3";
   const isUtilityView = selectedCategoryId === "gc4";
   const isCoupleView = selectedCategoryId === "gc5";
+  const isHomelyHubExtendedView =
+    selectedCategoryId === "gc6" ||
+    selectedCategoryId === "gc7" ||
+    selectedCategoryId === "gc8" ||
+    selectedCategoryId === "gc9";
 
   React.useEffect(() => {
     if (selectedSubCategory) setSelectedSubCategory(null);
@@ -473,7 +614,14 @@ export default function GiftsScreen() {
               setSelectedSubCategory(null);
               return;
             }
-            if (isArtCreativeView || isCorporateView || isEventBasedView || isUtilityView || isCoupleView) {
+            if (
+              isArtCreativeView ||
+              isCorporateView ||
+              isEventBasedView ||
+              isUtilityView ||
+              isCoupleView ||
+              isHomelyHubExtendedView
+            ) {
               setSelectedCategoryId(null);
               return;
             }
@@ -488,23 +636,6 @@ export default function GiftsScreen() {
         <TouchableOpacity style={styles.searchButton}>
           <Ionicons name="search-outline" size={20} color="#1d324e" />
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.trustStrip}>
-        <View style={styles.trustStripItem}>
-          <Ionicons name="car-outline" size={18} color="#15803d" />
-          <Text style={styles.trustStripText}>Free delivery</Text>
-        </View>
-        <View style={styles.trustStripDivider} />
-        <View style={styles.trustStripItem}>
-          <Ionicons name="shield-checkmark-outline" size={18} color="#1d4ed8" />
-          <Text style={styles.trustStripText}>Secure pay</Text>
-        </View>
-        <View style={styles.trustStripDivider} />
-        <View style={styles.trustStripItem}>
-          <Ionicons name="refresh-outline" size={18} color="#c2410c" />
-          <Text style={styles.trustStripText}>Easy returns</Text>
-        </View>
       </View>
 
       <ScrollView
@@ -611,7 +742,15 @@ export default function GiftsScreen() {
                             : styles.categoryCircleSelected),
                     ]}
                   >
-                    <Text style={styles.categoryCircleEmoji}>{category.emoji}</Text>
+                    {category.circleImage ? (
+                      <Image
+                        source={category.circleImage}
+                        style={styles.categoryCircleImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Text style={styles.categoryCircleEmoji}>{category.emoji}</Text>
+                    )}
                   </LinearGradient>
                   <Text
                     style={[
@@ -623,7 +762,7 @@ export default function GiftsScreen() {
                             ? styles.categoryCircleLabelSelectedEvent
                             : styles.categoryCircleLabelSelected),
                     ]}
-                    numberOfLines={1}
+                    numberOfLines={2}
                   >
                     {category.title}
                   </Text>
@@ -927,15 +1066,17 @@ export default function GiftsScreen() {
 
             <TouchableOpacity style={styles.eventBanner} activeOpacity={0.9}>
               <Image
-                source={require("../assets/images/homecate.png")}
+                source={require("../assets/homelyhub/EventBasedGifts.png")}
                 style={styles.eventBannerImage}
                 resizeMode="cover"
               />
               <View style={styles.eventBannerOverlay} />
               <View style={styles.eventBannerContent}>
-                <Text style={styles.eventBannerEyebrow}>GIFTING SEASON</Text>
-                <Text style={styles.eventBannerTitle}>Make Moments Special</Text>
-                <Text style={styles.eventBannerSubTitle}>Curated gifts for every occasion</Text>
+                <Text style={styles.eventBannerEyebrow}>EVENTS & CELEBRATIONS</Text>
+                <Text style={styles.eventBannerTitle}>Gifts for Every Occasion</Text>
+                <Text style={styles.eventBannerSubTitle}>
+                  Birthdays, weddings, anniversaries & hampers
+                </Text>
                 <View style={styles.eventBannerCta}>
                   <Text style={styles.eventBannerCtaText}>Shop Now</Text>
                 </View>
@@ -944,7 +1085,7 @@ export default function GiftsScreen() {
 
             <TouchableOpacity style={styles.eventBanner2} activeOpacity={0.9}>
               <Image
-                source={require("../assets/images/homecate.png")}
+                source={require("../assets/homelyhub/EventBasedGifts.png")}
                 style={styles.eventBanner2Image}
                 resizeMode="cover"
               />
@@ -1442,6 +1583,139 @@ export default function GiftsScreen() {
               ))}
             </ScrollView>
           </View>
+        ) : isHomelyHubExtendedView ? (
+          <View style={[styles.subCategorySection, styles.subCategoryShelfUtility]}>
+            <View style={styles.subCategorySectionHeader}>
+              <LinearGradient
+                colors={["#b45309", "#d97706"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.subCategorySectionAccent}
+              />
+              <View style={styles.subCategorySectionHeaderText}>
+                <Text style={styles.subCategorySectionEyebrow}>HOMELY HUB</Text>
+                <Text style={styles.subCategorySectionTitle}>
+                  {GIFT_CATEGORIES.find((c) => c.id === selectedCategoryId)?.title ?? "Gifts"}
+                </Text>
+                <Text style={styles.subCategorySectionHint}>
+                  Tap a collection below — curated picks for this theme
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.utilityGrid}>
+              {(selectedCategoryId
+                ? HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []
+                : []
+              ).map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.utilityCard,
+                    styles.utilityCardShelf,
+                    { backgroundColor: item.bg },
+                  ]}
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedSubCategory(item.title)}
+                >
+                  <View style={styles.utilityIconWrap}>
+                    <Text style={styles.utilityIcon}>{item.icon}</Text>
+                  </View>
+                  <Text style={styles.utilityCardTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {selectedSubCategory ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.trendingRow}
+                >
+                  {TRENDING_PRODUCTS.map((item) => (
+                    <TouchableOpacity
+                      key={`homely-${selectedSubCategory}-${item.id}`}
+                      style={styles.trendingProductCard}
+                      activeOpacity={0.9}
+                    >
+                      <View style={styles.trendingProductImageWrap}>
+                        <Image
+                          source={item.image}
+                          style={styles.trendingProductImage}
+                          resizeMode="cover"
+                        />
+                        {item.badge ? (
+                          <View style={styles.trendingProductBadge}>
+                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.trendingProductMeta}>
+                        <Text style={styles.trendingProductName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.trendingProductPriceRow}>
+                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                          {item.mrp ? (
+                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Trending in this category</Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.trendingRow}
+            >
+              {TRENDING_PRODUCTS.map((item) => (
+                <TouchableOpacity
+                  key={`homely-trend-${selectedCategoryId}-${item.id}`}
+                  style={styles.trendingProductCard}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.trendingProductImageWrap}>
+                    <Image
+                      source={item.image}
+                      style={styles.trendingProductImage}
+                      resizeMode="cover"
+                    />
+                    {item.badge ? (
+                      <View style={styles.trendingProductBadge}>
+                        <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.trendingProductMeta}>
+                    <Text style={styles.trendingProductName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    <View style={styles.trendingProductPriceRow}>
+                      <Text style={styles.trendingProductPrice}>{item.price}</Text>
+                      {item.mrp ? (
+                        <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
         ) : null}
 
         <View style={styles.giftDiscoverySection}>
@@ -1482,37 +1756,10 @@ export default function GiftsScreen() {
 
       </ScrollView>
 
-      <View style={styles.bottomTab}>
-        <TabItem icon="home-outline" label="Home" onPress={() => router.push("/home")} />
-        <TabItem icon="grid-outline" label="Categories" onPress={() => router.push("/categories")} />
-        <TabItem
-          icon="clipboard-outline"
-          label="Orders"
-          onPress={() => router.push("/orders")}
-        />
-        <TabItem
-          icon="person-outline"
-          label="Account"
-          onPress={() => router.push("/account")}
-        />
-        <TabItem icon="cart-outline" label="Cart" onPress={() => router.push("/cart")} />
-      </View>
+      <HomeBottomTabBar />
     </View>
   );
 }
-
-type TabItemProps = {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  label: string;
-  onPress: () => void;
-};
-
-const TabItem = ({ icon, label, onPress }: TabItemProps) => (
-  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
-    <Ionicons name={icon} size={22} color="#000" />
-    <Text style={styles.tabLabel}>{label}</Text>
-  </TouchableOpacity>
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -1548,36 +1795,6 @@ const styles = StyleSheet.create({
   searchButton: {
     padding: 6,
   },
-  trustStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.88)",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(251, 146, 60, 0.25)",
-  },
-  trustStripItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  trustStripDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 28,
-    backgroundColor: "rgba(148, 163, 184, 0.4)",
-  },
-  trustStripText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#475569",
-    maxWidth: 72,
-    textAlign: "center",
-    lineHeight: 13,
-  },
   scroll: {
     flex: 1,
     backgroundColor: "transparent",
@@ -1585,7 +1802,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 14,
     paddingTop: 12,
-    paddingBottom: 88,
+    paddingBottom: 90,
   },
   giftDiscoverySection: {
     marginTop: 8,
@@ -1960,6 +2177,11 @@ const styles = StyleSheet.create({
   },
   categoryCircleEmoji: {
     fontSize: 28,
+  },
+  categoryCircleImage: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
   },
   categoryCircleLabel: {
     marginTop: 8,
@@ -3173,25 +3395,5 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "700",
     fontSize: 11,
-  },
-  bottomTab: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: "#fff",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ccc",
-  },
-  tabItem: {
-    alignItems: "center",
-  },
-  tabLabel: {
-    fontSize: 11,
-    marginTop: 3,
   },
 });

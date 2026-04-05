@@ -48,7 +48,11 @@ export default function HomeBottomTabBar({
         { paddingBottom },
       ]}
     >
-      <TabItem icon="home" label="Home" onPress={() => router.push("/home")} />
+      <TabItem
+        icon="home-outline"
+        label="Home"
+        onPress={() => router.push("/home")}
+      />
       <TabItem
         icon="grid-outline"
         label="Categories"

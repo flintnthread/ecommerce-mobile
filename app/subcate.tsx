@@ -19,6 +19,7 @@ import {
   StackActions,
 } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 type BestDressItem = {
   id: string;
@@ -215,7 +216,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
     topHeading: "CATEGORIES",
     bannerTitle: "SUMMER VIBES",
     bannerSubtitle: "COLLECTION",
-    bannerImage: require("../assets/images/womencate.png"),
+    bannerImage: require("../assets/MainCatImages/images/Women.png"),
     chips: [
       { id: "wc1", label: "Women\u00a0Bra" },
       { id: "wc2", label: "Tops" },
@@ -227,25 +228,25 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         id: "wt1",
         label: "DRESSES",
         countText: "(1580 items)",
-        image: require("../assets/images/womencate.png"),
+        image: require("../assets/MainCatImages/images/Women.png"),
       },
       {
         id: "wt2",
         label: "TOPS",
         countText: "(1750 items)",
-        image: require("../assets/images/womencate.png"),
+        image: require("../assets/MainCatImages/images/Women.png"),
       },
       {
         id: "wt3",
         label: "BOTTOMS",
         countText: "(980 items)",
-        image: require("../assets/images/womencate.png"),
+        image: require("../assets/MainCatImages/images/Women.png"),
       },
       {
         id: "wt4",
         label: "ACTIVEWEAR",
         countText: "(640 items)",
-        image: require("../assets/images/sportscate.png"),
+        image: require("../assets/MainCatImages/images/Women.png"),
       },
     ],
   },
@@ -253,7 +254,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
     topHeading: "CATEGORIES",
     bannerTitle: "SUMMER ESSENTIALS",
     bannerSubtitle: "FOR MEN",
-    bannerImage: require("../assets/images/menscate.png"),
+    bannerImage: require("../assets/MainCatImages/images/Men.png"),
     chips: [
       { id: "mc1", label: "Bottom Wear" },
       { id: "mc2", label: "Ethnic Wear" },
@@ -267,25 +268,25 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         id: "mt1",
         label: "SHIRTS",
         countText: "(1420 items)",
-        image: require("../assets/images/menscate.png"),
+        image: require("../assets/MainCatImages/images/Men.png"),
       },
       {
         id: "mt2",
         label: "T-SHIRTS",
         countText: "(1760 items)",
-        image: require("../assets/images/menscate.png"),
+        image: require("../assets/MainCatImages/images/Men.png"),
       },
       {
         id: "mt3",
         label: "JEANS",
         countText: "(1080 items)",
-        image: require("../assets/images/menscate.png"),
+        image: require("../assets/MainCatImages/images/Men.png"),
       },
       {
         id: "mt4",
         label: "ACTIVEWEAR",
         countText: "(720 items)",
-        image: require("../assets/images/sportscate.png"),
+        image: require("../assets/MainCatImages/images/Men.png"),
       },
     ],
   },
@@ -293,7 +294,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
     topHeading: "CATEGORIES",
     bannerTitle: "KIDS",
     bannerSubtitle: "NEW ARRIVALS",
-    bannerImage: require("../assets/images/kidscate.png"),
+    bannerImage: require("../assets/MainCatImages/images/Kids.png"),
     chips: [
       { id: "kc1", label: "Boys" },
       { id: "kc2", label: "Girls" },
@@ -305,25 +306,25 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         id: "kt1",
         label: "BOYS WEAR",
         countText: "(980 items)",
-        image: require("../assets/images/kidscate.png"),
+        image: require("../assets/MainCatImages/images/Kids.png"),
       },
       {
         id: "kt2",
         label: "GIRLS WEAR",
         countText: "(860 items)",
-        image: require("../assets/images/kidscate.png"),
+        image: require("../assets/MainCatImages/images/Kids.png"),
       },
       {
         id: "kt3",
         label: "INFANT WEAR",
         countText: "(540 items)",
-        image: require("../assets/images/kidscate.png"),
+        image: require("../assets/MainCatImages/images/Kids.png"),
       },
       {
         id: "kt4",
         label: "KIDS TOYS",
         countText: "(420 items)",
-        image: require("../assets/images/kidscate.png"),
+        image: require("../assets/MainCatImages/images/Kids.png"),
       },
     ],
   },
@@ -331,7 +332,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
     topHeading: "CATEGORIES",
     bannerTitle: "SPORTS",
     bannerSubtitle: "COLLECTION",
-    bannerImage: require("../assets/images/sportscate.png"),
+    bannerImage: require("../assets/MainCatImages/images/Sportswear.png"),
     chips: [
       { id: "sc1", label: "Activewear" },
       { id: "sc2", label: "Tracksuits" },
@@ -343,25 +344,25 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         id: "st1",
         label: "ACTIVEWEAR",
         countText: "(1260 items)",
-        image: require("../assets/images/sportscate.png"),
+        image: require("../assets/MainCatImages/images/Sportswear.png"),
       },
       {
         id: "st2",
         label: "TRACKSUITS",
         countText: "(910 items)",
-        image: require("../assets/images/sportscate.png"),
+        image: require("../assets/MainCatImages/images/Sportswear.png"),
       },
       {
         id: "st3",
         label: "JERSEYS",
         countText: "(760 items)",
-        image: require("../assets/images/sportscate.png"),
+        image: require("../assets/MainCatImages/images/Sportswear.png"),
       },
       {
         id: "st4",
         label: "GYM",
         countText: "(520 items)",
-        image: require("../assets/images/sportscate.png"),
+        image: require("../assets/MainCatImages/images/Sportswear.png"),
       },
     ],
   },
@@ -369,7 +370,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
     topHeading: "CATEGORIES",
     bannerTitle: "FOOTWEAR",
     bannerSubtitle: "BEST DEALS",
-    bannerImage: require("../assets/images/footwearcate.png"),
+    bannerImage: require("../assets/MainCatImages/images/Footwear.png"),
     chips: [
       { id: "fc1", label: "Sneakers" },
       { id: "fc2", label: "Sandals" },
@@ -381,25 +382,25 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         id: "ft1",
         label: "SNEAKERS",
         countText: "(980 items)",
-        image: require("../assets/images/footwearcate.png"),
+        image: require("../assets/MainCatImages/images/Footwear.png"),
       },
       {
         id: "ft2",
         label: "SANDALS",
         countText: "(740 items)",
-        image: require("../assets/images/footwearcate.png"),
+        image: require("../assets/MainCatImages/images/Footwear.png"),
       },
       {
         id: "ft3",
         label: "FORMALS",
         countText: "(560 items)",
-        image: require("../assets/images/footwearcate.png"),
+        image: require("../assets/MainCatImages/images/Footwear.png"),
       },
       {
         id: "ft4",
         label: "CASUAL",
         countText: "(430 items)",
-        image: require("../assets/images/footwearcate.png"),
+        image: require("../assets/MainCatImages/images/Footwear.png"),
       },
     ],
   },
@@ -407,7 +408,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
     topHeading: "CATEGORIES",
     bannerTitle: "ACCESSORIES",
     bannerSubtitle: "STYLE UP",
-    bannerImage: require("../assets/images/accessariescate.png"),
+    bannerImage: require("../assets/MainCatImages/images/Accessories.png"),
     chips: [
       { id: "ac1", label: "Jewellery" },
       { id: "ac2", label: "Bags" },
@@ -419,25 +420,25 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         id: "at1",
         label: "JEWELLERY",
         countText: "(820 items)",
-        image: require("../assets/images/accessariescate.png"),
+        image: require("../assets/MainCatImages/images/Accessories.png"),
       },
       {
         id: "at2",
         label: "BAGS",
         countText: "(630 items)",
-        image: require("../assets/images/accessariescate.png"),
+        image: require("../assets/MainCatImages/images/Accessories.png"),
       },
       {
         id: "at3",
         label: "BELTS",
         countText: "(470 items)",
-        image: require("../assets/images/accessariescate.png"),
+        image: require("../assets/MainCatImages/images/Accessories.png"),
       },
       {
         id: "at4",
         label: "WATCHES",
         countText: "(390 items)",
-        image: require("../assets/images/accessariescate.png"),
+        image: require("../assets/MainCatImages/images/Accessories.png"),
       },
     ],
   },
@@ -483,7 +484,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
     topHeading: "CATEGORIES",
     bannerTitle: "SWEETS",
     bannerSubtitle: "SPECIALS",
-    bannerImage: require("../assets/images/sweetscate.png"),
+    bannerImage: require("../assets/MainCatImages/images/Sweets.png"),
     chips: [
       { id: "swc1", label: "Traditional" },
       { id: "swc2", label: "Chocolates" },
@@ -495,25 +496,25 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         id: "swt1",
         label: "TRADITIONAL",
         countText: "(420 items)",
-        image: require("../assets/images/sweetscate.png"),
+        image: require("../assets/MainCatImages/images/Sweets.png"),
       },
       {
         id: "swt2",
         label: "CHOCOLATES",
         countText: "(360 items)",
-        image: require("../assets/images/sweetscate.png"),
+        image: require("../assets/MainCatImages/images/Sweets.png"),
       },
       {
         id: "swt3",
         label: "DRY FRUITS",
         countText: "(280 items)",
-        image: require("../assets/images/sweetscate.png"),
+        image: require("../assets/MainCatImages/images/Sweets.png"),
       },
       {
         id: "swt4",
         label: "GIFTS",
         countText: "(220 items)",
-        image: require("../assets/images/sweetscate.png"),
+        image: require("../assets/MainCatImages/images/Sweets.png"),
       },
     ],
   },
@@ -521,7 +522,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
     topHeading: "CATEGORIES",
     bannerTitle: "TOP PICKS",
     bannerSubtitle: "RIGHT NOW",
-    bannerImage: require("../assets/images/womencate.png"),
+    bannerImage: require("../assets/MainCatImages/images/Women.png"),
     chips: [
       { id: "tc1", label: "Women" },
       { id: "tc2", label: "Men" },
@@ -533,7 +534,7 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         id: "t1",
         label: "WOMEN",
         countText: "(1580 items)",
-        image: require("../assets/images/womencate.png"),
+        image: require("../assets/MainCatImages/images/Women.png"),
       },
       {
         id: "t2",
@@ -552,6 +553,120 @@ const HOME_CONTENT: Record<string, HomeContent> = {
         label: "SPORTS",
         countText: "(1260 items)",
         image: require("../assets/images/sportscate.png"),
+      },
+    ],
+  },
+  beautyPersonalCare: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "BEAUTY",
+    bannerSubtitle: "& PERSONAL CARE",
+    bannerImage: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+    chips: [
+      { id: "bcc1", label: "Skincare" },
+      { id: "bcc2", label: "Hair care" },
+      { id: "bcc3", label: "Bath & body" },
+      { id: "bcc4", label: "Fragrances" },
+    ],
+    tiles: [
+      {
+        id: "bct1",
+        label: "SKINCARE",
+        countText: "(620 items)",
+        image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+      },
+      {
+        id: "bct2",
+        label: "HAIR CARE",
+        countText: "(480 items)",
+        image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+      },
+      {
+        id: "bct3",
+        label: "BATH & BODY",
+        countText: "(390 items)",
+        image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+      },
+      {
+        id: "bct4",
+        label: "FRAGRANCES",
+        countText: "(260 items)",
+        image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+      },
+    ],
+  },
+  gaargi: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "GAARGI",
+    bannerSubtitle: "COLLECTION",
+    bannerImage: require("../assets/MainCatImages/images/Gaargi.png"),
+    chips: [
+      { id: "gc1", label: "Featured" },
+      { id: "gc2", label: "New" },
+      { id: "gc3", label: "Trending" },
+      { id: "gc4", label: "Offers" },
+    ],
+    tiles: [
+      {
+        id: "gt1",
+        label: "FEATURED",
+        countText: "(320 items)",
+        image: require("../assets/MainCatImages/images/Gaargi.png"),
+      },
+      {
+        id: "gt2",
+        label: "NEW ARRIVALS",
+        countText: "(280 items)",
+        image: require("../assets/MainCatImages/images/Gaargi.png"),
+      },
+      {
+        id: "gt3",
+        label: "TRENDING",
+        countText: "(410 items)",
+        image: require("../assets/MainCatImages/images/Gaargi.png"),
+      },
+      {
+        id: "gt4",
+        label: "OFFERS",
+        countText: "(190 items)",
+        image: require("../assets/MainCatImages/images/Gaargi.png"),
+      },
+    ],
+  },
+  indoorPlayEquipments: {
+    topHeading: "CATEGORIES",
+    bannerTitle: "INDOOR PLAY",
+    bannerSubtitle: "EQUIPMENTS",
+    bannerImage: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
+    chips: [
+      { id: "ipc1", label: "Play mats" },
+      { id: "ipc2", label: "Slides" },
+      { id: "ipc3", label: "Games" },
+      { id: "ipc4", label: "Ride-ons" },
+    ],
+    tiles: [
+      {
+        id: "ipt1",
+        label: "PLAY MATS & GYMS",
+        countText: "(240 items)",
+        image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
+      },
+      {
+        id: "ipt2",
+        label: "SLIDES & CLIMBERS",
+        countText: "(180 items)",
+        image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
+      },
+      {
+        id: "ipt3",
+        label: "INDOOR GAMES",
+        countText: "(350 items)",
+        image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
+      },
+      {
+        id: "ipt4",
+        label: "RIDE-ONS",
+        countText: "(120 items)",
+        image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
       },
     ],
   },
@@ -765,17 +880,17 @@ const WOMEN_ALL_TILES: HomeFeatureTile[] = [
   {
     id: "wcat1",
     label: "Women Bra",
-    image: require("../assets/images/womencate.png"),
+    image: require("../assets/MainCatImages/images/Women.png"),
   },
   {
     id: "wcat2",
     label: "Tops",
-    image: require("../assets/images/womencate.png"),
+    image: require("../assets/MainCatImages/images/Women.png"),
   },
   {
     id: "wcat3",
     label: "Bottoms",
-    image: require("../assets/images/womencate.png"),
+    image: require("../assets/MainCatImages/images/Women.png"),
   },
   {
     id: "wcat4",
@@ -785,24 +900,24 @@ const WOMEN_ALL_TILES: HomeFeatureTile[] = [
 ];
 
 const WOMEN_BRA_TILES: HomeFeatureTile[] = [
-  { id: "wb1", label: "Padded Bras", countText: "(540 items)", image: require("../assets/images/womencate.png") },
-  { id: "wb2", label: "Sports Bras", countText: "(410 items)", image: require("../assets/images/womencate.png") },
-  { id: "wb3", label: "T-Shirt Bras", countText: "(620 items)", image: require("../assets/images/womencate.png") },
-  { id: "wb4", label: "Bralettes", countText: "(280 items)", image: require("../assets/images/womencate.png") },
+  { id: "wb1", label: "Padded Bras", countText: "(540 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wb2", label: "Sports Bras", countText: "(410 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wb3", label: "T-Shirt Bras", countText: "(620 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wb4", label: "Bralettes", countText: "(280 items)", image: require("../assets/MainCatImages/images/Women.png") },
 ];
 
 const WOMEN_TOPS_TILES: HomeFeatureTile[] = [
-  { id: "wtp1", label: "Casual Tops", countText: "(760 items)", image: require("../assets/images/womencate.png") },
-  { id: "wtp2", label: "Shirts", countText: "(520 items)", image: require("../assets/images/womencate.png") },
-  { id: "wtp3", label: "Tunics", countText: "(340 items)", image: require("../assets/images/womencate.png") },
-  { id: "wtp4", label: "Crop Tops", countText: "(460 items)", image: require("../assets/images/womencate.png") },
+  { id: "wtp1", label: "Casual Tops", countText: "(760 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wtp2", label: "Shirts", countText: "(520 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wtp3", label: "Tunics", countText: "(340 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wtp4", label: "Crop Tops", countText: "(460 items)", image: require("../assets/MainCatImages/images/Women.png") },
 ];
 
 const WOMEN_BOTTOMS_TILES: HomeFeatureTile[] = [
-  { id: "wbt1", label: "Jeans", countText: "(890 items)", image: require("../assets/images/womencate.png") },
-  { id: "wbt2", label: "Leggings", countText: "(640 items)", image: require("../assets/images/womencate.png") },
-  { id: "wbt3", label: "Palazzos", countText: "(320 items)", image: require("../assets/images/womencate.png") },
-  { id: "wbt4", label: "Skirts", countText: "(280 items)", image: require("../assets/images/womencate.png") },
+  { id: "wbt1", label: "Jeans", countText: "(890 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wbt2", label: "Leggings", countText: "(640 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wbt3", label: "Palazzos", countText: "(320 items)", image: require("../assets/MainCatImages/images/Women.png") },
+  { id: "wbt4", label: "Skirts", countText: "(280 items)", image: require("../assets/MainCatImages/images/Women.png") },
 ];
 
 const WOMEN_ACTIVEWEAR_TILES: HomeFeatureTile[] = [
@@ -995,6 +1110,9 @@ export default function SubcategoriesScreen() {
     if (mainCat === "womenswear") return "Women's Hub";
     if (mainCat === "kidswear") return "Kids Hub";
     if (mainCat === "sportswear") return "Sportswear Hub";
+    if (mainCat === "beautyPersonalCare") return "Beauty & Care Hub";
+    if (mainCat === "gaargi") return "Gaargi Hub";
+    if (mainCat === "indoorPlayEquipments") return "Indoor Play Hub";
     return "Categories Hub";
   }, [mainCat]);
   const [selectedHomeChip, setSelectedHomeChip] = useState(() =>
@@ -1694,42 +1812,10 @@ export default function SubcategoriesScreen() {
         </View>
       </Modal>
 
-      {/* BOTTOM TAB */}
-      <View style={styles.bottomTab}>
-        <TabItem icon="home-outline" label="Home" onPress={() => router.push("/home")} />
-        <TabItem
-          icon="grid-outline"
-          label="Categories"
-          onPress={() => router.push("/categories")}
-        />
-        <TabItem
-          icon="clipboard-outline"
-          label="Orders"
-          onPress={() => router.push("/orders")}
-        />
-        <TabItem
-          icon="person-outline"
-          label="Account"
-          onPress={() => router.push("/account")}
-        />
-        <TabItem icon="cart-outline" label="Cart" onPress={() => router.push("/cart")} />
-      </View>
+      <HomeBottomTabBar />
     </View>
   );
 }
-
-type TabItemProps = {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  label: string;
-  onPress: () => void;
-};
-
-const TabItem = ({ icon, label, onPress }: TabItemProps) => (
-  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
-    <Ionicons name={icon} size={22} color="#000" />
-    <Text style={styles.tabLabel}>{label}</Text>
-  </TouchableOpacity>
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -2623,25 +2709,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: "#64748B",
-  },
-  bottomTab: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: "#fff",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ccc",
-  },
-  tabItem: {
-    alignItems: "center",
-  },
-  tabLabel: {
-    fontSize: 11,
-    marginTop: 3,
   },
 });
