@@ -6,6 +6,7 @@ import {
   ImageBackground,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Pressable,
   Platform,
   ScrollView,
   StyleSheet,
@@ -51,46 +52,37 @@ const topCategories: TopCategory[] = [
   { id: "men", label: "MEN", image: require("../assets/images/menscate.png") },
   { id: "women", label: "WOMEN", image: require("../assets/images/womencate.png") },
   { id: "kids", label: "KIDS", image: require("../assets/images/kidscate.png") },
-  {
-    id: "beauty",
-    label: "BEAUTY",
-    image: require("../assets/images/accessoriescate.png"),
-  },
-  {
-    id: "accessories",
-    label: "ACCESSORIES",
-    image: require("../assets/images/accessariescate.png"),
-  },
+  {id: "accessories",label: "OTHER ACCESSORIES",image: require("../assets/images/accessariescate.png"),},
 ];
 
 const topCollectionItems: CollectionItem[] = [
   {
     id: "c1",
     title: "Everyday Elegance",
-    subtitle: "Jewellery & charms",
+    subtitle: "Jewellery & Charms",
     tag: "Top Rated",
-    image: require("../assets/images/latest1.png"),
+    image: require("../assets/images/toprated.png"),
   },
   {
     id: "c2",
     title: "Signature Watches",
     subtitle: "Premium timepieces",
     tag: "New Drop",
-    image: require("../assets/images/accessoriescate.png"),
+    image: require("../assets/images/menwatch.png"),
   },
   {
     id: "c3",
     title: "Festive Handbags",
     subtitle: "Party-ready bags",
     tag: "Limited",
-    image: require("../assets/images/look3.png"),
+    image: require("../assets/images/handbag.png"),
   },
   {
     id: "c4",
     title: "Beauty Must-haves",
     subtitle: "Glow essentials",
     tag: "Trending",
-    image: require("../assets/images/product6.png"),
+    image: require("../assets/images/bangles.png"),
   },
 ];
 
@@ -457,6 +449,37 @@ const accessoriesHeroDeals: AccessoriesHeroDeal[] = [
   },
 ];
 
+const accessoriesRelatedCategories: Record<string, string[]> = {
+  ad1: ["Tote Bags", "Sling Bags", "Backpacks", "Wallets"],
+  ad2: ["Aviators", "Wayfarers", "Blue Light Frames", "Sport Sunglasses"],
+  ad3: ["Analog Watches", "Smart Watches", "Leather Strap Watches", "Digital Watches"],
+  ad4: ["Necklaces", "Bracelets", "Earrings", "Charm Sets"],
+  ad5: ["Gold Rings", "Silver Rings", "Couple Rings", "Statement Rings"],
+};
+
+const accessoriesRelatedCategoryImages: Record<string, any> = {
+  "Tote Bags": require("../assets/images/look3.png"),
+  "Sling Bags": require("../assets/images/look4.png"),
+  Backpacks: require("../assets/images/kidscate.png"),
+  Wallets: require("../assets/images/product1.png"),
+  Aviators: require("../assets/images/look2.png"),
+  Wayfarers: require("../assets/images/look3.png"),
+  "Blue Light Frames": require("../assets/images/product2.png"),
+  "Sport Sunglasses": require("../assets/images/sportscate.png"),
+  "Analog Watches": require("../assets/images/accessoriescate.png"),
+  "Smart Watches": require("../assets/images/accessariescate.png"),
+  "Leather Strap Watches": require("../assets/images/product5.png"),
+  "Digital Watches": require("../assets/images/product6.png"),
+  Necklaces: require("../assets/images/latest4.png"),
+  Bracelets: require("../assets/images/latest1.png"),
+  Earrings: require("../assets/images/latest2.png"),
+  "Charm Sets": require("../assets/images/latest3.png"),
+  "Gold Rings": require("../assets/images/look1.png"),
+  "Silver Rings": require("../assets/images/product4.png"),
+  "Couple Rings": require("../assets/images/product3.png"),
+  "Statement Rings": require("../assets/images/accessoriescate.png"),
+};
+
 function womanYouAreCardEnterOpacityTranslate(reveal: Animated.Value, index: number) {
   const start = 0.26 + index * 0.068;
   const end = Math.min(start + 0.24, 0.99);
@@ -651,10 +674,39 @@ const spotlightFooterAdBanners: SpotlightFooterAdBanner[] = [
   },
 ];
 
+const finalUniquePicks: CollectionItem[] = [
+  {
+    id: "fu1",
+    title: "Party Clutches",
+    subtitle: "Elegant evening essentials",
+    tag: "Best Seller",
+    image: require("../assets/images/look3.png"),
+  },
+  {
+    id: "fu2",
+    title: "Dial & Bracelet",
+    subtitle: "Statement watch combos",
+    tag: "Editor Pick",
+    image: require("../assets/images/accessoriescate.png"),
+  },
+  {
+    id: "fu3",
+    title: "Charm Layers",
+    subtitle: "Minimal necklace stacks",
+    tag: "New",
+    image: require("../assets/images/latest4.png"),
+  },
+];
+
 export default function Accessories() {
   const router = useRouter();
   const params = useLocalSearchParams<{ focus?: string | string[] }>();
   const { width: windowWidth } = useWindowDimensions();
+  const [topCollectionBannerAspectRatio, setTopCollectionBannerAspectRatio] = useState(16 / 9);
+  const [spotlightBannerAspectRatio, setSpotlightBannerAspectRatio] = useState(2.2);
+  const kidsAccessoryBoardCardWidth = Math.round(
+    Math.min(118, Math.max(86, windowWidth * 0.24))
+  );
   const [activeTopCategory, setActiveTopCategory] = useState("accessories");
   const [womenSectionY, setWomenSectionY] = useState(0);
   const [menSectionY, setMenSectionY] = useState(0);
@@ -666,6 +718,7 @@ export default function Accessories() {
   const everyoneSectionYRef = useRef<number | null>(null);
   const [selectedWomenItemId, setSelectedWomenItemId] = useState("w1");
   const [selectedMenItemId, setSelectedMenItemId] = useState("m1");
+  const [selectedAccessoriesDealId, setSelectedAccessoriesDealId] = useState("ad1");
   const [selectedKidsRelatedItemId, setSelectedKidsRelatedItemId] = useState(
     KIDS_RELATED_SECTION_ITEM_ID
   );
@@ -683,8 +736,10 @@ export default function Accessories() {
   const leftShowcaseViewportHeightRef = useRef(0);
   const sparkleFloat = useRef(new Animated.Value(0)).current;
   const tintPulse = useRef(new Animated.Value(0)).current;
-  const lightSweepX = useRef(new Animated.Value(-260)).current;
   const ctaPulse = useRef(new Animated.Value(1)).current;
+  const heroStarOp1 = useRef(new Animated.Value(1)).current;
+  const heroStarOp2 = useRef(new Animated.Value(1)).current;
+  const heroStarOp3 = useRef(new Animated.Value(1)).current;
   const bottomAdPlayer = useVideoPlayer(require("../assets/images/videobanner.mp4"), (player) => {
     player.loop = true;
     player.muted = true;
@@ -912,15 +967,6 @@ export default function Accessories() {
       ])
     );
 
-    const sweepLoop = Animated.loop(
-      Animated.timing(lightSweepX, {
-        toValue: 460,
-        duration: 3200,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
     const ctaLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(ctaPulse, {
@@ -940,16 +986,51 @@ export default function Accessories() {
 
     sparkleLoop.start();
     tintLoop.start();
-    sweepLoop.start();
     ctaLoop.start();
 
     return () => {
       sparkleLoop.stop();
       tintLoop.stop();
-      sweepLoop.stop();
       ctaLoop.stop();
     };
-  }, [ctaPulse, lightSweepX, sparkleFloat, tintPulse]);
+  }, [ctaPulse, sparkleFloat, tintPulse]);
+
+  useEffect(() => {
+    const blinkLoop = (v: Animated.Value) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(v, {
+            toValue: 0.32,
+            duration: 520,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(v, {
+            toValue: 1,
+            duration: 520,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.delay(140),
+        ])
+      );
+
+    const l1 = blinkLoop(heroStarOp1);
+    const l2 = blinkLoop(heroStarOp2);
+    const l3 = blinkLoop(heroStarOp3);
+    const t1 = setTimeout(() => l1.start(), 0);
+    const t2 = setTimeout(() => l2.start(), 280);
+    const t3 = setTimeout(() => l3.start(), 560);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      l1.stop();
+      l2.stop();
+      l3.stop();
+    };
+  }, [heroStarOp1, heroStarOp2, heroStarOp3]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1004,6 +1085,10 @@ export default function Accessories() {
 
   const handleMenItemPress = (itemId: string) => {
     setSelectedMenItemId(itemId);
+  };
+
+  const handleAccessoriesDealPress = (dealId: string) => {
+    setSelectedAccessoriesDealId(dealId);
   };
 
   const onFooterAdMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -1078,31 +1163,29 @@ export default function Accessories() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-        removeClippedSubviews={false}
-      >
+      <View style={styles.topFixedArea}>
         <View style={styles.header}>
+          <View style={styles.headerBrand}>
+            <Text style={styles.brandF}>F</Text>
+            <Text style={styles.brandT}>T</Text>
+          </View>
           <View style={styles.searchBox}>
-            <Ionicons name="search-outline" size={18} color="#69798c" />
+            <Ionicons name="search-outline" size={18} color="#9aa0a6" />
             <TextInput
-              placeholder="Search accessories"
-              placeholderTextColor="#69798c"
+              placeholder="Search.."
+              placeholderTextColor="#b0b5ba"
               style={styles.searchInput}
             />
-            <Ionicons name="camera-outline" size={20} color="#69798c" />
+            <TouchableOpacity activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="camera-outline" size={20} color="#9aa0a6" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.headerIcons}>
-            <TouchableOpacity>
-              <Ionicons name="notifications-outline" size={23} color="#1d324e" />
-            </TouchableOpacity>
-            <TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7}>
               <Ionicons name="heart-outline" size={23} color="#1d324e" />
             </TouchableOpacity>
-            <TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7}>
               <Ionicons name="bag-outline" size={23} color="#1d324e" />
             </TouchableOpacity>
           </View>
@@ -1113,7 +1196,6 @@ export default function Accessories() {
           style={styles.topStrip}
           imageStyle={styles.topStripBgImage}
         >
-         
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1122,10 +1204,8 @@ export default function Accessories() {
             {topCategories.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={[
-                  styles.topCategoryItem,
-                  activeTopCategory === item.id && styles.topCategoryItemActive,
-                ]}
+                style={styles.topCategoryItem}
+                hitSlop={{ top: 8, bottom: 10, left: 8, right: 8 }}
                 onPress={() => {
                   setActiveTopCategory(item.id);
                   const scrollToSectionY = (y: number) => {
@@ -1159,30 +1239,46 @@ export default function Accessories() {
                   }
                 }}
               >
-                <View
-                  style={[
-                    styles.topCategoryImageWrap,
-                    activeTopCategory === item.id && styles.topCategoryImageWrapActive,
-                  ]}
-                >
-                  <Image source={item.image} style={styles.topCategoryImage} resizeMode="cover" />
+                <View style={styles.topCategoryColumn}>
+                  <View
+                    style={[
+                      styles.topCategoryMediaFrame,
+                      activeTopCategory === item.id && styles.topCategoryMediaFrameActive,
+                    ]}
+                  >
+                    <Image source={item.image} style={styles.topCategoryImage} resizeMode="cover" />
+                  </View>
+                  <Text
+                    style={[
+                      styles.topCategoryText,
+                      activeTopCategory === item.id && styles.topCategoryTextActive,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.topCategoryActiveBar,
+                      activeTopCategory === item.id && styles.topCategoryActiveBarOn,
+                    ]}
+                  />
                 </View>
-                <Text
-                  style={[
-                    styles.topCategoryText,
-                    activeTopCategory === item.id && styles.topCategoryTextActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </ImageBackground>
+      </View>
 
+      <ScrollView
+        ref={scrollRef}
+        style={styles.mainScroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        removeClippedSubviews={false}
+      >
         <View style={styles.heroSection}>
           <Image
-            source={require("../assets/images/accessariescate.png")}
+            source={require("../assets/images/accessariescates.png")}
             style={styles.heroImage}
             resizeMode="cover"
           />
@@ -1197,71 +1293,68 @@ export default function Accessories() {
               },
             ]}
           />
-          <Animated.View
-            style={[
-              styles.heroLightSweep,
-              {
-                transform: [{ translateX: lightSweepX }, { rotate: "-18deg" }],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.heroSparkleOne,
-              {
-                opacity: sparkleFloat.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.45, 0.9],
-                }),
-                transform: [
-                  {
-                    translateY: sparkleFloat.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, -8],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.heroSparkleTwo,
-              {
-                opacity: sparkleFloat.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.85, 0.35],
-                }),
-                transform: [
-                  {
-                    translateY: sparkleFloat.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 10],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.heroSparkleThree,
-              {
-                opacity: sparkleFloat.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.5, 0.95],
-                }),
-                transform: [
-                  {
-                    translateX: sparkleFloat.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 5],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
+          <View style={styles.heroStarCluster} pointerEvents="none">
+            <Animated.View
+              style={[
+                styles.heroStarNode,
+                styles.heroStarNodeA,
+                {
+                  opacity: heroStarOp1,
+                  transform: [
+                    {
+                      scale: heroStarOp1.interpolate({
+                        inputRange: [0.32, 1],
+                        outputRange: [0.9, 1.12],
+                      }),
+                    },
+                    { rotate: "-16deg" },
+                  ],
+                },
+              ]}
+            >
+              <Ionicons name="star" size={34} color="#FFD700" />
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.heroStarNode,
+                styles.heroStarNodeB,
+                {
+                  opacity: heroStarOp2,
+                  transform: [
+                    {
+                      scale: heroStarOp2.interpolate({
+                        inputRange: [0.32, 1],
+                        outputRange: [0.92, 1.08],
+                      }),
+                    },
+                    { rotate: "6deg" },
+                  ],
+                },
+              ]}
+            >
+              <Ionicons name="star" size={26} color="#FFC82C" />
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.heroStarNode,
+                styles.heroStarNodeC,
+                {
+                  opacity: heroStarOp3,
+                  transform: [
+                    {
+                      scale: heroStarOp3.interpolate({
+                        inputRange: [0.32, 1],
+                        outputRange: [0.88, 1.06],
+                      }),
+                    },
+                    { rotate: "18deg" },
+                  ],
+                },
+              ]}
+            >
+              <Ionicons name="star" size={18} color="#FFE566" />
+            </Animated.View>
+          </View>
           <Animated.View
             style={[
               styles.heroBadgeRow,
@@ -1299,72 +1392,133 @@ export default function Accessories() {
         </View>
 
         <View style={styles.glamSection}>
-          {/* <Text style={styles.glamTitle}>GLOW, GLAM & GAME ON</Text> */}
-          <Text style={styles.glamSubtitle}>Festivities, but make it stylish</Text>
+          <View style={styles.glamHeadingRow}>
+            <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+            <Text style={styles.glamHeadingLabel}>FESTIVE EDIT</Text>
+            <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+          </View>
+          <Text style={styles.glamSubtitle}>
+            Festivities, but make it <Text style={styles.glamSubtitleHighlight}>stylish</Text>
+          </Text>
         </View>
 
         <View style={styles.tileSection}>
           <View style={styles.tileRow}>
             <TouchableOpacity style={[styles.tileCard, styles.leftTile]} activeOpacity={0.9}>
-              <View style={styles.tileBadge}>
-                <Text style={styles.tileBadgeText}>HOME GLOW</Text>
+              <View style={styles.tileTextContent}>
+                <View style={styles.tileBadge}>
+                  <Text style={styles.tileBadgeText}>HOME GLOW</Text>
+                </View>
+                <Text style={styles.tileHeading}>Light up Home</Text>
+                <Text style={styles.tileSubHeading}>
+                  Warm lamps and festive decor picks
+                </Text>
               </View>
-              <Text style={styles.tileHeading}>Light up Home</Text>
-              <Text style={styles.tileSubHeading}>Warm lamps and festive decor picks</Text>
-              <Image
-                source={require("../assets/images/homecate.png")}
-                style={styles.tileImage}
-                resizeMode="contain"
-              />
+              <View style={styles.tileImageWrap}>
+                <Image
+                  source={require("../assets/images/homecate.png")}
+                  style={styles.tileImage}
+                  resizeMode="cover"
+                />
+              </View>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.tileCard, styles.rightTile]} activeOpacity={0.9}>
-              <View style={styles.tileBadge}>
-                <Text style={styles.tileBadgeText}>STYLE DROP</Text>
+              <View style={styles.tileTextContent}>
+                <View style={styles.tileBadge}>
+                  <Text style={styles.tileBadgeText}>STYLE DROP</Text>
+                </View>
+                <Text style={styles.tileHeading}>Festive Glam</Text>
+                <Text style={styles.tileSubHeading}>
+                  Statement accessories for celebrations
+                </Text>
               </View>
-              <Text style={styles.tileHeading}>Festive Glam</Text>
-              <Text style={styles.tileSubHeading}>Statement accessories for celebrations</Text>
-              <Image
-                source={require("../assets/images/accessoriescate.png")}
-                style={styles.tileImage}
-                resizeMode="contain"
-              />
+              <View style={styles.tileImageWrap}>
+                <Image
+                  source={require("../assets/images/accessoriescate.png")}
+                  style={styles.tileImage}
+                  resizeMode="cover"
+                />
+              </View>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.collectionSection}>
           <View style={styles.collectionHeader}>
-            <View>
-              <Text style={styles.collectionTitle}>Top Collection</Text>
+            <View style={styles.collectionHeaderContent}>
+              
+              <View style={styles.collectionTitleAccentWrap}>
+                
+                <View style={styles.collectionTitleRow}>
+                  <View style={styles.collectionTitleBar} />
+                  <Text style={styles.collectionTitle}>Top Collection</Text>
+                </View>
+              </View>
               <Text style={styles.collectionSubtitle}>Accessories you will love</Text>
             </View>
-            <TouchableOpacity style={styles.collectionViewAll}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.collectionViewAll}
+              onPress={() =>
+                router.push({
+                  pathname: "/subcatProducts",
+                  params: {
+                    mainCat: "accessories",
+                    subCategory: "Top Collection",
+                  },
+                })
+              }
+            >
               <Text style={styles.collectionViewAllText}>View all</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.collectionFeaturedCard}
-            activeOpacity={0.9}
+          <Pressable
+            style={[styles.collectionFeaturedCard, { aspectRatio: topCollectionBannerAspectRatio }]}
             onPress={() => router.push("/productdetail")}
           >
-            <Image
-              source={topCollectionItems[0].image}
-              style={styles.collectionFeaturedImage}
-              resizeMode="cover"
-            />
-            <View style={styles.collectionFeaturedTag}>
-              <Text style={styles.collectionFeaturedTagText}>{topCollectionItems[0].tag}</Text>
-            </View>
-            <View style={styles.collectionFeaturedOverlay}>
-              <Text style={styles.collectionFeaturedTitle} numberOfLines={1}>
-                {topCollectionItems[0].title}
-              </Text>
-              <Text style={styles.collectionFeaturedSubtitle} numberOfLines={1}>
-                {topCollectionItems[0].subtitle}
-              </Text>
-            </View>
-          </TouchableOpacity>
+            {({ hovered, pressed }) => {
+              const showOverlay = hovered || pressed;
+
+              return (
+                <>
+                  <Image
+                    source={topCollectionItems[0].image}
+                    style={styles.collectionFeaturedImage}
+                    resizeMode="contain"
+                    onLoad={(e) => {
+                      const { width, height } = e.nativeEvent.source;
+                      if (
+                        typeof width === "number" &&
+                        typeof height === "number" &&
+                        height > 0
+                      ) {
+                        setTopCollectionBannerAspectRatio(width / height);
+                      }
+                    }}
+                  />
+                  <View style={styles.collectionFeaturedTag}>
+                    <Text style={styles.collectionFeaturedTagText}>{topCollectionItems[0].tag}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.collectionFeaturedOverlay,
+                      showOverlay
+                        ? styles.collectionFeaturedOverlayVisible
+                        : styles.collectionFeaturedOverlayHidden,
+                    ]}
+                  >
+                    <Text style={styles.collectionFeaturedTitle} numberOfLines={1}>
+                      {topCollectionItems[0].title}
+                    </Text>
+                    <Text style={styles.collectionFeaturedSubtitle} numberOfLines={1}>
+                      {topCollectionItems[0].subtitle}
+                    </Text>
+                  </View>
+                </>
+              );
+            }}
+          </Pressable>
 
           <View style={styles.collectionMiniGrid}>
             {topCollectionItems.slice(1).map((item) => (
@@ -1374,7 +1528,7 @@ export default function Accessories() {
                 activeOpacity={0.9}
                 onPress={() => router.push("/productdetail")}
               >
-                <Image source={item.image} style={styles.collectionMiniImage} resizeMode="contain" />
+                <Image source={item.image} style={styles.collectionMiniImage} resizeMode="cover" />
                 <View style={styles.collectionMiniTag}>
                   <Text style={styles.collectionMiniTagText}>{item.tag}</Text>
                 </View>
@@ -1392,15 +1546,35 @@ export default function Accessories() {
         </View>
 
         <View style={styles.videoAdSection}>
-          <View style={styles.videoAdHeader}>
-            <Text style={styles.videoAdTitle}>Accessories Spotlight</Text>
-            <Text style={styles.videoAdSubtitle}>Exclusive festive ad</Text>
+          <View style={styles.spotlightHeaderCard}>
+            <View style={styles.spotlightHeaderTitleRow}>
+              <Ionicons name="star" size={16} color="#ef7b1a" />
+              <Text style={styles.spotlightHeaderTitle}>Accessories Spotlight</Text>
+              <Ionicons name="star" size={16} color="#ef7b1a" />
+              {/* <Text style={styles.spotlightHeaderSubtitle}>Exclusive festive ad</Text> */}
+            </View>
           </View>
-          <View style={[styles.videoAdCard, styles.videoAdCardSpotlight]}>
+          <View
+            style={[
+              styles.videoAdCard,
+              styles.videoAdCardSpotlight,
+              { aspectRatio: spotlightBannerAspectRatio },
+            ]}
+          >
             <Image
-              source={require("../assets/images/accessariescate.png")}
+              source={require("../assets/images/applicationbanner.png")}
               style={styles.videoAdPlayer}
-              resizeMode="cover"
+              resizeMode="contain"
+              onLoad={(e) => {
+                const { width, height } = e.nativeEvent.source;
+                if (
+                  typeof width === "number" &&
+                  typeof height === "number" &&
+                  height > 0
+                ) {
+                  setSpotlightBannerAspectRatio(width / height);
+                }
+              }}
             />
             <View style={styles.videoAdOverlay}>
               <Text style={styles.videoAdOverlayTitle}>Style the Season with Accessories</Text>
@@ -1425,7 +1599,11 @@ export default function Accessories() {
         >
           <View style={styles.womenHeader}>
             <View style={styles.womenTitleWrap}>
-              <Text style={styles.womenTitle}>Women Accessories</Text>
+              <View style={styles.womenTitleRow}>
+                <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+                <Text style={styles.womenTitleWord}>Women Accessories</Text>
+              </View>
+              <View style={styles.womenTitleUnderline} />
               <Text style={styles.womenSubtitle}>Curated picks for her style</Text>
             </View>
             <TouchableOpacity
@@ -1447,9 +1625,6 @@ export default function Accessories() {
                 style={styles.womenCardImage}
                 resizeMode="cover"
               />
-              <View style={styles.womenTag}>
-                <Text style={styles.womenTagText}>{womenAccessoriesItems[0].tag}</Text>
-              </View>
               <View style={styles.womenCardOverlay}>
                 <Text style={styles.womenCardTitle} numberOfLines={1}>
                   {womenAccessoriesItems[0].title}
@@ -1471,9 +1646,6 @@ export default function Accessories() {
                   style={styles.womenCardImage}
                   resizeMode="contain"
                 />
-                <View style={styles.womenTag}>
-                  <Text style={styles.womenTagText}>{womenAccessoriesItems[1].tag}</Text>
-                </View>
                 <View style={styles.womenCardOverlay}>
                   <Text style={styles.womenCardTitle} numberOfLines={1}>
                     {womenAccessoriesItems[1].title}
@@ -1494,9 +1666,6 @@ export default function Accessories() {
                   style={styles.womenCardImage}
                   resizeMode="contain"
                 />
-                <View style={styles.womenTag}>
-                  <Text style={styles.womenTagText}>{womenAccessoriesItems[2].tag}</Text>
-                </View>
                 <View style={styles.womenCardOverlay}>
                   <Text style={styles.womenCardTitle} numberOfLines={1}>
                     {womenAccessoriesItems[2].title}
@@ -1519,14 +1688,11 @@ export default function Accessories() {
               style={styles.womenCardImage}
               resizeMode="cover"
             />
-            <View style={styles.womenTag}>
-              <Text style={styles.womenTagText}>{womenAccessoriesItems[3].tag}</Text>
-            </View>
             <View style={styles.womenCardOverlay}>
               <Text style={styles.womenCardTitle} numberOfLines={1}>
                 {womenAccessoriesItems[3].title}
               </Text>
-              <Text style={styles.womenCardSubtitle} numberOfLines={1}>
+              <Text style={[styles.womenCardSubtitle, styles.womenCardSubtitleRight]} numberOfLines={1}>
                 {womenAccessoriesItems[3].subtitle}
               </Text>
             </View>
@@ -1534,12 +1700,20 @@ export default function Accessories() {
         </View>
 
         <View style={styles.womenRelatedSection}>
-          <Text style={styles.womenRelatedTitle}>
-            Related categories for{" "}
-            {womenAccessoriesItems.find((item) => item.id === selectedWomenItemId)?.title ??
-              "Women Accessories"}
-          </Text>
-          <View style={styles.womenRelatedChips}>
+          <View style={styles.womenRelatedTitleRow}>
+            <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+            <Text style={styles.womenRelatedTitle}>
+              Related categories for{" "}
+              {womenAccessoriesItems.find((item) => item.id === selectedWomenItemId)?.title ??
+                "Women Accessories"}
+            </Text>
+          </View>
+          <View style={styles.womenRelatedTitleUnderline} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.womenRelatedChips}
+          >
             {(womenRelatedCategories[selectedWomenItemId] || []).map((category) => (
               <TouchableOpacity
                 key={category}
@@ -1556,7 +1730,7 @@ export default function Accessories() {
                 <Text style={styles.womenRelatedChipText}>{category}</Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
         <View style={styles.styleLabSection}>
@@ -1607,10 +1781,25 @@ export default function Accessories() {
 
         <View style={styles.videoAdSection}>
           <View style={styles.videoAdHeader}>
-            <Text style={styles.videoAdTitle}>Style Lab Ad</Text>
-            <Text style={styles.videoAdSubtitle}>Watch and shop accessories</Text>
+            <View style={styles.styleLabAdHeadingCard}>
+              <View style={styles.styleLabAdHeadingIconWrap}>
+                <Ionicons name="color-wand" size={22} color="#ef7b1a" />
+              </View>
+              <View style={styles.styleLabAdHeadingTextCol}>
+                <View style={styles.styleLabAdHeadingTitleRow}>
+                  <Text style={styles.styleLabAdHeadingTitle}>
+                    <Text style={styles.styleLabAdHeadingTitleLead}>Style </Text>
+                    <Text style={styles.styleLabAdHeadingTitleAccent}>Lab</Text>
+                  </Text>
+                  <View style={styles.styleLabAdHeadingAdMark}>
+                    <Text style={styles.styleLabAdHeadingAdMarkText}>Ad</Text>
+                  </View>
+                </View>
+                <Text style={styles.styleLabAdHeadingSub}>Watch and shop accessories</Text>
+              </View>
+            </View>
           </View>
-          <View style={styles.videoAdCard}>
+          <View style={[styles.videoAdCard, styles.videoAdCardFixedHeight]}>
             <VideoView
               player={bottomAdPlayer}
               style={styles.videoAdPlayer}
@@ -1640,7 +1829,11 @@ export default function Accessories() {
         >
           <View style={styles.menHeader}>
             <View style={styles.menTitleWrap}>
-              <Text style={styles.menTitle}>Men Accessories</Text>
+              <View style={styles.menTitleRow}>
+                <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+                <Text style={styles.menTitle}>Men Accessories</Text>
+              </View>
+              <View style={styles.menTitleUnderline} />
               <Text style={styles.menSubtitle}>Essentials curated for him</Text>
             </View>
             <TouchableOpacity
@@ -1664,9 +1857,6 @@ export default function Accessories() {
                 onPress={() => handleMenItemPress(item.id)}
               >
                 <Image source={item.image} style={styles.menCardImage} resizeMode="contain" />
-                <View style={styles.menTag}>
-                  <Text style={styles.menTagText}>{item.tag}</Text>
-                </View>
                 <View style={styles.menCardOverlay}>
                   <Text style={styles.menCardTitle} numberOfLines={1}>
                     {item.title}
@@ -1681,11 +1871,15 @@ export default function Accessories() {
         </View>
 
         <View style={styles.menRelatedSection}>
-          <Text style={styles.menRelatedTitle}>
-            Related categories for{" "}
-            {menAccessoriesItems.find((item) => item.id === selectedMenItemId)?.title ??
-              "Men Accessories"}
-          </Text>
+          <View style={styles.menRelatedTitleRow}>
+            <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+            <Text style={styles.menRelatedTitle}>
+              Related categories for{" "}
+              {menAccessoriesItems.find((item) => item.id === selectedMenItemId)?.title ??
+                "Men Accessories"}
+            </Text>
+          </View>
+          <View style={styles.menRelatedTitleUnderline} />
           <View style={styles.menRelatedChips}>
             {(menRelatedCategories[selectedMenItemId] || []).map((category) => (
               <TouchableOpacity
@@ -1773,13 +1967,13 @@ export default function Accessories() {
                         ) : null}
                       </View>
 
-                      <View>
+                      <View style={styles.splitProductCopyBlock}>
                         <Text style={styles.splitProductTitle} numberOfLines={2}>
                           {product.title}
                         </Text>
 
                         <View style={styles.splitProductRatingPill}>
-                          <Ionicons name="star" size={11} color="#f6c795" />
+                          <Ionicons name="star" size={11} color="#16a34a" />
                           <Text style={styles.splitProductRatingPillValue}>
                             {product.rating.toFixed(1)}
                           </Text>
@@ -1801,16 +1995,16 @@ export default function Accessories() {
                             </Text>
                           </View>
                         </View>
-
-                        <TouchableOpacity
-                          style={styles.splitAddButton}
-                          activeOpacity={0.88}
-                          onPress={() => router.push("/productdetail")}
-                        >
-                          <Ionicons name="bag-add-outline" size={17} color="#f7fbf9" />
-                          <Text style={styles.splitAddButtonText}>Add to Cart</Text>
-                        </TouchableOpacity>
                       </View>
+
+                      <TouchableOpacity
+                        style={styles.splitAddButton}
+                        activeOpacity={0.88}
+                        onPress={() => router.push("/productdetail")}
+                      >
+                        <Ionicons name="bag-add-outline" size={17} color="#f7fbf9" />
+                        <Text style={styles.splitAddButtonText}>Add to Cart</Text>
+                      </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
                 );
@@ -2050,6 +2244,7 @@ export default function Accessories() {
                 "Kids Accessories"}
             </Text>
           </View>
+          <View style={styles.kidsRelatedTitleUnderline} />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -2092,7 +2287,7 @@ export default function Accessories() {
             style={styles.kidsInterstitialAdCard}
           >
             <View style={styles.kidsInterstitialAdOverlay}>
-              /* <Text style={styles.kidsInterstitialAdTag}>Ad</Text> */
+              {/* <Text style={styles.kidsInterstitialAdTag}>Ad</Text> */}
               <Text style={styles.kidsInterstitialAdTitle}>Accessories Spotlight</Text>
             </View>
           </ImageBackground>
@@ -2106,11 +2301,7 @@ export default function Accessories() {
             setEveryoneSectionY(y);
           }}
         >
-          <TouchableOpacity
-            activeOpacity={0.92}
-            style={styles.accessoriesReplicaHero}
-            onPress={() => router.push("/promote")}
-          >
+          <View style={styles.accessoriesReplicaHero}>
                 <View style={styles.accessoriesReplicaHeroImage}>
                   <View style={styles.accessoriesReplicaHeroGrid} pointerEvents="none" />
                   <View style={styles.accessoriesReplicaHeroGlowLeft} pointerEvents="none" />
@@ -2130,34 +2321,115 @@ export default function Accessories() {
                     ))}
                   </View>
                   <Text style={styles.accessoriesReplicaHeroTitle}>ACCESSORIES</Text>
-                  <Image
-                    source={require("../assets/images/sportsbanner1.png")}
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad1")}
                     style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceTopLeft]}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require("../assets/images/sportsbanner2.png")}
+                  >
+                    <Image
+                      source={require("../assets/images/sportsbanner1.png")}
+                      style={styles.accessoriesReplicaHeroPieceImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad2")}
                     style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceTopRight]}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require("../assets/images/sportsbanner3.png")}
+                  >
+                    <Image
+                      source={require("../assets/images/sportsbanner2.png")}
+                      style={styles.accessoriesReplicaHeroPieceImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad3")}
                     style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceBottomLeft]}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require("../assets/images/sportsbanner4.png")}
+                  >
+                    <Image
+                      source={require("../assets/images/sportsbanner3.png")}
+                      style={styles.accessoriesReplicaHeroPieceImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad4")}
                     style={[styles.accessoriesReplicaHeroPiece, styles.accessoriesReplicaHeroPieceBottomRight]}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require("../assets/images/latest1.png")}
+                  >
+                    <Image
+                      source={require("../assets/images/sportsbanner4.png")}
+                      style={styles.accessoriesReplicaHeroPieceImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => handleAccessoriesDealPress("ad5")}
                     style={styles.accessoriesReplicaHeroCenterBag}
-                    resizeMode="contain"
-                  />
-                  <Text style={styles.accessoriesReplicaHeroCta}>Shop All</Text>
+                  >
+                    <Image
+                      source={require("../assets/images/latest1.png")}
+                      style={styles.accessoriesReplicaHeroCenterBagImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/subcatProducts",
+                        params: {
+                          mainCat: "accessories",
+                          subCategory: "All Accessories",
+                        },
+                      })
+                    }
+                    style={styles.accessoriesReplicaHeroCtaWrap}
+                  >
+                    <Text style={styles.accessoriesReplicaHeroCta}>Shop All</Text>
+                  </TouchableOpacity>
                 </View>
-          </TouchableOpacity>
+          </View>
+
+          <View style={styles.accessoriesReplicaRelatedSection}>
+            <View style={styles.accessoriesReplicaRelatedTitleRow}>
+              <Ionicons name="sparkles" size={14} color="#ef7b1a" />
+              <Text style={styles.accessoriesReplicaRelatedTitle}>
+                Related categories for{" "}
+                {accessoriesHeroDeals.find((deal) => deal.id === selectedAccessoriesDealId)?.title ??
+                  "Accessories"}
+              </Text>
+            </View>
+            <View style={styles.accessoriesReplicaRelatedTitleUnderline} />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.accessoriesReplicaRelatedChips}
+            >
+              {(accessoriesRelatedCategories[selectedAccessoriesDealId] || []).map((category) => (
+                <TouchableOpacity
+                  key={category}
+                  style={styles.accessoriesReplicaRelatedChip}
+                  onPress={() => router.push("/productdetail")}
+                >
+                  <View style={styles.accessoriesReplicaRelatedImageWrap}>
+                    <Image
+                      source={
+                        accessoriesRelatedCategoryImages[category] ??
+                        require("../assets/images/accessoriescate.png")
+                      }
+                      style={styles.accessoriesReplicaRelatedImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <Text style={styles.accessoriesReplicaRelatedChipText}>{category}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
 
           <ScrollView
             horizontal
@@ -2168,8 +2440,11 @@ export default function Accessories() {
               <TouchableOpacity
                 key={deal.id}
                 activeOpacity={0.9}
-                style={styles.accessoriesReplicaDealCard}
-                onPress={() => router.push("/productdetail")}
+                style={[
+                  styles.accessoriesReplicaDealCard,
+                  selectedAccessoriesDealId === deal.id && styles.accessoriesReplicaDealCardActive,
+                ]}
+                onPress={() => handleAccessoriesDealPress(deal.id)}
               >
                 <View style={styles.accessoriesReplicaDealImageWrap}>
                   <Image source={deal.image} style={styles.accessoriesReplicaDealImage} resizeMode="cover" />
@@ -2200,11 +2475,20 @@ export default function Accessories() {
                 <Text style={styles.kidsAccessoryBoardRowTitle}>{row.title}</Text>
                 <View style={styles.kidsAccessoryBoardRowTitleLine} />
               </View>
-              <View style={styles.kidsAccessoryBoardRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                nestedScrollEnabled
+                style={styles.kidsAccessoryBoardRowScroll}
+                contentContainerStyle={styles.kidsAccessoryBoardRowScrollContent}
+              >
                 {row.items.map((item) => (
                   <TouchableOpacity
                     key={item.id}
-                    style={styles.kidsAccessoryBoardCard}
+                    style={[
+                      styles.kidsAccessoryBoardCard,
+                      { width: kidsAccessoryBoardCardWidth },
+                    ]}
                     activeOpacity={0.9}
                     onPress={() => router.push("/productdetail")}
                   >
@@ -2226,12 +2510,72 @@ export default function Accessories() {
                     </View>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
               {index < kidsAccessoryShowcaseRows.length - 1 ? (
                 <View style={styles.kidsAccessoryBoardRowDivider} />
               ) : null}
             </View>
           ))}
+        </View>
+
+        <View style={styles.finalUniqueSection}>
+          <View style={styles.finalUniqueHeader}>
+            <View style={styles.finalUniqueTitleWrap}>
+              <View style={styles.finalUniqueTitleRow}>
+                <Ionicons name="sparkles" size={15} color="#ef7b1a" />
+                <Text style={styles.finalUniqueTitle}>
+                  <Text style={styles.finalUniqueTitleLead}>Unique </Text>
+                  <Text style={styles.finalUniqueTitleAccent}>Picks</Text>
+                </Text>
+              </View>
+              <View style={styles.finalUniqueTitleUnderline} />
+              <Text style={styles.finalUniqueSubtitle}>Fresh accessories to finish your look</Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.finalUniqueViewAll}
+              onPress={() =>
+                router.push({
+                  pathname: "/subcatProducts",
+                  params: {
+                    mainCat: "accessories",
+                    subCategory: "Unique Picks",
+                  },
+                })
+              }
+            >
+              <Text style={styles.finalUniqueViewAllText}>View All</Text>
+              <Ionicons name="chevron-forward" size={16} color="#9a3412" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.finalUniqueRow}
+          >
+            {finalUniquePicks.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.finalUniqueCard}
+                activeOpacity={0.9}
+                onPress={() => router.push("/productdetail")}
+              >
+                <Image source={item.image} style={styles.finalUniqueCardImage} resizeMode="cover" />
+                <View style={styles.finalUniqueTagPill}>
+                  <Text style={styles.finalUniqueTagText}>{item.tag}</Text>
+                </View>
+                <View style={styles.finalUniqueCardContent}>
+                  <Text style={styles.finalUniqueCardTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.finalUniqueCardSubtitle} numberOfLines={1}>
+                    {item.subtitle}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       </ScrollView>
 
@@ -2264,29 +2608,61 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff4fb",
   },
+  topFixedArea: {
+    backgroundColor: "#fff9f2",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(29, 50, 78, 0.12)",
+    zIndex: 2,
+    ...Platform.select({
+      android: { elevation: 3 },
+      default: {},
+    }),
+  },
+  mainScroll: {
+    flex: 1,
+  },
   content: {
-    paddingBottom: 90,
+    paddingBottom: 70,
   },
   header: {
     paddingTop: 50,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    backgroundColor: "#fff9f2",
     flexDirection: "row",
     alignItems: "center",
   },
+  headerBrand: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginRight: 8,
+    paddingBottom: 1,
+  },
+  brandF: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#1d324e",
+    letterSpacing: -0.5,
+  },
+  brandT: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#ef7b1a",
+    letterSpacing: -0.5,
+    marginLeft: 1,
+  },
   searchBox: {
     flex: 1,
-    height: 42,
-    borderRadius: 10,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#ffffff",
-    borderWidth: 1.0,
-    borderColor: "#222125",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e2e6",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    marginRight: 12,
+    paddingHorizontal: 12,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
@@ -2294,21 +2670,22 @@ const styles = StyleSheet.create({
     marginRight: 8,
     color: "#1d324e",
     fontSize: 14,
+    paddingVertical: Platform.OS === "ios" ? 10 : 6,
   },
   headerIcons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
   },
   topStrip: {
-    backgroundColor: "#5B4B8A",
-    paddingBottom: 10,
-    paddingTop: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#3b3a41",
+    backgroundColor: "transparent",
+    paddingBottom: 0,
+    paddingTop: 2,
+    borderBottomWidth: 0,
+    borderBottomColor: "transparent",
   },
   topStripBgImage: {
-    opacity: 0.22,
+    opacity: 0,
   },
   topStripHeader: {
     paddingHorizontal: 12,
@@ -2326,56 +2703,61 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   topStripContent: {
-    paddingHorizontal: 0,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 2,
+    alignItems: "flex-start",
   },
   topCategoryItem: {
+    marginRight: 12,
+  },
+  topCategoryColumn: {
+    alignItems: "center",
     width: 84,
-    marginHorizontal: 5,
+  },
+  topCategoryMediaFrame: {
+    width: 78,
+    height: 52,
     borderRadius: 12,
-    paddingVertical: 6,
-    alignItems: "center",
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  topCategoryItemActive: {
-    backgroundColor: "transparent",
-    borderColor: "#ffea00",
-  },
-  topCategoryImageWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#f3f3f3",
-    alignItems: "center",
-    justifyContent: "center",
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#e2e2e2",
+    borderWidth: 2,
+    borderColor: "#d7e0e8",
+    backgroundColor: "#ffffff",
   },
-  topCategoryImageWrapActive: {
-    borderColor: "#ffea00",
+  topCategoryMediaFrameActive: {
+    borderColor: "#ef7b1a",
   },
   topCategoryImage: {
     width: "100%",
     height: "100%",
   },
   topCategoryText: {
-    marginTop: 6,
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#d1d1d6",
+    marginTop: 8,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+    color: "#1d324e",
     textAlign: "center",
   },
   topCategoryTextActive: {
-    color: "#ffffff",
+    color: "#ef7b1a",
+  },
+  topCategoryActiveBar: {
+    marginTop: 6,
+    width: 32,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "transparent",
+  },
+  topCategoryActiveBarOn: {
+    backgroundColor: "#ef7b1a",
   },
   heroSection: {
     width: "100%",
     height: 500,
     position: "relative",
     backgroundColor: "#504f56",
+    marginTop: -2,
   },
   heroImage: {
     width: "100%",
@@ -2385,46 +2767,29 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(29,50,78,0.16)",
   },
-  heroLightSweep: {
+  heroStarCluster: {
     position: "absolute",
-    top: -60,
-    left: -150,
-    width: 140,
-    height: 700,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    top: 44,
+    right: 8,
+    width: 132,
+    height: 168,
   },
-  heroSparkleOne: {
+  heroStarNode: {
     position: "absolute",
-    top: 70,
-    right: 30,
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "rgba(246,199,149,0.4)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  heroSparkleTwo: {
-    position: "absolute",
-    top: 140,
-    left: 24,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(239,123,26,0.35)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.55)",
+  heroStarNodeA: {
+    top: 2,
+    right: 2,
   },
-  heroSparkleThree: {
-    position: "absolute",
-    top: 220,
-    right: 75,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "rgba(121,65,28,0.35)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.5)",
+  heroStarNodeB: {
+    top: 58,
+    right: 44,
+  },
+  heroStarNodeC: {
+    top: 118,
+    right: 6,
   },
   heroBadgeRow: {
     position: "absolute",
@@ -2501,8 +2866,25 @@ const styles = StyleSheet.create({
   glamSection: {
     backgroundColor: "#ffffff",
     paddingTop: 10,
-    paddingBottom: 8,
+    paddingBottom: 10,
     alignItems: "center",
+  },
+  glamHeadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#fff4e7",
+    borderWidth: 1,
+    borderColor: "#f6c795",
+  },
+  glamHeadingLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#79411c",
+    letterSpacing: 0.8,
   },
   glamTitle: {
     fontSize: 32,
@@ -2511,10 +2893,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   glamSubtitle: {
-    marginTop: 2,
+    marginTop: 8,
     fontSize: 18,
-    color: "#6c8494",
+    color: "#445f73",
     textAlign: "center",
+    fontWeight: "700",
+  },
+  glamSubtitleHighlight: {
+    color: "#ef7b1a",
+    fontWeight: "900",
   },
   tileSection: {
     paddingHorizontal: 0,
@@ -2527,11 +2914,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   tileCard: {
-    width: "48.5%",
+    flex: 1,
+    minWidth: 0,
     minHeight: 240,
-    borderRadius: 16,
+    borderRadius: 0,
     paddingTop: 12,
-    paddingHorizontal: 10,
     alignItems: "center",
     borderWidth: 1,
     overflow: "hidden",
@@ -2543,6 +2930,7 @@ const styles = StyleSheet.create({
   rightTile: {
     backgroundColor: "#79411c",
     borderColor: "#5f3013",
+    marginLeft: 8,
   },
   tileBadge: {
     alignSelf: "flex-start",
@@ -2558,6 +2946,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.4,
   },
+  tileTextContent: {
+    width: "100%",
+    paddingHorizontal: 10,
+    alignItems: "flex-start",
+  },
   tileHeading: {
     color: "#ffffff",
     fontSize: 22,
@@ -2572,9 +2965,17 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginBottom: 8,
   },
-  tileImage: {
+  tileImageWrap: {
     width: "100%",
     height: 130,
+    alignSelf: "stretch",
+    flexShrink: 0,
+    borderRadius: 0,
+    overflow: "hidden",
+  },
+  tileImage: {
+    width: "100%",
+    height: "100%",
   },
   collectionSection: {
     backgroundColor: "#e9edf5",
@@ -2589,13 +2990,64 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 12,
   },
+  collectionHeaderContent: {
+    flex: 1,
+  },
+  collectionEyebrow: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fff6ec",
+    borderColor: "#ffd6b0",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  collectionEyebrowText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#8b4a1a",
+    letterSpacing: 0.4,
+  },
+  collectionTitleAccentWrap: {
+    alignSelf: "flex-start",
+  },
+  collectionTitleBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#1d324e",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 5,
+  },
+  collectionTitleBadgeText: {
+    color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  collectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  collectionTitleBar: {
+    width: 4,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: "#ef7b1a",
+  },
   collectionTitle: {
     fontSize: 22,
-    fontWeight: "800",
+    fontWeight: "900",
     color: "#1d324e",
+    letterSpacing: 0.2,
   },
   collectionSubtitle: {
-    marginTop: 2,
+    marginTop: 5,
     fontSize: 12,
     color: "#6c8494",
     fontWeight: "600",
@@ -2615,12 +3067,11 @@ const styles = StyleSheet.create({
   },
   collectionFeaturedCard: {
     width: "100%",
-    height: 190,
-    borderRadius: 16,
+    borderRadius: 0,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#d5dbe7",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#e9edf5",
     marginBottom: 12,
   },
   collectionFeaturedImage: {
@@ -2650,17 +3101,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 9,
     paddingBottom: 11,
+    alignItems: "stretch",
+  },
+  collectionFeaturedOverlayVisible: {
+    opacity: 1,
+  },
+  collectionFeaturedOverlayHidden: {
+    opacity: 0,
   },
   collectionFeaturedTitle: {
     color: "#f6c795",
     fontSize: 16,
     fontWeight: "800",
+    textAlign: "left",
   },
   collectionFeaturedSubtitle: {
     marginTop: 2,
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "right",
   },
   collectionMiniGrid: {
     flexDirection: "row",
@@ -2722,25 +3182,115 @@ const styles = StyleSheet.create({
   },
   videoAdHeader: {
     marginBottom: 8,
+    paddingHorizontal: 0,
+  },
+  spotlightHeaderCard: {
+    marginBottom: 10,
+    marginHorizontal: 12,
+    borderRadius: 0,
     paddingHorizontal: 12,
+    paddingTop: 11,
+    paddingBottom: 11,
+    backgroundColor: "#eef4ff",
+    borderWidth: 1,
+    borderColor: "#cddcff",
+  },
+  spotlightHeaderTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  spotlightHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1d324e",
+  },
+  spotlightHeaderSubtitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#4a5f78",
+    textAlign: "right",
+    marginLeft: 10,
   },
   videoAdTitle: {
     fontSize: 20,
     fontWeight: "800",
     color: "#311b92",
   },
-  videoAdSubtitle: {
-    marginTop: 2,
+  styleLabAdHeadingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 0,
+    backgroundColor: "#faf7ff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#dfd5f0",
+  },
+  styleLabAdHeadingIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(239, 123, 26, 0.35)",
+  },
+  styleLabAdHeadingTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  styleLabAdHeadingTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  styleLabAdHeadingTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+  },
+  styleLabAdHeadingTitleLead: {
+    color: "#1d324e",
+  },
+  styleLabAdHeadingTitleAccent: {
+    color: "#ef7b1a",
+  },
+  styleLabAdHeadingAdMark: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "rgba(49, 27, 146, 0.08)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(49, 27, 146, 0.22)",
+  },
+  styleLabAdHeadingAdMarkText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#311b92",
+    letterSpacing: 0.6,
+  },
+  styleLabAdHeadingSub: {
+    marginTop: 4,
     fontSize: 12,
     fontWeight: "600",
-    color: "#4a148c",
+    color: "#5c4a78",
+    letterSpacing: 0.1,
   },
   videoAdCard: {
-    height: 220,
+    width: "100%",
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 0,
     backgroundColor: "#504f56",
+  },
+  videoAdCardFixedHeight: {
+    height: 220,
   },
   videoAdCardSpotlight: {
     borderRadius: 0,
@@ -2800,28 +3350,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
+    paddingVertical: 10,
     marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: "#f5f8ff",
+    borderWidth: 1,
+    borderColor: "#d7e2fb",
   },
   womenTitleWrap: {
     flex: 1,
     marginRight: 8,
   },
-  womenTitle: {
+  womenTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  womenTitleWord: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#311b92",
+    color: "#1d324e",
+  },
+  womenTitleUnderline: {
+    marginTop: 4,
+    marginBottom: 2,
+    marginLeft: 28,
+    width: 156,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
   },
   womenSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: "#4a148c",
+    color: "#4f657b",
     fontWeight: "600",
   },
   womenViewAll: {
-    backgroundColor: "#ef7b1a",
-    borderRadius: 14,
+    backgroundColor: "#1d324e",
+    borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#f6c795",
   },
   womenViewAllText: {
     color: "#fff",
@@ -2902,26 +3473,12 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  womenTag: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "#79411c",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  womenTagText: {
-    color: "#f6c795",
-    fontSize: 10,
-    fontWeight: "800",
-  },
   womenCardOverlay: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(29,50,78,0.78)",
+    backgroundColor: "rgba(29,50,78,0.48)",
     paddingHorizontal: 9,
     paddingVertical: 8,
   },
@@ -2935,6 +3492,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "600",
+  },
+  womenCardSubtitleRight: {
+    alignSelf: "flex-end",
+    textAlign: "right",
   },
   womenRelatedSection: {
     marginHorizontal: 0,
@@ -2950,16 +3511,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#1d324e",
+    flexShrink: 1,
+  },
+  womenRelatedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  womenRelatedTitleUnderline: {
+    marginTop: 6,
     marginBottom: 10,
+    marginLeft: 58,
+    width: 170,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
   },
   womenRelatedChips: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "flex-start",
+    paddingRight: 8,
   },
   womenRelatedChip: {
-    width: "25%",
+    width: 88,
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 0,
+    marginRight: 8,
     paddingHorizontal: 4,
   },
   womenRelatedImageWrap: {
@@ -3018,7 +3595,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 6,
     paddingRight: 8,
   },
   kidsRelatedIconBadge: {
@@ -3038,6 +3615,14 @@ const styles = StyleSheet.create({
     color: "#1d324e",
     lineHeight: 18,
     fontStyle: "italic",
+  },
+  kidsRelatedTitleUnderline: {
+    marginLeft: 48,
+    marginBottom: 12,
+    width: 160,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
   },
   kidsRelatedScroll: {
     flexDirection: "row",
@@ -3213,9 +3798,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   accessoriesReplicaSection: {
-    marginHorizontal: 8,
+    marginHorizontal: 0,
     marginBottom: 10,
-    paddingHorizontal: 1,
+    paddingHorizontal: 0,
   },
   accessoriesReplicaHero: {
     borderWidth: 1,
@@ -3299,6 +3884,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  accessoriesReplicaHeroPieceImage: {
+    width: "100%",
+    height: "100%",
+  },
   accessoriesReplicaHeroPieceTopLeft: {
     width: 88,
     height: 56,
@@ -3334,13 +3923,19 @@ const styles = StyleSheet.create({
     top: 72,
     zIndex: 2,
   },
+  accessoriesReplicaHeroCenterBagImage: {
+    width: "100%",
+    height: "100%",
+  },
+  accessoriesReplicaHeroCtaWrap: {
+    zIndex: 6,
+    marginBottom: 4,
+  },
   accessoriesReplicaHeroCta: {
     fontSize: 20,
     fontWeight: "600",
     color: "#111111",
     textDecorationLine: "underline",
-    marginBottom: 4,
-    zIndex: 5,
   },
   accessoriesReplicaDealsRow: {
     marginTop: 6,
@@ -3350,6 +3945,9 @@ const styles = StyleSheet.create({
   },
   accessoriesReplicaDealCard: {
     width: 122,
+  },
+  accessoriesReplicaDealCardActive: {
+    transform: [{ scale: 1.02 }],
   },
   accessoriesReplicaDealImageWrap: {
     borderRadius: 8,
@@ -3406,9 +4004,67 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
 
   },
+  accessoriesReplicaRelatedSection: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d6c1b7",
+    backgroundColor: "#fffdfb",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  accessoriesReplicaRelatedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  accessoriesReplicaRelatedTitle: {
+    color: "#1d324e",
+    fontSize: 13,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+  accessoriesReplicaRelatedTitleUnderline: {
+    width: 176,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
+    marginBottom: 10,
+    marginLeft: 18,
+  },
+  accessoriesReplicaRelatedChips: {
+    flexDirection: "row",
+    gap: 10,
+    paddingRight: 6,
+  },
+  accessoriesReplicaRelatedChip: {
+    width: 86,
+    alignItems: "center",
+  },
+  accessoriesReplicaRelatedImageWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#d6c1b7",
+    backgroundColor: "#f5efea",
+    marginBottom: 6,
+  },
+  accessoriesReplicaRelatedImage: {
+    width: "100%",
+    height: "100%",
+  },
+  accessoriesReplicaRelatedChipText: {
+    color: "#4a3a33",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   kidsAccessoryBoardSection: {
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 6,
     paddingTop: 3,
     paddingBottom: 5,
     paddingHorizontal: 3,
@@ -3446,10 +4102,14 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,
   },
-  kidsAccessoryBoardRow: {
+  kidsAccessoryBoardRowScroll: {
+    flexGrow: 0,
+  },
+  kidsAccessoryBoardRowScrollContent: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
     paddingHorizontal: 3,
+    paddingRight: 12,
     gap: 3,
   },
   kidsAccessoryBoardRowDivider: {
@@ -3459,7 +4119,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   kidsAccessoryBoardCard: {
-    width: "24.25%",
     backgroundColor: "#ffffff",
     borderRadius: 0,
     overflow: "hidden",
@@ -3488,25 +4147,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#1d324e",
     borderTopWidth: 1,
     borderTopColor: "#ef7b1a",
-    paddingTop: 2,
-    paddingBottom: 3,
-    paddingHorizontal: 3,
-    minHeight: 34,
+    paddingTop: 4,
+    paddingBottom: 4,
+    paddingHorizontal: 2,
+    minHeight: 44,
     justifyContent: "space-between",
   },
   kidsAccessoryBoardCardTitle: {
     color: "#f6c795",
-    fontSize: 7,
+    fontSize: 10,
     fontWeight: "800",
     textAlign: "center",
-    lineHeight: 8,
+    lineHeight: 12,
   },
   kidsAccessoryBoardCardOffer: {
     color: "#ef7b1a",
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "900",
     textAlign: "center",
-    lineHeight: 8,
+    lineHeight: 11,
+    marginTop: 1,
   },
   womanYouAreSection: {
     marginHorizontal: 0,
@@ -3901,28 +4561,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
+    paddingVertical: 10,
     marginBottom: 10,
+    borderRadius: 14,
+    backgroundColor: "#f5f8ff",
+    borderWidth: 1,
+    borderColor: "#d7e2fb",
   },
   menTitleWrap: {
     flex: 1,
     marginRight: 8,
+  },
+  menTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   menTitle: {
     fontSize: 20,
     fontWeight: "800",
     color: "#1d324e",
   },
+  menTitleUnderline: {
+    marginTop: 4,
+    marginBottom: 2,
+    marginLeft: 18,
+    width: 138,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
+  },
   menSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: "#5f6f8c",
+    color: "#4f657b",
     fontWeight: "600",
   },
   menViewAll: {
     backgroundColor: "#1d324e",
-    borderRadius: 14,
+    borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#f6c795",
   },
   menViewAllText: {
     color: "#fff",
@@ -3945,20 +4626,6 @@ const styles = StyleSheet.create({
   menCardImage: {
     width: "100%",
     height: "100%",
-  },
-  menTag: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "#0f766e",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  menTagText: {
-    color: "#d1fae5",
-    fontSize: 10,
-    fontWeight: "800",
   },
   menCardOverlay: {
     position: "absolute",
@@ -3994,7 +4661,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#1d324e",
+    flexShrink: 1,
+  },
+  menRelatedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  menRelatedTitleUnderline: {
+    marginTop: 6,
     marginBottom: 10,
+    marginLeft: 18,
+    width: 170,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ef7b1a",
   },
   menRelatedChips: {
     flexDirection: "row",
@@ -4073,7 +4754,7 @@ const styles = StyleSheet.create({
   },
   splitShowcaseRow: {
     flexDirection: "row",
-    height: 364,
+    height: 400,
   },
   splitLeftPane: {
     width: "42%",
@@ -4126,10 +4807,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 11,
     paddingBottom: 11,
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+  },
+  splitProductCopyBlock: {
+    flexGrow: 0,
+    flexShrink: 0,
   },
   splitProductImageStage: {
-    height: 132,
+    height: 168,
     borderRadius: 14,
     overflow: "hidden",
     position: "relative",
@@ -4188,19 +4873,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#1d324e",
+    backgroundColor: "#ecfdf3",
     borderWidth: 1,
-    borderColor: "#2d4a63",
+    borderColor: "#bbf7d0",
   },
   splitProductRatingPillValue: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#f7fbf9",
+    color: "#15803d",
   },
   splitProductRatingPillCount: {
     fontSize: 9,
     fontWeight: "600",
-    color: "#9eb5cc",
+    color: "#4ade80",
   },
   splitProductPriceBlock: {
     marginTop: 9,
@@ -4235,7 +4920,7 @@ const styles = StyleSheet.create({
     textDecorationLine: "line-through",
   },
   splitAddButton: {
-    marginTop: 10,
+    marginTop: "auto",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -4372,6 +5057,130 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  finalUniqueSection: {
+    marginHorizontal: 0,
+    marginBottom: 8,
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#d7e0e8",
+    shadowColor: "#1d324e",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  finalUniqueHeader: {
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  finalUniqueTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  finalUniqueTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  finalUniqueTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  finalUniqueTitleLead: {
+    color: "#1d324e",
+  },
+  finalUniqueTitleAccent: {
+    color: "#ef7b1a",
+  },
+  finalUniqueTitleUnderline: {
+    marginTop: 6,
+    marginLeft: 50,
+    width: 52,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#ef7b1a",
+  },
+  finalUniqueSubtitle: {
+    marginTop: 8,
+    color: "#4a5f78",
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.15,
+    lineHeight: 16,
+  },
+  finalUniqueViewAll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fff9f2",
+    borderWidth: 1,
+    borderColor: "#e8c4a8",
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    marginTop: 2,
+  },
+  finalUniqueViewAllText: {
+    color: "#9a3412",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  finalUniqueRow: {
+    paddingLeft: 12,
+    paddingRight: 4,
+  },
+  finalUniqueCard: {
+    width: 156,
+    marginRight: 8,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#d9d9de",
+    backgroundColor: "#fff9f2",
+  },
+  finalUniqueCardImage: {
+    width: "100%",
+    height: 112,
+    backgroundColor: "#f1f1f5",
+  },
+  finalUniqueTagPill: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(29,50,78,0.92)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  finalUniqueTagText: {
+    color: "#f6c795",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  finalUniqueCardContent: {
+    paddingHorizontal: 9,
+    paddingTop: 8,
+    paddingBottom: 10,
+  },
+  finalUniqueCardTitle: {
+    color: "#1d324e",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  finalUniqueCardSubtitle: {
+    marginTop: 3,
+    color: "#69798c",
+    fontSize: 11,
+    fontWeight: "600",
   },
   bottomTab: {
     position: "absolute",
