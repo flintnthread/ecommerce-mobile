@@ -101,137 +101,9 @@ type Section = {
 };
 
 const CATEGORY_CONTENT: Record<CategoryKey, Section[]> = {
-  womenswear: [
-    {
-      title: "Ethnic wear",
-      items: [
-        {
-          id: "w1",
-          name: "Sarees",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w2",
-          name: "Kurtas & Kurtis",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w3",
-          name: "Lehengas",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w13",
-          name: "Gowns",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-      ],
-    },
-    {
-      title: "Lingerie & Sleepwear",
-      items: [
-        {
-          id: "w4",
-          name: "Bras",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w5",
-          name: "Briefs",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w6",
-          name: "Nightwear",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-      ],
-    },
-    {
-      title: "western wear",
-      items: [
-        {
-          id: "w7",
-          name: "Tops & Tees",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w8",
-          name: "Dresses",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w9",
-          name: "Jeans",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-      ],
-    },
-    {
-      title: "winterwear",
-      items: [
-        {
-          id: "w10",
-          name: "Sweaters",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w11",
-          name: "Jackets",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-        {
-          id: "w12",
-          name: "Co-ords",
-          image: require("../assets/MainCatImages/images/Women.png"),
-        },
-      ],
-    },
-  ],
-  menswear: [
-    {
-      title: "Menswear picks",
-      items: [
-        {
-          id: "m1",
-          name: "Casual shirts",
-          image: require("../assets/MainCatImages/images/Men.png"),
-        },
-        {
-          id: "m2",
-          name: "T-shirts",
-          image: require("../assets/MainCatImages/images/Men.png"),
-        },
-        {
-          id: "m3",
-          name: "Jeans & Trousers",
-          image: require("../assets/MainCatImages/images/Men.png"),
-        },
-      ],
-    },
-  ],
-  kidswear: [
-    {
-      title: "Kidswear picks",
-      items: [
-        {
-          id: "k1",
-          name: "Boys clothing",
-          image: require("../assets/MainCatImages/images/Kids.png"),
-        },
-        {
-          id: "k2",
-          name: "Girls clothing",
-          image: require("../assets/MainCatImages/images/Kids.png"),
-        },
-        {
-          id: "k3",
-          name: "Infant wear",
-          image: require("../assets/MainCatImages/images/Kids.png"),
-        },
-      ],
-    },
-  ],
+  womenswear: [],
+  menswear: [],
+  kidswear: [],
   homelyHub: [
     {
       title: "homely hub",
@@ -540,6 +412,21 @@ export default function Categories() {
                 <TouchableOpacity
                   key={cat.key}
                   onPress={() => {
+                    if (cat.key === "womenswear") {
+                      setIsSideBarOpen(false);
+                      router.push("/women" as Href);
+                      return;
+                    }
+                    if (cat.key === "menswear") {
+                      setIsSideBarOpen(false);
+                      router.push("/men" as Href);
+                      return;
+                    }
+                    if (cat.key === "kidswear") {
+                      setIsSideBarOpen(false);
+                      router.push("/kids" as Href);
+                      return;
+                    }
                     setActiveCategory(cat.key);
                     setIsSideBarOpen(false);
                   }}
@@ -576,24 +463,36 @@ export default function Categories() {
                       activeOpacity={0.85}
                       onPress={() => {
                         setActiveCategory(cat.key);
+                        if (cat.key === "womenswear") {
+                          router.push("/women" as Href);
+                          return;
+                        }
+                        if (cat.key === "menswear") {
+                          router.push("/men" as Href);
+                          return;
+                        }
+                        if (cat.key === "kidswear") {
+                          router.push("/kids" as Href);
+                          return;
+                        }
                         if (cat.key === "homelyHub") {
-                          router.push("/gifts" as never);
+                          router.push("/gifts" as Href);
                           return;
                         }
                         if (cat.key === "accessories") {
-                          router.push("/accessories" as never);
+                          router.push("/accessories" as Href);
                           return;
                         }
                         if (cat.key === "sportswear") {
-                          router.push("/sportswear" as never);
+                          router.push("/sportswear" as Href);
                           return;
                         }
                         if (cat.key === "sweets") {
-                          router.push("/sweets" as never);
+                          router.push("/sweets" as Href);
                           return;
                         }
                         if (cat.key === "footwear") {
-                          router.push("/footwear" as never);
+                          router.push("/footwear" as Href);
                           return;
                         }
                         router.push({
@@ -615,6 +514,44 @@ export default function Categories() {
                     </TouchableOpacity>
                   ))}
             </View>
+
+            {filteredSections.length > 0 ? (
+              <View style={styles.subCategoriesBlock}>
+                {filteredSections.map((section) => (
+                  <View key={section.title} style={styles.sectionBlock}>
+                    <Text style={styles.sectionTitle}>{section.title}</Text>
+                    <View style={styles.itemsGrid}>
+                      {section.items.map((item) => (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={styles.itemCard}
+                          activeOpacity={0.85}
+                          onPress={() =>
+                            router.push({
+                              pathname: "/subcate",
+                              params: {
+                                mainCat: activeCategory,
+                              },
+                            })
+                          }
+                        >
+                          <View style={styles.itemImageWrapper}>
+                            <Image
+                              source={item.image}
+                              style={styles.itemImage}
+                              resizeMode="cover"
+                            />
+                          </View>
+                          <Text style={styles.itemLabel} numberOfLines={2}>
+                            {item.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         </ScrollView>
       </View>
@@ -746,6 +683,12 @@ const styles = StyleSheet.create({
   },
   sectionBlock: {
     marginBottom: 24,
+  },
+  subCategoriesBlock: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e5e5e5",
   },
   sectionTitle: {
     fontSize: 14,
