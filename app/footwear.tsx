@@ -28,7 +28,7 @@ const HERO_SIDE_INSET = 20;
 const HERO_SLIDE_WIDTH = DESK_INNER_WIDTH - HERO_SIDE_INSET * 2;
 
 const FW1 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM.jpeg");
-const FW2 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM (1).jpeg");
+const FW2 = require("../assets/footwearimages/hub-men-footwear.png");
 const FW3 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM (2).jpeg");
 const FW4 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM.jpeg");
 const FW5 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM (1).jpeg");
@@ -1496,7 +1496,7 @@ const styles = StyleSheet.create({
   },
   subCardImage: {
     width: "100%",
-    height: 110,
+    height: 160,
     resizeMode: "cover",
   },
   subCardLabel: {
@@ -1611,7 +1611,7 @@ const styles = StyleSheet.create({
   },
   moodImage: {
     width: "100%",
-    height: 120,
+    height: 150,
     resizeMode: "cover",
   },
   moodText: {

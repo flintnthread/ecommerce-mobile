@@ -12,9 +12,70 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
+import {
+  fetchSubcategoriesTable,
+  SWEETS_DRY_CATEGORY_ID,
+  SWEETS_MILK_CATEGORY_ID,
+  subcategoryTableImageUrl,
+} from "../services/api";
+
+type SweetsSubItem = {
+  id: string;
+  name: string;
+  note: string;
+  color: string;
+  image?: any;
+};
+
+const DRY_SWEET_TILE_COLORS = ["#FFE7D4", "#FFF2C9", "#EAFBF2", "#F4E9FF"];
+
+const DRY_SUBS_FALLBACK: SweetsSubItem[] = [
+  {
+    id: "d1",
+    name: "Sununda",
+    note: "Traditional dry sweet",
+    color: "#FFE7D4",
+    image: require("../assets/sweetsimages/sununda.jpg"),
+  },
+  {
+    id: "d2",
+    name: "Boondi Laddus",
+    note: "Classic boondi laddu",
+    color: "#FFF2C9",
+    image: require("../assets/sweetsimages/laddu.jpg"),
+  },
+  {
+    id: "d3",
+    name: "Dryfruit Laddus",
+    note: "Nuts & dry fruits",
+    color: "#EAFBF2",
+    image: require("../assets/sweetsimages/dry fruit laddu.jpg"),
+  },
+];
+
+const MILK_SWEET_TILE_COLORS = ["#FFE7D4", "#F4E9FF", "#FFF2C9", "#EAFBF2"];
+
+const MILK_SUBS_FALLBACK: SweetsSubItem[] = [
+  {
+    id: "m1",
+    name: "Gulab Jamun",
+    note: "Warm syrupy",
+    color: "#FFE7D4",
+    image: require("../assets/sweetsimages/jamun.jpg"),
+  },
+  {
+    id: "m2",
+    name: "Kalakand",
+    note: "Milky fudge",
+    color: "#F4E9FF",
+    image: require("../assets/sweetsimages/48.png"),
+  },
+];
 
 export default function Sweets() {
+  const router = useRouter();
   const { width } = Dimensions.get("window");
   const scrollRef = useRef<ScrollView>(null);
   const bannerListRef = useRef<any>(null);
@@ -42,6 +103,10 @@ export default function Sweets() {
   type CategoryKey = "dry" | "milk";
   const [active, setActive] = useState<CategoryKey>("dry");
   const [query, setQuery] = useState("");
+  const [drySubcategories, setDrySubcategories] =
+    useState<SweetsSubItem[]>(DRY_SUBS_FALLBACK);
+  const [milkSubcategories, setMilkSubcategories] =
+    useState<SweetsSubItem[]>(MILK_SUBS_FALLBACK);
 
   const sectionY = useRef<Record<CategoryKey, number>>({
     dry: 0,
@@ -99,52 +164,66 @@ export default function Sweets() {
     return () => clearInterval(t);
   }, [MID_PROMO_BANNERS.length, midBannerItemW]);
 
-  const SUB: Record<
-    CategoryKey,
-    { id: string; name: string; note: string; color: string; image?: any }[]
-  > = useMemo(
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchSubcategoriesTable(SWEETS_DRY_CATEGORY_ID);
+        const first = rows[0];
+        if (cancelled || !first?.subcategories?.length) return;
+        setDrySubcategories(
+          first.subcategories.map((s, i) => ({
+            id: String(s.id),
+            name: s.name,
+            note: "Dry sweet",
+            color: DRY_SWEET_TILE_COLORS[i % DRY_SWEET_TILE_COLORS.length],
+            image: s.image
+              ? { uri: subcategoryTableImageUrl(s.image) }
+              : require("../assets/sweetsimages/laddu.jpg"),
+          }))
+        );
+      } catch {
+        /* keep DRY_SUBS_FALLBACK */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchSubcategoriesTable(SWEETS_MILK_CATEGORY_ID);
+        const first = rows[0];
+        if (cancelled || !first?.subcategories?.length) return;
+        setMilkSubcategories(
+          first.subcategories.map((s, i) => ({
+            id: String(s.id),
+            name: s.name,
+            note: "Milk sweet",
+            color: MILK_SWEET_TILE_COLORS[i % MILK_SWEET_TILE_COLORS.length],
+            image: s.image
+              ? { uri: subcategoryTableImageUrl(s.image) }
+              : require("../assets/sweetsimages/jamun.jpg"),
+          }))
+        );
+      } catch {
+        /* keep MILK_SUBS_FALLBACK */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const SUB: Record<CategoryKey, SweetsSubItem[]> = useMemo(
     () => ({
-      dry: [
-        {
-          id: "d1",
-          name: "Sununda",
-          note: "Traditional dry sweet",
-          color: "#FFE7D4",
-          image: require("../assets/sweetsimages/sununda.jpg"),
-        },
-        {
-          id: "d2",
-          name: "Boondi Laddus",
-          note: "Classic boondi laddu",
-          color: "#FFF2C9",
-          image: require("../assets/sweetsimages/laddu.jpg"),
-        },
-        {
-          id: "d3",
-          name: "Dryfruit Laddus",
-          note: "Nuts & dry fruits",
-          color: "#EAFBF2",
-          image: require("../assets/sweetsimages/dry fruit laddu.jpg"),
-        },
-      ],
-      milk: [
-        {
-          id: "m1",
-          name: "Gulab Jamun",
-          note: "Warm syrupy",
-          color: "#FFE7D4",
-          image: require("../assets/sweetsimages/jamun.jpg"),
-        },
-        {
-          id: "m2",
-          name: "Kalakand",
-          note: "Milky fudge",
-          color: "#F4E9FF",
-          image: require("../assets/sweetsimages/48.png"),
-        },
-      ],
+      dry: drySubcategories,
+      milk: milkSubcategories,
     }),
-    []
+    [drySubcategories, milkSubcategories]
   );
 
   const filtered = useMemo(() => {
@@ -161,6 +240,16 @@ export default function Sweets() {
     setActive(key);
     const y = sectionY.current[key] ?? 0;
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+  };
+
+  const handleSweetsSubcategoryPress = (section: CategoryKey, item: SweetsSubItem) => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: section === "dry" ? "sweets-dry" : "sweets-milk",
+        subCategory: item.name,
+      },
+    });
   };
 
   const renderCategorySection = (key: CategoryKey) => (
@@ -186,6 +275,7 @@ export default function Sweets() {
               { backgroundColor: item.color, width: (width - 10 * 2 - 10) / 2 },
             ]}
             activeOpacity={0.9}
+            onPress={() => handleSweetsSubcategoryPress(key, item)}
           >
             {!!item.image ? (
               <View style={styles.tileWrap}>
