@@ -1,10 +1,9 @@
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
-import { FlatList } from "react-native";
 
 import {
   View,
@@ -13,26 +12,219 @@ import {
   TextInput,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   Image,
   Dimensions,
   Modal,
   Alert,
   Platform,
+  FlatList,
+  type ImageSourcePropType,
 } from "react-native";
 import * as IntentLauncher from "expo-intent-launcher";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import { requestForegroundLocation } from "../lib/requestForegroundLocation";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.6;
+const USER_PICK_CARD_WIDTH = Math.min(Math.round(width * 0.38), 148);
+const USER_PICK_ITEM_GAP = 12;
+
+/** Category strip: fixed chip width for horizontal scroll. */
+const CATEGORY_CHIP_WIDTH = 70;
+const CATEGORY_ICON_INNER = 48;
+
+const FOCUS_CARD_WIDTH = Math.round(Math.min(width * 0.78, 336));
+const FOCUS_CARD_GAP = 16;
+const FOCUS_CARD_HEIGHT = 232;
+
+/** Below header: page + scroll base (slate blue-gray) */
+const HOME_PAGE_BG = "#69798c";
+
+/**
+ * Section surfaces — rgba so the multi-color scroll mesh shows through slightly.
+ * Each tint is different; Fresh stays most opaque for image contrast.
+ */
+const PANEL_BROWSE = "rgba(245, 248, 255, 0.90)";
+const PANEL_MEDIA = "rgba(255, 252, 249, 0.88)";
+const PANEL_SUGGESTED = "rgba(247, 244, 255, 0.88)";
+const PANEL_VIDEO = "rgba(240, 249, 255, 0.88)";
+const PANEL_FRESH = "rgba(255, 255, 255, 0.94)";
+const PANEL_BANNER2 = "rgba(237, 242, 255, 0.88)";
+const PANEL_SHOP = "rgba(242, 251, 247, 0.88)";
+const PANEL_FOCUS = "rgba(255, 248, 240, 0.88)";
+const PANEL_LATEST = "rgba(248, 250, 252, 0.90)";
+const PANEL_SELLER = "rgba(250, 245, 255, 0.88)";
+
+const BORDER_BROWSE = "#B8C9DC";
+const BORDER_MEDIA = "#E5D5CC";
+const BORDER_SUGGESTED = "#CDC0E8";
+const BORDER_VIDEO = "#A5D8F7";
+const BORDER_FRESH = "#B8C9DC";
+const BORDER_BANNER2 = "#A8BEE0";
+const BORDER_SHOP = "#9FD9C4";
+const BORDER_FOCUS = "#F5D0A8";
+const BORDER_LATEST = "#CBD5E1";
+const BORDER_SELLER = "#D8C4F0";
+
+/**
+ * Full feed background: subtle variation around #69798c so categories and
+ * sections read on one cohesive slate tone.
+ */
+const HOME_SCROLL_MESH_COLORS = [
+  "#586776",
+  "#5f6e7e",
+  "#667586",
+  "#6d7c8e",
+  "#69798c",
+  "#738496",
+  "#7d8fa0",
+  "#8799aa",
+  "#7a8b9c",
+  "#69798c",
+] as const;
+
+const HOME_SCROLL_MESH_LOCATIONS = [
+  0, 0.1, 0.22, 0.34, 0.46, 0.55, 0.64, 0.73, 0.86, 1,
+] as const;
+
+/** Top header: orange + white blend */
+const HEADER_MESH_COLORS = [
+  "#FFFFFF",
+  "#FFF7ED",
+  "#FFEDD5",
+  "#FFFFFF",
+  "#FFF1E6",
+  "#FDBA74",
+  "#FFF8F3",
+  "#FFE4CC",
+  "#FFFFFF",
+] as const;
+const HEADER_MESH_LOCATIONS = [
+  0, 0.12, 0.24, 0.36, 0.48, 0.58, 0.7, 0.85, 1,
+] as const;
+
+/** Greeting chip: white with soft orange wash */
+const GREETING_CHIP_COLORS = [
+  "#FFFFFF",
+  "#FFFBF7",
+  "#FFF1E6",
+  "#FFEDD5",
+  "#FFFFFF",
+] as const;
+const GREETING_CHIP_LOCS = [0, 0.22, 0.48, 0.72, 1] as const;
+
+/** Logo ring: orange tones + white highlight */
+const LOGO_RING_COLORS = [
+  "#FB923C",
+  "#FDBA74",
+  "#FFFFFF",
+  "#F97316",
+  "#FED7AA",
+  "#EA580C",
+  "#FFF7ED",
+  "#FFFFFF",
+] as const;
+const LOGO_RING_LOCATIONS = [0, 0.14, 0.28, 0.42, 0.55, 0.68, 0.82, 1] as const;
+
+/** Search bar: white + peach-orange mix */
+const SEARCH_BAR_MESH_COLORS = [
+  "#FFFFFF",
+  "#FFFEFC",
+  "#FFF7ED",
+  "#FFFFFF",
+  "#FFEDD5",
+  "#FFF8F3",
+  "#FFFFFF",
+] as const;
+const SEARCH_BAR_MESH_LOCS = [0, 0.15, 0.32, 0.48, 0.62, 0.8, 1] as const;
+
+/** Location pill: white → soft orange */
+const LOCATION_MESH_COLORS = [
+  "#FFFFFF",
+  "#FFF7ED",
+  "#FFEDD5",
+  "#FDBA74",
+  "#FFE4CC",
+  "#FFFFFF",
+] as const;
+const LOCATION_MESH_LOCS = [0, 0.18, 0.38, 0.55, 0.72, 1] as const;
+
+/** Greeting-chip promo sheet: saturated gold + magenta CTA */
+const PROMO_MODAL_GRADIENT = [
+  "#FBBF24",
+  "#F59E0B",
+  "#EAB308",
+  "#CA8A04",
+  "#FCD34D",
+  "#F59E0B",
+] as const;
+const PROMO_MODAL_GRADIENT_LOCS = [0, 0.18, 0.38, 0.52, 0.68, 1] as const;
+
+const PROMO_BOKEH = [
+  { top: "6%", left: "4%", size: 64, opacity: 0.28 },
+  { top: "14%", left: "78%", size: 48, opacity: 0.22 },
+  { top: "28%", left: "12%", size: 40, opacity: 0.2 },
+  { top: "40%", left: "88%", size: 56, opacity: 0.18 },
+  { top: "52%", left: "6%", size: 36, opacity: 0.25 },
+  { top: "68%", left: "72%", size: 44, opacity: 0.2 },
+  { top: "22%", left: "42%", size: 72, opacity: 0.12 },
+] as const;
+
+const PROMO_HERO_IMAGE = require("../assets/images/getpromoting1.png");
+const PROMO_CHAR_LEFT = require("../assets/images/getpromoting2.png");
+const PROMO_CHAR_RIGHT = require("../assets/images/getpromoting3.png");
 
 interface FilterItemProps {
   icon: keyof typeof MaterialIcons.glyphMap;
   label: string;
   onPress: () => void;
+  tint: { bubble: string; border: string; icon: string };
 }
 
+interface SavedDeliveryAddress {
+  id: string;
+  name: string;
+  line: string;
+  phone?: string;
+}
 
+const DELIVERY_ADDRESSES_STORAGE_KEY = "home_savedDeliveryAddresses_v1";
+
+const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
+  {
+    id: "1",
+    name: "Sai Ramya",
+    line: "Kphb colony, road no 3, phase 1, near shivalaya temple",
+  },
+  {
+    id: "2",
+    name: "Sai Ramya",
+    line: "Brundhavan gardens 3/2rd line, Maduri girls hostel",
+  },
+];
+
+/** expo-video uses a native SharedObject; play/pause can throw or reject after it is released. */
+function safeVideoPlayback(
+  player: { play(): unknown; pause(): unknown },
+  action: "play" | "pause"
+): void {
+  try {
+    const result = action === "play" ? player.play() : player.pause();
+    if (
+      result != null &&
+      typeof result === "object" &&
+      "then" in result &&
+      typeof (result as PromiseLike<void>).then === "function"
+    ) {
+      void Promise.resolve(result as Promise<unknown>).then(undefined, () => undefined);
+    }
+  } catch {
+    /* ignored */
+  }
+}
 
 export default function Home() {
  const [activeIndex, setActiveIndex] = useState(0);
@@ -47,6 +239,27 @@ export default function Home() {
   
   const [searchQuery, setSearchQuery] = useState("");
   const [userDisplayName, setUserDisplayName] = useState("Ramya");
+
+  const [deliveryAddressModalVisible, setDeliveryAddressModalVisible] =
+    useState(false);
+  const [promoSpotlightModalVisible, setPromoSpotlightModalVisible] =
+    useState(false);
+  const [deliveryAddressSearchQuery, setDeliveryAddressSearchQuery] =
+    useState("");
+  const [displayDeliveryLine, setDisplayDeliveryLine] = useState(
+    "Kphb colony ,road no 3 ,phase 1,near shi..."
+  );
+  const [savedDeliveryAddresses, setSavedDeliveryAddresses] = useState<
+    SavedDeliveryAddress[]
+  >(DEFAULT_SAVED_DELIVERY_ADDRESSES);
+  const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] =
+    useState("1");
+  const [deliveryAddMode, setDeliveryAddMode] = useState<"list" | "add">(
+    "list"
+  );
+  const [newAddressName, setNewAddressName] = useState("");
+  const [newAddressPhone, setNewAddressPhone] = useState("");
+  const [newAddressLine, setNewAddressLine] = useState("");
 
   const loadUserDisplayName = useCallback(async () => {
     try {
@@ -64,6 +277,136 @@ export default function Home() {
       void loadUserDisplayName();
     }, [loadUserDisplayName])
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(DELIVERY_ADDRESSES_STORAGE_KEY);
+        if (cancelled || !raw) return;
+        const parsed = JSON.parse(raw) as SavedDeliveryAddress[];
+        if (
+          Array.isArray(parsed) &&
+          parsed.length > 0 &&
+          parsed.every(
+            (a) =>
+              a &&
+              typeof a.id === "string" &&
+              typeof a.name === "string" &&
+              typeof a.line === "string"
+          )
+        ) {
+          setSavedDeliveryAddresses(parsed);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistSavedDeliveryAddresses = useCallback(
+    async (next: SavedDeliveryAddress[]) => {
+      setSavedDeliveryAddresses(next);
+      try {
+        await AsyncStorage.setItem(
+          DELIVERY_ADDRESSES_STORAGE_KEY,
+          JSON.stringify(next)
+        );
+      } catch {
+        /* ignore */
+      }
+    },
+    []
+  );
+
+  const closeDeliveryModal = useCallback(() => {
+    setDeliveryAddressModalVisible(false);
+    setDeliveryAddressSearchQuery("");
+    setDeliveryAddMode("list");
+    setNewAddressName("");
+    setNewAddressPhone("");
+    setNewAddressLine("");
+  }, []);
+
+  const openAddNewAddressForm = useCallback(() => {
+    setNewAddressName("");
+    setNewAddressPhone("");
+    setNewAddressLine("");
+    setDeliveryAddMode("add");
+  }, []);
+
+  const goBackAddAddressForm = useCallback(() => {
+    setDeliveryAddMode("list");
+    setNewAddressName("");
+    setNewAddressPhone("");
+    setNewAddressLine("");
+  }, []);
+
+  const filteredDeliveryAddresses = useMemo(() => {
+    const q = deliveryAddressSearchQuery.trim().toLowerCase();
+    if (!q) return savedDeliveryAddresses;
+    return savedDeliveryAddresses.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        a.line.toLowerCase().includes(q) ||
+        (a.phone?.toLowerCase().includes(q) ?? false)
+    );
+  }, [savedDeliveryAddresses, deliveryAddressSearchQuery]);
+
+  const selectDeliveryAddress = useCallback(
+    (addr: SavedDeliveryAddress) => {
+      setSelectedDeliveryAddressId(addr.id);
+      setDisplayDeliveryLine(addr.line);
+      closeDeliveryModal();
+    },
+    [closeDeliveryModal]
+  );
+
+  const handleUseCurrentLocation = useCallback(async () => {
+    const result = await requestForegroundLocation();
+    if (result.ok) {
+      setDisplayDeliveryLine(result.addressLine);
+      closeDeliveryModal();
+    }
+  }, [closeDeliveryModal]);
+
+  const handleSaveNewAddress = useCallback(() => {
+    const name = newAddressName.trim();
+    const line = newAddressLine.trim();
+    const phone = newAddressPhone.trim();
+    if (!name || !line) {
+      Alert.alert(
+        "Missing details",
+        "Please enter the recipient name and full address."
+      );
+      return;
+    }
+    const newAddr: SavedDeliveryAddress = {
+      id: `addr-${Date.now()}`,
+      name,
+      line,
+      ...(phone ? { phone } : {}),
+    };
+    void (async () => {
+      const next = [...savedDeliveryAddresses, newAddr];
+      await persistSavedDeliveryAddresses(next);
+      setDeliveryAddMode("list");
+      setNewAddressName("");
+      setNewAddressPhone("");
+      setNewAddressLine("");
+      selectDeliveryAddress(newAddr);
+    })();
+  }, [
+    newAddressName,
+    newAddressLine,
+    newAddressPhone,
+    savedDeliveryAddresses,
+    persistSavedDeliveryAddresses,
+    selectDeliveryAddress,
+  ]);
 
   const launchGoogleVoiceInput = async () => {
     if (Platform.OS !== "android") {
@@ -118,6 +461,8 @@ export default function Home() {
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [bannerIndex2, setBannerIndex2] = useState(0);
+  const bannerCarouselRef = useRef<FlatList<ImageSourcePropType> | null>(null);
+  const bannerCarousel2Ref = useRef<FlatList<ImageSourcePropType> | null>(null);
 
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -136,18 +481,19 @@ export default function Home() {
     (p) => {
       p.loop = true;
       p.muted = true;
-      p.play();
     }
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      videoBannerPlayer.play();
-      return () => {
-        videoBannerPlayer.pause();
-      };
-    }, [videoBannerPlayer])
-  );
+  const isHomeFocused = useIsFocused();
+
+  /** Sync play/pause with screen focus. Do not use useFocusEffect cleanup to pause — it can run after expo-video's shared player is released (native crash / rejection). */
+  useEffect(() => {
+    if (!isHomeFocused) {
+      safeVideoPlayback(videoBannerPlayer, "pause");
+      return;
+    }
+    safeVideoPlayback(videoBannerPlayer, "play");
+  }, [isHomeFocused, videoBannerPlayer]);
 
   const banners = [
     require("../assets/images/banner1.png"),
@@ -163,24 +509,14 @@ const banners2 = [
    require("../assets/images/banner9.png"),
 ];
 
-
-
-  const serviceItems = [
-    {
-      id: 1,
-      label: "delivery",
-      icon: "car-sport-outline" as const,
-    },
-    {
-      id: 2,
-      label: "upi payment",
-      icon: "wallet-outline" as const,
-    },
-    {
-      id: 3,
-      label: "coupons",
-      icon: "pricetag-outline" as const,
-    },
+  const serviceItems: {
+    id: number;
+    label: string;
+    icon: keyof typeof MaterialIcons.glyphMap;
+  }[] = [
+    { id: 1, label: "delivery", icon: "local-shipping" },
+    { id: 2, label: "upi payment", icon: "payments" },
+    { id: 3, label: "coupons", icon: "local-offer" },
   ];
 
   const lookingProducts = [
@@ -222,19 +558,33 @@ const banners2 = [
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setBannerIndex((prev) => (prev + 1) % banners.length);
+      setBannerIndex((prev) => {
+        const next = (prev + 1) % banners.length;
+        bannerCarouselRef.current?.scrollToIndex({
+          index: next,
+          animated: true,
+        });
+        return next;
+      });
     }, 3000);
 
     return () => clearInterval(interval);
   }, [banners.length]);
 
-useEffect(() => {
-  const interval = setInterval(() => {
-    setBannerIndex2((prev) => (prev + 1) % banners2.length);
-  }, 3000);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBannerIndex2((prev) => {
+        const next = (prev + 1) % banners2.length;
+        bannerCarousel2Ref.current?.scrollToIndex({
+          index: next,
+          animated: true,
+        });
+        return next;
+      });
+    }, 3000);
 
-  return () => clearInterval(interval);
-}, []);
+    return () => clearInterval(interval);
+  }, [banners2.length]);
 
 useEffect(() => {
   const interval = setInterval(() => {
@@ -262,12 +612,12 @@ useEffect(() => {
     {
       name: "Kids Wear",
       image: require("../assets/images/kidscate.png"),
-      href: "/age",
+      href: "/sportswear",
     },
     {
       name: "Mens Wear",
       image: require("../assets/images/menscate.png"),
-      href: "/gender",
+      href: "/sportswear",
     },
     {
       name: "Womens Wear",
@@ -277,7 +627,7 @@ useEffect(() => {
     {
       name: "Play",
       image: require("../assets/images/playcate.png"),
-      href: "/other",
+      href: "/sportswear",
     },
     {
       name: "Gargi",
@@ -308,6 +658,11 @@ useEffect(() => {
       name: "Homelyhub",
       image: require("../assets/images/homecate.png"),
       href: "/gifts",
+    },
+    {
+      name: "Skin and Beauty",
+      image: require("../assets/images/product6.png"),
+      href: "/accessories",
     },
   ];
 
@@ -750,77 +1105,40 @@ const categoryData = [
 
   return (
     <View style={styles.container}>
-      <View
-        style={[
-          styles.headerSticky,
-          { paddingTop: insets.top },
-        ]}
-      >
-        {/* HEADER — logo, location, search (fixed while scrolling) */}
-        <View style={styles.header}>
-          <View style={styles.searchRow}>
-            <View style={styles.logoLocationCol}>
-              <Image
-                source={require("../assets/images/logo.png")}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-              <TouchableOpacity
-                style={styles.locationBtnUnderLogo}
-                onPress={() => router.push("/loc")}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Location"
-              >
-                <Ionicons name="location-outline" size={21} color="#ff6600" />
-                <Text style={styles.locationBtnTextUnderLogo} numberOfLines={1}>
-                  Location
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.searchContainer}>
-              <Ionicons name="search-outline" size={18} color="#777" />
-              <TextInput
-                placeholder={placeholderTexts[placeholderIndex]}
-                placeholderTextColor="#777"
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                onFocus={() => {
-                  router.push("/search");
-                }}
-              />
-<TouchableOpacity onPress={openCamera} style={styles.searchBarIconBtn}>
-                <Ionicons
-                  name="camera-outline"
-                  size={24}
-                  color="#777"
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={startVoiceSearch}
-                style={styles.searchBarIconBtn}
-              >
-                <Ionicons name="mic-outline" size={24} color="#777" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      <ScrollView
-        style={{ flex: 1 }}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 90 }}
-      >
+      <View style={styles.headerSticky}>
+        <LinearGradient
+          colors={[...HEADER_MESH_COLORS]}
+          locations={[...HEADER_MESH_LOCATIONS]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.headerMeshGradient, { paddingTop: insets.top }]}
+        >
+        {/* Top: greeting + wishlist / notifications */}
         <View style={styles.greetingBar}>
           <View style={styles.topRow}>
             <View style={styles.greetingCol}>
-              <Text style={styles.helloText} numberOfLines={1}>
-                Hello, {userDisplayName} 👋
-              </Text>
-              <Text style={styles.shopText}>Let&apos;s shop</Text>
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() => setPromoSpotlightModalVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Open promotional offer"
+              >
+                <LinearGradient
+                  colors={[...GREETING_CHIP_COLORS]}
+                  locations={[...GREETING_CHIP_LOCS]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.greetingTextChip}
+                >
+                  <Text style={styles.helloLine} numberOfLines={1}>
+                    <Text style={styles.helloMuted}>Hi, </Text>
+                    <Text style={styles.helloName}>{userDisplayName}</Text>
+                  </Text>
+                  <Text style={styles.shopText} numberOfLines={1}>
+                    New finds await
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
             <View style={styles.iconRow}>
               <TouchableOpacity
@@ -828,104 +1146,308 @@ const categoryData = [
                 style={styles.headerIconHit}
                 accessibilityLabel="Wishlist"
               >
-                <Ionicons name="heart-outline" size={24} color="#000" />
+                <Ionicons name="heart-outline" size={24} color="#C2410C" />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => router.push("/notifications")}
                 style={styles.headerIconHit}
                 accessibilityLabel="Notifications"
               >
-                <Ionicons name="notifications-outline" size={24} color="#000" />
+                <Ionicons name="notifications-outline" size={24} color="#C2410C" />
               </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        {/* ALL CATEGORIES (NO SLIDE) */}
-      <View style={styles.categoryPage}>
-  {categories.map((cat, index) => (
-    <Image source={cat.image as any} style={styles.categoryImage} />
-  
-  ))}
-</View>
+        {/* Below: logo + search, then location */}
+        <View style={styles.header}>
+          <View style={styles.searchRow}>
+            <View style={styles.logoCol}>
+              <LinearGradient
+                colors={[...LOGO_RING_COLORS]}
+                locations={[...LOGO_RING_LOCATIONS]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.logoRingGradient}
+              >
+                <View style={styles.logoInnerDisc}>
+                  <Image
+                    source={require("../assets/images/logo.png")}
+                    style={styles.logo}
+                    resizeMode="contain"
+                  />
+                </View>
+              </LinearGradient>
+            </View>
 
-        {/* FILTER ROW */}
-        <View style={styles.filterRow}>
+            <LinearGradient
+              colors={[...SEARCH_BAR_MESH_COLORS]}
+              locations={[...SEARCH_BAR_MESH_LOCS]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.searchContainer}
+            >
+              <Ionicons name="search-outline" size={18} color="#C2410C" />
+              <TextInput
+                placeholder={placeholderTexts[placeholderIndex]}
+                placeholderTextColor="#9A3412"
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onFocus={() => {
+                  router.push("/search");
+                }}
+              />
+              <TouchableOpacity onPress={openCamera} style={styles.searchBarIconBtn}>
+                <Ionicons
+                  name="camera-outline"
+                  size={24}
+                  color="#C2410C"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={startVoiceSearch}
+                style={styles.searchBarIconBtn}
+              >
+                <Ionicons name="mic-outline" size={24} color="#C2410C" />
+              </TouchableOpacity>
+            </LinearGradient>
+          </View>
+
+          <TouchableOpacity
+            style={styles.locationPillOuter}
+            onPress={() => setDeliveryAddressModalVisible(true)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Delivery address, tap to change"
+          >
+            <LinearGradient
+              colors={[...LOCATION_MESH_COLORS]}
+              locations={[...LOCATION_MESH_LOCS]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0.85 }}
+              style={styles.locationPill}
+            >
+              <MaterialIcons name="place" size={17} color="#C2410C" />
+              <Text
+                style={styles.locationPillText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {displayDeliveryLine}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color="#C2410C" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+        </LinearGradient>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1, backgroundColor: HOME_PAGE_BG }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.homeScrollContent}
+        nestedScrollEnabled
+      >
+        <LinearGradient
+          colors={[...HOME_SCROLL_MESH_COLORS]}
+          locations={[...HOME_SCROLL_MESH_LOCATIONS]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.homeScrollMesh}
+        >
+        {/* Browse: categories + filters */}
+        <View style={styles.homeBrowsePanel}>
+          <View style={styles.categorySection}>
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScrollContent}
+            >
+              {categories.map((cat, index) => (
+                <TouchableOpacity
+                  key={`${String(cat.href)}-${cat.name}`}
+                  style={[
+                    styles.categoryChip,
+                    index < categories.length - 1 && styles.categoryChipSpacing,
+                  ]}
+                  activeOpacity={0.82}
+                  onPress={() => router.push(cat.href)}
+                  accessibilityRole="button"
+                  accessibilityLabel={cat.name}
+                >
+                  <View style={styles.categoryImageCard}>
+                    <Image
+                      source={cat.image as any}
+                      style={styles.categoryImageInner}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <Text style={styles.categoryChipLabel} numberOfLines={2}>
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* FILTER ROW — color-coded chips */}
+          <View style={[styles.filterRow, styles.homeFilterRowInset]}>
           <FilterItem
             icon="swap-vert"
             label="Sort"
             onPress={() => handleFilterPress("Sort")}
+            tint={{
+              bubble: "#EEF2FF",
+              border: "#A5B4FC",
+              icon: "#4338CA",
+            }}
           />
           <FilterItem
             icon="grid-view"
             label="Category"
             onPress={() => handleFilterPress("Category")}
+            tint={{
+              bubble: "#ECFDF5",
+              border: "#6EE7B7",
+              icon: "#047857",
+            }}
           />
           <FilterItem
             icon="person-outline"
             label="Gender"
             onPress={() => handleFilterPress("Gender")}
+            tint={{
+              bubble: "#FDF2F8",
+              border: "#F9A8D4",
+              icon: "#BE185D",
+            }}
           />
           <FilterItem
             icon="filter-list"
             label="Filter"
             onPress={() => handleFilterPress("Filter")}
+            tint={{
+              bubble: "#FFF7ED",
+              border: "#FDBA74",
+              icon: "#C2410C",
+            }}
           />
-        </View>
-
-        {/* BANNER */}
-        <View>
-          <View style={styles.banner}>
-            <Image
-              source={banners[bannerIndex]}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
           </View>
-
-         <View style={styles.bannerDotsRow}>
-  {banners.map((item, index) => (
-    <View
-      key={item.id || index}
-      style={[
-        styles.bannerDot,
-        bannerIndex === index ? styles.bannerDotActive : null,
-      ]}
-    />
-  ))}
-</View>
         </View>
 
-        {/* USER BOX */}
-        <View style={styles.userSuggestionCard}>
-  <Text style={styles.userSuggestionTitle}>
-    Top Picks for You
-  </Text>
-
-  <View style={styles.userSuggestionRow}>
-    {lookingProducts.slice(0, 3).map((item) => (
-      <TouchableOpacity key={item.id} style={styles.userSuggestionItem}>
-        <Image
-          source={item.image}
-          style={styles.userSuggestionImageBox}
-          resizeMode="cover"
-        />
-        <Text style={styles.userSuggestionText}>{item.name}</Text>
-      </TouchableOpacity>
-    ))}
-  </View>
-</View>
-
-        {/* SERVICE LOGOS */}
-        <View style={styles.serviceRow}>
-          {serviceItems.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.serviceItem}>
-              <View style={styles.serviceIconCircle}>
-                <Ionicons name={item.icon} size={24} color="#000" />
+        {/* BANNER — horizontal scroll (no image swap / blink) */}
+        <View style={styles.homeMediaPanel}>
+          <FlatList
+            ref={bannerCarouselRef}
+            data={banners}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            keyExtractor={(_, index) => `home-banner-${index}`}
+            getItemLayout={(_, index) => ({
+              length: width,
+              offset: width * index,
+              index,
+            })}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+              const clamped = Math.min(
+                Math.max(0, idx),
+                banners.length - 1
+              );
+              setBannerIndex(clamped);
+            }}
+            onScrollToIndexFailed={(info) => {
+              setTimeout(() => {
+                bannerCarouselRef.current?.scrollToIndex({
+                  index: info.index,
+                  animated: false,
+                });
+              }, 350);
+            }}
+            renderItem={({ item }) => (
+              <View style={{ width, height: 200 }}>
+                <View style={[styles.banner, styles.bannerSlideInner]}>
+                  <Image
+                    source={item}
+                    style={styles.bannerImage}
+                    resizeMode="cover"
+                  />
+                </View>
               </View>
-              <Text style={styles.serviceText}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
+            )}
+            style={styles.bannerCarousel}
+          />
+
+          <View style={styles.bannerDotsRow}>
+            {banners.map((_, index) => (
+              <View
+                key={`banner-dot-${index}`}
+                style={[
+                  styles.bannerDot,
+                  bannerIndex === index ? styles.bannerDotActive : null,
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Top Picks for You — horizontal ScrollView (FlatList inside ScrollView often collapses to 0 height) */}
+        <LinearGradient
+          colors={["#DBEAFE", "#E0E7FF", "#EDE9FE"]}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.userSuggestionCard}
+        >
+          <Text style={styles.userSuggestionTitle}>Top Picks for You</Text>
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.userSuggestionScroll}
+            contentContainerStyle={styles.userSuggestionListContent}
+          >
+            {lookingProducts.map((item, index) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.userSuggestionItem,
+                  { width: USER_PICK_CARD_WIDTH },
+                  index < lookingProducts.length - 1
+                    ? { marginRight: USER_PICK_ITEM_GAP }
+                    : undefined,
+                ]}
+                activeOpacity={0.88}
+              >
+                <Image
+                  source={item.image}
+                  style={styles.userSuggestionImageBox}
+                  resizeMode="cover"
+                />
+                <Text style={styles.userSuggestionText} numberOfLines={2}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </LinearGradient>
+
+        {/* SERVICE LOGOS — Material icons for clearer delivery / UPI / offers */}
+        <View style={styles.homeServiceShell}>
+          <View style={styles.serviceRow}>
+            {serviceItems.map((item) => (
+              <TouchableOpacity key={item.id} style={styles.serviceItem}>
+                <View style={styles.serviceIconCircle}>
+                  <MaterialIcons name={item.icon} size={22} color="#1565C0" />
+                </View>
+                <Text style={styles.serviceText}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 {/* cards section */}
 
@@ -933,90 +1455,138 @@ const categoryData = [
 
       
     <View style={styles.freshSection}>
- <View style={styles.freshHeader}>
-  <Text style={styles.freshTitle}>Fresh Finds</Text>
+        <View style={styles.freshHeader}>
+          <View style={styles.freshTitleBlock}>
+            <View style={styles.freshTitleAccentBar} />
+            <View style={styles.freshTitleTextCol}>
+              <Text style={styles.freshTitle}>
+                <Text style={styles.freshTitleWord}>Fresh </Text>
+                <Text style={styles.freshTitleHighlight}>Finds</Text>
+              </Text>
+              <View style={styles.freshTitleUnderline} />
+            </View>
+          </View>
 
-  <TouchableOpacity
-    style={styles.freshArrow}
-    onPress={() => router.push("/startselling")}
-  >
-    <Ionicons name="arrow-forward" size={20} color="#fff" />
-  </TouchableOpacity>
-</View>
+          <TouchableOpacity
+            style={styles.freshArrow}
+            onPress={() => router.push("/startselling")}
+          >
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        {/* Horizontal ScrollView: nested FlatList often blocks horizontal swipe inside vertical ScrollView */}
+        <ScrollView
+          horizontal
+          pagingEnabled
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          decelerationRate="fast"
+          contentContainerStyle={styles.freshFlatListContent}
+          style={styles.freshHorizontalScroll}
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / width);
+            setActiveIndex(
+              Math.min(
+                Math.max(0, index),
+                Math.max(0, freshPairs.length - 1)
+              )
+            );
+          }}
+        >
+          {freshPairs.map((pair, index) => {
+            const isActive = index === activeIndex;
+            const [left, right] = [pair[0], pair[1]];
+            return (
+              <View
+                key={`fresh-pair-${index}`}
+                style={{ width, paddingHorizontal: FRESH_ROW_PADDING }}
+              >
+                <View
+                  style={[
+                    styles.freshPairRow,
+                    {
+                      gap: FRESH_IMG_GAP,
+                      opacity: isActive ? 1 : 0.88,
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={{ width: FRESH_IMG_60 }}
+                  >
+                    <Image
+                      source={left.image}
+                      style={styles.freshCardImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                  {right ? (
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      style={{ width: FRESH_IMG_30 }}
+                    >
+                      <Image
+                        source={right.image}
+                        style={styles.freshCardImage}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ width: FRESH_IMG_30 }} />
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+    </View>
+{/* second banner section — horizontal scroll */}
+<View style={styles.secondBannerAfterFresh}>
   <FlatList
-    data={freshPairs}
+    ref={bannerCarousel2Ref}
+    data={banners2}
     horizontal
     pagingEnabled
     showsHorizontalScrollIndicator={false}
-    snapToInterval={width}
     decelerationRate="fast"
-    keyExtractor={(_, i) => `fresh-pair-${i}`}
-    contentContainerStyle={{ marginTop: 8 }}
+    keyExtractor={(_, index) => `home-banner2-${index}`}
+    getItemLayout={(_, index) => ({
+      length: width,
+      offset: width * index,
+      index,
+    })}
     onMomentumScrollEnd={(e) => {
-      const index = Math.round(e.nativeEvent.contentOffset.x / width);
-      setActiveIndex(
-        Math.min(Math.max(0, index), Math.max(0, freshPairs.length - 1))
-      );
+      const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+      const clamped = Math.min(Math.max(0, idx), banners2.length - 1);
+      setBannerIndex2(clamped);
     }}
-    renderItem={({ item: pair, index }) => {
-      const isActive = index === activeIndex;
-      const [left, right] = [pair[0], pair[1]];
-      return (
-        <View style={{ width, paddingHorizontal: FRESH_ROW_PADDING }}>
-          <View
-            style={[
-              styles.freshPairRow,
-              {
-                gap: FRESH_IMG_GAP,
-                opacity: isActive ? 1 : 0.88,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={{ width: FRESH_IMG_60 }}
-            >
-              <Image
-                source={left.image}
-                style={styles.freshCardImage}
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
-            {right ? (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={{ width: FRESH_IMG_30 }}
-              >
-                <Image
-                  source={right.image}
-                  style={styles.freshCardImage}
-                  resizeMode="cover"
-                />
-              </TouchableOpacity>
-            ) : (
-              <View style={{ width: FRESH_IMG_30 }} />
-            )}
-          </View>
+    onScrollToIndexFailed={(info) => {
+      setTimeout(() => {
+        bannerCarousel2Ref.current?.scrollToIndex({
+          index: info.index,
+          animated: false,
+        });
+      }, 350);
+    }}
+    renderItem={({ item }) => (
+      <View style={{ width, height: 200 }}>
+        <View style={[styles.banner, styles.bannerSlideInner]}>
+          <Image
+            source={item}
+            style={styles.bannerImage}
+            resizeMode="contain"
+          />
         </View>
-      );
-    }}
+      </View>
+    )}
+    style={styles.bannerCarousel}
   />
-</View>
-{/* second banner section  */}
-
-<View style={{ marginTop: 4 }}>
-  <View style={styles.banner}>
-    <Image
-      source={banners2[bannerIndex2]}
-      style={styles.bannerImage}
-      resizeMode="contain"
-    />
-  </View>
 
   <View style={styles.bannerDotsRow}>
-    {banners2.map((item, index) => (
+    {banners2.map((_, index) => (
       <View
-        key={index}
+        key={`banner2-dot-${index}`}
         style={[
           styles.bannerDot,
           bannerIndex2 === index ? styles.bannerDotActive : null,
@@ -1026,52 +1596,60 @@ const categoryData = [
   </View>
 </View>
 {/* suggested list */}
-
-<View style={styles.productSectionHeader}>
-  <Text style={styles.productSectionTitle}>Suggested For You</Text>
-  <TouchableOpacity
-    style={styles.productArrowButton}
-    onPress={() => router.push("/sportswear")}
-  >
-    <Ionicons name="arrow-forward" size={22} color="#fff" />
-  </TouchableOpacity>
-</View>
-
-<View style={styles.productGridWrapper}>
-  {suggestedProducts.map((item) => (
-    <TouchableOpacity key={item.id} style={styles.productCard}>
-      <View style={styles.productImageWrap}>
-        <Image
-          source={item.image}
-          style={styles.productCardImage}
-          resizeMode="cover"
-        />
-        {item.rating ? (
-          <View style={styles.ratingBadge}>
-            <Text style={styles.ratingText}>{item.rating}</Text>
-          </View>
-        ) : null}
+<View style={styles.homeSuggestedPanel}>
+  <View style={styles.productSectionHeader}>
+    <View style={styles.suggestedTitleWrap}>
+      <View style={styles.suggestedTitleBadge}>
+        <Ionicons name="sparkles" size={18} color="#FDE047" />
+        <Text style={styles.suggestedTitleBadgeText}>Suggested For You</Text>
       </View>
-
-      <Text style={styles.productName} numberOfLines={1}>
-        {item.name}
-      </Text>
-
-      <View style={styles.priceRow}>
-        <Text style={styles.oldPrice}>{item.oldPrice}</Text>
-        <Text style={styles.newPrice}> {item.price}</Text>
-      </View>
-
-      <View style={styles.addCartContainer}>
-        <TouchableOpacity style={styles.addCartButton}>
-          <Text style={styles.addCartText}>Add to Cart</Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.suggestedTitleTagline}>Handpicked just for you</Text>
+    </View>
+    <TouchableOpacity
+      style={styles.productArrowButton}
+      onPress={() => router.push("/sportswear")}
+    >
+      <Ionicons name="arrow-forward" size={22} color="#fff" />
     </TouchableOpacity>
-  ))}
+  </View>
+
+  <View style={styles.productGridWrapper}>
+    {suggestedProducts.map((item) => (
+      <TouchableOpacity key={item.id} style={styles.productCard}>
+        <View style={styles.productImageWrap}>
+          <Image
+            source={item.image}
+            style={styles.productCardImage}
+            resizeMode="cover"
+          />
+          {item.rating ? (
+            <View style={styles.ratingBadge}>
+              <Text style={styles.ratingText}>{item.rating}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <Text style={styles.productName} numberOfLines={1}>
+          {item.name}
+        </Text>
+
+        <View style={styles.priceRow}>
+          <Text style={styles.oldPrice}>{item.oldPrice}</Text>
+          <Text style={styles.newPrice}> {item.price}</Text>
+        </View>
+
+        <View style={styles.addCartContainer}>
+          <TouchableOpacity style={styles.addCartButton}>
+            <Text style={styles.addCartText}>Add to Cart</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    ))}
+  </View>
 </View>
 
 {/* Video Banner Section */}
+<View style={styles.homeVideoShell}>
   <View style={styles.videoBannerContainer}>
     <VideoView
       player={videoBannerPlayer}
@@ -1081,85 +1659,160 @@ const categoryData = [
       allowsFullscreen={false}
     />
   </View>
-
-
-
-
-
-
-{/* Premium Finds Section */}
-<View style={styles.premiumSection}>
-  <View style={styles.premiumHeader}>
-    <Text style={styles.premiumTitle}>Premium finds for you</Text>
-
-    <TouchableOpacity
-      style={styles.premiumArrowButton}
-      onPress={() => router.push("/products")}
-    >
-      <Ionicons name="arrow-forward" size={22} color="#000" />
-    </TouchableOpacity>
-  </View>
-
-  <View style={styles.premiumGrid}>
-    {premiumProducts.map((item) => (
-      <TouchableOpacity key={item.id} style={styles.premiumCard}>
-        <View style={styles.premiumImageWrap}>
-          <Image
-            source={item.image}
-            style={styles.premiumImage}
-            resizeMode="contain"
-          />
-        </View>
-
-        <Text style={styles.premiumName} numberOfLines={1}>
-          {item.name}
-        </Text>
-
-        <Text style={styles.premiumSubtitle} numberOfLines={1}>
-          {item.subtitle}
-        </Text>
-      </TouchableOpacity>
-    ))}
-  </View>
 </View>
 
 
-{/* catagariesbased products
- */}
 
- <Text style={styles.sectionTitle}>Shop by Store</Text>
 
-<FlatList
-  data={categoryData}
-  horizontal
-  showsHorizontalScrollIndicator={false}
-  keyExtractor={(item) => item.id}
-  contentContainerStyle={styles.storeList}
-  renderItem={({ item }) => (
-    <View style={styles.storeItem}>
-      
-      <View style={styles.arcContainer}>
-        <Image source={item.image} style={styles.arcImage} />
+
+
+{/* Premium Finds Section — sapphire gradient + luxe title */}
+<View style={styles.premiumSection}>
+  <LinearGradient
+    colors={["#0F172A", "#1E3A8A", "#1D4ED8"]}
+    start={{ x: 0, y: 0 }}
+    end={{ x: 1, y: 1 }}
+    style={styles.premiumGradient}
+  >
+    <View style={styles.premiumHeader}>
+      <View style={styles.premiumTitleCluster}>
+        <View style={styles.premiumIconTile}>
+          <MaterialIcons name="workspace-premium" size={26} color="#FDE68A" />
+        </View>
+        <View style={styles.premiumTitleCol}>
+          <Text style={styles.premiumTitleLine}>
+            <Text style={styles.premiumTitleW}>Premium </Text>
+            <Text style={styles.premiumTitleG}>finds</Text>
+          </Text>
+          <Text style={styles.premiumTitleForYou}>for you</Text>
+        </View>
       </View>
 
-      <Text style={styles.storeText}>{item.title}</Text>
-
+      <TouchableOpacity
+        style={styles.premiumArrowButton}
+        onPress={() => router.push("/products")}
+        activeOpacity={0.88}
+      >
+        <Ionicons name="arrow-forward" size={22} color="#1E40AF" />
+      </TouchableOpacity>
     </View>
-  )}
-/>
+
+    <View style={styles.premiumGrid}>
+      {premiumProducts.map((item) => (
+        <TouchableOpacity key={item.id} style={styles.premiumCard}>
+          <View style={styles.premiumImageWrap}>
+            <Image
+              source={item.image}
+              style={styles.premiumImage}
+              resizeMode="contain"
+            />
+          </View>
+
+          <Text style={styles.premiumName} numberOfLines={1}>
+            {item.name}
+          </Text>
+
+          <Text style={styles.premiumSubtitle} numberOfLines={1}>
+            {item.subtitle}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </LinearGradient>
+</View>
 
 
-{/* focus */}
-{/* IN FOCUS Section */}
+{/* Shop by Store */}
+<View style={styles.shopByStoreSection}>
+  <View style={styles.shopByStoreHeader}>
+    <View style={styles.shopByStoreTitleRow}>
+      <View style={styles.shopByStoreIconRing}>
+        <MaterialIcons name="store-mall-directory" size={28} color="#0F766E" />
+      </View>
+      <View style={styles.shopByStoreTitleCol}>
+        <Text style={styles.shopByStoreTitleMain}>
+          <Text style={styles.shopByStoreTitleLight}>Shop by </Text>
+          <Text style={styles.shopByStoreTitleEmphasis}>Store</Text>
+        </Text>
+      </View>
+    </View>
+    <View style={styles.shopByStoreRule} />
+  </View>
+
+  <FlatList
+    data={categoryData}
+    horizontal
+    showsHorizontalScrollIndicator={false}
+    keyExtractor={(item) => item.id}
+    contentContainerStyle={styles.storeList}
+    renderItem={({ item }) => (
+      <View style={styles.storeItem}>
+        <View style={styles.arcContainer}>
+          <Image source={item.image} style={styles.arcImage} />
+        </View>
+        <Text style={styles.storeText}>{item.title}</Text>
+      </View>
+    )}
+  />
+</View>
+
+
+{/* IN FOCUS — horizontal spotlight carousel (distinct from sage/stack sections) */}
 <View style={styles.focusSection}>
-  <Text style={styles.focusTitle}>IN FOCUS</Text>
-  <View style={styles.focusUnderline} />
+  <View style={styles.focusTopBar}>
+    <View style={styles.focusTopBarLeft}>
+      <LinearGradient
+        colors={["#9e2f72", "#e950b8"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.focusAccentBar}
+      />
+      <View style={styles.focusTitleCluster}>
+        <Text style={styles.focusEyebrow}>Spotlight</Text>
+        <Text style={styles.focusHeadline}>
+          <Text style={styles.focusHeadlineThin}>In </Text>
+          <Text style={styles.focusHeadlineBold}>Focus</Text>
+        </Text>
+      </View>
+    </View>
+  </View>
 
-  {focusBanners.map((item) => (
-    <TouchableOpacity key={item.id} style={styles.focusCard} activeOpacity={0.9}>
-      <Image source={item.image} style={styles.focusImage} resizeMode="cover" />
-    </TouchableOpacity>
-  ))}
+  <ScrollView
+    horizontal
+    nestedScrollEnabled
+    showsHorizontalScrollIndicator={false}
+    decelerationRate="fast"
+    snapToInterval={FOCUS_CARD_WIDTH + FOCUS_CARD_GAP}
+    snapToAlignment="start"
+    contentContainerStyle={styles.focusCarouselContent}
+  >
+    {focusBanners.map((item, index) => (
+      <TouchableOpacity
+        key={item.id}
+        activeOpacity={0.92}
+        onPress={() => router.push("/products")}
+        style={[
+          styles.focusCarouselCard,
+          { width: FOCUS_CARD_WIDTH },
+          index < focusBanners.length - 1 && { marginRight: FOCUS_CARD_GAP },
+        ]}
+      >
+        <Image
+          source={item.image}
+          style={styles.focusCarouselImage}
+          resizeMode="cover"
+        />
+        <LinearGradient
+          colors={["transparent", "rgba(30,27,75,0.82)"]}
+          style={styles.focusCarouselFade}
+        />
+        <View style={styles.focusCarouselTag}>
+          <MaterialIcons name="auto-awesome" size={14} color="#FDE68A" />
+          <Text style={styles.focusCarouselTagText}>Featured</Text>
+        </View>
+      </TouchableOpacity>
+    ))}
+  </ScrollView>
 </View>
 
 
@@ -1168,108 +1821,83 @@ const categoryData = [
 {/* premium list */}
 {/* Mega Discounts Section */}
 <View style={styles.megaSection}>
-  <View style={styles.megaHeader}>
-    <Text style={styles.megaTitle}>Mega Discounts</Text>
-
-    <TouchableOpacity
-      style={styles.megaArrowButton}
-      onPress={() => router.push("/products")}
-    >
-      <Ionicons name="arrow-forward" size={22} color="#000" />
-    </TouchableOpacity>
-  </View>
-
-  <View style={styles.megaGrid}>
-    {megaProducts.map((item) => (
-      <TouchableOpacity key={item.id} style={styles.megaCard}>
-        <View style={styles.megaImageWrap}>
-          <Image
-            source={item.image}
-            style={styles.megaImage}
-            resizeMode="contain"
-          />
+  <LinearGradient
+    colors={["#831843", "#BE123C", "#E11D48"]}
+    start={{ x: 0, y: 0 }}
+    end={{ x: 1, y: 1 }}
+    style={styles.megaGradient}
+  >
+    <View style={styles.megaHeader}>
+      <View style={styles.megaTitleCluster}>
+        <View style={styles.megaTitleIconWrap}>
+          <MaterialIcons name="local-offer" size={28} color="#FACC15" />
         </View>
+        <View style={styles.megaTitleTextCol}>
+          <Text style={styles.megaTitleLine}>
+            <Text style={styles.megaTitleA}>Mega </Text>
+            <Text style={styles.megaTitleB}>Discounts</Text>
+          </Text>
+          <Text style={styles.megaTitleHint}>Limited-time deals</Text>
+        </View>
+      </View>
 
-        <Text style={styles.megaName}>{item.name}</Text>
-
-        <Text style={styles.megaSubtitle}>{item.subtitle}</Text>
+      <TouchableOpacity
+        style={styles.megaArrowButton}
+        onPress={() => router.push("/products")}
+        activeOpacity={0.88}
+      >
+        <Ionicons name="arrow-forward" size={22} color="#BE123C" />
       </TouchableOpacity>
-    ))}
-  </View>
+    </View>
+
+    <View style={styles.megaGrid}>
+      {megaProducts.map((item) => (
+        <TouchableOpacity key={item.id} style={styles.megaCard}>
+          <View style={styles.megaImageWrap}>
+            <Image
+              source={item.image}
+              style={styles.megaImage}
+              resizeMode="contain"
+            />
+          </View>
+
+          <Text style={styles.megaName}>{item.name}</Text>
+
+          <Text style={styles.megaSubtitle}>{item.subtitle}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </LinearGradient>
 </View>
 
-{/* Latest Products Section */}
-<View style={styles.latestSection}>
-  <View style={styles.latestTopLine} />
-
-  <View style={styles.latestHeaderWrap}>
-    <View style={styles.latestHeaderBox}>
-      <Text style={styles.latestHeaderTitle}>Latest Products</Text>
-      <View style={styles.latestHeaderUnderline} />
+{/* seller gallery — card header + pill CTA */}
+<View style={styles.sellerSectionContainer}>
+  <View style={styles.sellerGalleryHeaderCard}>
+    <View style={styles.sellerGalleryHeaderRow}>
+      <View style={styles.sellerGalleryTitleArea}>
+        <View style={styles.sellerGalleryTitleBadge}>
+          <Feather name="users" size={14} color="#6D28D9" />
+          <Text style={styles.sellerGalleryBadgeLabel}>Vendors</Text>
+        </View>
+        <Text style={styles.sellerGalleryTitleLine}>
+          <Text style={styles.sellerGalleryTitleItalic}>Seller </Text>
+          <Text style={styles.sellerGalleryTitleBold}>Gallery</Text>
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={styles.sellerGallerySeeAllBtn}
+        onPress={() => router.push("/sellergalleryscreen")}
+        activeOpacity={0.88}
+      >
+        <Text style={styles.sellerGallerySeeAllText}>View all</Text>
+        <Feather name="arrow-right" size={17} color="#5B21B6" />
+      </TouchableOpacity>
     </View>
   </View>
 
-  <Text style={styles.latestHeaderSubtitle}>
-    Check out our newest arrivals
-  </Text>
-
-  <View style={styles.latestGrid}>
-    {latestProducts.map((item) => (
-      <TouchableOpacity key={item.id} style={styles.latestCard}>
-        <View style={styles.latestImageWrap}>
-          <Image
-            source={item.image}
-            style={styles.latestImage}
-            resizeMode="cover"
-          />
-
-          {item.discount ? (
-            <View style={styles.latestDiscountBadge}>
-              <Text style={styles.latestDiscountText}>{item.discount}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <Text style={styles.latestProductTitle} numberOfLines={1}>
-          {item.name}
-        </Text>
-
-        <View style={styles.latestRatingRow}>
-          <Text style={styles.latestStars}>★★★★★</Text>
-          <Text style={styles.latestRatingValue}>{item.rating}</Text>
-        </View>
-
-        <View style={styles.latestPriceRow}>
-          {item.oldPrice ? (
-            <Text style={styles.latestOldPrice}>{item.oldPrice}</Text>
-          ) : null}
-          <Text style={styles.latestNewPrice}>{item.price}</Text>
-        </View>
-
-        <TouchableOpacity style={styles.latestCartButton}>
-  <Ionicons name="cart-outline" size={18} color="#fff" />
-  <Text style={styles.latestCartButtonText}> Add To Cart</Text>
-</TouchableOpacity>
-      </TouchableOpacity>
-    ))}
-  </View>
-</View>
-{/* seller gallary
- */}
-
- <View style={styles.sellerSectionContainer}>
-
-  {/* Title */}
-<View style={styles.titleContainer}>
-  <Text style={styles.titleText}>SELLER GALLERY</Text>
-  <View style={styles.titleLine} />
-</View>
-
-  {/* Grid */}
   <View style={styles.sellerGrid}>
     {sellerGallery.map((item) => (
       <View key={item.id} style={styles.sellerCard}>
-        
         <View style={styles.imageArea}>
           <Image source={item.image} style={styles.sellerImage} />
         </View>
@@ -1279,30 +1907,406 @@ const categoryData = [
             {item.name}
           </Text>
         </View>
-
       </View>
     ))}
   </View>
-
-  {/* Arrow Navigation */}
-  <TouchableOpacity
-    style={styles.arrowButton}
-    onPress={() => router.push("/sellergalleryscreen")}
-  >
-    <Feather name="arrow-right" size={24} color="#eedfdf" />
-  </TouchableOpacity>
-
 </View>
 
+{/* More products for you — vertical list rows (thumbnail + details + action) */}
+<View style={styles.latestSection}>
+  <View style={styles.latestListHead}>
+    <View style={styles.latestListHeadAccent} />
+    <View style={styles.latestListHeadText}>
+      <Text style={styles.latestListHeadLabel}>Recommended</Text>
+      <Text style={styles.latestListHeadTitle}>
+        <Text style={styles.latestListHeadTitleMain}>More products</Text>
+        <Text style={styles.latestListHeadTitleSub}> for you</Text>
+      </Text>
+    </View>
+  </View>
 
+  <View style={styles.latestListStack}>
+    {latestProducts.map((item) => (
+      <TouchableOpacity
+        key={item.id}
+        activeOpacity={0.9}
+        style={styles.latestRowCard}
+      >
+        <View style={styles.latestRowThumbWrap}>
+          <Image
+            source={item.image}
+            style={styles.latestRowThumb}
+            resizeMode="cover"
+          />
+          {item.discount ? (
+            <View style={styles.latestRowDiscountPill}>
+              <Text style={styles.latestRowDiscountPillText}>
+                {item.discount}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.latestRowCenter}>
+          <Text style={styles.latestRowTitle} numberOfLines={2}>
+            {item.name}
+          </Text>
+          <View style={styles.latestRowMeta}>
+            <Text style={styles.latestRowStars}>★★★★★</Text>
+            <Text style={styles.latestRowRatingText}>{item.rating}</Text>
+          </View>
+          <View style={styles.latestRowPriceLine}>
+            {item.oldPrice ? (
+              <Text style={styles.latestRowStrike}>{item.oldPrice}</Text>
+            ) : null}
+            <Text style={styles.latestRowPrice}>{item.price}</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.latestRowFab} activeOpacity={0.88}>
+          <Ionicons name="cart-outline" size={21} color="#C2410C" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    ))}
+  </View>
+</View>
+
+        </LinearGradient>
       </ScrollView>
 
+      {/* Select delivery address — bottom sheet */}
+      <Modal
+        visible={deliveryAddressModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeDeliveryModal}
+      >
+        <View style={styles.deliveryModalRoot}>
+          <Pressable style={styles.deliveryModalBackdrop} onPress={closeDeliveryModal} />
+          <View
+            style={[
+              styles.deliveryAddressSheet,
+              { paddingBottom: Math.max(insets.bottom, 12) },
+            ]}
+          >
+            <View style={styles.deliverySheetHandle} />
 
+            {deliveryAddMode === "list" ? (
+              <>
+                <View style={styles.deliverySheetHeader}>
+                  <Text style={styles.deliverySheetTitle}>
+                    Select delivery address
+                  </Text>
+                  <TouchableOpacity
+                    onPress={closeDeliveryModal}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Ionicons name="close" size={26} color="#333" />
+                  </TouchableOpacity>
+                </View>
 
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.deliverySheetScroll}
+                >
+                  <View style={styles.deliverySearchBox}>
+                    <Ionicons name="search-outline" size={20} color="#999" />
+                    <TextInput
+                      placeholder="Search by area, street name, pin code"
+                      placeholderTextColor="#999"
+                      style={styles.deliverySearchInput}
+                      value={deliveryAddressSearchQuery}
+                      onChangeText={setDeliveryAddressSearchQuery}
+                    />
+                  </View>
 
+                  <TouchableOpacity
+                    style={styles.deliveryUseCurrentRow}
+                    activeOpacity={0.75}
+                    onPress={() => void handleUseCurrentLocation()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Use my current location"
+                  >
+                    <View style={styles.deliveryUseCurrentIconWrap}>
+                      <Ionicons name="locate" size={22} color="#1976D2" />
+                    </View>
+                    <View style={styles.deliveryUseCurrentTextCol}>
+                      <Text style={styles.deliveryUseCurrentTitle}>
+                        Use my current location
+                      </Text>
+                      <Text style={styles.deliveryUseCurrentSub}>
+                        Allow access to location
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
 
+                  <View style={styles.deliveryDividerDashed} />
 
+                  <View style={styles.deliverySavedHeaderRow}>
+                    <Text style={styles.deliverySavedTitle}>Saved addresses</Text>
+                    <TouchableOpacity
+                      onPress={openAddNewAddressForm}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.deliveryAddNewText}>+ Add New</Text>
+                    </TouchableOpacity>
+                  </View>
 
+                  {filteredDeliveryAddresses.map((addr) => {
+                    const selected = addr.id === selectedDeliveryAddressId;
+                    return (
+                      <TouchableOpacity
+                        key={addr.id}
+                        style={styles.deliveryAddressCard}
+                        activeOpacity={0.8}
+                        onPress={() => selectDeliveryAddress(addr)}
+                      >
+                        <MaterialIcons name="place" size={22} color="#666" />
+                        <View style={styles.deliveryAddressCardBody}>
+                          <View style={styles.deliveryAddressNameRow}>
+                            <Text
+                              style={styles.deliveryAddressName}
+                              numberOfLines={1}
+                            >
+                              {addr.name}
+                            </Text>
+                            {selected ? (
+                              <View style={styles.deliverySelectedBadge}>
+                                <Text style={styles.deliverySelectedBadgeText}>
+                                  Currently selected
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text
+                            style={styles.deliveryAddressLine}
+                            numberOfLines={2}
+                            ellipsizeMode="tail"
+                          >
+                            {addr.line}
+                          </Text>
+                          {addr.phone ? (
+                            <Text style={styles.deliveryAddressPhone} numberOfLines={1}>
+                              {addr.phone}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.deliveryAddressMenuBtn}>
+                          <Ionicons
+                            name="ellipsis-vertical"
+                            size={20}
+                            color="#666"
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            ) : (
+              <>
+                <View style={styles.deliveryAddHeaderRow}>
+                  <TouchableOpacity
+                    onPress={goBackAddAddressForm}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Back"
+                  >
+                    <Ionicons name="arrow-back" size={24} color="#333" />
+                  </TouchableOpacity>
+                  <Text style={styles.deliveryAddSheetTitle}>Add new address</Text>
+                  <TouchableOpacity
+                    onPress={closeDeliveryModal}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Ionicons name="close" size={26} color="#333" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.deliverySheetScroll}
+                >
+                  <Text style={styles.deliveryFormLabel}>Full name</Text>
+                  <TextInput
+                    style={styles.deliveryFormInput}
+                    placeholder="Recipient name"
+                    placeholderTextColor="#999"
+                    value={newAddressName}
+                    onChangeText={setNewAddressName}
+                  />
+
+                  <Text style={styles.deliveryFormLabel}>Mobile number</Text>
+                  <TextInput
+                    style={styles.deliveryFormInput}
+                    placeholder="10-digit mobile number"
+                    placeholderTextColor="#999"
+                    keyboardType="phone-pad"
+                    value={newAddressPhone}
+                    onChangeText={setNewAddressPhone}
+                  />
+
+                  <Text style={styles.deliveryFormLabel}>Address</Text>
+                  <TextInput
+                    style={[styles.deliveryFormInput, styles.deliveryFormInputMultiline]}
+                    placeholder="House / flat no., street, area, landmark, pin code"
+                    placeholderTextColor="#999"
+                    multiline
+                    textAlignVertical="top"
+                    value={newAddressLine}
+                    onChangeText={setNewAddressLine}
+                  />
+
+                  <TouchableOpacity
+                    style={styles.deliverySaveNewButton}
+                    activeOpacity={0.85}
+                    onPress={handleSaveNewAddress}
+                  >
+                    <Text style={styles.deliverySaveNewButtonText}>Save address</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Greeting chip — promotional spotlight (thick colors, mascots + ad hero) */}
+      <Modal
+        visible={promoSpotlightModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPromoSpotlightModalVisible(false)}
+      >
+        <View style={styles.promoModalRoot}>
+          <Pressable
+            style={styles.promoModalBackdrop}
+            onPress={() => setPromoSpotlightModalVisible(false)}
+          />
+          <View
+            style={[
+              styles.promoModalSheet,
+              { paddingBottom: Math.max(insets.bottom, 14) + 8 },
+            ]}
+          >
+            <LinearGradient
+              colors={[...PROMO_MODAL_GRADIENT]}
+              locations={[...PROMO_MODAL_GRADIENT_LOCS]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <View
+              style={styles.promoBokehLayer}
+              pointerEvents="none"
+            >
+              {PROMO_BOKEH.map((b, i) => (
+                <View
+                  key={`promo-bokeh-${i}`}
+                  style={[
+                    styles.promoBokehDot,
+                    {
+                      top: b.top,
+                      left: b.left,
+                      width: b.size,
+                      height: b.size,
+                      borderRadius: b.size / 2,
+                      opacity: b.opacity,
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.promoCloseBtn}
+              onPress={() => setPromoSpotlightModalVisible(false)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close promotion"
+            >
+              <View style={styles.promoCloseBtnInner}>
+                <Ionicons name="close" size={26} color="#422006" />
+              </View>
+            </TouchableOpacity>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.promoScrollContent}
+              bounces={false}
+            >
+              <Text style={styles.promoTitleScript}>
+                Daily deals magic!
+              </Text>
+              <Text style={styles.promoTitleSub}>
+                Extra rewards for you today
+              </Text>
+
+              <View style={styles.promoHeroRow}>
+                <View style={styles.promoCharWrap}>
+                  <Image
+                    source={PROMO_CHAR_LEFT}
+                    style={styles.promoCharImage}
+                    resizeMode="contain"
+                  />
+                </View>
+                <View style={styles.promoAdCard}>
+                  <LinearGradient
+                    colors={["#FFF7ED", "#FFEDD5", "#FEF3C7"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.promoAdCardInner}
+                  >
+                    <View style={styles.promoAdBadge}>
+                      <Text style={styles.promoAdBadgeText}>SALE</Text>
+                    </View>
+                    <Image
+                      source={PROMO_HERO_IMAGE}
+                      style={styles.promoHeroImage}
+                      resizeMode="cover"
+                    />
+                  </LinearGradient>
+                </View>
+                <View style={styles.promoCharWrap}>
+                  <Image
+                    source={PROMO_CHAR_RIGHT}
+                    style={styles.promoCharImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.promoBodyBold}>
+                Shop today and unlock exclusive offers — save up to ₹2000 on top
+                picks!
+              </Text>
+              <Text style={styles.promoBodyMuted}>
+                ✨ Visit your Account tab for more rewards & flash deals 🎉
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => {
+                  setPromoSpotlightModalVisible(false);
+                  router.push("/account");
+                }}
+                style={styles.promoCtaOuter}
+              >
+                <LinearGradient
+                  colors={["#EC4899", "#DB2777", "#BE185D"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.promoCtaGradient}
+                >
+                  <Text style={styles.promoCtaText}>CLAIM NOW</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* SORT MODAL */}
       <Modal
@@ -1606,10 +2610,21 @@ const categoryData = [
   );
 }
 
-const FilterItem = ({ icon, label, onPress }: FilterItemProps) => (
-  <TouchableOpacity style={styles.filterItem} onPress={onPress}>
-    <MaterialIcons name={icon} size={20} color="#000" />
-    <Text style={styles.filterText}>{label}</Text>
+const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
+  <TouchableOpacity
+    style={styles.filterChip}
+    onPress={onPress}
+    activeOpacity={0.88}
+  >
+    <View
+      style={[
+        styles.filterIconBubble,
+        { backgroundColor: tint.bubble, borderColor: tint.border },
+      ]}
+    >
+      <MaterialIcons name={icon} size={17} color={tint.icon} />
+    </View>
+    <Text style={styles.filterChipLabel}>{label}</Text>
   </TouchableOpacity>
 );
 
@@ -1618,33 +2633,126 @@ const FilterItem = ({ icon, label, onPress }: FilterItemProps) => (
 
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F5F5" },
+  container: { flex: 1, backgroundColor: HOME_PAGE_BG },
 
-  headerSticky: {
-    backgroundColor: "#fff",
-    zIndex: 20,
-    elevation: 10,
-    shadowColor: "#000",
+  homeScrollContent: {
+    paddingBottom: 90,
+    flexGrow: 1,
+  },
+
+  homeScrollMesh: {
+    width: "100%",
+    flexGrow: 1,
+  },
+
+  homeBrowsePanel: {
+    marginHorizontal: 10,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: PANEL_BROWSE,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BORDER_BROWSE,
+    shadowColor: "#153B59",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+
+  homeFilterRowInset: {
+    marginHorizontal: 8,
+    marginTop: 6,
+    marginBottom: 0,
+  },
+
+  homeMediaPanel: {
+    marginHorizontal: 10,
+    marginBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: PANEL_MEDIA,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BORDER_MEDIA,
+    shadowColor: "#153B59",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+
+  homeServiceShell: {
+    marginHorizontal: 10,
+    marginBottom: 12,
+    paddingVertical: 0,
+  },
+
+  homeSuggestedPanel: {
+    marginHorizontal: 10,
+    marginBottom: 12,
+    paddingTop: 14,
+    paddingBottom: 16,
+    paddingHorizontal: 10,
+    backgroundColor: PANEL_SUGGESTED,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BORDER_SUGGESTED,
+    shadowColor: "#1E4976",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+
+  homeVideoShell: {
+    marginHorizontal: 10,
+    marginBottom: 14,
+    padding: 10,
+    backgroundColor: PANEL_VIDEO,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BORDER_VIDEO,
+    shadowColor: "#153B59",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+
+  headerSticky: {
+    backgroundColor: "transparent",
+    zIndex: 20,
+    elevation: 8,
+    shadowColor: "#EA580C",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+  },
+
+  headerMeshGradient: {
+    width: "100%",
   },
 
   header: {
-    backgroundColor: "#fff",
-    paddingTop: 12,
+    backgroundColor: "transparent",
+    paddingTop: 4,
     paddingHorizontal: 16,
-    paddingBottom: 15,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(234, 88, 12, 0.22)",
   },
 
   greetingBar: {
     width: "100%",
-    backgroundColor: "#fff",
+    backgroundColor: "transparent",
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 14,
+    paddingTop: 6,
+    paddingBottom: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#eee",
+    borderBottomColor: "rgba(234, 88, 12, 0.2)",
   },
   topRow: {
     flexDirection: "row",
@@ -1669,12 +2777,51 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  helloText: { fontSize: 14, color: "#777" },
-  shopText: { fontSize: 18, fontWeight: "bold" },
+  greetingTextChip: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(249, 115, 22, 0.4)",
+    shadowColor: "#F97316",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  helloLine: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+
+  helloMuted: {
+    color: "#EA580C",
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
+
+  helloName: {
+    color: "#7C2D12",
+    fontWeight: "800",
+    letterSpacing: 0.1,
+  },
+
+  shopText: {
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 4,
+    lineHeight: 13,
+    color: "#C2410C",
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+  },
 
   searchBarIconBtn: {
-    width: 44,
-    height: 44,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 0,
@@ -1686,45 +2833,306 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 0,
-    gap: 4,
+    gap: 8,
   },
 
-  logoLocationCol: {
-    alignItems: "center",
-    flexShrink: 0,
-    width: 64,
-    paddingRight: 0,
-  },
-
-  logo: { width: 60, height: 35 },
-
-  locationBtnUnderLogo: {
-    flexDirection: "row",
+  logoCol: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    marginTop: 5,
-    maxWidth: "100%",
+    flexShrink: 0,
+    width: 56,
   },
 
-  locationBtnTextUnderLogo: {
+  logoRingGradient: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    padding: 3,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#EA580C",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  logoInnerDisc: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    overflow: "hidden",
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  logo: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+
+  locationPillOuter: {
+    marginTop: 4,
+    borderRadius: 999,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(249, 115, 22, 0.45)",
+    shadowColor: "#FB923C",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+
+  locationPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    gap: 5,
+  },
+
+  locationPillText: {
+    flex: 1,
     fontSize: 12,
-    color: "#444",
+    lineHeight: 16,
+    color: "#7C2D12",
     fontWeight: "600",
+    minWidth: 0,
+  },
+
+  deliveryModalRoot: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  deliveryModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  deliveryAddressSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: "88%",
+    paddingTop: 6,
+  },
+  deliverySheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D0D0D0",
+    marginBottom: 12,
+  },
+  deliverySheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    marginBottom: 14,
+  },
+  deliverySheetTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#111",
+  },
+  deliverySheetScroll: {
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+  },
+  deliverySearchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F3F3",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    marginBottom: 16,
+  },
+  deliverySearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#333",
+    paddingVertical: 0,
+  },
+  deliveryUseCurrentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  deliveryUseCurrentIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "#ECEFF1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deliveryUseCurrentTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  deliveryUseCurrentTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1976D2",
+  },
+  deliveryUseCurrentSub: {
+    fontSize: 13,
+    color: "#9E9E9E",
+    marginTop: 2,
+  },
+  deliveryDividerDashed: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+    borderStyle: "dashed",
+    marginBottom: 16,
+  },
+  deliverySavedHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  deliverySavedTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111",
+  },
+  deliveryAddNewText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1976D2",
+  },
+  deliveryAddHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    marginBottom: 14,
+  },
+  deliveryAddSheetTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#111",
+    textAlign: "center",
+    marginHorizontal: 8,
+  },
+  deliveryFormLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  deliveryFormInput: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#111",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E0E0E0",
+    marginBottom: 12,
+  },
+  deliveryFormInputMultiline: {
+    minHeight: 100,
+    paddingTop: 12,
+  },
+  deliverySaveNewButton: {
+    backgroundColor: "#1976D2",
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  deliverySaveNewButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  deliveryAddressPhone: {
+    fontSize: 13,
+    color: "#1976D2",
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  deliveryAddressCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#EEE",
+    gap: 10,
+  },
+  deliveryAddressCardBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  deliveryAddressNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 4,
+  },
+  deliveryAddressName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#222",
+    flexShrink: 1,
+  },
+  deliverySelectedBadge: {
+    backgroundColor: "#D9ECFF",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  deliverySelectedBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#1565C0",
+  },
+  deliveryAddressLine: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 18,
+  },
+  deliveryAddressMenuBtn: {
+    padding: 4,
+    marginTop: -2,
   },
 
   searchContainer: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#EFEFEF",
-    borderRadius: 25,
+    borderRadius: 22,
     paddingHorizontal: 10,
-    minHeight: 48,
+    minHeight: 44,
     paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "rgba(249, 115, 22, 0.38)",
+    shadowColor: "#F97316",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
 
-  searchInput: { flex: 1, marginLeft: 8 },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#431407",
+  },
 
   searchDropdown: {
     marginTop: 4,
@@ -1753,33 +3161,108 @@ const styles = StyleSheet.create({
     color: "#333",
   },
 
-  categoryPage: {
+  categorySection: {
+    paddingTop: 4,
+    paddingBottom: 0,
+  },
+
+  categoryScrollContent: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingTop: 4,
+    paddingBottom: 2,
   },
 
-  categoryBox: {
-    width: width / 5 - 10,
+  categoryChip: {
+    width: CATEGORY_CHIP_WIDTH,
     alignItems: "center",
-    marginBottom: 15,
   },
 
-  categoryImage: { width: 55, height: 55, marginBottom: 4 },
-  categoryText: { fontSize: 11, textAlign: "center" },
+  categoryChipSpacing: {
+    marginRight: 10,
+  },
+
+  categoryImageCard: {
+    width: CATEGORY_CHIP_WIDTH - 4,
+    height: CATEGORY_CHIP_WIDTH - 4,
+    maxHeight: 66,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E7E5E4",
+    marginBottom: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+
+  categoryImageInner: {
+    width: CATEGORY_ICON_INNER,
+    height: CATEGORY_ICON_INNER,
+  },
+
+  categoryChipLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "center",
+    color: "#292524",
+    width: "100%",
+    lineHeight: 12,
+    paddingHorizontal: 1,
+  },
 
   filterRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    marginVertical: 15,
-    backgroundColor: "#fff",
-    paddingVertical: 10,
+    justifyContent: "space-between",
+    alignItems: "stretch",
+    marginHorizontal: 12,
+    marginTop: 0,
+    marginBottom: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+    backgroundColor: "#FAFAF9",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E7E5E4",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 2,
   },
 
-  filterItem: { alignItems: "center" },
-  filterText: { fontSize: 12, marginTop: 4 },
+  filterChip: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 1,
+    paddingVertical: 1,
+  },
+
+  filterIconBubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    marginBottom: 4,
+  },
+
+  filterChipLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#292524",
+    textAlign: "center",
+    letterSpacing: 0.15,
+  },
 
  banner: {
   width: '100%',
@@ -1789,8 +3272,17 @@ const styles = StyleSheet.create({
   justifyContent: 'center',
   alignItems: 'center',
   overflow: 'hidden',
-  marginTop: 15,
+  marginTop: 0,
 },
+
+  bannerCarousel: {
+    marginTop: 0,
+  },
+
+  bannerSlideInner: {
+    marginTop: 0,
+    flex: 1,
+  },
 
   bannerImage: {
     width: "100%",
@@ -1801,8 +3293,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 12,
-    marginBottom: 18,
+    marginTop: 6,
+    marginBottom: 4,
   },
 
   bannerDot: {
@@ -1869,74 +3361,107 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    marginHorizontal: 8,
-    marginTop: 10,
-    backgroundColor: "#EFEFEF",
-    borderRadius: 24,
+    marginHorizontal: 0,
+    marginTop: 0,
+    backgroundColor: "rgba(239, 246, 255, 0.82)",
+    borderRadius: 14,
     paddingVertical: 8,
     paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.28)",
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
 
   serviceItem: {
     alignItems: "center",
     justifyContent: "center",
+    flex: 1,
+    paddingVertical: 2,
   },
 
   serviceIconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#D9D9D9",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(21, 101, 192, 0.35)",
   },
 
   serviceText: {
-    fontSize: 10,
-    color: "#333",
+    fontSize: 9,
+    color: "#0F172A",
     textAlign: "center",
+    fontWeight: "700",
+    lineHeight: 12,
+    paddingHorizontal: 2,
   },
 
   userSuggestionCard: {
-    backgroundColor: "#c8c8da",
-    marginHorizontal: 30,
-    marginTop: 18,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 20,
+    marginHorizontal: 10,
+    marginTop: 4,
+    marginBottom: 12,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 18,
+    minHeight: 220,
+    borderWidth: 2,
+    borderColor: "rgba(37, 99, 235, 0.35)",
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+
+  userSuggestionScroll: {
+    flexGrow: 0,
+  },
+
+  userSuggestionListContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingRight: 8,
+    paddingBottom: 4,
   },
 
   userSuggestionTitle: {
-    fontSize: 25,
-    color: "#1d324e",
-    marginBottom: 16,
-  },
-
-  userSuggestionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1E40AF",
+    marginBottom: 14,
+    letterSpacing: 0.3,
   },
 
   userSuggestionItem: {
-    width: "28%",
     alignItems: "center",
   },
 
   userSuggestionImageBox: {
-    width: 90,
-    height: 120,
-    backgroundColor: "#ECECEC",
-    borderRadius: 8,
+    width: "100%",
+    height: 152,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
     marginBottom: 8,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(30, 64, 175, 0.2)",
   },
 
   userSuggestionText: {
-    fontSize: 14,
-    color: "#333",
+    fontSize: 13,
+    color: "#1E293B",
     textAlign: "center",
+    fontWeight: "600",
+    lineHeight: 18,
   },
 
   likeHeaderRow: {
@@ -2240,18 +3765,53 @@ const styles = StyleSheet.create({
   },
 
   productSectionHeader: {
-    marginTop: 18,
-    marginHorizontal: 16,
-    marginBottom: 14,
+    marginTop: 0,
+    marginHorizontal: 0,
+    marginBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
 
-  productSectionTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#333",
+  suggestedTitleWrap: {
+    flex: 1,
+    marginRight: 12,
+    minWidth: 0,
+  },
+
+  suggestedTitleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 10,
+    backgroundColor: "#0F172A",
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#334155",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+
+  suggestedTitleBadgeText: {
+    color: "#F8FAFC",
+    fontSize: 17,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+
+  suggestedTitleTagline: {
+    marginTop: 8,
+    marginLeft: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
   },
 
   productArrowButton: {
@@ -2267,8 +3827,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    marginBottom: 20,
+    paddingHorizontal: 4,
+    marginBottom: 0,
   },
 
   productCard: {
@@ -2355,13 +3915,13 @@ addCartText: {
 },
 
 videoBannerContainer: {
-  width: width - 32,
-  alignSelf: "center",
+  width: "100%",
+  alignSelf: "stretch",
   aspectRatio: 16 / 9,
   maxHeight: 220,
-  marginTop: 12,
-  marginBottom: 24,
-  borderRadius: 12,
+  marginTop: 0,
+  marginBottom: 0,
+  borderRadius: 14,
   overflow: "hidden",
   backgroundColor: "#000",
 },
@@ -2369,37 +3929,96 @@ videoBannerContainer: {
 videoBanner: {
   ...StyleSheet.absoluteFillObject,
 },
-// premimum
+// premium — sapphire gradient (replaces flat orange)
 premiumSection: {
   marginHorizontal: 10,
-  marginTop: 16,
-  backgroundColor: '#ef7b1a',
+  marginTop: 12,
+  marginBottom: 12,
   borderRadius: 26,
-  paddingTop: 18,
-  paddingBottom: 18,
+  overflow: "hidden",
+  borderWidth: 1,
+  borderColor: "rgba(30, 58, 138, 0.45)",
+  shadowColor: "#1E40AF",
+  shadowOffset: { width: 0, height: 5 },
+  shadowOpacity: 0.22,
+  shadowRadius: 10,
+  elevation: 6,
+},
+
+premiumGradient: {
+  paddingTop: 20,
+  paddingBottom: 20,
   paddingHorizontal: 14,
 },
 
 premiumHeader: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: 16,
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 18,
+  gap: 12,
 },
 
-premiumTitle: {
-  color: '#fff',
-  fontSize: 18,
-  fontWeight: '800',
+premiumTitleCluster: {
+  flex: 1,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 12,
+  minWidth: 0,
+},
+
+premiumIconTile: {
+  width: 50,
+  height: 50,
+  borderRadius: 14,
+  backgroundColor: "rgba(255, 255, 255, 0.12)",
+  borderWidth: 1,
+  borderColor: "rgba(253, 230, 138, 0.45)",
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+premiumTitleCol: {
+  flex: 1,
+  minWidth: 0,
+},
+
+premiumTitleLine: {
+  flexShrink: 1,
+},
+
+premiumTitleW: {
+  fontSize: 21,
+  fontWeight: "700",
+  color: "#F8FAFC",
+  letterSpacing: 0.2,
+},
+
+premiumTitleG: {
+  fontSize: 21,
+  fontWeight: "900",
+  color: "#FDE68A",
+  letterSpacing: -0.2,
+},
+
+premiumTitleForYou: {
+  marginTop: 2,
+  fontSize: 13,
+  fontWeight: "600",
+  color: "rgba(226, 232, 240, 0.92)",
+  letterSpacing: 2,
+  textTransform: "uppercase",
 },
 
 premiumArrowButton: {
-  width: 42,
-  height: 42,
-  borderRadius: 21,
-  backgroundColor: '#fff',
-  justifyContent: 'center',
-  alignItems: 'center',
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  backgroundColor: "#F8FAFC",
+  justifyContent: "center",
+  alignItems: "center",
+  borderWidth: 2,
+  borderColor: "rgba(147, 197, 253, 0.8)",
 },
 
 premiumGrid: {
@@ -2443,37 +4062,95 @@ premiumSubtitle: {
   fontWeight: '800',
   color: '#000',
 },
-// megacolors
+// megacolors — rose gradient + offer title (replaces flat navy block)
 megaSection: {
   marginHorizontal: 10,
-  marginTop: 45,
-  backgroundColor: '#1d324e',
+  marginTop: 20,
+  marginBottom: 12,
   borderRadius: 26,
-  paddingTop: 18,
-  paddingBottom: 18,
+  overflow: "hidden",
+  borderWidth: 1,
+  borderColor: "rgba(190, 18, 60, 0.4)",
+  shadowColor: "#BE123C",
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.28,
+  shadowRadius: 12,
+  elevation: 8,
+},
+
+megaGradient: {
+  paddingTop: 20,
+  paddingBottom: 20,
   paddingHorizontal: 14,
 },
 
 megaHeader: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: 16,
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 18,
+  gap: 12,
 },
 
-megaTitle: {
-  color: '#fff',
-  fontSize: 18,
-  fontWeight: '800',
+megaTitleCluster: {
+  flex: 1,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 12,
+  minWidth: 0,
+},
+
+megaTitleIconWrap: {
+  width: 52,
+  height: 52,
+  borderRadius: 14,
+  backgroundColor: "rgba(255, 255, 255, 0.18)",
+  borderWidth: 1,
+  borderColor: "rgba(253, 224, 71, 0.45)",
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+megaTitleTextCol: {
+  flex: 1,
+  minWidth: 0,
+},
+
+megaTitleLine: {
+  flexShrink: 1,
+},
+
+megaTitleA: {
+  fontSize: 22,
+  fontWeight: "700",
+  color: "#FFFBEB",
+  letterSpacing: 0.2,
+},
+
+megaTitleB: {
+  fontSize: 22,
+  fontWeight: "900",
+  color: "#FACC15",
+  letterSpacing: -0.3,
+},
+
+megaTitleHint: {
+  marginTop: 4,
+  fontSize: 12,
+  fontWeight: "600",
+  color: "rgba(255, 255, 255, 0.78)",
+  letterSpacing: 0.6,
 },
 
 megaArrowButton: {
-  width: 42,
-  height: 42,
-  borderRadius: 21,
-  backgroundColor: '#fff',
-  justifyContent: 'center',
-  alignItems: 'center',
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  backgroundColor: "#FFFBEB",
+  justifyContent: "center",
+  alignItems: "center",
+  borderWidth: 2,
+  borderColor: "rgba(250, 204, 21, 0.65)",
 },
 
 megaGrid: {
@@ -2516,41 +4193,131 @@ megaSubtitle: {
   fontWeight: '800',
   color: '#000',
 },
-// focus
+// IN FOCUS — teal header + horizontal snap carousel
 focusSection: {
-  marginTop: 20,
-  paddingHorizontal: 14,
-},
-
-focusTitle: {
-  fontSize: 22,
-  fontWeight: '800',
-  color: '#243b5a',
-  textAlign: 'center',
-  letterSpacing: 1,
+  marginTop: 8,
+  marginHorizontal: 10,
   marginBottom: 12,
-},
-
-focusUnderline: {
-  height: 3,
-  backgroundColor: '#d98324',
-  borderRadius: 2,
-  marginBottom: 22,
-},
-
-focusCard: {
-  width: '100%',
-  height: 210,
+  paddingHorizontal: 12,
+  paddingTop: 14,
+  paddingBottom: 12,
+  backgroundColor: PANEL_FOCUS,
   borderRadius: 18,
-  overflow: 'hidden',
-  backgroundColor: '#f3f3f3',
-  marginBottom: 20,
+  borderWidth: 1,
+  borderColor: BORDER_FOCUS,
+  shadowColor: "#153B59",
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.07,
+  shadowRadius: 8,
+  elevation: 2,
 },
 
-focusImage: {
-  width: '100%',
-  height: '100%',
-},
+  focusTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+
+  focusTopBarLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+
+  focusAccentBar: {
+    width: 5,
+    height: 46,
+    borderRadius: 3,
+  },
+
+  focusTitleCluster: {
+    flexShrink: 1,
+  },
+
+  focusEyebrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#96309d",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+
+  focusHeadline: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+  },
+
+  focusHeadlineThin: {
+    fontSize: 26,
+    fontWeight: "300",
+    color: "#6e2c6f",
+    letterSpacing: 0.3,
+  },
+
+  focusHeadlineBold: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#981b90",
+    letterSpacing: -0.5,
+  },
+
+  focusCarouselContent: {
+    paddingBottom: 6,
+    paddingRight: 20,
+  },
+
+  focusCarouselCard: {
+    height: FOCUS_CARD_HEIGHT,
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "#EDE9FE",
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    shadowColor: "#4C1D95",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+
+  focusCarouselImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  focusCarouselFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "55%",
+  },
+
+  focusCarouselTag: {
+    position: "absolute",
+    bottom: 14,
+    left: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(15,23,42,0.55)",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+
+  focusCarouselTagText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FEF3C7",
+    letterSpacing: 0.4,
+  },
 
 nextSectionTitleWrap: {
   marginTop: 8,
@@ -2586,200 +4353,295 @@ megaBannerImage: {
 
 
 
-// latest products
+// More products for you — vertical list rows
 
 latestSection: {
-  marginTop: 14,
-  backgroundColor: "#f6f6f6",
-  paddingTop: 8,
-  paddingBottom: 10,
-},
-
-latestTopLine: {
-  height: 3,
-  backgroundColor: "#d8922f",
-  marginHorizontal: 12,
-  marginBottom: 14,
-},
-
-latestHeaderWrap: {
-  alignItems: "center",
-},
-
-latestHeaderBox: {
-  minWidth: 210,
-  backgroundColor: "#f7f3ed",
+  marginHorizontal: 10,
+  marginTop: 4,
+  marginBottom: 12,
+  paddingTop: 14,
+  paddingBottom: 16,
+  backgroundColor: PANEL_LATEST,
+  borderRadius: 18,
   borderWidth: 1,
-  borderColor: "#eadbc8",
-  paddingVertical: 16,
-  paddingHorizontal: 26,
-  alignItems: "center",
+  borderColor: BORDER_LATEST,
+  shadowColor: "#153B59",
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.07,
+  shadowRadius: 8,
+  elevation: 2,
 },
 
-latestHeaderTitle: {
-  fontSize: 20,
-  fontWeight: "800",
-  color: "#243b5a",
-},
+  latestListHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginBottom: 14,
+    gap: 12,
+  },
 
-latestHeaderUnderline: {
-  width: 94,
-  height: 8,
-  borderRadius: 10,
-  backgroundColor: "#8b4e22",
-  marginTop: 10,
-},
+  latestListHeadAccent: {
+    width: 4,
+    height: 40,
+    borderRadius: 2,
+    backgroundColor: "#EA580C",
+  },
 
-latestHeaderSubtitle: {
-  textAlign: "center",
-  fontSize: 17,
-  color: "#556f99",
-  marginTop: 10,
-  marginBottom: 22,
-},
+  latestListHeadText: {
+    flex: 1,
+    minWidth: 0,
+  },
 
-latestGrid: {
-  flexDirection: "row",
-  flexWrap: "wrap",
-  justifyContent: "space-between",
-  paddingHorizontal: 14,
-},
+  latestListHeadLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#9CA3AF",
+    letterSpacing: 1.3,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
 
-latestCard: {
-  width: "48.3%",
-  backgroundColor: "#ffffff",
-  borderRadius: 16,
-  marginBottom: 18,
-  overflow: "hidden",
-  elevation: 3,
-  shadowColor: "#000",
-  shadowOpacity: 0.08,
-  shadowRadius: 6,
-  shadowOffset: { width: 0, height: 3 },
-},
+  latestListHeadTitle: {
+    flexShrink: 1,
+  },
 
-latestImageWrap: {
-  width: "100%",
-  height: 200,
-  backgroundColor: "#f2f2f2",
-  position: "relative",
-},
+  latestListHeadTitleMain: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#111827",
+    letterSpacing: -0.3,
+  },
 
-latestImage: {
-  width: "100%",
-  height: "100%",
-},
+  latestListHeadTitleSub: {
+    fontSize: 22,
+    fontWeight: "500",
+    color: "#6B7280",
+    letterSpacing: -0.2,
+  },
 
-latestDiscountBadge: {
-  position: "absolute",
-  top: 14,
-  left: 14,
-  backgroundColor: "white",
-  width: 88,
-  height: 30,
-  borderRadius: 27,
-  justifyContent: "center",
-  alignItems: "center",
-},
+  latestListStack: {
+    paddingHorizontal: 14,
+  },
 
-latestDiscountText: {
-  color: "#fff",
-  fontSize: 15,
-  fontWeight: "700",
-},
+  latestRowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginBottom: 11,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
 
-latestProductTitle: {
-  fontSize: 14,
-  color: "#243b5a",
-  marginTop: 14,
-  marginHorizontal: 12,
-},
+  latestRowThumbWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#F3F4F6",
+    position: "relative",
+  },
 
-latestRatingRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginTop: 10,
-  marginHorizontal: 12,
-},
+  latestRowThumb: {
+    width: "100%",
+    height: "100%",
+  },
 
-latestStars: {
-  color: "#8b8b8b",
-  fontSize: 16,
-  letterSpacing: 1,
-},
+  latestRowDiscountPill: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
 
-latestRatingValue: {
-  marginLeft: 8,
-  color: "#6f7b8a",
-  fontSize: 13,
-},
+  latestRowDiscountPillText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
 
-latestPriceRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginTop: 10,
-  marginHorizontal: 12,
-},
+  latestRowCenter: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 6,
+    minWidth: 0,
+    justifyContent: "center",
+  },
 
-latestOldPrice: {
-  color: "#7a8795",
-  fontSize: 16,
-  textDecorationLine: "line-through",
-  marginRight: 8,
-},
+  latestRowTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+    lineHeight: 20,
+    marginBottom: 6,
+  },
 
-latestNewPrice: {
-  color: "#f28a18",
-  fontSize: 18,
-  fontWeight: "800",
-},
+  latestRowMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
 
-latestCartButton: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: "#f28a18",
-  paddingVertical: 8,
-  paddingHorizontal: 12,
-  borderRadius: 6,
-  height:50,
-},
+  latestRowStars: {
+    color: "#D1D5DB",
+    fontSize: 12,
+    letterSpacing: 0.3,
+  },
 
-latestCartButtonText: {
-  color: "#fff",
-  fontSize: 14,
-  marginLeft: 6,
-  fontWeight: "600",
-},
+  latestRowRatingText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+
+  latestRowPriceLine: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+
+  latestRowStrike: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    textDecorationLine: "line-through",
+  },
+
+  latestRowPrice: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#EA580C",
+  },
+
+  latestRowFab: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#FFEDD5",
+    borderWidth: 1,
+    borderColor: "#FDBA74",
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+  },
 //  seller gallary
 
 
   sellerSectionContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 20,
-    backgroundColor: "#F5F5F5",
+    marginHorizontal: 10,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 18,
+    backgroundColor: PANEL_SELLER,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BORDER_SELLER,
+    shadowColor: "#5B21B6",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
 
- titleContainer: {
-  alignItems: "center",
-  marginVertical: 15,
-},
+  sellerGalleryHeaderCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#EDE9FE",
+    borderLeftWidth: 6,
+    borderLeftColor: "#7C3AED",
+    shadowColor: "#4C1D95",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
 
-titleText: {
-  fontSize: 20,
-  fontWeight: "700",
-  letterSpacing: 2,
-  color: "#2E3A4D",
-  marginBottom: 8,
-},
+  sellerGalleryHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
 
-titleLine: {
-  width: "90%",
-  height: 4,
-  backgroundColor: "#C4812E",
-  borderRadius: 2,
-},
+  sellerGalleryTitleArea: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  sellerGalleryTitleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: "#F5F3FF",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+
+  sellerGalleryBadgeLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#6D28D9",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+
+  sellerGalleryTitleLine: {
+    flexShrink: 1,
+  },
+
+  sellerGalleryTitleItalic: {
+    fontSize: 25,
+    fontStyle: "italic",
+    fontWeight: "600",
+    color: "#7C3AED",
+  },
+
+  sellerGalleryTitleBold: {
+    fontSize: 25,
+    fontWeight: "900",
+    color: "#111827",
+    letterSpacing: -0.5,
+  },
+
+  sellerGallerySeeAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: "#F5F3FF",
+    borderWidth: 2,
+    borderColor: "#7C3AED",
+  },
+
+  sellerGallerySeeAllText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#5B21B6",
+    letterSpacing: 0.2,
+  },
 
   sellerGrid: {
     flexDirection: "row",
@@ -2821,28 +4683,69 @@ titleLine: {
     fontWeight: "600",
   },
 
-  arrowButton: {
-  alignSelf: "flex-end",
-  backgroundColor: "black",
-  marginTop: 6,
-  width: 40,
-  height: 36,
-  borderRadius: 18,
-  justifyContent: "center",
-  alignItems: "center",
-},
-
 // cards
 freshSection: {
-  marginTop: 28,
+  marginHorizontal: 10,
+  marginTop: 4,
+  marginBottom: 12,
+  paddingTop: 14,
+  paddingBottom: 12,
+  backgroundColor: PANEL_FRESH,
+  borderRadius: 18,
+  borderWidth: 1,
+  borderColor: BORDER_FRESH,
+  shadowColor: "#153B59",
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.08,
+  shadowRadius: 10,
+  elevation: 3,
 },
 
-freshTitle: {
-  fontSize: 28,
-  fontWeight: "600",
-  marginLeft: 16,
-  marginBottom: 8,
-},
+  freshTitleBlock: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 12,
+    minWidth: 0,
+  },
+
+  freshTitleAccentBar: {
+    width: 5,
+    height: 32,
+    borderRadius: 3,
+    backgroundColor: "#f28a18",
+    marginRight: 12,
+  },
+
+  freshTitleTextCol: {
+    flexShrink: 1,
+  },
+
+  freshTitle: {
+    flexShrink: 1,
+  },
+
+  freshTitleWord: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#0F172A",
+    letterSpacing: 0.3,
+  },
+
+  freshTitleHighlight: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#f28a18",
+    letterSpacing: 0.5,
+  },
+
+  freshTitleUnderline: {
+    marginTop: 6,
+    width: 72,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#C4812E",
+  },
 
 freshCardImage: {
   width: "100%",
@@ -2859,43 +4762,139 @@ freshHeader: {
   justifyContent: "space-between",
   alignItems: "center",
   paddingHorizontal: 16,
+  marginBottom: 12,
 },
+
+  freshFlatListContent: {
+    marginTop: 16,
+    paddingBottom: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  freshHorizontalScroll: {
+    width: "100%",
+    minHeight: 308,
+  },
+
+  secondBannerAfterFresh: {
+    marginHorizontal: 10,
+    marginTop: 0,
+    marginBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: PANEL_BANNER2,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BORDER_BANNER2,
+    shadowColor: "#1E4976",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
 
 freshPairRow: {
   flexDirection: "row",
   alignItems: "stretch",
 },
 
-// categariesbased
+// Shop by Store
 
-sectionTitle: {
-  fontSize: 28,
-  fontWeight: "600",
-  marginLeft: 15,
-  marginTop: 20,
-  marginBottom: 15,
-  color: "#333",
-},
+  shopByStoreSection: {
+    marginHorizontal: 10,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingTop: 14,
+    paddingBottom: 10,
+    backgroundColor: PANEL_SHOP,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BORDER_SHOP,
+    shadowColor: "#153B59",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+
+  shopByStoreHeader: {
+    marginHorizontal: 12,
+    marginBottom: 14,
+  },
+
+  shopByStoreTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+
+  shopByStoreIconRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#CCFBF1",
+    borderWidth: 2,
+    borderColor: "#5EEAD4",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  shopByStoreTitleCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+
+  shopByStoreTitleMain: {
+    flexShrink: 1,
+  },
+
+  shopByStoreTitleLight: {
+    fontSize: 26,
+    fontWeight: "300",
+    color: "#475569",
+    letterSpacing: 0.2,
+  },
+
+  shopByStoreTitleEmphasis: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#0D9488",
+    letterSpacing: -0.5,
+  },
+
+  shopByStoreRule: {
+    marginTop: 12,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#14B8A6",
+    opacity: 0.85,
+  },
 
 storeList: {
-  paddingLeft: 15,
+  paddingLeft: 16,
+  paddingRight: 8,
+  paddingBottom: 4,
 },
 
 storeItem: {
-  width: 140,
+  width: 172,
   alignItems: "center",
-  marginRight: 18,
+  marginRight: 20,
 },
 
 arcContainer: {
-  width: 130,
-  height: 120,
-  borderTopLeftRadius: 80,
-  borderTopRightRadius: 80,
-  borderBottomLeftRadius: 20,
-  borderBottomRightRadius: 20,
+  width: 164,
+  height: 152,
+  borderTopLeftRadius: 100,
+  borderTopRightRadius: 100,
+  borderBottomLeftRadius: 24,
+  borderBottomRightRadius: 24,
   overflow: "hidden",
-  backgroundColor: "#eee",
+  backgroundColor: "#E2E8F0",
+  borderWidth: StyleSheet.hairlineWidth,
+  borderColor: "rgba(13, 148, 136, 0.25)",
 },
 
 arcImage: {
@@ -2905,10 +4904,184 @@ arcImage: {
 },
 
 storeText: {
-  marginTop: 10,
-  fontSize: 15,
-  fontWeight: "500",
+  marginTop: 12,
+  fontSize: 16,
+  fontWeight: "600",
   textAlign: "center",
-  color: "#333",
+  color: "#1E293B",
+  paddingHorizontal: 4,
 },
+
+  promoModalRoot: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  promoModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.52)",
+  },
+  promoModalSheet: {
+    width: "100%",
+    maxHeight: Math.min(Dimensions.get("window").height * 0.78, 620),
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: "hidden",
+    borderTopWidth: 3,
+    borderLeftWidth: 2,
+    borderRightWidth: 2,
+    borderColor: "rgba(120, 53, 15, 0.35)",
+  },
+  promoBokehLayer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  promoBokehDot: {
+    position: "absolute",
+    backgroundColor: "#FEF08A",
+  },
+  promoCloseBtn: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 20,
+  },
+  promoCloseBtnInner: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(120, 53, 15, 0.25)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  promoScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 52,
+    paddingBottom: 8,
+  },
+  promoTitleScript: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#422006",
+    textAlign: "center",
+    letterSpacing: -0.5,
+    fontStyle: "italic",
+    textShadowColor: "rgba(255, 255, 255, 0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  promoTitleSub: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#7C2D12",
+    textAlign: "center",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  promoHeroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+    gap: 4,
+  },
+  promoCharWrap: {
+    width: 72,
+    height: 100,
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  promoCharImage: {
+    width: 68,
+    height: 96,
+  },
+  promoAdCard: {
+    flex: 1,
+    maxWidth: width * 0.52,
+    borderRadius: 20,
+    padding: 4,
+    backgroundColor: "#FFF",
+    borderWidth: 3,
+    borderColor: "#F97316",
+    shadowColor: "#EA580C",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  promoAdCardInner: {
+    borderRadius: 16,
+    overflow: "hidden",
+    minHeight: 168,
+  },
+  promoAdBadge: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    zIndex: 2,
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#FEF08A",
+  },
+  promoAdBadgeText: {
+    color: "#FFF",
+    fontWeight: "900",
+    fontSize: 11,
+    letterSpacing: 1,
+  },
+  promoHeroImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: 14,
+  },
+  promoBodyBold: {
+    marginTop: 20,
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1C1917",
+    textAlign: "center",
+    lineHeight: 24,
+    letterSpacing: -0.2,
+  },
+  promoBodyMuted: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#422006",
+    textAlign: "center",
+    lineHeight: 20,
+    opacity: 0.95,
+  },
+  promoCtaOuter: {
+    marginTop: 22,
+    borderRadius: 999,
+    overflow: "hidden",
+    alignSelf: "stretch",
+    shadowColor: "#BE185D",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  promoCtaGradient: {
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  promoCtaText: {
+    color: "#FFF",
+    fontSize: 17,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
 });

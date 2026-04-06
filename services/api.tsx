@@ -1,6 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
+ 
   baseURL: "http://192.168.0.29:8080",
   timeout: 10000,
   headers: {
@@ -42,6 +43,7 @@ export function subcategoryTableImageUrl(fileName: string): string {
 
 export async function fetchSubcategoriesTable(
   categoryId: number
+  
 ): Promise<ApiSubcategoriesTableEntry[]> {
   const { data } = await api.get<ApiSubcategoriesTableEntry[]>(
     `/api/categories/${categoryId}/subcategories-table`

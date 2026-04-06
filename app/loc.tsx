@@ -5,8 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  Alert,
-  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { requestForegroundLocation } from "../lib/requestForegroundLocation";
@@ -24,37 +22,21 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
   onOnlyThisTime,
   onDontAllow,
 }) => {
-  const locationAlertMessage =
-    Platform.OS === "ios"
-      ? "We use your location for delivery and nearby offers. Tap OK to open Settings, then turn on Location for this app."
-      : "We use your location for delivery and nearby offers. Tap OK to continue — your phone will show the system location permission next.";
-
-  /** First an in-app alert; on OK, Android shows the real permission dialog; iOS opens Settings. */
-  const showLocationAlertThenSystem = useCallback(
-    (onContinue: () => void) => {
-      Alert.alert("Allow location access", locationAlertMessage, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "OK",
-          onPress: () => {
-            void (async () => {
-              await requestForegroundLocation();
-              onContinue();
-            })();
-          },
-        },
-      ]);
-    },
-    [locationAlertMessage]
-  );
+  /** Triggers the real OS location permission dialog (expo-location), then the parent callback. */
+  const runLocationThen = useCallback((onContinue: () => void) => {
+    void (async () => {
+      await requestForegroundLocation();
+      onContinue();
+    })();
+  }, []);
 
   const handleWhileUsing = useCallback(() => {
-    showLocationAlertThenSystem(onWhileUsing);
-  }, [onWhileUsing, showLocationAlertThenSystem]);
+    runLocationThen(onWhileUsing);
+  }, [onWhileUsing, runLocationThen]);
 
   const handleOnlyThisTime = useCallback(() => {
-    showLocationAlertThenSystem(onOnlyThisTime);
-  }, [onOnlyThisTime, showLocationAlertThenSystem]);
+    runLocationThen(onOnlyThisTime);
+  }, [onOnlyThisTime, runLocationThen]);
 
   const handleDontAllow = useCallback(() => {
     onDontAllow();
@@ -64,7 +46,6 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
     <Modal transparent visible={visible} animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.dialogContainer}>
-          
           {/* Top Small Icon */}
           <Ionicons
             name="location-outline"
@@ -80,7 +61,6 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
 
           {/* Location Options */}
           <View style={styles.optionsContainer}>
-            
             {/* Precise */}
             <View style={styles.option}>
               <View style={styles.outerCircle}>
@@ -100,12 +80,10 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
               </View>
               <Text style={styles.optionText}>Approximate</Text>
             </View>
-
           </View>
 
           {/* Buttons */}
           <View style={styles.buttonContainer}>
-            
             <TouchableOpacity
               style={styles.button}
               onPress={handleWhileUsing}
@@ -132,9 +110,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
                 Don’t allow
               </Text>
             </TouchableOpacity>
-
           </View>
-
         </View>
       </View>
     </Modal>
@@ -144,50 +120,49 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   dialogContainer: {
-    width: '90%',
-    backgroundColor: '#FFFFFF',
+    width: "90%",
+    backgroundColor: "#FFFFFF",
     borderRadius: 24,
     paddingVertical: 24,
     paddingHorizontal: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
 
   title: {
     fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    color: '#222',
+    fontWeight: "600",
+    textAlign: "center",
+    color: "#222",
     marginBottom: 28,
     lineHeight: 24,
   },
 
   optionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
     marginBottom: 30,
   },
 
   option: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
 
-  /* SAME SIZE CIRCLES */
   outerCircle: {
     width: 120,
     height: 120,
     borderRadius: 60,
     borderWidth: 2,
-    borderColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: "#E0E0E0",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 8,
   },
 
@@ -195,44 +170,44 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#2F5BFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#2F5BFF",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   optionText: {
     fontSize: 15,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: "500",
+    color: "#333",
   },
 
   buttonContainer: {
-    width: '100%',
+    width: "100%",
   },
 
   button: {
-    width: '100%',
+    width: "100%",
     paddingVertical: 15,
     borderRadius: 12,
-    backgroundColor: '#D6E4FF',
-    alignItems: 'center',
+    backgroundColor: "#D6E4FF",
+    alignItems: "center",
     marginBottom: 12,
   },
 
   primaryText: {
-    color: '#1E3A8A',
+    color: "#1E3A8A",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 
   dontAllowButton: {
-    backgroundColor: '#E5E7EB',
+    backgroundColor: "#E5E7EB",
   },
 
   dontAllowText: {
-    color: '#333',
+    color: "#333",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
 
