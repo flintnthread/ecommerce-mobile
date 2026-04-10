@@ -6,11 +6,28 @@ import { View,
   ScrollView,
   Image,
   ImageBackground,
+  StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+
+const HEADER_FT_LOGO = require("../assets/men/categories/fntfav.png");
+
+function hexToRgba(hex: string, alpha: number): string {
+  let h = hex.replace("#", "").trim();
+  if (h.length === 3) {
+    h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  }
+  const num = parseInt(h, 16);
+  if (Number.isNaN(num)) return `rgba(29, 50, 78, ${alpha})`;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 type GiftCategory = {
   id: string;
@@ -509,6 +526,7 @@ const BEST_SELLER_PRODUCTS: TrendingProduct[] = [
 
 export default function GiftsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [selectedCategoryId, setSelectedCategoryId] = React.useState<string | null>(
     null
   );
@@ -534,6 +552,8 @@ export default function GiftsScreen() {
     }
     return DEFAULT_GIFT_HERO;
   }, [selectedCategoryId]);
+
+  const atGiftsRoot = selectedCategoryId === null;
 
   const renderTrendingProductRow = (sectionTitle: string, products: TrendingProduct[]) => (
     <View style={styles.homeProductRowBlock}>
@@ -593,6 +613,7 @@ export default function GiftsScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <LinearGradient
         colors={
           isCorporateView
@@ -607,36 +628,108 @@ export default function GiftsScreen() {
         style={styles.screenBgGradient}
         pointerEvents="none"
       />
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => {
-            if (selectedSubCategory) {
-              setSelectedSubCategory(null);
-              return;
-            }
-            if (
-              isArtCreativeView ||
-              isCorporateView ||
-              isEventBasedView ||
-              isUtilityView ||
-              isCoupleView ||
-              isHomelyHubExtendedView
-            ) {
-              setSelectedCategoryId(null);
-              return;
-            }
-            router.back();
-          }}
-          style={styles.backButton}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={22} color="#1d324e" />
-        </TouchableOpacity>
-        <View style={styles.headerSpacer} />
-        <TouchableOpacity style={styles.searchButton}>
-          <Ionicons name="search-outline" size={20} color="#1d324e" />
-        </TouchableOpacity>
-      </View>
+      <LinearGradient
+        colors={["#fffefb", "#faf7f3", "#f5f1eb"]}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={[styles.giftsStickyHeader, { paddingTop: insets.top + 8 }]}
+      >
+        <LinearGradient
+          colors={["transparent", hexToRgba("#ef7b1a", 0.07), "transparent"]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.giftsHeaderAccentWash}
+          pointerEvents="none"
+        />
+        <View style={styles.giftsHeaderRow}>
+          {atGiftsRoot ? (
+            <TouchableOpacity
+              style={styles.giftsLogoHit}
+              onPress={() => router.replace("/home")}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Home"
+            >
+              <View style={styles.giftsLogoTile}>
+                <Image
+                  source={HEADER_FT_LOGO}
+                  style={styles.giftsLogoImage}
+                  resizeMode="contain"
+                />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => {
+                if (selectedSubCategory) {
+                  setSelectedSubCategory(null);
+                  return;
+                }
+                if (
+                  isArtCreativeView ||
+                  isCorporateView ||
+                  isEventBasedView ||
+                  isUtilityView ||
+                  isCoupleView ||
+                  isHomelyHubExtendedView
+                ) {
+                  setSelectedCategoryId(null);
+                  return;
+                }
+                router.back();
+              }}
+              style={styles.giftsBackHit}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
+              <Ionicons name="arrow-back" size={22} color="#1d324e" />
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.giftsSearchPill}>
+            <TouchableOpacity
+              style={styles.giftsSearchMain}
+              onPress={() => router.push("/search")}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+            >
+              <Ionicons name="search-outline" size={19} color="#64748b" />
+              <Text style={styles.giftsSearchPlaceholder}>Search..</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/camerasearch")}
+              style={styles.giftsSearchCameraBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Search by photo"
+            >
+              <Ionicons name="camera-outline" size={22} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.giftsHeaderIconGroup}>
+            <TouchableOpacity
+              style={styles.giftsHeaderIconHit}
+              onPress={() => router.push("/wishlist")}
+              accessibilityRole="button"
+              accessibilityLabel="Wishlist"
+            >
+              <Ionicons name="heart-outline" size={24} color="#c2410c" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.giftsHeaderIconHit}
+              onPress={() => router.push("/notifications")}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+            >
+              <Ionicons name="notifications-outline" size={24} color="#c2410c" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </LinearGradient>
 
       <ScrollView
         style={styles.scroll}
@@ -1769,31 +1862,88 @@ const styles = StyleSheet.create({
   screenBgGradient: {
     ...StyleSheet.absoluteFillObject,
   },
-  header: {
+  giftsStickyHeader: {
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(29, 50, 78, 0.05)",
+  },
+  giftsHeaderAccentWash: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  giftsHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 48,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(255, 251, 247, 0.94)",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(246, 199, 149, 0.55)",
+    paddingHorizontal: 14,
+    gap: 12,
   },
-  backButton: {
-    paddingVertical: 4,
-    paddingRight: 8,
+  giftsLogoHit: {
+    borderRadius: 18,
   },
-  headerTitle: {
+  giftsLogoTile: {
+    width: 46,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  giftsLogoImage: {
+    width: 40,
+    height: 40,
+  },
+  giftsBackHit: {
+    width: 44,
+    height: 46,
+    justifyContent: "center",
+    alignItems: "flex-start",
+    paddingRight: 4,
+  },
+  giftsSearchPill: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1d324e",
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 0,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 999,
+    paddingLeft: 4,
+    paddingRight: 6,
+    paddingVertical: 5,
+    shadowColor: "#1d324e",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  headerSpacer: {
+  giftsSearchMain: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingLeft: 10,
+    minWidth: 0,
   },
-  searchButton: {
-    padding: 6,
+  giftsSearchPlaceholder: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#94a3b8",
+  },
+  giftsSearchCameraBtn: {
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(239, 123, 26, 0.1)",
+  },
+  giftsHeaderIconGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  giftsHeaderIconHit: {
+    padding: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.65)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29, 50, 78, 0.06)",
   },
   scroll: {
     flex: 1,

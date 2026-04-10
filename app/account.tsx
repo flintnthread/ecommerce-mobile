@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import NotificationPermission from "./notification";
 import * as ImagePicker from "expo-image-picker";
 
@@ -1587,6 +1588,7 @@ export default function AccountScreen() {
           </View>
         </Modal>
       </ScrollView>
+      <HomeBottomTabBar />
     </View>
   );
 }
@@ -1634,7 +1636,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
   topRow: {
     marginTop: 16,
