@@ -19,6 +19,7 @@ import {
   Alert,
   Platform,
   FlatList,
+  Animated,
   type ImageSourcePropType,
 } from "react-native";
 import * as IntentLauncher from "expo-intent-launcher";
@@ -26,37 +27,129 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { requestForegroundLocation } from "../lib/requestForegroundLocation";
+import * as ImagePicker from "expo-image-picker";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
+const HIDE_TOP_BAR_H = 66;
 const CARD_WIDTH = width * 0.6;
 const USER_PICK_CARD_WIDTH = Math.min(Math.round(width * 0.38), 148);
 const USER_PICK_ITEM_GAP = 12;
 
 /** Category strip: fixed chip width for horizontal scroll. */
-const CATEGORY_CHIP_WIDTH = 70;
-const CATEGORY_ICON_INNER = 48;
+const CATEGORY_CHIP_WIDTH = 86;
+/** Rounded image box behind each category icon */
+const CATEGORY_IMAGE_CARD_SIZE = 78;
+/** Inset inside the box so the full image fits with `contain` (not clipped). */
+const CATEGORY_IMAGE_INNER_INSET = 6;
+const CATEGORY_ICON_INNER =
+  CATEGORY_IMAGE_CARD_SIZE - CATEGORY_IMAGE_INNER_INSET * 2;
 
 const FOCUS_CARD_WIDTH = Math.round(Math.min(width * 0.78, 336));
 const FOCUS_CARD_GAP = 16;
 const FOCUS_CARD_HEIGHT = 232;
 
-/** Below header: page + scroll base (slate blue-gray) */
-const HOME_PAGE_BG = "#69798c";
+/** First hero carousel: Amazon-style tall cards + matching sticky header tint */
+const HERO_PROMO_CARD_WIDTH = Math.round(Math.min(width * 0.90, 400));
+const HERO_PROMO_CARD_HEIGHT = Math.round(
+  Math.max(280, Math.min(height * 0.5, 420))
+);
+const HERO_PROMO_CARD_GAP = 14;
+const HERO_PROMO_SNAP_STRIDE = HERO_PROMO_CARD_WIDTH + HERO_PROMO_CARD_GAP;
+const HERO_PROMO_SIDE_PADDING = (width - HERO_PROMO_CARD_WIDTH) / 2;
+
+type HeroPromoCard = {
+  id: string;
+  /** Saturated gradient for sticky header + browse (categories / filters) — matches banner */
+  chromeGradient: readonly [string, string, string];
+  cardGradient: readonly [string, string];
+  titleColor: string;
+  subtitleColor: string;
+  title: string;
+  subtitle: string;
+  tag: string;
+  footer: string;
+  image: ImageSourcePropType;
+};
+
+/** Hero carousel — swap keys on each slide’s `image` to use other `banner*.png` files */
+const HERO_BANNER_ASSETS = {
+  banner1: require("../assets/images/banner1.png"),
+  banner2: require("../assets/images/banner2.png"),
+  banner3: require("../assets/images/banner3.png"),
+  banner5: require("../assets/images/banner5.png"),
+  banner6: require("../assets/images/banner6.png"),
+  banner7: require("../assets/images/banner7.png"),
+  banner8: require("../assets/images/banner8.png"),
+  banner9: require("../assets/images/banner9.png"),
+} as const;
+
+const HERO_PROMO_CARDS: HeroPromoCard[] = [
+  {
+    id: "h1",
+    chromeGradient: ["#F9A8D4", "#EC4899", "#BE185D"],
+    cardGradient: ["#F472B6", "#DB2777"],
+    titleColor: "#FFFFFF",
+    subtitleColor: "rgba(255,255,255,0.95)",
+    title: "Up to 75% off",
+    subtitle: "Limited-time deals storewide*",
+    tag: "MEGA TECH DAYS",
+    footer: "Up to 10% instant discount*",
+    image: HERO_BANNER_ASSETS.banner1,
+  },
+  {
+    id: "h2",
+    chromeGradient: ["#A5B4FC", "#6366F1", "#4338CA"],
+    cardGradient: ["#818CF8", "#4F46E5"],
+    titleColor: "#FFFFFF",
+    subtitleColor: "rgba(255,255,255,0.94)",
+    title: "Up to ₹50 back*",
+    subtitle: "Pay safe, shop fast",
+    tag: "PAY OFFERS",
+    footer: "On eligible orders, T&C apply*",
+    image: HERO_BANNER_ASSETS.banner2,
+  },
+  {
+    id: "h3",
+    chromeGradient: ["#5EEAD4", "#14B8A6", "#0F766E"],
+    cardGradient: ["#2DD4BF", "#0F766E"],
+    titleColor: "#FFFFFF",
+    subtitleColor: "rgba(255,255,255,0.94)",
+    title: "Style fest",
+    subtitle: "Fashion & footwear",
+    tag: "STYLE EDIT",
+    footer: "Extra savings on top brands*",
+    image: HERO_BANNER_ASSETS.banner3,
+  },
+  {
+    id: "h4",
+    chromeGradient: ["#FDBA74", "#F97316", "#C2410C"],
+    cardGradient: ["#FB923C", "#C2410C"],
+    titleColor: "#FFFFFF",
+    subtitleColor: "rgba(255,255,255,0.95)",
+    title: "Fresh deals",
+    subtitle: "Daily essentials",
+    tag: "FRESH PICKS",
+    footer: "Free delivery on select orders*",
+    image: HERO_BANNER_ASSETS.banner5,
+  },
+];
+
+/** Below header: page + scroll base (clean white) */
+const HOME_PAGE_BG = "#FFFFFF";
 
 /**
- * Section surfaces — rgba so the multi-color scroll mesh shows through slightly.
- * Each tint is different; Fresh stays most opaque for image contrast.
+ * Section surfaces — keep all sections pure white for a clean, consistent look.
  */
-const PANEL_BROWSE = "rgba(245, 248, 255, 0.90)";
-const PANEL_MEDIA = "rgba(255, 252, 249, 0.88)";
-const PANEL_SUGGESTED = "rgba(247, 244, 255, 0.88)";
-const PANEL_VIDEO = "rgba(240, 249, 255, 0.88)";
-const PANEL_FRESH = "rgba(255, 255, 255, 0.94)";
-const PANEL_BANNER2 = "rgba(237, 242, 255, 0.88)";
-const PANEL_SHOP = "rgba(242, 251, 247, 0.88)";
-const PANEL_FOCUS = "rgba(255, 248, 240, 0.88)";
-const PANEL_LATEST = "rgba(248, 250, 252, 0.90)";
-const PANEL_SELLER = "rgba(250, 245, 255, 0.88)";
+const PANEL_BROWSE = "#FFFFFF";
+const PANEL_MEDIA = "#FFFFFF";
+const PANEL_SUGGESTED = "#FFFFFF";
+const PANEL_VIDEO = "#FFFFFF";
+const PANEL_FRESH = "#FFFFFF";
+const PANEL_BANNER2 = "#FFFFFF";
+const PANEL_SHOP = "#FFFFFF";
+const PANEL_FOCUS = "#FFFFFF";
+const PANEL_LATEST = "#FFFFFF";
+const PANEL_SELLER = "#FFFFFF";
 
 const BORDER_BROWSE = "#B8C9DC";
 const BORDER_MEDIA = "#E5D5CC";
@@ -70,36 +163,35 @@ const BORDER_LATEST = "#CBD5E1";
 const BORDER_SELLER = "#D8C4F0";
 
 /**
- * Full feed background: subtle variation around #69798c so categories and
- * sections read on one cohesive slate tone.
+ * Full feed background: keep it near-white so section spacing stays clean.
  */
 const HOME_SCROLL_MESH_COLORS = [
-  "#586776",
-  "#5f6e7e",
-  "#667586",
-  "#6d7c8e",
-  "#69798c",
-  "#738496",
-  "#7d8fa0",
-  "#8799aa",
-  "#7a8b9c",
-  "#69798c",
+  "#FFFFFF",
+  "#F8FAFC",
+  "#F1F5F9",
+  "#FFFFFF",
+  "#FAFAFA",
+  "#F8FAFC",
+  "#FFFFFF",
+  "#F1F5F9",
+  "#F8FAFC",
+  "#FFFFFF",
 ] as const;
 
 const HOME_SCROLL_MESH_LOCATIONS = [
   0, 0.1, 0.22, 0.34, 0.46, 0.55, 0.64, 0.73, 0.86, 1,
 ] as const;
 
-/** Top header: orange + white blend */
+/** Top header: clean "paper" gradient (professional + brand-safe) */
 const HEADER_MESH_COLORS = [
   "#FFFFFF",
-  "#FFF7ED",
-  "#FFEDD5",
+  "#F8FAFC",
+  "#F1F5F9",
   "#FFFFFF",
+  "#FFFBF7",
   "#FFF1E6",
-  "#FDBA74",
-  "#FFF8F3",
-  "#FFE4CC",
+  "#FFFFFF",
+  "#FAFAFA",
   "#FFFFFF",
 ] as const;
 const HEADER_MESH_LOCATIONS = [
@@ -176,6 +268,13 @@ const PROMO_BOKEH = [
 const PROMO_HERO_IMAGE = require("../assets/images/getpromoting1.png");
 const PROMO_CHAR_LEFT = require("../assets/images/getpromoting2.png");
 const PROMO_CHAR_RIGHT = require("../assets/images/getpromoting3.png");
+
+type RateCard = {
+  id: string;
+  brand: string;
+  title: string;
+  image: ImageSourcePropType;
+};
 
 interface FilterItemProps {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -459,10 +558,15 @@ export default function Home() {
   };
 
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const topBarAnim = useRef(new Animated.Value(1)).current;
+  const [topBarMounted, setTopBarMounted] = useState(true);
+  const lastMainScrollY = useRef(0);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [bannerIndex2, setBannerIndex2] = useState(0);
-  const bannerCarouselRef = useRef<FlatList<ImageSourcePropType> | null>(null);
+  const bannerCarouselRef = useRef<FlatList<HeroPromoCard> | null>(null);
   const bannerCarousel2Ref = useRef<FlatList<ImageSourcePropType> | null>(null);
+  const rateCarouselRef = useRef<ScrollView>(null);
+  const [rateIndex, setRateIndex] = useState(0);
 
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -495,19 +599,33 @@ export default function Home() {
     safeVideoPlayback(videoBannerPlayer, "play");
   }, [isHomeFocused, videoBannerPlayer]);
 
-  const banners = [
-    require("../assets/images/banner1.png"),
-    require("../assets/images/banner2.png"),
-    require("../assets/images/banner3.png"),
-    require("../assets/images/banner1.png"),
-    require("../assets/images/banner5.png"),
-  ];
 const banners2 = [
   require("../assets/images/banner6.png"),
   require("../assets/images/banner7.png"),
   require("../assets/images/banner8.png"),
    require("../assets/images/banner9.png"),
 ];
+
+  const rateCards: RateCard[] = [
+    {
+      id: "r1",
+      brand: "AVANOVA",
+      title: "Women Ruched Fit & Flare Dress",
+      image: require("../assets/images/premium1.png"),
+    },
+    {
+      id: "r2",
+      brand: "NIKE",
+      title: "Air Zoom Running Shoes",
+      image: require("../assets/images/sports6.png"),
+    },
+    {
+      id: "r3",
+      brand: "ADIDAS",
+      title: "Gym Training Tee",
+      image: require("../assets/images/sports2.png"),
+    },
+  ];
 
   const serviceItems: {
     id: number;
@@ -559,17 +677,17 @@ const banners2 = [
   useEffect(() => {
     const interval = setInterval(() => {
       setBannerIndex((prev) => {
-        const next = (prev + 1) % banners.length;
-        bannerCarouselRef.current?.scrollToIndex({
-          index: next,
+        const next = (prev + 1) % HERO_PROMO_CARDS.length;
+        bannerCarouselRef.current?.scrollToOffset({
+          offset: next * HERO_PROMO_SNAP_STRIDE,
           animated: true,
         });
         return next;
       });
-    }, 3000);
+    }, 3500);
 
     return () => clearInterval(interval);
-  }, [banners.length]);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -585,6 +703,23 @@ const banners2 = [
 
     return () => clearInterval(interval);
   }, [banners2.length]);
+
+  useEffect(() => {
+    const n = rateCards.length;
+    if (n <= 1) return undefined;
+    const interval = setInterval(() => {
+      setRateIndex((prev) => {
+        const next = (prev + 1) % n;
+        rateCarouselRef.current?.scrollTo({
+          x: next * width,
+          y: 0,
+          animated: true,
+        });
+        return next;
+      });
+    }, 3200);
+    return () => clearInterval(interval);
+  }, [rateCards.length]);
 
 useEffect(() => {
   const interval = setInterval(() => {
@@ -611,57 +746,57 @@ useEffect(() => {
   }[] = [
     {
       name: "Kids Wear",
-      image: require("../assets/images/kidscate.png"),
-      href: "/sportswear",
+      image: require("../assets/MainCatImages/images/Kids.png"),
+      href: "/kids",
     },
     {
       name: "Mens Wear",
-      image: require("../assets/images/menscate.png"),
-      href: "/sportswear",
+      image: require("../assets/MainCatImages/images/Men.png"),
+      href: "/men",
     },
     {
       name: "Womens Wear",
-      image: require("../assets/images/womencate.png"),
-      href: "/categories",
+      image: require("../assets/MainCatImages/images/Women.png"),
+      href: "/women",
     },
     {
       name: "Play",
-      image: require("../assets/images/playcate.png"),
+      image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
       href: "/sportswear",
     },
     {
       name: "Gargi",
-      image: require("../assets/images/sofacate.png"),
+      image: require("../assets/MainCatImages/images/Gaargi.png"),
       href: "/subcate",
     },
     {
       name: "Sweets",
-      image: require("../assets/images/sweetscate.png"),
+      image: require("../assets/MainCatImages/images/Sweets.png"),
       href: "/sweets",
     },
     {
       name: "Foot Wear",
-      image: require("../assets/images/footwearcate.png"),
+      image: require("../assets/MainCatImages/images/Footwear.png"),
       href: "/footwear",
     },
     {
       name: "Sports Wear",
-      image: require("../assets/images/sportscate.png"),
+      image: require("../assets/MainCatImages/images/Sportswear.png"),
       href: "/sportswear",
     },
     {
       name: "Accessories",
-      image: require("../assets/images/accessariescate.png"),
+      image: require("../assets/MainCatImages/images/Accessories.png"),
       href: "/accessories",
     },
     {
       name: "Homelyhub",
-      image: require("../assets/images/homecate.png"),
+      image: require("../assets/MainCatImages/images/HomelyHub.png"),
       href: "/gifts",
     },
     {
       name: "Skin and Beauty",
-      image: require("../assets/images/product6.png"),
+      image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
       href: "/accessories",
     },
   ];
@@ -891,15 +1026,30 @@ const focusBanners = [
     image: require('../assets/images/focus2.png'),
   },
 ];
+  const launchHomeCamera = useCallback(async () => {
+    const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
+    if (cameraStatus.status !== "granted") {
+      Alert.alert("Permission required", "Camera permission is required.");
+      return;
+    }
+    await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+    });
+  }, []);
+
   const openCamera = () => {
-    Alert.alert(
-      "Camera access",
-      "Allow camera access to take photos?",
-      [
-        { text: "Don't allow", style: "cancel" },
-        { text: "Allow", onPress: () => router.push("/camerasearch") },
-      ]
-    );
+    Alert.alert("Camera access", "Allow camera access to take photos?", [
+      { text: "Don't allow", style: "cancel" },
+      {
+        text: "Allow",
+        onPress: () => {
+          Alert.alert("Camera", "Camera option opened.", [
+            { text: "OK", onPress: () => void launchHomeCamera() },
+          ]);
+        },
+      },
+    ]);
   };
 
 
@@ -1103,18 +1253,39 @@ const categoryData = [
 
 // megabanners
 
+  const activeHeroHeader =
+    HERO_PROMO_CARDS[
+      Math.min(Math.max(0, bannerIndex), HERO_PROMO_CARDS.length - 1)
+    ] ?? HERO_PROMO_CARDS[0]!;
+
   return (
     <View style={styles.container}>
       <View style={styles.headerSticky}>
         <LinearGradient
-          colors={[...HEADER_MESH_COLORS]}
-          locations={[...HEADER_MESH_LOCATIONS]}
+          colors={[...activeHeroHeader.chromeGradient]}
+          locations={[0, 0.45, 1]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.headerMeshGradient, { paddingTop: insets.top }]}
         >
-        {/* Top: greeting + wishlist / notifications */}
-        <View style={styles.greetingBar}>
+        {/* Top: greeting + wishlist / notifications (hide on scroll down) */}
+        {topBarMounted ? (
+          <Animated.View
+            style={[
+              styles.greetingBar,
+              {
+                opacity: topBarAnim,
+                transform: [
+                  {
+                    translateY: topBarAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-HIDE_TOP_BAR_H, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
           <View style={styles.topRow}>
             <View style={styles.greetingCol}>
               <TouchableOpacity
@@ -1146,18 +1317,19 @@ const categoryData = [
                 style={styles.headerIconHit}
                 accessibilityLabel="Wishlist"
               >
-                <Ionicons name="heart-outline" size={24} color="#C2410C" />
+                <Ionicons name="heart-outline" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => router.push("/notifications")}
                 style={styles.headerIconHit}
                 accessibilityLabel="Notifications"
               >
-                <Ionicons name="notifications-outline" size={24} color="#C2410C" />
+                <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+          </Animated.View>
+        ) : null}
 
         {/* Below: logo + search, then location */}
         <View style={styles.header}>
@@ -1187,10 +1359,10 @@ const categoryData = [
               end={{ x: 1, y: 1 }}
               style={styles.searchContainer}
             >
-              <Ionicons name="search-outline" size={18} color="#C2410C" />
+              <Ionicons name="search-outline" size={18} color="#64748B" />
               <TextInput
                 placeholder={placeholderTexts[placeholderIndex]}
-                placeholderTextColor="#9A3412"
+                placeholderTextColor="#64748B"
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -1202,14 +1374,14 @@ const categoryData = [
                 <Ionicons
                   name="camera-outline"
                   size={24}
-                  color="#C2410C"
+                  color="#64748B"
                 />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={startVoiceSearch}
                 style={styles.searchBarIconBtn}
               >
-                <Ionicons name="mic-outline" size={24} color="#C2410C" />
+                <Ionicons name="mic-outline" size={24} color="#64748B" />
               </TouchableOpacity>
             </LinearGradient>
           </View>
@@ -1222,13 +1394,13 @@ const categoryData = [
             accessibilityLabel="Delivery address, tap to change"
           >
             <LinearGradient
-              colors={[...LOCATION_MESH_COLORS]}
-              locations={[...LOCATION_MESH_LOCS]}
+              colors={["rgba(255,255,255,0.96)", "rgba(255,255,255,0.9)"]}
+              locations={[0, 1]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0.85 }}
               style={styles.locationPill}
             >
-              <MaterialIcons name="place" size={17} color="#C2410C" />
+              <MaterialIcons name="place" size={17} color="#0F172A" />
               <Text
                 style={styles.locationPillText}
                 numberOfLines={1}
@@ -1236,18 +1408,50 @@ const categoryData = [
               >
                 {displayDeliveryLine}
               </Text>
-              <Ionicons name="chevron-down" size={18} color="#C2410C" />
+              <Ionicons name="chevron-down" size={18} color="#0F172A" />
             </LinearGradient>
           </TouchableOpacity>
         </View>
         </LinearGradient>
       </View>
 
-      <ScrollView
+      <Animated.ScrollView
         style={{ flex: 1, backgroundColor: HOME_PAGE_BG }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.homeScrollContent}
         nestedScrollEnabled
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          const y = e.nativeEvent.contentOffset.y ?? 0;
+          const prev = lastMainScrollY.current;
+          lastMainScrollY.current = y;
+          const dy = y - prev;
+          if (Math.abs(dy) < 8) return;
+
+          // Hide on scroll down. Show ONLY when back near top (categories start).
+          const REVEAL_NEAR_TOP_Y = 24;
+          const HIDE_AFTER_Y = 40;
+
+          if (dy > 0 && y > HIDE_AFTER_Y && topBarMounted) {
+            Animated.timing(topBarAnim, {
+              toValue: 0,
+              duration: 180,
+              useNativeDriver: true,
+            }).start(({ finished }) => {
+              if (finished) setTopBarMounted(false);
+            });
+            return;
+          }
+          if (dy < 0 && y <= REVEAL_NEAR_TOP_Y && !topBarMounted) {
+            setTopBarMounted(true);
+            topBarAnim.setValue(0);
+            Animated.timing(topBarAnim, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }).start();
+          }
+        }}
       >
         <LinearGradient
           colors={[...HOME_SCROLL_MESH_COLORS]}
@@ -1256,8 +1460,14 @@ const categoryData = [
           end={{ x: 1, y: 1 }}
           style={styles.homeScrollMesh}
         >
-        {/* Browse: categories + filters */}
-        <View style={styles.homeBrowsePanel}>
+        {/* Browse: categories + filters — same bold gradient as active hero banner */}
+        <LinearGradient
+          colors={[...activeHeroHeader.chromeGradient]}
+          locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.homeBrowsePanelChrome}
+        >
           <View style={styles.categorySection}>
             <ScrollView
               horizontal
@@ -1284,7 +1494,7 @@ const categoryData = [
                       resizeMode="contain"
                     />
                   </View>
-                  <Text style={styles.categoryChipLabel} numberOfLines={2}>
+                  <Text style={styles.categoryChipLabelChrome} numberOfLines={2}>
                     {cat.name}
                   </Text>
                 </TouchableOpacity>
@@ -1335,55 +1545,105 @@ const categoryData = [
             }}
           />
           </View>
-        </View>
+        </LinearGradient>
 
-        {/* BANNER — horizontal scroll (no image swap / blink) */}
+        {/* Hero promo cards — snap carousel; header tint follows active card */}
         <View style={styles.homeMediaPanel}>
           <FlatList
             ref={bannerCarouselRef}
-            data={banners}
+            data={HERO_PROMO_CARDS}
             horizontal
-            pagingEnabled
+            pagingEnabled={false}
             showsHorizontalScrollIndicator={false}
             decelerationRate="fast"
-            keyExtractor={(_, index) => `home-banner-${index}`}
-            getItemLayout={(_, index) => ({
-              length: width,
-              offset: width * index,
-              index,
-            })}
+            disableIntervalMomentum
+            snapToInterval={HERO_PROMO_SNAP_STRIDE}
+            snapToAlignment="start"
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.heroPromoListContent}
             onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+              const idx = Math.round(
+                e.nativeEvent.contentOffset.x / HERO_PROMO_SNAP_STRIDE
+              );
               const clamped = Math.min(
                 Math.max(0, idx),
-                banners.length - 1
+                HERO_PROMO_CARDS.length - 1
               );
               setBannerIndex(clamped);
             }}
-            onScrollToIndexFailed={(info) => {
-              setTimeout(() => {
-                bannerCarouselRef.current?.scrollToIndex({
-                  index: info.index,
-                  animated: false,
-                });
-              }, 350);
-            }}
             renderItem={({ item }) => (
-              <View style={{ width, height: 200 }}>
-                <View style={[styles.banner, styles.bannerSlideInner]}>
-                  <Image
-                    source={item}
-                    style={styles.bannerImage}
-                    resizeMode="cover"
+              <View
+                style={[
+                  styles.heroPromoItemWrap,
+                  { width: HERO_PROMO_SNAP_STRIDE },
+                ]}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.92}
+                  style={[
+                    styles.heroPromoCard,
+                    {
+                      width: HERO_PROMO_CARD_WIDTH,
+                      height: HERO_PROMO_CARD_HEIGHT,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.title}, ${item.subtitle}`}
+                >
+                  <LinearGradient
+                    colors={[...item.cardGradient]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
                   />
-                </View>
+                  <View style={styles.heroPromoCardInner}>
+                    <View style={styles.heroPromoTextBlock}>
+                      <Text
+                        style={[
+                          styles.heroPromoTitle,
+                          { color: item.titleColor },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.heroPromoSubtitle,
+                          { color: item.subtitleColor },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {item.subtitle}
+                      </Text>
+                      <Text
+                        style={[styles.heroPromoTag, { color: item.titleColor }]}
+                        numberOfLines={1}
+                      >
+                        {item.tag}
+                      </Text>
+                    </View>
+                    <View style={styles.heroPromoImageMount}>
+                      <Image
+                        source={item.image}
+                        style={styles.heroPromoImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <View style={styles.heroPromoFooter}>
+                      <Text style={styles.heroPromoFooterText} numberOfLines={1}>
+                        {item.footer}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
               </View>
             )}
             style={styles.bannerCarousel}
           />
 
           <View style={styles.bannerDotsRow}>
-            {banners.map((_, index) => (
+            {HERO_PROMO_CARDS.map((_, index) => (
               <View
                 key={`banner-dot-${index}`}
                 style={[
@@ -1721,6 +1981,57 @@ const categoryData = [
   </LinearGradient>
 </View>
 
+{/* Rate your recent purchase — auto-scrolling card */}
+<View style={styles.rateSection}>
+  <Text style={styles.rateSectionTitle}>Rate Your Recent Purchase</Text>
+
+  <ScrollView
+    ref={rateCarouselRef}
+    horizontal
+    pagingEnabled
+    showsHorizontalScrollIndicator={false}
+    decelerationRate="fast"
+    onMomentumScrollEnd={(e) => {
+      const page = Math.round(e.nativeEvent.contentOffset.x / width);
+      const max = rateCards.length - 1;
+      setRateIndex(Math.max(0, Math.min(page, max)));
+    }}
+  >
+    {rateCards.map((card) => (
+      <View key={card.id} style={{ width }}>
+        <View style={styles.rateCard}>
+          <Image source={card.image} style={styles.rateCardImage} resizeMode="cover" />
+          <View style={styles.rateCardRight}>
+            <Text style={styles.rateCardBrand} numberOfLines={1}>
+              {card.brand}
+            </Text>
+            <Text style={styles.rateCardTitle} numberOfLines={2}>
+              {card.title}
+            </Text>
+            <View style={styles.rateStarsRow} pointerEvents="none">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Ionicons key={i} name="star-outline" size={28} color="#94A3B8" />
+              ))}
+            </View>
+            <Text style={styles.rateCardHint} numberOfLines={2}>
+              Tap on the stars to rate the product
+            </Text>
+          </View>
+        </View>
+      </View>
+    ))}
+  </ScrollView>
+
+  <View style={styles.rateDotsRow}>
+    {rateCards.map((_, i) => (
+      <View
+        key={`rate-dot-${i}`}
+        style={[styles.rateDot, i === rateIndex ? styles.rateDotActive : null]}
+      />
+    ))}
+  </View>
+</View>
+
 
 {/* Shop by Store */}
 <View style={styles.shopByStoreSection}>
@@ -1972,7 +2283,7 @@ const categoryData = [
 </View>
 
         </LinearGradient>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Select delivery address — bottom sheet */}
       <Modal
@@ -2662,6 +2973,23 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
+  homeBrowsePanelChrome: {
+    marginHorizontal: 10,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.42)",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 4,
+    overflow: "hidden",
+  },
+
   homeFilterRowInset: {
     marginHorizontal: 8,
     marginTop: 6,
@@ -2671,12 +2999,12 @@ const styles = StyleSheet.create({
   homeMediaPanel: {
     marginHorizontal: 10,
     marginBottom: 12,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingTop: 6,
+    paddingBottom: 6,
     backgroundColor: PANEL_MEDIA,
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: BORDER_MEDIA,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.35)",
     shadowColor: "#153B59",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.09,
@@ -2726,10 +3054,10 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     zIndex: 20,
     elevation: 8,
-    shadowColor: "#EA580C",
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14,
-    shadowRadius: 6,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
 
   headerMeshGradient: {
@@ -2738,21 +3066,22 @@ const styles = StyleSheet.create({
 
   header: {
     backgroundColor: "transparent",
-    paddingTop: 4,
+    paddingTop: 2,
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(234, 88, 12, 0.22)",
+    borderBottomColor: "rgba(255,255,255,0.28)",
   },
 
   greetingBar: {
     width: "100%",
     backgroundColor: "transparent",
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 6,
+    paddingTop: 4,
+    paddingBottom: 4,
+    overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(234, 88, 12, 0.2)",
+    borderBottomColor: "rgba(255,255,255,0.28)",
   },
   topRow: {
     flexDirection: "row",
@@ -2772,15 +3101,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   headerIconHit: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
   },
   greetingTextChip: {
     alignSelf: "flex-start",
     maxWidth: "100%",
-    paddingVertical: 7,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1,
@@ -2812,7 +3141,7 @@ const styles = StyleSheet.create({
   shopText: {
     fontSize: 10,
     fontWeight: "800",
-    marginTop: 4,
+    marginTop: 2,
     lineHeight: 13,
     color: "#C2410C",
     letterSpacing: 0.45,
@@ -2840,13 +3169,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    width: 56,
+    width: 52,
   },
 
   logoRingGradient: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     padding: 3,
     justifyContent: "center",
     alignItems: "center",
@@ -2858,9 +3187,9 @@ const styles = StyleSheet.create({
   },
 
   logoInnerDisc: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     overflow: "hidden",
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     justifyContent: "center",
@@ -2868,13 +3197,13 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
 
   locationPillOuter: {
-    marginTop: 4,
+    marginTop: 2,
     borderRadius: 999,
     overflow: "hidden",
     borderWidth: 1,
@@ -2889,7 +3218,7 @@ const styles = StyleSheet.create({
   locationPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 5,
+    paddingVertical: 4,
     paddingHorizontal: 10,
     gap: 5,
   },
@@ -2898,7 +3227,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     lineHeight: 16,
-    color: "#7C2D12",
+    color: "#0F172A",
     fontWeight: "600",
     minWidth: 0,
   },
@@ -3119,19 +3448,19 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: "rgba(249, 115, 22, 0.38)",
-    shadowColor: "#F97316",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: "rgba(255,255,255,0.55)",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
 
   searchInput: {
     flex: 1,
     marginLeft: 8,
     fontSize: 14,
-    color: "#431407",
+    color: "#0F172A",
   },
 
   searchDropdown: {
@@ -3184,16 +3513,17 @@ const styles = StyleSheet.create({
   },
 
   categoryImageCard: {
-    width: CATEGORY_CHIP_WIDTH - 4,
-    height: CATEGORY_CHIP_WIDTH - 4,
-    maxHeight: 66,
-    borderRadius: 14,
+    width: CATEGORY_IMAGE_CARD_SIZE,
+    height: CATEGORY_IMAGE_CARD_SIZE,
+    borderRadius: 16,
     backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
+    padding: CATEGORY_IMAGE_INNER_INSET,
     borderWidth: 1,
     borderColor: "#E7E5E4",
     marginBottom: 5,
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.07,
@@ -3202,8 +3532,10 @@ const styles = StyleSheet.create({
   },
 
   categoryImageInner: {
-    width: CATEGORY_ICON_INNER,
-    height: CATEGORY_ICON_INNER,
+    width: "100%",
+    height: "100%",
+    maxWidth: CATEGORY_ICON_INNER,
+    maxHeight: CATEGORY_ICON_INNER,
   },
 
   categoryChipLabel: {
@@ -3214,6 +3546,19 @@ const styles = StyleSheet.create({
     width: "100%",
     lineHeight: 12,
     paddingHorizontal: 1,
+  },
+
+  categoryChipLabelChrome: {
+    fontSize: 10,
+    fontWeight: "800",
+    textAlign: "center",
+    color: "#FFFFFF",
+    width: "100%",
+    lineHeight: 12,
+    paddingHorizontal: 1,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
 
   filterRow: {
@@ -3309,6 +3654,95 @@ const styles = StyleSheet.create({
     width: 34,
     backgroundColor: "#000",
   },
+
+  heroPromoListContent: {
+    paddingHorizontal: HERO_PROMO_SIDE_PADDING,
+    paddingVertical: 10,
+  },
+  heroPromoItemWrap: {
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+  },
+  heroPromoCard: {
+    borderRadius: 24,
+    overflow: "hidden",
+    backgroundColor: "#E2E8F0",
+    elevation: 8,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+  },
+  heroPromoCardInner: {
+    flex: 1,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+  },
+  heroPromoTextBlock: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  heroPromoTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+    lineHeight: 30,
+    textShadowColor: "rgba(0,0,0,0.25)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  heroPromoSubtitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginTop: 6,
+    lineHeight: 19,
+    textShadowColor: "rgba(0,0,0,0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  heroPromoTag: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    marginTop: 8,
+    textTransform: "uppercase",
+    opacity: 0.95,
+    textShadowColor: "rgba(0,0,0,0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  heroPromoImageMount: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    marginTop: 4,
+    overflow: "hidden",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  heroPromoImage: {
+    width: "100%",
+    height: "100%",
+    minHeight: 140,
+  },
+  heroPromoFooter: {
+    backgroundColor: "rgba(255,255,255,0.94)",
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  heroPromoFooterText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#0F172A",
+    textAlign: "center",
+  },
+
 // looking card
 
   lookingCard: {
@@ -4062,6 +4496,82 @@ premiumSubtitle: {
   fontWeight: '800',
   color: '#000',
 },
+
+  rateSection: {
+    marginHorizontal: 10,
+    marginBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  rateSectionTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#111827",
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    letterSpacing: 0.2,
+  },
+  rateCard: {
+    flexDirection: "row",
+    gap: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  rateCardImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+  },
+  rateCardRight: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rateCardBrand: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0F172A",
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  rateCardTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+    opacity: 0.9,
+    marginBottom: 10,
+  },
+  rateStarsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+  rateCardHint: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  rateDotsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+  },
+  rateDot: {
+    width: 44,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "#E2E8F0",
+  },
+  rateDotActive: {
+    backgroundColor: "#475569",
+  },
 // megacolors — rose gradient + offer title (replaces flat navy block)
 megaSection: {
   marginHorizontal: 10,

@@ -61,17 +61,17 @@ export default function LanguageScreen() {
 
   const handleLocationWhileUsing = () => {
     setShowLocation(false);
-    router.replace("/gender");
+    router.replace("/genderage");
   };
 
   const handleLocationOnlyThisTime = () => {
     setShowLocation(false);
-    router.replace("/gender");
+    router.replace("/genderage");
   };
 
   const handleLocationDontAllow = () => {
     setShowLocation(false);
-    router.replace("/gender");
+    router.replace("/genderage");
   };
 
   const handleBack = () => {

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useRef, useEffect } from "react";
+import React, { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,13 +12,14 @@ import {
   StatusBar,
   Alert,
   Animated,
-  ActivityIndicator,
+  Easing,
   type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api, { getPublicImageUrl } from "../services/api";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 
@@ -29,12 +30,20 @@ const DIARY_SPREAD_W = NOTEBOOK_MAX_W - 20;
 const HERO_GAP = 8;
 const HERO_TOP_H = 148;
 const HERO_BOTTOM_H = 132;
+const SPECTRUM_SIDE_PADDING = 12;
 
 /** Swap these `require(...)` paths when you add your own banner images. */
 const IMG_HERO_WORKOUT = require("../assets/images/fntsportswear1.png");
 const IMG_HERO_SOCCER = require("../assets/images/fntsportswear2.png");
 const IMG_HERO_TENNIS = require("../assets/images/fntsportswear3.png");
 const IMG_HERO = require("../assets/images/fntsportswear4.png");
+
+const TOP_BANNER_SLIDES = [
+  IMG_HERO_WORKOUT,
+  IMG_HERO_SOCCER,
+  IMG_HERO_TENNIS,
+  IMG_HERO,
+] as const;
 
 const SPORTSWEAR_DEAL_CARDS: {
   id: string;
@@ -64,27 +73,6 @@ const SPORTSWEAR_DEAL_CARDS: {
  
 ];
 
-type PlaybookPageAssets = {
-  topLeft: ImageSourcePropType;
-  topRight: ImageSourcePropType;
-  bottomLeft: ImageSourcePropType;
-  bottomMini1: ImageSourcePropType;
-  bottomMini2: ImageSourcePropType;
-};
-
-type ApiSubcategory = { id: number; name: string; image: string };
-type ApiCategoryResponse = {
-  categoryName: string;
-  subcategories: ApiSubcategory[];
-};
-
-const DEFAULT_PAGE_BADGES: [string, string, string, string, string] = [
-  "UP TO 30% OFF*",
-  "UP TO 50% OFF*",
-  "UP TO 50% OFF*",
-  "UP TO 50% OFF*",
-  "UP TO 50% OFF*",
-];
 // moon shape
 
 
@@ -128,6 +116,24 @@ const data2 = [
     smallImage: require('../assets/images/whitesport4.png'),
   },
 ];
+
+type PlaybookPageAssets = {
+  topLeft: ImageSourcePropType;
+  topRight: ImageSourcePropType;
+  bottomLeft: ImageSourcePropType;
+  bottomMini1: ImageSourcePropType;
+  bottomMini2: ImageSourcePropType;
+};
+
+const DEFAULT_PAGE_BADGES: [string, string, string, string, string] = [
+  "UP TO 30% OFF*",
+  "UP TO 50% OFF*",
+  "UP TO 50% OFF*",
+  "UP TO 50% OFF*",
+  "UP TO 50% OFF*",
+];
+
+/** Athlete's Playbook — editorial / campaign assets */
 const DIARY_SPREADS: {
   left: PlaybookPageAssets;
   right: PlaybookPageAssets;
@@ -136,91 +142,37 @@ const DIARY_SPREADS: {
 }[] = [
   {
     left: {
-      topLeft: require("../assets/images/sports1.png"),
-      topRight: require("../assets/images/sports2.png"),
-      bottomLeft: require("../assets/images/sports3.png"),
-      bottomMini1: require("../assets/images/sports4.png"),
-      bottomMini2: require("../assets/images/sports5.png"),
+      topLeft: require("../assets/images/fntsportswear1.png"),
+      topRight: require("../assets/images/fntsportswear2.png"),
+      bottomLeft: require("../assets/images/newsports.jpeg"),
+      bottomMini1: require("../assets/images/fntsportswear3.png"),
+      bottomMini2: require("../assets/images/fntsportswear4.png"),
     },
     right: {
-      topLeft: require("../assets/images/sports3.png"),
-      topRight: require("../assets/images/sports5.png"),
-      bottomLeft: require("../assets/images/sports1.png"),
-      bottomMini1: require("../assets/images/sports4.png"),
-      bottomMini2: require("../assets/images/sports2.png"),
+      topLeft: require("../assets/images/fntsportswear5.png"),
+      topRight: require("../assets/images/fntsportswear6.png"),
+      bottomLeft: require("../assets/images/newsports2.jpeg"),
+      bottomMini1: require("../assets/images/fntsportswear2.png"),
+      bottomMini2: require("../assets/images/fntsportswear1.png"),
     },
   },
   {
     left: {
-      topLeft: require("../assets/images/sports1.png"),
-      topRight: require("../assets/images/sports4.png"),
-      bottomLeft: require("../assets/images/sports3.png"),
-      bottomMini1: require("../assets/images/sports4.png"),
-      bottomMini2: require("../assets/images/sports2.png"),
+      topLeft: require("../assets/images/fntsportswear3.png"),
+      topRight: require("../assets/images/fntsportswear4.png"),
+      bottomLeft: require("../assets/images/fntsportswear5.png"),
+      bottomMini1: require("../assets/images/greensport1.png"),
+      bottomMini2: require("../assets/images/redsport2.png"),
     },
     right: {
-      topLeft: require("../assets/images/sports5.png"),
-      topRight: require("../assets/images/sports4.png"),
-      bottomLeft: require("../assets/images/sports6.png"),
-      bottomMini1: require("../assets/images/sports1.png"),
-      bottomMini2: require("../assets/images/sports4.png"),
+      topLeft: require("../assets/images/fntsportswear6.png"),
+      topRight: require("../assets/images/newsports.jpeg"),
+      bottomLeft: require("../assets/images/yellowsport2.png"),
+      bottomMini1: require("../assets/images/blacksport2.png"),
+      bottomMini2: require("../assets/images/whitesport2.png"),
     },
   },
 ];
-
-type DiarySpreadEntry = (typeof DIARY_SPREADS)[number];
-
-function padBadgesFromNames(names: string[]): [string, string, string, string, string] {
-  const n = [...names];
-  while (n.length < 5) {
-    n.push(n[n.length - 1] ?? "Shop");
-  }
-  return n.slice(0, 5) as [string, string, string, string, string];
-}
-
-function buildPlaybookPageFromFiles(topFile: string, bottomFile: string): PlaybookPageAssets {
-  const top: ImageSourcePropType = { uri: getPublicImageUrl(topFile) };
-  const bottom: ImageSourcePropType = { uri: getPublicImageUrl(bottomFile) };
-  return {
-    topLeft: top,
-    topRight: top,
-    bottomLeft: bottom,
-    bottomMini1: bottom,
-    bottomMini2: bottom,
-  };
-}
-
-/** Builds one playbook spread from Accessories subcategories (first half of API list). */
-function buildAccessoryPlaybookSpreads(subs: ApiSubcategory[]): DiarySpreadEntry[] {
-  if (subs.length === 0) return [];
-  const pickFile = (i: number) =>
-    subs[Math.min(Math.max(0, i), subs.length - 1)]!.image;
-  const names = subs.map((s) => s.name);
-  const a0 = pickFile(0);
-  const a1 = pickFile(1);
-  const a2 = pickFile(2);
-  const a3 = subs.length >= 4 ? pickFile(3) : pickFile(0);
-  return [
-    {
-      left: buildPlaybookPageFromFiles(a0, a1),
-      right: buildPlaybookPageFromFiles(a2, a3),
-      leftBadges: padBadgesFromNames([
-        names[0] ?? "",
-        names[1] ?? names[0] ?? "",
-        names[2] ?? names[0] ?? "",
-        names[0] ?? "",
-        names[1] ?? "",
-      ]),
-      rightBadges: padBadgesFromNames([
-        names[2] ?? names[0] ?? "",
-        names[3] ?? names[0] ?? "",
-        names[0] ?? "",
-        names[1] ?? "",
-        names[2] ?? "",
-      ]),
-    },
-  ];
-}
 
 // banner section
 
@@ -272,11 +224,6 @@ const interests = [
   { name: "Sports wear", size: 80, img: require("../assets/images/sports8.png") },
 ];
 
-/** Orbit circle sizes when mapping API subcategories (category 67) */
-const MENS_INTEREST_ORBIT_SIZES = [170, 120, 100, 90, 90, 90, 80, 80];
-
-  
-
 // banner section
 
 const banners = [
@@ -286,14 +233,197 @@ const banners = [
   require("../assets/images/sportsbanner6.png"),
 ];
 
-/** Full-width banners under “Sportswear deals” (new assets + fnt sportswear promos) */
-const SPORTSWEAR_DEALS_BANNERS: { id: string; image: ReturnType<typeof require> }[] = [
-  { id: "sd1", image: require("../assets/images/newsports.jpeg") },
-  { id: "sd2", image: require("../assets/images/newsports2.jpeg") },
-  { id: "sd3", image: require("../assets/images/fntsportswear5.png") },
-  { id: "sd4", image: require("../assets/images/fntsportswear6.png") },
-  { id: "sd5", image: require("../assets/images/fntsportswear1.png") },
-  { id: "sd6", image: require("../assets/images/fntsportswear2.png") },
+const LOOKBOOK_SCROLL_ITEMS: { id: string; image: ImageSourcePropType }[] =
+  banners.map((img, index) => ({
+    id: `lookbook-${index}`,
+    image: img as ImageSourcePropType,
+  }));
+
+const ACCESSORIES_MASONRY_ITEMS: {
+  id: string;
+  name: string;
+  image: ReturnType<typeof require>;
+}[] = [
+  {
+    id: "acc1",
+    name: "Bags & backpacks",
+    image: require("../assets/images/sports2.png"),
+  },
+  {
+    id: "acc2",
+    name: "Caps & headwear",
+    image: require("../assets/images/sports4.png"),
+  },
+  {
+    id: "acc3",
+    name: "Socks & essentials",
+    image: require("../assets/images/sports1.png"),
+  },
+  {
+    id: "acc4",
+    name: "Training gear",
+    image: require("../assets/images/sports3.png"),
+  },
+  {
+    id: "acc5",
+    name: "Bottles & kits",
+    image: require("../assets/images/sports5.png"),
+  },
+  {
+    id: "acc6",
+    name: "Wrist & supports",
+    image: require("../assets/images/sports6.png"),
+  },
+];
+
+/** Accessory promo rail tiles (horizontal strip) */
+const ACCESSORIES_ABOVE_PLAYBOOK_BANNERS: {
+  id: string;
+  tag: string;
+  title: string;
+  image: ImageSourcePropType;
+  chrome: readonly [string, string, string];
+}[] = [
+  {
+    id: "apb1",
+    tag: "ESSENTIALS",
+    title: "Caps & headwear",
+    image: require("../assets/images/sports4.png"),
+    chrome: ["#0f766e", "#115e59", "#134e4a"],
+  },
+  {
+    id: "apb2",
+    tag: "NEW",
+    title: "Bottles & kits",
+    image: require("../assets/images/sports5.png"),
+    chrome: ["#7c3aed", "#5b21b6", "#4c1d95"],
+  },
+  {
+    id: "apb3",
+    tag: "GEAR UP",
+    title: "Socks & layers",
+    image: require("../assets/images/sports1.png"),
+    chrome: ["#ea580c", "#c2410c", "#9a3412"],
+  },
+];
+
+const MENS_SPORTSWEAR_SCROLL_CARDS: {
+  id: string;
+  title: string;
+  image: ReturnType<typeof require>;
+  offer: string;
+}[] = [
+  {
+    id: "m1",
+    title: "Tops, T shirts & Shirts",
+    image: require("../assets/images/greensport1.png"),
+    offer: "MIN. 60% OFF*",
+  },
+  {
+    id: "m2",
+    title: "Jeans",
+    image: require("../assets/images/yellowsport2.png"),
+    offer: "MIN. 60% OFF*",
+  },
+  {
+    id: "m3",
+    title: "Trousers",
+    image: require("../assets/images/whitesport2.png"),
+    offer: "MIN. 65% OFF*",
+  },
+];
+
+const SPORTSWEAR_SPECTRUM_ITEMS: {
+  id: string;
+  label: string;
+  image: ReturnType<typeof require>;
+}[] = [
+  { id: "spc1", label: "Black", image: require("../assets/images/blacksport2.png") },
+  { id: "spc2", label: "Blue", image: require("../assets/images/sports4.png") },
+  { id: "spc3", label: "Green", image: require("../assets/images/greensport2.png") },
+  { id: "spc4", label: "Red", image: require("../assets/images/redsport2.png") },
+  { id: "spc5", label: "Yellow", image: require("../assets/images/yellowsport2.png") },
+  { id: "spc6", label: "White", image: require("../assets/images/whitesport2.png") },
+];
+
+const WHATS_MOVING_ITEMS: {
+  id: string;
+  title: string;
+  offer: string;
+  image: ReturnType<typeof require>;
+}[] = [
+  {
+    id: "wm1",
+    title: "Running shoes",
+    offer: "UP TO 40% OFF*",
+    image: require("../assets/images/sports6.png"),
+  },
+  {
+    id: "wm2",
+    title: "Gym wear",
+    offer: "UP TO 55% OFF*",
+    image: require("../assets/images/sports2.png"),
+  },
+  {
+    id: "wm3",
+    title: "Sports jackets",
+    offer: "UP TO 50% OFF*",
+    image: require("../assets/images/greensport1.png"),
+  },
+  {
+    id: "wm4",
+    title: "Training tees",
+    offer: "UP TO 60% OFF*",
+    image: require("../assets/images/redsport2.png"),
+  },
+  {
+    id: "wm5",
+    title: "Shorts",
+    offer: "UP TO 35% OFF*",
+    image: require("../assets/images/yellowsport2.png"),
+  },
+  {
+    id: "wm6",
+    title: "Socks & gear",
+    offer: "UP TO 30% OFF*",
+    image: require("../assets/images/sports1.png"),
+  },
+  {
+    id: "wm7",
+    title: "Bags",
+    offer: "MIN. 40% OFF*",
+    image: require("../assets/images/sports5.png"),
+  },
+  {
+    id: "wm8",
+    title: "Accessories",
+    offer: "UP TO 45% OFF*",
+    image: require("../assets/images/sports4.png"),
+  },
+  {
+    id: "wm9",
+    title: "Sports bottles",
+    offer: "UP TO 40% OFF*",
+    image: require("../assets/images/sports4.png"),
+  },
+  {
+    id: "wm10",
+    title: "Track pants",
+    offer: "UP TO 55% OFF*",
+    image: require("../assets/images/sports3.png"),
+  },
+  {
+    id: "wm11",
+    title: "Gym bags",
+    offer: "MIN. 40% OFF*",
+    image: require("../assets/images/sports5.png"),
+  },
+  {
+    id: "wm12",
+    title: "Caps & headwear",
+    offer: "UP TO 35% OFF*",
+    image: require("../assets/images/sports1.png"),
+  },
 ];
 
 const SPOTLIGHT_CARDS: {
@@ -323,37 +453,99 @@ const SPOTLIGHT_CARDS: {
   },
 ];
 
+/** Wide + strip tiles — shown above the SPORTS FOOTWEAR spotlight */
+const FOOTWEAR_PROMO_STRIP: {
+  id: string;
+  tag: string;
+  label: string;
+  image: ImageSourcePropType;
+  chrome: readonly [string, string, string];
+}[] = [
+  {
+    id: "fpr1",
+    tag: "RUN",
+    label: "Road runners",
+    image: require("../assets/images/sports6.png"),
+    chrome: ["#dc2626", "#b91c1c", "#991b1b"],
+  },
+  {
+    id: "fpr2",
+    tag: "GYM",
+    label: "Training kicks",
+    image: require("../assets/images/sports7.png"),
+    chrome: ["#2563eb", "#1d4ed8", "#1e40af"],
+  },
+  {
+    id: "fpr3",
+    tag: "COURT",
+    label: "Court & turf",
+    image: require("../assets/images/sports3.png"),
+    chrome: ["#059669", "#047857", "#065f46"],
+  },
+  {
+    id: "fpr4",
+    tag: "HIKE",
+    label: "Trail ready",
+    image: require("../assets/images/sports4.png"),
+    chrome: ["#d97706", "#b45309", "#92400e"],
+  },
+];
+
 const PRODUCTS_TO_BUY: {
   id: string;
   name: string;
   price: string;
+  mrp?: string;
+  discountPercent?: number;
+  rating: number;
+  reviewCount: number;
   image: ReturnType<typeof require>;
 }[] = [
   {
     id: "ptb1",
-    name: "Training Shoes",
+    name: "Training Shoes — cushioned sole",
     price: "₹2,499",
+    mrp: "₹3,499",
+    discountPercent: 29,
+    rating: 4.3,
+    reviewCount: 216,
     image: require("../assets/images/sports6.png"),
   },
   {
     id: "ptb2",
-    name: "Gym T-shirt",
+    name: "Gym T-shirt quick-dry",
     price: "₹799",
+    mrp: "₹1,099",
+    discountPercent: 27,
+    rating: 4.1,
+    reviewCount: 89,
     image: require("../assets/images/sports2.png"),
   },
   {
     id: "ptb3",
-    name: "Running Shorts",
+    name: "Running Shorts lightweight",
     price: "₹999",
+    mrp: "₹1,299",
+    discountPercent: 23,
+    rating: 0,
+    reviewCount: 0,
     image: require("../assets/images/sports3.png"),
   },
   {
     id: "ptb4",
-    name: "Sports Bottle",
+    name: "Sports Bottle 750ml",
     price: "₹399",
+    mrp: "₹549",
+    discountPercent: 27,
+    rating: 4.7,
+    reviewCount: 340,
     image: require("../assets/images/sports4.png"),
   },
 ];
+
+/** Products to buy — 2 columns; section horizontal padding 16 + gap between cells */
+const PTB_GRID_GAP = 12;
+const PTB_GRID_COL_W = Math.floor((width - 32 - PTB_GRID_GAP) / 2);
 
 const imagesByColor = {
   black: [
@@ -384,7 +576,51 @@ const imagesByColor = {
 
   
 };
-/** Center spine + mirrored C-hooks (coil through the gutter), like a real spiral bind */
+
+function ArcText({
+  text,
+  radius,
+  textStyle,
+}: {
+  text: string;
+  radius: number;
+  textStyle?: object;
+}) {
+  const chars = text.split("");
+  const start = -Math.PI; // left
+  const end = 0; // right
+  const denom = Math.max(1, chars.length - 1);
+  return (
+    <View style={[styles.arcTextFull, { width: radius * 2, height: radius * 2 }]}>
+      {chars.map((ch, i) => {
+        const t = i / denom;
+        const ang = start + t * (end - start);
+        const x = radius + radius * Math.cos(ang);
+        const y = radius + radius * Math.sin(ang);
+        const rotate = `${(ang + Math.PI / 2) * (180 / Math.PI)}deg`;
+        return (
+          <View
+            key={`${ch}-${i}`}
+            style={[
+              styles.arcChar,
+              {
+                transform: [
+                  { translateX: x },
+                  { translateY: y },
+                  { rotate },
+                ],
+              },
+            ]}
+          >
+            <Text style={[styles.arcCharText, textStyle]}>{ch}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Center spine + mirrored C-hooks (coil through the gutter) */
 function SpiralBindColumn() {
   const rings = 20;
   return (
@@ -421,7 +657,11 @@ function PlaybookPageGrid({
           activeOpacity={0.9}
           onPress={onShop}
         >
-          <Image source={page.topLeft} style={styles.pbCardImg} />
+          <Image
+            source={page.topLeft}
+            style={styles.pbCardImg}
+            resizeMode="cover"
+          />
           <View style={styles.pbCardFooter}>
             <Text style={styles.pbBadge} numberOfLines={2}>
               {badges[0]}
@@ -439,7 +679,11 @@ function PlaybookPageGrid({
           activeOpacity={0.9}
           onPress={onShop}
         >
-          <Image source={page.bottomLeft} style={styles.pbCardImg} />
+          <Image
+            source={page.bottomLeft}
+            style={styles.pbCardImg}
+            resizeMode="cover"
+          />
           <View style={[styles.pbCardFooter, styles.pbCardFooterDark]}>
             <Text style={[styles.pbBadge, styles.pbBadgeOnDark]} numberOfLines={2}>
               {badges[2]}
@@ -473,22 +717,34 @@ function SportswearGlassDealCard({
   scrollY: Animated.Value;
   anchorY: number;
 }) {
-  // Trigger while this card is entering the viewport (not earlier),
-  // so the movement is visible during scroll.
-  const fromX = index % 2 === 0 ? -140 : 140;
-  const start = Math.max(0, anchorY - height * 0.85);
-  const end = Math.max(0, anchorY - height * 0.55);
-  const inputRange = [start, end];
-  const translateX = scrollY.interpolate({
-    inputRange,
-    outputRange: [fromX, 0],
+  // Zig-zag while scrolling:
+  // - a subtle "wobble" around the card's anchor position
+  // - plus a small entrance slide so it feels dynamic when it first appears
+  const dir = index % 2 === 0 ? -1 : 1;
+
+  // As the user scrolls through this card's vertical region,
+  // move it left→right→left (or right→left→right) for a strong "sweep" effect.
+  const sweepRange = 520;
+  const sweep = scrollY.interpolate({
+    inputRange: [
+      Math.max(0, anchorY - sweepRange),
+      Math.max(0, anchorY),
+      Math.max(0, anchorY + sweepRange),
+    ],
+    outputRange: [dir * 140, dir * -140, dir * 140],
     extrapolate: "clamp",
   });
+
+  // Fade-in as it enters viewport
+  const fadeStart = Math.max(0, anchorY - height * 0.9);
+  const fadeEnd = Math.max(0, anchorY - height * 0.55);
   const opacity = scrollY.interpolate({
-    inputRange,
+    inputRange: [fadeStart, fadeEnd],
     outputRange: [0, 1],
     extrapolate: "clamp",
   });
+
+  const translateX = sweep;
 
   return (
     <Animated.View style={{ transform: [{ translateX }], opacity }}>
@@ -501,6 +757,7 @@ function SportswearGlassDealCard({
           source={image}
           style={styles.glassDealBg}
           imageStyle={styles.glassDealBgImage}
+          resizeMode="cover"
         >
           <View style={styles.glassDealTopRow}>
             <View style={styles.glassDealTopSpacer} />
@@ -524,9 +781,15 @@ function SportswearGlassDealCard({
 
 export default function SportsWearSection() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
   const [playbookPage, setPlaybookPage] = useState(0);
   const [selectedColor, setSelectedColor] = useState("white");
+  const topBannerRef = useRef<ScrollView>(null);
+  const [topBannerIndex, setTopBannerIndex] = useState(0);
+  const [activeBannerShortcut, setActiveBannerShortcut] = useState<
+    "footwear" | "women" | "men" | "accessories" | null
+  >(null);
   const rootScrollY = useRef(new Animated.Value(0)).current;
   const [browseCardYs, setBrowseCardYs] = useState<number[]>([]);
   const scrollRef = useRef<ScrollView>(null);
@@ -537,261 +800,11 @@ export default function SportsWearSection() {
   const mensInterestY = useRef(0);
   const mensSportsWearY = useRef(0);
   const athletesPlaybookY = useRef(0);
+  /** "Accessories worth the hype" promo block (mosaic + rail) */
+  const accessoriesWorthHypeY = useRef(0);
   const playbookScrollRef = useRef<ScrollView>(null);
-  const sportswearDealsBannerScrollRef = useRef<ScrollView>(null);
-  const [sportswearDealsBannerIndex, setSportswearDealsBannerIndex] = useState(0);
-  const [accessoryApiLoading, setAccessoryApiLoading] = useState(true);
-  const [accessoryApiError, setAccessoryApiError] = useState<string | null>(null);
-  const [accessoryApiPayload, setAccessoryApiPayload] = useState<{
-    playbookSpreads: DiarySpreadEntry[];
-    accessoriesSubs: ApiSubcategory[];
-  } | null>(null);
-
-  const [footwearApiLoading, setFootwearApiLoading] = useState(true);
-  const [footwearApiError, setFootwearApiError] = useState<string | null>(null);
-  const [footwearApiPayload, setFootwearApiPayload] = useState<{
-    spotlightSubs: ApiSubcategory[];
-    dealsSubs: ApiSubcategory[];
-  } | null>(null);
-
-  const [womensApiLoading, setWomensApiLoading] = useState(true);
-  const [womensApiError, setWomensApiError] = useState<string | null>(null);
-  const [womensApiPayload, setWomensApiPayload] = useState<{
-    womenSectionSubs: ApiSubcategory[];
-    lookbookSubs: ApiSubcategory[];
-  } | null>(null);
-
-  const [mensApiLoading, setMensApiLoading] = useState(true);
-  const [mensApiError, setMensApiError] = useState<string | null>(null);
-  const [mensApiPayload, setMensApiPayload] = useState<{
-    mensSectionSubs: ApiSubcategory[];
-    interestSubs: ApiSubcategory[];
-  } | null>(null);
-
-  const spreadsForPlaybook = useMemo(() => {
-    if (accessoryApiPayload?.playbookSpreads?.length) {
-      return accessoryApiPayload.playbookSpreads;
-    }
-    return DIARY_SPREADS;
-  }, [accessoryApiPayload]);
-
-  const accessoriesFromApi = accessoryApiPayload?.accessoriesSubs ?? null;
-
-  /** Category 47 — first half → SPORTS FOOTWEAR spotlight; second half → Sportswear deals carousel */
-  const spotlightSectionItems = useMemo(() => {
-    if (footwearApiPayload?.spotlightSubs?.length) {
-      return footwearApiPayload.spotlightSubs.map((s) => ({
-        id: String(s.id),
-        title: s.name,
-        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
-      }));
-    }
-    return SPOTLIGHT_CARDS.map((c) => ({
-      id: c.id,
-      title: c.title,
-      image: c.image,
-    }));
-  }, [footwearApiPayload]);
-
-  const dealsCarouselItems = useMemo(() => {
-    if (footwearApiPayload?.dealsSubs?.length) {
-      return footwearApiPayload.dealsSubs.map((s) => ({
-        id: String(s.id),
-        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
-      }));
-    }
-    return SPORTSWEAR_DEALS_BANNERS.map((b) => ({
-      id: b.id,
-      image: b.image,
-    }));
-  }, [footwearApiPayload]);
-
-  /** Category 68 — first half → WOMEN SPORTS WEAR store row; second half → THE LOCAL LOOKBOOK */
-  const womenStoreSectionItems = useMemo(() => {
-    if (womensApiPayload?.womenSectionSubs?.length) {
-      return womensApiPayload.womenSectionSubs.map((s) => ({
-        id: String(s.id),
-        title: s.name,
-        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
-      }));
-    }
-    return SHOP_STORE_DATA;
-  }, [womensApiPayload]);
-
-  const lookbookSectionItems = useMemo(() => {
-    if (womensApiPayload?.lookbookSubs?.length) {
-      return womensApiPayload.lookbookSubs.map((s) => ({
-        id: String(s.id),
-        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
-      }));
-    }
-    return banners.map((img, index) => ({
-      id: `lookbook-fallback-${index}`,
-      image: img as ImageSourcePropType,
-    }));
-  }, [womensApiPayload]);
-
-  /** Category 67 — first half → MEN'S SPORTS WEAR cards; second half → What's your interest orbit */
-  const mensWesternProductItems = useMemo(() => {
-    if (mensApiPayload?.mensSectionSubs?.length) {
-      return mensApiPayload.mensSectionSubs.map((s) => ({
-        id: String(s.id),
-        title: s.name,
-        image: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
-      }));
-    }
-    return null;
-  }, [mensApiPayload]);
-
-  const mensInterestsList = useMemo(() => {
-    if (mensApiPayload?.interestSubs?.length) {
-      return mensApiPayload.interestSubs.map((s, i) => ({
-        name: s.name,
-        size:
-          MENS_INTEREST_ORBIT_SIZES[i % MENS_INTEREST_ORBIT_SIZES.length] ?? 90,
-        img: { uri: getPublicImageUrl(s.image) } as ImageSourcePropType,
-      }));
-    }
-    return interests;
-  }, [mensApiPayload]);
-
-  useEffect(() => {
-    const max = Math.max(0, dealsCarouselItems.length - 1);
-    setSportswearDealsBannerIndex((prev) => Math.min(prev, max));
-  }, [dealsCarouselItems.length]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadAccessoryCategory = async () => {
-      setAccessoryApiLoading(true);
-      setAccessoryApiError(null);
-      try {
-        const { data } = await api.get<ApiCategoryResponse[]>(
-          "/api/categories/70/subcategories-table"
-        );
-        if (cancelled) return;
-        const subs = Array.isArray(data) ? data[0]?.subcategories ?? [] : [];
-        if (subs.length === 0) {
-          setAccessoryApiPayload(null);
-          return;
-        }
-        const mid = Math.ceil(subs.length / 2);
-        const playbookSubs = subs.slice(0, mid);
-        const accessoriesSubs = subs.slice(mid);
-        const spreads = buildAccessoryPlaybookSpreads(playbookSubs);
-        setAccessoryApiPayload({
-          playbookSpreads: spreads.length > 0 ? spreads : [],
-          accessoriesSubs,
-        });
-      } catch {
-        if (!cancelled) {
-          setAccessoryApiError("Could not load accessories");
-          setAccessoryApiPayload(null);
-        }
-      } finally {
-        if (!cancelled) setAccessoryApiLoading(false);
-      }
-    };
-
-    const loadFootwearCategory = async () => {
-      setFootwearApiLoading(true);
-      setFootwearApiError(null);
-      try {
-        const { data } = await api.get<ApiCategoryResponse[]>(
-          "/api/categories/47/subcategories-table"
-        );
-        if (cancelled) return;
-        const subs = Array.isArray(data) ? data[0]?.subcategories ?? [] : [];
-        if (subs.length === 0) {
-          setFootwearApiPayload(null);
-          return;
-        }
-        const mid = Math.ceil(subs.length / 2);
-        setFootwearApiPayload({
-          spotlightSubs: subs.slice(0, mid),
-          dealsSubs: subs.slice(mid),
-        });
-      } catch {
-        if (!cancelled) {
-          setFootwearApiError("Could not load sports footwear");
-          setFootwearApiPayload(null);
-        }
-      } finally {
-        if (!cancelled) setFootwearApiLoading(false);
-      }
-    };
-
-    const loadWomensSportswearCategory = async () => {
-      setWomensApiLoading(true);
-      setWomensApiError(null);
-      try {
-        const { data } = await api.get<ApiCategoryResponse[]>(
-          "/api/categories/68/subcategories-table"
-        );
-        if (cancelled) return;
-        const subs = Array.isArray(data) ? data[0]?.subcategories ?? [] : [];
-        if (subs.length === 0) {
-          setWomensApiPayload(null);
-          return;
-        }
-        const mid = Math.ceil(subs.length / 2);
-        setWomensApiPayload({
-          womenSectionSubs: subs.slice(0, mid),
-          lookbookSubs: subs.slice(mid),
-        });
-      } catch {
-        if (!cancelled) {
-          setWomensApiError("Could not load women's sportswear");
-          setWomensApiPayload(null);
-        }
-      } finally {
-        if (!cancelled) setWomensApiLoading(false);
-      }
-    };
-
-    const loadMensSportswearCategory = async () => {
-      setMensApiLoading(true);
-      setMensApiError(null);
-      try {
-        const { data } = await api.get<ApiCategoryResponse[]>(
-          "/api/categories/67/subcategories-table"
-        );
-        if (cancelled) return;
-        const subs = Array.isArray(data) ? data[0]?.subcategories ?? [] : [];
-        if (subs.length === 0) {
-          setMensApiPayload(null);
-          return;
-        }
-        const mid = Math.ceil(subs.length / 2);
-        setMensApiPayload({
-          mensSectionSubs: subs.slice(0, mid),
-          interestSubs: subs.slice(mid),
-        });
-      } catch {
-        if (!cancelled) {
-          setMensApiError("Could not load men's sportswear");
-          setMensApiPayload(null);
-        }
-      } finally {
-        if (!cancelled) setMensApiLoading(false);
-      }
-    };
-
-    void Promise.all([
-      loadAccessoryCategory(),
-      loadFootwearCategory(),
-      loadWomensSportswearCategory(),
-      loadMensSportswearCategory(),
-    ]);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const lookbookScales = useRef(banners.map(() => new Animated.Value(1)));
-  /** One page per banner; scrollTo x = index * width */
-  const DEALS_BANNER_PAGE_W = width;
 
   const openCamera = useCallback(() => {
     Alert.alert(
@@ -807,45 +820,6 @@ export default function SportsWearSection() {
   const goShop = useCallback(() => {
     router.push("/products");
   }, [router]);
-
-  const scrollToSportswearDeals = useCallback(() => {
-    const scroll = scrollRef.current;
-    if (!scroll) return;
-
-    const run = () => {
-      const inner = (
-        scroll as unknown as { getInnerViewRef?: () => View | null }
-      ).getInnerViewRef?.();
-      const target = productsToBuyRef.current;
-      if (inner && target) {
-        target.measureLayout(
-          inner,
-          (_x, y) => {
-            scroll.scrollTo({
-              x: 0,
-              y: Math.max(0, y - 16),
-              animated: true,
-            });
-          },
-          () => {
-            scroll.scrollTo({
-              x: 0,
-              y: Math.max(0, productsToBuyY.current),
-              animated: true,
-            });
-          }
-        );
-        return;
-      }
-      scroll.scrollTo({
-        x: 0,
-        y: Math.max(0, productsToBuyY.current),
-        animated: true,
-      });
-    };
-
-    requestAnimationFrame(run);
-  }, []);
 
   const scrollToSpotlightFootwear = useCallback(() => {
     scrollRef.current?.scrollTo({ y: spotlightFootwearY.current, animated: true });
@@ -863,26 +837,15 @@ export default function SportsWearSection() {
     scrollRef.current?.scrollTo({ y: mensSportsWearY.current, animated: true });
   }, []);
 
-  const scrollToAthletesPlaybook = useCallback(() => {
-    scrollRef.current?.scrollTo({ y: athletesPlaybookY.current, animated: true });
+  const scrollToAccessoriesWorthTheHype = useCallback(() => {
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, accessoriesWorthHypeY.current - 16),
+      animated: true,
+    });
   }, []);
 
-  useEffect(() => {
-    const n = dealsCarouselItems.length;
-    if (n === 0) return undefined;
-    const interval = setInterval(() => {
-      setSportswearDealsBannerIndex((prev) => {
-        const next = (prev + 1) % n;
-        sportswearDealsBannerScrollRef.current?.scrollTo({
-          x: next * DEALS_BANNER_PAGE_W,
-          animated: true,
-        });
-        return next;
-      });
-    }, 3200);
-    return () => clearInterval(interval);
-  }, [DEALS_BANNER_PAGE_W, dealsCarouselItems.length]);
-
+  const movingGridScrollRef = useRef<ScrollView>(null);
+  const [movingGridPage, setMovingGridPage] = useState(0);
 
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
@@ -900,6 +863,31 @@ const rotate = rotateAnim.interpolate({
   inputRange: [0, 1],
   outputRange: ["0deg", "360deg"],
 });
+
+  const movingPages = useMemo(() => {
+    const out: typeof WHATS_MOVING_ITEMS[] = [];
+    for (let i = 0; i < WHATS_MOVING_ITEMS.length; i += 6) {
+      out.push(WHATS_MOVING_ITEMS.slice(i, i + 6));
+    }
+    return out.length ? out : [WHATS_MOVING_ITEMS];
+  }, []);
+
+  useEffect(() => {
+    const n = movingPages.length;
+    if (n <= 1) return undefined;
+    const interval = setInterval(() => {
+      setMovingGridPage((prev) => {
+        const next = (prev + 1) % n;
+        movingGridScrollRef.current?.scrollTo({
+          x: next * width,
+          y: 0,
+          animated: true,
+        });
+        return next;
+      });
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [movingPages.length]);
 
   const womensCardScale1 = useRef(new Animated.Value(1)).current;
   const womensCardScale2 = useRef(new Animated.Value(1)).current;
@@ -923,7 +911,7 @@ const rotate = rotateAnim.interpolate({
   };
 
   useEffect(() => {
-    const n = spreadsForPlaybook.length;
+    const n = DIARY_SPREADS.length;
     if (n <= 1) return undefined;
     const interval = setInterval(() => {
       setPlaybookPage((prev) => {
@@ -937,7 +925,22 @@ const rotate = rotateAnim.interpolate({
     }, 4200);
 
     return () => clearInterval(interval);
-  }, [spreadsForPlaybook.length]);
+  }, []);
+
+  useEffect(() => {
+    const n = TOP_BANNER_SLIDES.length;
+    if (n <= 1) return undefined;
+
+    const interval = setInterval(() => {
+      setTopBannerIndex((prev) => {
+        const next = (prev + 1) % n;
+        topBannerRef.current?.scrollTo({ x: next * width, y: 0, animated: true });
+        return next;
+      });
+    }, 3200);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -953,7 +956,7 @@ const rotate = rotateAnim.interpolate({
       )}
     >
       {/* HEADER */}
-      <View style={styles.header}>
+      <View style={[styles.header, { marginTop: insets.top + 6 }]}>
         <Image
           source={require("../assets/images/logo.png")}
           style={styles.logo}
@@ -992,59 +995,120 @@ const rotate = rotateAnim.interpolate({
       </View>
 
     <View style={styles.bannerContainer}>
-      <Image
-        source={require("../assets/images/sportswear.png")}
-        style={styles.bannerImage}
-      />
+      <ScrollView
+        ref={topBannerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        onMomentumScrollEnd={(e) => {
+          const page = Math.round(e.nativeEvent.contentOffset.x / width);
+          setTopBannerIndex(Math.max(0, Math.min(page, TOP_BANNER_SLIDES.length - 1)));
+        }}
+        style={styles.topBannerScroll}
+      >
+        {TOP_BANNER_SLIDES.map((src, idx) => (
+          <Image
+            key={`top-banner-${idx}`}
+            source={src}
+            style={styles.topBannerSlide}
+            resizeMode="cover"
+          />
+        ))}
+      </ScrollView>
 
       {/* top category buttons on banner */}
-      <View style={styles.bannerTopButtonsRow}>
-        <TouchableOpacity
-          style={styles.bannerTopBtn}
-          activeOpacity={0.9}
-          onPress={scrollToSpotlightFootwear}
-        >
-          <Text style={styles.bannerTopBtnText}>Sports footwear</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.bannerTopBtn}
-          activeOpacity={0.9}
-          onPress={scrollToShopByStore}
-        >
-          <Text style={styles.bannerTopBtnText}>Women's sports wear</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.bannerTopBtn}
-          activeOpacity={0.9}
-          onPress={scrollToMensSportsWear}
-        >
-          <Text style={styles.bannerTopBtnText}>Mens sports wear</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.bannerTopBtn}
-          activeOpacity={0.9}
-          onPress={scrollToAthletesPlaybook}
-        >
-          <Text style={styles.bannerTopBtnText}>Accessories</Text>
-        </TouchableOpacity>
+      <View style={styles.bannerShortcutDock}>
+        <View style={styles.bannerShortcutGrid}>
+          <TouchableOpacity
+            style={[
+              styles.bannerShortcutTile,
+              activeBannerShortcut === "footwear" && styles.bannerShortcutTileActive,
+            ]}
+            activeOpacity={0.9}
+            onPress={() => {
+              setActiveBannerShortcut("footwear");
+              scrollToSpotlightFootwear();
+            }}
+          >
+            <Ionicons name="walk-outline" size={18} color="#111" />
+            <Text style={styles.bannerShortcutTileText}>Footwear</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.bannerShortcutTile,
+              activeBannerShortcut === "women" && styles.bannerShortcutTileActive,
+            ]}
+            activeOpacity={0.9}
+            onPress={() => {
+              setActiveBannerShortcut("women");
+              scrollToShopByStore();
+            }}
+          >
+            <Ionicons name="flower-outline" size={18} color="#111" />
+            <Text style={styles.bannerShortcutTileText}>Women</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.bannerShortcutTile,
+              activeBannerShortcut === "men" && styles.bannerShortcutTileActive,
+            ]}
+            activeOpacity={0.9}
+            onPress={() => {
+              setActiveBannerShortcut("men");
+              scrollToMensSportsWear();
+            }}
+          >
+            <Ionicons name="flash-outline" size={18} color="#111" />
+            <Text style={styles.bannerShortcutTileText}>Men</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.bannerShortcutTile,
+              activeBannerShortcut === "accessories" && styles.bannerShortcutTileActive,
+            ]}
+            activeOpacity={0.9}
+            onPress={() => {
+              setActiveBannerShortcut("accessories");
+              scrollToAccessoriesWorthTheHype();
+            }}
+          >
+            <Ionicons name="bag-handle-outline" size={18} color="#111" />
+            <Text style={styles.bannerShortcutTileText}>Accessories</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* explore deals button inside banner */}
-      <TouchableOpacity
-        style={styles.bannerExploreBtn}
-        activeOpacity={0.9}
-        onPress={scrollToSportswearDeals}
-      >
-        <Text style={styles.bannerExploreText}>Explore deals</Text>
-        <Ionicons name="chevron-forward" size={18} color="#fff" />
-      </TouchableOpacity>
+      <View style={styles.topBannerDots}>
+        {TOP_BANNER_SLIDES.map((_, idx) => (
+          <View
+            key={`top-banner-dot-${idx}`}
+            style={[styles.topBannerDot, idx === topBannerIndex && styles.topBannerDotActive]}
+          />
+        ))}
+      </View>
     </View>
 
 
       
 
       {/* SHOP BY CATEGORY */}
-      <View style={styles.glassDealsSection}>
+      <LinearGradient
+        colors={["#120810", "#5c1f33", "#7c2d6e", "#1e1b4b"]}
+        locations={[0, 0.28, 0.58, 1]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.95, y: 1 }}
+        style={styles.glassDealsSection}
+      >
+        <LinearGradient
+          colors={["#34d399", "#38bdf8", "#e879f9"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.glassDealsSectionRibbon}
+        />
         <Text style={styles.glassDealsSectionTitle}>Browse Collections</Text>
         {SPORTSWEAR_DEAL_CARDS.map((item, index) => (
           <View
@@ -1073,7 +1137,7 @@ const rotate = rotateAnim.interpolate({
                   : item.id === "3"
                   ? scrollToMensSportsWear
                   : item.id === "4"
-                  ? scrollToAthletesPlaybook
+                  ? scrollToAccessoriesWorthTheHype
                   : goShop
               }
               onBag={() => router.push("/cart")}
@@ -1085,13 +1149,13 @@ const rotate = rotateAnim.interpolate({
                   : item.id === "3"
                   ? scrollToMensSportsWear
                   : item.id === "4"
-                  ? scrollToAthletesPlaybook
+                  ? scrollToAccessoriesWorthTheHype
                   : goShop
               }
             />
           </View>
         ))}
-      </View>
+      </LinearGradient>
 
       <View style={{ height: 25 }} />
   
@@ -1099,16 +1163,25 @@ const rotate = rotateAnim.interpolate({
 
       {/* POWER PICKS */}
       <View style={styles.powerSection}>
-        <View style={styles.powerTitleRow}>
-          <Text style={styles.powerTitle}>POWER PICKS</Text>
-          <View style={styles.powerTitleLine} />
+        <View style={styles.powerHeader}>
+          <View>
+            <Text style={styles.powerEyebrow}>Limited-time</Text>
+            <Text style={styles.powerTitle}>Power Picks</Text>
+            <Text style={styles.powerSubTitle}>Handpicked deals in sportswear.</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.powerSeeAllBtn}
+            activeOpacity={0.9}
+            onPress={goShop}
+            accessibilityRole="button"
+            accessibilityLabel="See all power picks"
+          >
+            <Text style={styles.powerSeeAllText}>See all</Text>
+            <Ionicons name="chevron-forward" size={16} color="#0F172A" />
+          </TouchableOpacity>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 10 }}
-        >
+        <View style={styles.powerGrid}>
           {[
             {
               id: "pp1",
@@ -1128,45 +1201,182 @@ const rotate = rotateAnim.interpolate({
               label: "TRENDING",
               offer: "MIN 30% OFF",
             },
-          ].map((card) => {
-            const scale = new Animated.Value(1);
-            return (
+            {
+              id: "pp4",
+              img: require("../assets/images/fntsportswear1.png"),
+              label: "TOP RATED",
+              offer: "UNDER ₹999",
+            },
+          ].map((card) => (
+            <TouchableOpacity
+              key={card.id}
+              style={styles.powerGridCard}
+              activeOpacity={0.92}
+              onPress={goShop}
+              accessibilityRole="button"
+              accessibilityLabel={`${card.label}, ${card.offer}`}
+            >
+              <Image
+                source={card.img}
+                style={styles.powerGridImage}
+                resizeMode="cover"
+              />
+              <View style={styles.powerGridShade} />
+
+              <View style={styles.powerGridBadge}>
+                <Text style={styles.powerGridBadgeText}>{card.label}</Text>
+              </View>
+
+              <View style={styles.powerGridFooter}>
+                <Text style={styles.powerGridOffer}>{card.offer}</Text>
+                <View style={styles.powerGridCta}>
+                  <Text style={styles.powerGridCtaText}>Shop</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#fff" />
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Accessory promos — mosaic + rail */}
+      <View
+        style={styles.accessoriesAbovePlaybookOuter}
+        onLayout={(e) => {
+          accessoriesWorthHypeY.current = e.nativeEvent.layout.y;
+        }}
+      >
+        <LinearGradient
+          colors={["#ecfeff", "#e0f2fe", "#f5f3ff"]}
+          locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.accessoriesAbovePlaybookSurface}
+        >
+          <View style={styles.accessoriesAbovePlaybookHeader}>
+            <View style={styles.accessoriesAbovePlaybookHeaderText}>
+              <View style={styles.accessoriesAbovePlaybookEyebrow}>
+                <Ionicons name="sparkles" size={14} color="#0369a1" />
+                <Text style={styles.accessoriesAbovePlaybookEyebrowTxt}>
+                  Add-ons & sport gear
+                </Text>
+              </View>
+              <Text style={styles.accessoriesAbovePlaybookTitle}>
+                Accessories worth the hype
+              </Text>
+              <Text style={styles.accessoriesAbovePlaybookSub}>
+                Bags, caps, bottles, and small essentials — curated picks in one place.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.accessoriesAbovePlaybookMosaic}>
+            <TouchableOpacity
+              style={styles.accessoriesAbovePlaybookHeroTile}
+              activeOpacity={0.92}
+              onPress={goShop}
+              accessibilityRole="button"
+              accessibilityLabel="Shop sports accessories collection"
+            >
+              <ImageBackground
+                source={require("../assets/images/SportsAccessories.png")}
+                style={styles.accessoriesAbovePlaybookHeroImg}
+                imageStyle={styles.accessoriesAbovePlaybookHeroImgInner}
+                resizeMode="cover"
+              >
+                <LinearGradient
+                  colors={["transparent", "rgba(15,23,42,0.05)", "rgba(15,23,42,0.82)"]}
+                  locations={[0, 0.45, 1]}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.accessoriesAbovePlaybookHeroCopy}>
+                  <Text style={styles.accessoriesAbovePlaybookHeroKicker}>COLLECTION</Text>
+                  <Text style={styles.accessoriesAbovePlaybookHeroHeadline}>
+                    Sport accessories
+                  </Text>
+                  <View style={styles.accessoriesAbovePlaybookHeroPill}>
+                    <Text style={styles.accessoriesAbovePlaybookHeroPillTxt}>Shop now</Text>
+                    <Ionicons name="arrow-forward" size={14} color="#0c4a6e" />
+                  </View>
+                </View>
+              </ImageBackground>
+            </TouchableOpacity>
+
+            <View style={styles.accessoriesAbovePlaybookStackCol}>
               <TouchableOpacity
-                key={card.id}
-                activeOpacity={0.95}
-                onPressIn={() => {
-                  Animated.spring(scale, {
-                    toValue: 1.05,
-                    useNativeDriver: true,
-                    speed: 18,
-                    bounciness: 6,
-                  }).start();
-                }}
-                onPressOut={() => {
-                  Animated.spring(scale, {
-                    toValue: 1,
-                    useNativeDriver: true,
-                    speed: 18,
-                    bounciness: 6,
-                  }).start();
-                }}
+                style={styles.accessoriesAbovePlaybookMiniA}
+                activeOpacity={0.9}
                 onPress={goShop}
               >
-                <Animated.View style={[styles.powerCard, { transform: [{ scale }] }]}>
-                  <Image source={card.img} style={styles.powerImage} />
-
-                  <View style={styles.powerTagRow}>
-                    <Text style={styles.powerTag}>{card.label}</Text>
-                  </View>
-
-                  <View style={styles.powerOfferTag}>
-                    <Text style={styles.powerOfferText}>{card.offer}</Text>
-                  </View>
-                </Animated.View>
+                <ImageBackground
+                  source={ACCESSORIES_MASONRY_ITEMS[0]!.image}
+                  style={styles.accessoriesAbovePlaybookMiniImg}
+                  imageStyle={styles.accessoriesAbovePlaybookMiniImgInner}
+                  resizeMode="cover"
+                >
+                  <LinearGradient
+                    colors={["rgba(15,118,110,0.2)", "rgba(15,23,42,0.75)"]}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <Text style={styles.accessoriesAbovePlaybookMiniLabel} numberOfLines={2}>
+                    {ACCESSORIES_MASONRY_ITEMS[0]!.name}
+                  </Text>
+                </ImageBackground>
               </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+              <TouchableOpacity
+                style={styles.accessoriesAbovePlaybookMiniB}
+                activeOpacity={0.9}
+                onPress={goShop}
+              >
+                <ImageBackground
+                  source={ACCESSORIES_MASONRY_ITEMS[1]!.image}
+                  style={styles.accessoriesAbovePlaybookMiniImg}
+                  imageStyle={styles.accessoriesAbovePlaybookMiniImgInnerB}
+                  resizeMode="cover"
+                >
+                  <LinearGradient
+                    colors={["rgba(124,58,237,0.2)", "rgba(15,23,42,0.78)"]}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <Text style={styles.accessoriesAbovePlaybookMiniLabel} numberOfLines={2}>
+                    {ACCESSORIES_MASONRY_ITEMS[1]!.name}
+                  </Text>
+                </ImageBackground>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.accessoriesAbovePlaybookRail}
+          >
+            {ACCESSORIES_ABOVE_PLAYBOOK_BANNERS.map((b) => (
+              <TouchableOpacity
+                key={b.id}
+                activeOpacity={0.9}
+                onPress={goShop}
+                style={styles.accessoriesAbovePlaybookRailCard}
+                accessibilityRole="button"
+                accessibilityLabel={b.title}
+              >
+                <LinearGradient colors={b.chrome} style={styles.accessoriesAbovePlaybookRailFrame}>
+                  <Image source={b.image} style={styles.accessoriesAbovePlaybookRailImg} resizeMode="cover" />
+                  <LinearGradient
+                    colors={["transparent", "rgba(0,0,0,0.75)"]}
+                    style={styles.accessoriesAbovePlaybookRailShade}
+                  />
+                  <View style={styles.accessoriesAbovePlaybookRailCopy}>
+                    <Text style={styles.accessoriesAbovePlaybookRailTag}>{b.tag}</Text>
+                    <Text style={styles.accessoriesAbovePlaybookRailTitle} numberOfLines={2}>
+                      {b.title}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </LinearGradient>
       </View>
 
       {/* Playbook: left page | spiral | right page — swipe for next spread */}
@@ -1192,12 +1402,12 @@ const rotate = rotateAnim.interpolate({
             setPlaybookPage(
               Math.min(
                 Math.max(0, next),
-                Math.max(0, spreadsForPlaybook.length - 1)
+                Math.max(0, DIARY_SPREADS.length - 1)
               )
             );
           }}
         >
-          {spreadsForPlaybook.map((spread, spreadIndex) => {
+          {DIARY_SPREADS.map((spread, spreadIndex) => {
             const leftB = spread.leftBadges ?? DEFAULT_PAGE_BADGES;
             const rightB = spread.rightBadges ?? DEFAULT_PAGE_BADGES;
             return (
@@ -1227,7 +1437,7 @@ const rotate = rotateAnim.interpolate({
           })}
         </ScrollView>
         <View style={styles.diaryPageDots}>
-          {spreadsForPlaybook.map((_, i) => (
+          {DIARY_SPREADS.map((_, i) => (
             <View
               key={i}
               style={[
@@ -1240,87 +1450,6 @@ const rotate = rotateAnim.interpolate({
       </View>
 
      {/* sports footwear */}
-
-
-
-     <View style={styles.trendsSection}>
-  <View style={styles.trendsTitleRow}>
-    <Text style={styles.trendsTitle}>Accessories</Text>
-    {accessoryApiLoading ? (
-      <ActivityIndicator size="small" color="#666" style={{ marginLeft: 8 }} />
-    ) : null}
-  </View>
-  {accessoryApiError ? (
-    <Text style={styles.accessoryApiErrorText}>{accessoryApiError}</Text>
-  ) : null}
-
-  <ScrollView
-    horizontal
-    showsHorizontalScrollIndicator={false}
-    snapToInterval={195} // card width + margin
-    decelerationRate="fast"
-    snapToAlignment="start"
-    disableIntervalMomentum={true}
-    contentContainerStyle={{ paddingHorizontal: 10 }}
-  >
-    {accessoriesFromApi && accessoriesFromApi.length > 0 ? (
-      accessoriesFromApi.map((item) => (
-        <TouchableOpacity
-          key={item.id}
-          style={styles.trendCard}
-          activeOpacity={0.9}
-          onPress={goShop}
-        >
-          <Image
-            source={{ uri: getPublicImageUrl(item.image) }}
-            style={styles.trendImage}
-          />
-          <View style={styles.trendOverlay}>
-            <Text style={styles.trendBrand} numberOfLines={2}>
-              {item.name}
-            </Text>
-            <Text style={styles.trendPrice}>Shop now</Text>
-          </View>
-        </TouchableOpacity>
-      ))
-    ) : (
-      <>
-        <TouchableOpacity style={styles.trendCard} onPress={goShop}>
-          <Image
-            source={require("../assets/images/sports2.png")}
-            style={styles.trendImage}
-          />
-          <View style={styles.trendOverlay}>
-            <Text style={styles.trendBrand}>DNMX • NETPLAY</Text>
-            <Text style={styles.trendPrice}>UNDER ₹399*</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.trendCard} onPress={goShop}>
-          <Image
-            source={require("../assets/images/sports4.png")}
-            style={styles.trendImage}
-          />
-          <View style={styles.trendOverlay}>
-            <Text style={styles.trendBrand}>YOUSTA</Text>
-            <Text style={styles.trendPrice}>UNDER ₹399*</Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.trendCard} onPress={goShop}>
-          <Image
-            source={require("../assets/images/sports1.png")}
-            style={styles.trendImage}
-          />
-          <View style={styles.trendOverlay}>
-            <Text style={styles.trendBrand}>JOHN PLAYERS</Text>
-            <Text style={styles.trendPrice}>MIN. 65% OFF</Text>
-          </View>
-        </TouchableOpacity>
-      </>
-    )}
-  </ScrollView>
-</View>
-
 
 
 
@@ -1339,17 +1468,11 @@ const rotate = rotateAnim.interpolate({
     source={require("../assets/images/redsport1.png")} // change banner
     style={styles.storeBanner}
     imageStyle={{ borderRadius: 14 }}
+    resizeMode="cover"
   >
     <View style={styles.storeOverlay}>
       <View style={styles.storeTitleRow}>
         <Text style={styles.storeTitle}>WOMEN SPORTS WEAR</Text>
-        {womensApiLoading ? (
-          <ActivityIndicator
-            size="small"
-            color="#fff"
-            style={{ marginLeft: 10 }}
-          />
-        ) : null}
       </View>
 
       <TouchableOpacity onPress={goShop}>
@@ -1357,10 +1480,6 @@ const rotate = rotateAnim.interpolate({
       </TouchableOpacity>
     </View>
   </ImageBackground>
-
-  {womensApiError ? (
-    <Text style={styles.womensApiErrorText}>{womensApiError}</Text>
-  ) : null}
 
   {/* 🔶 HORIZONTAL SCROLL */}
   <ScrollView
@@ -1370,7 +1489,7 @@ const rotate = rotateAnim.interpolate({
     decelerationRate="fast"
     contentContainerStyle={{ paddingHorizontal: 10 }}
   >
-    {womenStoreSectionItems.map((item) => (
+    {SHOP_STORE_DATA.map((item) => (
       <TouchableOpacity
         key={item.id}
         style={styles.storeCard}
@@ -1378,7 +1497,11 @@ const rotate = rotateAnim.interpolate({
         activeOpacity={0.9}
       >
         <View style={styles.storeImageWrapper}>
-          <Image source={item.image} style={styles.storeImage} />
+          <Image
+            source={item.image}
+            style={styles.storeImage}
+            resizeMode="cover"
+          />
         </View>
 
         <Text style={styles.storeText}>{item.title}</Text>
@@ -1395,13 +1518,6 @@ const rotate = rotateAnim.interpolate({
 
   <View style={styles.lookbookTitleRow}>
     <Text style={styles.lookbookTitle}>THE LOCAL LOOKBOOK</Text>
-    {womensApiLoading ? (
-      <ActivityIndicator
-        size="small"
-        color="#333"
-        style={{ marginLeft: 8 }}
-      />
-    ) : null}
   </View>
 
   <ScrollView
@@ -1410,50 +1526,43 @@ const rotate = rotateAnim.interpolate({
     snapToInterval={width * 0.75}
     decelerationRate="fast"
   >
-    {womensApiPayload?.lookbookSubs?.length ? (
-      lookbookSectionItems.map((item) => (
-        <View key={item.id} style={styles.cardWrapper}>
-          <TouchableOpacity activeOpacity={0.95} onPress={goShop}>
-            <View style={styles.redFrame}>
-              <Image source={item.image} style={styles.lookbookImage} />
-            </View>
-          </TouchableOpacity>
-        </View>
-      ))
-    ) : (
-      banners.map((img, index) => (
-        <View key={index} style={styles.cardWrapper}>
-          <TouchableOpacity
-            activeOpacity={0.95}
-            onPressIn={() => {
-              Animated.spring(lookbookScales.current[index], {
-                toValue: 1.04,
-                useNativeDriver: true,
-                speed: 18,
-                bounciness: 6,
-              }).start();
-            }}
-            onPressOut={() => {
-              Animated.spring(lookbookScales.current[index], {
-                toValue: 1,
-                useNativeDriver: true,
-                speed: 18,
-                bounciness: 6,
-              }).start();
-            }}
+    {LOOKBOOK_SCROLL_ITEMS.map((item, index) => (
+      <View key={item.id} style={styles.cardWrapper}>
+        <TouchableOpacity
+          activeOpacity={0.95}
+          onPress={goShop}
+          onPressIn={() => {
+            Animated.spring(lookbookScales.current[index], {
+              toValue: 1.04,
+              useNativeDriver: true,
+              speed: 18,
+              bounciness: 6,
+            }).start();
+          }}
+          onPressOut={() => {
+            Animated.spring(lookbookScales.current[index], {
+              toValue: 1,
+              useNativeDriver: true,
+              speed: 18,
+              bounciness: 6,
+            }).start();
+          }}
+        >
+          <Animated.View
+            style={[
+              styles.redFrame,
+              { transform: [{ scale: lookbookScales.current[index] }] },
+            ]}
           >
-            <Animated.View
-              style={[
-                styles.redFrame,
-                { transform: [{ scale: lookbookScales.current[index] }] },
-              ]}
-            >
-              <Image source={img} style={styles.lookbookImage} />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
-      ))
-    )}
+            <Image
+              source={item.image}
+              style={styles.lookbookImage}
+              resizeMode="cover"
+            />
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
+    ))}
   </ScrollView>
 
 </View>
@@ -1472,17 +1581,11 @@ const rotate = rotateAnim.interpolate({
     source={require("../assets/images/redsport2.png")}
     style={styles.westernBanner}
     imageStyle={{ borderRadius: 12 }}
+    resizeMode="cover"
   >
     <View style={styles.bannerOverlay}>
       <View style={styles.bannerTitleRow}>
         <Text style={styles.bannerTitle}>MEN&apos;S SPORTS WEAR</Text>
-        {mensApiLoading ? (
-          <ActivityIndicator
-            size="small"
-            color="#fff"
-            style={{ marginLeft: 10 }}
-          />
-        ) : null}
       </View>
 
       <TouchableOpacity onPress={goShop}>
@@ -1490,10 +1593,6 @@ const rotate = rotateAnim.interpolate({
       </TouchableOpacity>
     </View>
   </ImageBackground>
-
-  {mensApiError ? (
-    <Text style={styles.mensApiErrorText}>{mensApiError}</Text>
-  ) : null}
 
   {/* 🔶 SCROLLING PRODUCTS */}
   <ScrollView
@@ -1503,92 +1602,32 @@ const rotate = rotateAnim.interpolate({
     decelerationRate="fast"
     contentContainerStyle={{ paddingHorizontal: 10 }}
   >
-    {mensWesternProductItems ? (
-      mensWesternProductItems.map((item, index) => {
-        const scale = [womensCardScale1, womensCardScale2, womensCardScale3][
-          index % 3
-        ];
-        return (
-          <Animated.View
-            key={item.id}
-            style={{ transform: [{ scale }] }}
-          >
-            <TouchableOpacity
-              style={styles.productCard}
-              onPressIn={() => pressIn(scale)}
-              onPressOut={() => pressOut(scale)}
-              activeOpacity={0.95}
-              onPress={goShop}
-            >
-              <Image source={item.image} style={styles.productImage} />
-              <View style={styles.productOverlay}>
-                <Text style={styles.productText}>{item.title}</Text>
-              </View>
-              <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        );
-      })
-    ) : (
-      <>
-        <Animated.View style={{ transform: [{ scale: womensCardScale1 }] }}>
+    {MENS_SPORTSWEAR_SCROLL_CARDS.map((item, index) => {
+      const scale = [womensCardScale1, womensCardScale2, womensCardScale3][
+        index % 3
+      ];
+      return (
+        <Animated.View key={item.id} style={{ transform: [{ scale }] }}>
           <TouchableOpacity
             style={styles.productCard}
-            onPressIn={() => pressIn(womensCardScale1)}
-            onPressOut={() => pressOut(womensCardScale1)}
+            onPressIn={() => pressIn(scale)}
+            onPressOut={() => pressOut(scale)}
             activeOpacity={0.95}
             onPress={goShop}
           >
             <Image
-              source={require("../assets/images/greensport1.png")}
+              source={item.image}
               style={styles.productImage}
+              resizeMode="cover"
             />
             <View style={styles.productOverlay}>
-              <Text style={styles.productText}>Tops, T shirts & Shirts</Text>
+              <Text style={styles.productText}>{item.title}</Text>
             </View>
-            <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
+            <Text style={styles.productOffer}>{item.offer}</Text>
           </TouchableOpacity>
         </Animated.View>
-
-        <Animated.View style={{ transform: [{ scale: womensCardScale2 }] }}>
-          <TouchableOpacity
-            style={styles.productCard}
-            onPressIn={() => pressIn(womensCardScale2)}
-            onPressOut={() => pressOut(womensCardScale2)}
-            activeOpacity={0.95}
-            onPress={goShop}
-          >
-            <Image
-              source={require("../assets/images/yellowsport2.png")}
-              style={styles.productImage}
-            />
-            <View style={styles.productOverlay}>
-              <Text style={styles.productText}>Jeans</Text>
-            </View>
-            <Text style={styles.productOffer}>MIN. 60% OFF*</Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        <Animated.View style={{ transform: [{ scale: womensCardScale3 }] }}>
-          <TouchableOpacity
-            style={styles.productCard}
-            onPressIn={() => pressIn(womensCardScale3)}
-            onPressOut={() => pressOut(womensCardScale3)}
-            activeOpacity={0.95}
-            onPress={goShop}
-          >
-            <Image
-              source={require("../assets/images/whitesport2.png")}
-              style={styles.productImage}
-            />
-            <View style={styles.productOverlay}>
-              <Text style={styles.productText}>Trousers</Text>
-            </View>
-            <Text style={styles.productOffer}>MIN. 65% OFF*</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </>
-    )}
+      );
+    })}
   </ScrollView>
 </View>
 
@@ -1603,23 +1642,17 @@ const rotate = rotateAnim.interpolate({
  >
     <View style={styles.interestTitleRow}>
       <Text style={styles.title}>What&apos;s your interest in?</Text>
-      {mensApiLoading ? (
-        <ActivityIndicator
-          size="small"
-          color="#333"
-          style={{ marginLeft: 10 }}
-        />
-      ) : null}
     </View>
 
     <View style={styles.centerWrapper}>
       {/* CENTER CIRCLE */}
       <View style={[styles.circle, styles.centerCircle]}>
         <Image
-          source={mensInterestsList[0]!.img}
+          source={interests[0]!.img}
           style={styles.circleImage}
+          resizeMode="cover"
         />
-        <Text style={styles.circleText}>{mensInterestsList[0]!.name}</Text>
+        <Text style={styles.circleText}>{interests[0]!.name}</Text>
       </View>
 
       {/* ORBITING CIRCLES */}
@@ -1629,8 +1662,8 @@ const rotate = rotateAnim.interpolate({
           { transform: [{ rotate }] },
         ]}
       >
-        {mensInterestsList.slice(1).map((item, index) => {
-          const total = mensInterestsList.length;
+        {interests.slice(1).map((item, index) => {
+          const total = interests.length;
           const denom = Math.max(1, total - 1);
           const angle = (index / denom) * (2 * Math.PI);
           const radius = 140;
@@ -1651,7 +1684,11 @@ const rotate = rotateAnim.interpolate({
                 },
               ]}
             >
-              <Image source={item.img} style={styles.circleImage} />
+              <Image
+                source={item.img}
+                style={styles.circleImage}
+                resizeMode="cover"
+              />
               <Text style={styles.circleText}>{item.name}</Text>
             </View>
           );
@@ -1660,49 +1697,180 @@ const rotate = rotateAnim.interpolate({
     </View>
   </View>
 
-  {/* spotlight cards section (below interest) */}
   <View
-    style={styles.spotlightSection}
     onLayout={(e) => {
       spotlightFootwearY.current = e.nativeEvent.layout.y;
     }}
   >
-    <View style={styles.spotlightTitleRow}>
-      <View style={styles.spotlightTitlePill}>
-        <Text style={styles.spotlightTitle}>SPORTS FOOTWEAR</Text>
-      </View>
-      {footwearApiLoading ? (
-        <ActivityIndicator
-          size="small"
-          color="#ff6f00"
-          style={{ marginLeft: 10 }}
-        />
-      ) : null}
-    </View>
-    {footwearApiError ? (
-      <Text style={styles.footwearApiErrorText}>{footwearApiError}</Text>
-    ) : null}
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      snapToInterval={width * 0.42 + 14}
-      decelerationRate="fast"
-      contentContainerStyle={styles.spotlightScroll}
-    >
-      {spotlightSectionItems.map((item) => (
-        <TouchableOpacity
-          key={item.id}
-          activeOpacity={0.9}
-          style={styles.spotlightCard}
-          onPress={goShop}
-        >
-          <Image source={item.image} style={styles.spotlightImage} />
-          <Text style={styles.spotlightCardTitle} numberOfLines={2}>
-            {item.title}
+    {/* Sports footwear banners — new layout above spotlight */}
+    <View style={styles.footwearPromoSection}>
+      <LinearGradient
+        colors={["#0f172a", "#1e293b", "#0c4a6e"]}
+        locations={[0, 0.55, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.footwearPromoSurface}
+      >
+        <View style={styles.footwearPromoRibbon} />
+        <View style={styles.footwearPromoHeader}>
+          <View style={styles.footwearPromoEyebrowRow}>
+            <Ionicons name="walk-outline" size={16} color="#fbbf24" />
+            <Text style={styles.footwearPromoEyebrowText}>SPORTS FOOTWEAR</Text>
+          </View>
+          <Text style={styles.footwearPromoHeadline}>Built for every stride</Text>
+          <Text style={styles.footwearPromoSub}>
+            Road, gym, court, and trail — fast picks before the carousel below.
           </Text>
+        </View>
+
+        <View style={styles.footwearPromoDuoRow}>
+          <TouchableOpacity
+            style={styles.footwearPromoDuoLeft}
+            activeOpacity={0.92}
+            onPress={goShop}
+            accessibilityRole="button"
+            accessibilityLabel="Shop featured sports shoes"
+          >
+            <ImageBackground
+              source={require("../assets/images/sports6.png")}
+              style={styles.footwearPromoDuoImg}
+              imageStyle={styles.footwearPromoDuoImgInner}
+              resizeMode="cover"
+            >
+              <LinearGradient
+                colors={["transparent", "rgba(15,23,42,0.2)", "rgba(15,23,42,0.88)"]}
+                locations={[0, 0.4, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.footwearPromoDuoCopy}>
+                <Text style={styles.footwearPromoDuoTag}>SPRINT</Text>
+                <Text style={styles.footwearPromoDuoTitle}>Speed lane</Text>
+              </View>
+            </ImageBackground>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.footwearPromoDuoRight}
+            activeOpacity={0.92}
+            onPress={goShop}
+            accessibilityRole="button"
+            accessibilityLabel="Shop training footwear"
+          >
+            <ImageBackground
+              source={require("../assets/images/sports7.png")}
+              style={styles.footwearPromoDuoImg}
+              imageStyle={styles.footwearPromoDuoImgInnerR}
+              resizeMode="cover"
+            >
+              <LinearGradient
+                colors={["transparent", "rgba(30,58,138,0.25)", "rgba(15,23,42,0.9)"]}
+                locations={[0, 0.45, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.footwearPromoDuoCopy}>
+                <Text style={styles.footwearPromoDuoTag}>LIFT</Text>
+                <Text style={styles.footwearPromoDuoTitle}>Training grip</Text>
+              </View>
+            </ImageBackground>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.footwearPromoHeroWrap}
+          activeOpacity={0.92}
+          onPress={goShop}
+          accessibilityRole="button"
+          accessibilityLabel="Shop sports footwear collection"
+        >
+          <ImageBackground
+            source={require("../assets/images/SportsFootwear.png")}
+            style={styles.footwearPromoHeroBg}
+            imageStyle={styles.footwearPromoHeroImgRadius}
+            resizeMode="cover"
+          >
+            <LinearGradient
+              colors={["rgba(15,23,42,0.15)", "rgba(15,23,42,0.5)", "rgba(15,23,42,0.92)"]}
+              locations={[0, 0.55, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.footwearPromoHeroBadge}>
+              <Text style={styles.footwearPromoHeroBadgeTxt}>NEW SEASON</Text>
+            </View>
+            <View style={styles.footwearPromoHeroFooter}>
+              <Text style={styles.footwearPromoHeroTitle}>Footwear drops</Text>
+              <View style={styles.footwearPromoHeroCta}>
+                <Text style={styles.footwearPromoHeroCtaTxt}>Explore</Text>
+                <Ionicons name="arrow-forward-circle" size={20} color="#0c4a6e" />
+              </View>
+            </View>
+          </ImageBackground>
         </TouchableOpacity>
-      ))}
-    </ScrollView>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.footwearPromoRail}
+        >
+          {FOOTWEAR_PROMO_STRIP.map((row) => (
+            <TouchableOpacity
+              key={row.id}
+              activeOpacity={0.9}
+              onPress={goShop}
+              style={styles.footwearPromoRailCard}
+              accessibilityRole="button"
+              accessibilityLabel={row.label}
+            >
+              <LinearGradient colors={row.chrome} style={styles.footwearPromoRailFrame}>
+                <Image source={row.image} style={styles.footwearPromoRailImg} resizeMode="cover" />
+                <LinearGradient
+                  colors={["transparent", "rgba(0,0,0,0.82)"]}
+                  style={styles.footwearPromoRailShade}
+                />
+                <View style={styles.footwearPromoRailCopy}>
+                  <Text style={styles.footwearPromoRailTag}>{row.tag}</Text>
+                  <Text style={styles.footwearPromoRailLabel} numberOfLines={2}>
+                    {row.label}
+                  </Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </LinearGradient>
+    </View>
+
+    {/* spotlight cards section */}
+    <View style={styles.spotlightSection}>
+      <View style={styles.spotlightTitleRow}>
+        <View style={styles.spotlightTitlePill}>
+          <Text style={styles.spotlightTitle}>SPORTS FOOTWEAR</Text>
+        </View>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={width * 0.42 + 14}
+        decelerationRate="fast"
+        contentContainerStyle={styles.spotlightScroll}
+      >
+        {SPOTLIGHT_CARDS.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            activeOpacity={0.9}
+            style={styles.spotlightCard}
+            onPress={goShop}
+          >
+            <Image
+              source={item.image}
+              style={styles.spotlightImage}
+              resizeMode="cover"
+            />
+            <Text style={styles.spotlightCardTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
   </View>
 
 {/* trending cards */}
@@ -1710,108 +1878,116 @@ const rotate = rotateAnim.interpolate({
 
 
 {/* deals section */}
-<View style={styles.heroDealsOnlyWrap}>
-  <TouchableOpacity onPress={goShop} activeOpacity={0.9}>
-    <View style={styles.sportswearDealsBtn}>
-      <Text style={styles.sportswearDealsBtnText}>Sportswear deals</Text>
-      <Ionicons name="chevron-forward" size={18} color="#fff" />
-    </View>
-  </TouchableOpacity>
-      </View>
+      {/* WHAT'S MOVING — grid like reference + horizontal auto-scroll */}
+      <View style={styles.movingSection}>
+        <LinearGradient
+          colors={["#FFE4E6", "#FFF1F2", "#FFE4E6"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.movingBg}
+        />
+        <Text style={styles.movingTitle}>WHAT&apos;S MOVING</Text>
 
-      {/* Sportswear deals banners — full-width paging; back / forward scroll one image */}
-      <View style={styles.angledWrap}>
         <ScrollView
-          ref={sportswearDealsBannerScrollRef}
+          ref={movingGridScrollRef}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           decelerationRate="fast"
-          keyboardShouldPersistTaps="handled"
           onMomentumScrollEnd={(e) => {
-            const page = Math.round(
-              e.nativeEvent.contentOffset.x / DEALS_BANNER_PAGE_W
-            );
-            const max = dealsCarouselItems.length - 1;
-            setSportswearDealsBannerIndex(Math.max(0, Math.min(page, max)));
+            const page = Math.round(e.nativeEvent.contentOffset.x / width);
+            const max = movingPages.length - 1;
+            setMovingGridPage(Math.max(0, Math.min(page, max)));
           }}
         >
-          {dealsCarouselItems.map((item) => (
-            <View
-              key={item.id}
-              style={{
-                width: DEALS_BANNER_PAGE_W,
-                paddingHorizontal: 14,
-                justifyContent: "center",
-              }}
-            >
-              <TouchableOpacity
-                activeOpacity={0.95}
-                onPress={goShop}
-                accessibilityRole="button"
-                accessibilityLabel="Open sportswear deal"
-              >
-                <View style={styles.angledCard}>
-                  <Image source={item.image} style={styles.angledImage} />
-                </View>
-              </TouchableOpacity>
+          {movingPages.map((pageItems, pageIdx) => (
+            <View key={`moving-page-${pageIdx}`} style={[styles.movingPage, { width }]}>
+              <View style={styles.movingGrid}>
+                {pageItems.slice(0, 3).map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.movingCard}
+                    activeOpacity={0.92}
+                    onPress={goShop}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Shop ${item.title}`}
+                  >
+                    <LinearGradient
+                      colors={["#FFFFFF", "#FFE4E6", "#FECACA"]}
+                      locations={[0, 0.55, 1]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.movingCardBg}
+                    />
+                    <View style={styles.movingCardInnerStroke} />
+                    <View style={styles.movingCardImageShell}>
+                      <Image
+                        source={item.image}
+                        style={styles.movingCardImage}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <Text style={styles.movingCardTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.movingCardOffer} numberOfLines={1}>
+                      {item.offer}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.movingGrid}>
+                {pageItems.slice(3, 6).map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.movingCard}
+                    activeOpacity={0.92}
+                    onPress={goShop}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Shop ${item.title}`}
+                  >
+                    <LinearGradient
+                      colors={["#FFFFFF", "#FFE4E6", "#FECACA"]}
+                      locations={[0, 0.55, 1]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.movingCardBg}
+                    />
+                    <View style={styles.movingCardInnerStroke} />
+                    <View style={styles.movingCardImageShell}>
+                      <Image
+                        source={item.image}
+                        style={styles.movingCardImage}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <Text style={styles.movingCardTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.movingCardOffer} numberOfLines={1}>
+                      {item.offer}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           ))}
         </ScrollView>
 
-        <View style={styles.angledNavRow}>
-          <TouchableOpacity
-            style={styles.angledNavBtn}
-            activeOpacity={0.85}
-            onPress={() => {
-              setSportswearDealsBannerIndex((prev) => {
-                const next = Math.max(0, prev - 1);
-                sportswearDealsBannerScrollRef.current?.scrollTo({
-                  x: next * DEALS_BANNER_PAGE_W,
-                  animated: true,
-                });
-                return next;
-              });
-            }}
-          >
-            <Ionicons name="chevron-back" size={18} color="#fff" />
-          </TouchableOpacity>
-
-          <View style={styles.angledDotsRow}>
-            {dealsCarouselItems.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.angledDot,
-                  i === sportswearDealsBannerIndex ? styles.angledDotActive : null,
-                ]}
-              />
-            ))}
-          </View>
-
-          <TouchableOpacity
-            style={styles.angledNavBtn}
-            activeOpacity={0.85}
-            onPress={() => {
-              const last = dealsCarouselItems.length - 1;
-              setSportswearDealsBannerIndex((prev) => {
-                const next = Math.min(last, prev + 1);
-                sportswearDealsBannerScrollRef.current?.scrollTo({
-                  x: next * DEALS_BANNER_PAGE_W,
-                  animated: true,
-                });
-                return next;
-              });
-            }}
-          >
-            <Ionicons name="chevron-forward" size={18} color="#fff" />
-          </TouchableOpacity>
+        <View style={styles.movingDotsRow}>
+          {movingPages.map((_, i) => (
+            <View
+              key={`moving-dot-${i}`}
+              style={[
+                styles.movingDot,
+                i === movingGridPage ? styles.movingDotActive : null,
+              ]}
+            />
+          ))}
         </View>
       </View>
 
-      {/* (removed old promo grid + L-shape section; replaced by angled carousel above) */}
-
-      {/* products to buy (bottom section) */}
+      {/* products to buy — 2 per row, no inner scroll */}
       <View
         ref={productsToBuyRef}
         style={styles.ptbSection}
@@ -1819,35 +1995,79 @@ const rotate = rotateAnim.interpolate({
           productsToBuyY.current = e.nativeEvent.layout.y;
         }}
       >
-        <View style={styles.ptbHeaderRow}>
-          <Text style={styles.ptbTitle}>Products to buy</Text>
-          <TouchableOpacity onPress={goShop} activeOpacity={0.9}>
-            <Text style={styles.ptbSeeAll}>See all</Text>
+        <View style={styles.ptbHeaderSimple}>
+          <Text style={styles.ptbHeading}>Products to buy</Text>
+          <TouchableOpacity onPress={goShop} activeOpacity={0.85}>
+            <Text style={styles.ptbSeeAllText}>See all</Text>
           </TouchableOpacity>
         </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.ptbScroll}
-        >
+        <View style={styles.ptbGrid}>
           {PRODUCTS_TO_BUY.map((p) => (
-            <View key={p.id} style={styles.ptbCard}>
-              <Image source={p.image} style={styles.ptbImage} />
-              <Text style={styles.ptbName} numberOfLines={1}>
-                {p.name}
-              </Text>
-              <Text style={styles.ptbPrice}>{p.price}</Text>
+            <View
+              key={p.id}
+              style={[styles.ptbCard, { width: PTB_GRID_COL_W }]}
+            >
               <TouchableOpacity
-                style={styles.ptbBtn}
+                activeOpacity={0.92}
+                onPress={goShop}
+                accessibilityRole="button"
+                accessibilityLabel={`${p.name}, ${p.price}`}
+              >
+                <View style={styles.ptbCardImageWrap}>
+                  {p.discountPercent != null && p.discountPercent > 0 ? (
+                    <View style={styles.ptbDiscountBadge}>
+                      <Text style={styles.ptbDiscountBadgeText}>
+                        {p.discountPercent}%
+                      </Text>
+                    </View>
+                  ) : null}
+                  <Image
+                    source={p.image}
+                    style={styles.ptbCardImage}
+                    resizeMode="cover"
+                  />
+                </View>
+                <View style={styles.ptbCardBody}>
+                  <Text style={styles.ptbCardName} numberOfLines={3}>
+                    {p.name}
+                  </Text>
+                  <View style={styles.ptbRatingRow}>
+                    {[1, 2, 3, 4, 5].map((i) => {
+                      const filled = i <= Math.round(p.rating);
+                      return (
+                        <Ionicons
+                          key={`${p.id}-star-${i}`}
+                          name={filled ? "star" : "star-outline"}
+                          size={11}
+                          color={filled ? "#f59e0b" : "#cbd5e1"}
+                        />
+                      );
+                    })}
+                    <Text style={styles.ptbRatingMeta}>
+                      {p.rating.toFixed(1)} ({p.reviewCount})
+                    </Text>
+                  </View>
+                  <View style={styles.ptbPriceRow}>
+                    {p.mrp ? (
+                      <Text style={styles.ptbMrp}>{p.mrp}</Text>
+                    ) : null}
+                    <Text style={styles.ptbSalePrice}>{p.price}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.ptbAddToCart}
                 activeOpacity={0.9}
                 onPress={() => router.push("/cart")}
+                accessibilityRole="button"
+                accessibilityLabel={`Add to cart: ${p.name}`}
               >
-                <Text style={styles.ptbBtnText}>Buy</Text>
+                <Ionicons name="cart-outline" size={17} color="#fff" />
+                <Text style={styles.ptbAddToCartText}>Add to Cart</Text>
               </TouchableOpacity>
             </View>
           ))}
-        </ScrollView>
+        </View>
       </View>
 
   
@@ -1874,7 +2094,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 8,
     paddingBottom: 8,
-    marginTop: StatusBar.currentHeight || 20,
+    marginTop: 0,
     marginBottom: 14,
     gap: 6,
   },
@@ -1920,7 +2140,7 @@ const styles = StyleSheet.create({
 
   bannerContainer: {
     width: "100%",
-    height: height * 0.6,
+    height: Math.min(Math.round(height * 0.62), 520),
     position: "relative",
   },
 
@@ -1928,6 +2148,86 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "cover",
+  },
+
+  topBannerScroll: {
+    width: "100%",
+    height: "100%",
+  },
+  topBannerSlide: {
+    width,
+    height: "100%",
+    resizeMode: "cover",
+  },
+  topBannerDots: {
+    position: "absolute",
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    zIndex: 4,
+  },
+  topBannerDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.12)",
+  },
+  topBannerDotActive: {
+    width: 18,
+    backgroundColor: "rgba(255,255,255,0.92)",
+  },
+
+  bannerShortcutDock: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 30,
+    zIndex: 5,
+  },
+  bannerShortcutGrid: {
+    padding: 10,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.10)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 6,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 10,
+  },
+  bannerShortcutTile: {
+    width: "48.5%",
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  bannerShortcutTileActive: {
+    backgroundColor: "rgba(255, 111, 0, 0.14)",
+    borderColor: "rgba(255, 111, 0, 0.38)",
+  },
+  bannerShortcutTileText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#111",
+    letterSpacing: 0.2,
   },
 
   bannerTopButtonsRow: {
@@ -2030,6 +2330,280 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#fff",
     letterSpacing: 0.4,
+  },
+
+  spectrumSection: {
+    marginTop: 10,
+    paddingTop: 18,
+    paddingBottom: 18,
+    backgroundColor: "#FFFFFF",
+  },
+  spectrumArcWrap: {
+    alignItems: "center",
+    paddingHorizontal: 12,
+    marginBottom: 0,
+  },
+  spectrumSubTitle: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+    letterSpacing: 0.2,
+  },
+  arcTextOuter: {
+    position: "relative",
+    overflow: "visible",
+  },
+  arcHalfMask: {
+    overflow: "hidden",
+  },
+  arcTextFull: {
+    position: "relative",
+  },
+  arcChar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+  },
+  arcCharText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#FF6F00",
+    letterSpacing: 1.35,
+    textShadowColor: "rgba(0,0,0,0.22)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  spectrumCardsRow: {
+    paddingHorizontal: 12,
+    paddingTop: 2,
+    paddingBottom: 6,
+    marginTop: -18,
+  },
+  spectrumCard: {
+    width: 228,
+    height: 245,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+    marginRight: 12,
+  },
+  spectrumCardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  spectrumCardFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 90,
+    backgroundColor: "rgba(255,255,255,0.82)",
+  },
+  spectrumCardLabelPill: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    bottom: 12,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+  },
+  spectrumCardLabelText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+
+  movingSection: {
+    marginTop: 10,
+    paddingTop: 16,
+    paddingBottom: 14,
+    backgroundColor: "#FFE4E6",
+    overflow: "hidden",
+  },
+  movingBg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  movingTitle: {
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#9A3412",
+    letterSpacing: 1.2,
+    marginBottom: 12,
+  },
+  movingPage: {
+    paddingHorizontal: 12,
+  },
+  movingGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 10,
+  },
+  movingCard: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: "#FFF7F7",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.9)",
+    padding: 10,
+    shadowColor: "#9A3412",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+    overflow: "hidden",
+  },
+  movingCardBg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  movingCardInnerStroke: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(154,52,18,0.18)",
+  },
+  movingCardImageShell: {
+    width: "100%",
+    height: 96,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1.2,
+    borderColor: "rgba(154,52,18,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+    overflow: "hidden",
+  },
+  movingCardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  movingCardTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F172A",
+    textAlign: "center",
+    lineHeight: 15,
+    minHeight: 28,
+  },
+  movingCardOffer: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#B45309",
+    textAlign: "center",
+    letterSpacing: 0.4,
+  },
+  movingDotsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 6,
+  },
+  movingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(154,52,18,0.28)",
+  },
+  movingDotActive: {
+    width: 20,
+    backgroundColor: "#9A3412",
+  },
+
+  motionSection: {
+    marginTop: 10,
+    paddingTop: 18,
+    paddingBottom: 18,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+  },
+  motionHeader: {
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  motionSubTitle: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+    textAlign: "center",
+    letterSpacing: 0.2,
+  },
+  motionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "stretch",
+    gap: 14,
+  },
+  motionArcMask: {
+    position: "relative",
+  },
+  motionArcMarqueeText: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: "56%",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 2.4,
+    color: "#FF6F00",
+    opacity: 0.24,
+    textShadowColor: "rgba(0,0,0,0.18)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+    zIndex: 0,
+    pointerEvents: "none",
+  },
+  motionArcCharText: {
+    fontSize: 14,
+    letterSpacing: 1.0,
+  },
+  motionCard: {
+    flex: 1,
+    height: 255,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+    zIndex: 2,
+  },
+  motionCardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  motionCardFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 90,
+    backgroundColor: "rgba(255,255,255,0.80)",
+  },
+  motionCardLabel: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#0F172A",
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
   },
 
   /* Hero promo grid */
@@ -2144,107 +2718,346 @@ const styles = StyleSheet.create({
   },
 
   powerSection: {
-    marginTop: 20,
-    paddingVertical: 20,
-    backgroundColor: "#ff6f00",
+    marginTop: 18,
+    paddingHorizontal: 12,
+    paddingTop: 16,
+    paddingBottom: 18,
+    backgroundColor: "#F8FAFF",
   },
 
-  powerTitleRow: {
-    paddingHorizontal: 12,
+  powerHeader: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    marginBottom: 15,
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  powerEyebrow: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+    color: "#FF6F00",
   },
   powerTitle: {
+    marginTop: 2,
     fontSize: 22,
     fontWeight: "900",
-    color: "#fff",
-    textAlign: "center",
-    letterSpacing: 2,
-    textShadowColor: "rgba(0,0,0,0.25)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
+    color: "#0F172A",
+    letterSpacing: 0.2,
   },
-  powerTitleLine: {
-    height: 2,
-    width: 34,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.85)",
+  powerSubTitle: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748B",
   },
 
-  powerCard: {
-    width: 260,
-    height: 320,
-    marginRight: 15,
+  powerSeeAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.85)",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  powerSeeAllText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0F172A",
   },
 
-  powerImage: {
+  powerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 12,
+  },
+  powerGridCard: {
+    width: "48.5%",
+    height: 196,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#0B1220",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.12)",
+  },
+  powerGridImage: {
     width: "100%",
     height: "100%",
     resizeMode: "cover",
   },
-
-  powerTagRow: {
-    position: "absolute",
-    left: 12,
-    top: 12,
+  powerGridShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
-  powerTag: {
-    color: "#111",
-    fontSize: 12,
-    fontWeight: "900",
-    backgroundColor: "rgba(255,255,255,0.92)",
+  powerGridBadge: {
+    position: "absolute",
+    left: 10,
+    top: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    overflow: "hidden",
-    letterSpacing: 0.4,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.10)",
   },
-  powerOfferTag: {
-    position: "absolute",
-    right: 12,
-    bottom: 12,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  powerOfferText: {
-    color: "#fff",
+  powerGridBadgeText: {
     fontSize: 11,
     fontWeight: "900",
-    letterSpacing: 0.3,
+    color: "#0F172A",
+    letterSpacing: 0.4,
+  },
+  powerGridFooter: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
+  },
+  powerGridOffer: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    marginBottom: 8,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
+  powerGridCta: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#FF6F00",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.10)",
+  },
+  powerGridCtaText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+
+  /* Accessory promos (mosaic + rail) — above playbook */
+  accessoriesAbovePlaybookOuter: {
+    marginTop: 18,
+    marginHorizontal: 8,
+    marginBottom: 6,
+  },
+  accessoriesAbovePlaybookSurface: {
+    borderRadius: 22,
+    paddingTop: 16,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.18)",
+    overflow: "hidden",
+  },
+  accessoriesAbovePlaybookHeader: {
+    marginBottom: 14,
+  },
+  accessoriesAbovePlaybookHeaderText: {
+    maxWidth: "100%",
+  },
+  accessoriesAbovePlaybookEyebrow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(14,165,233,0.35)",
+  },
+  accessoriesAbovePlaybookEyebrowTxt: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0369a1",
+    letterSpacing: 0.4,
+  },
+  accessoriesAbovePlaybookTitle: {
+    marginTop: 10,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.3,
+  },
+  accessoriesAbovePlaybookSub: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  accessoriesAbovePlaybookMosaic: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+  },
+  accessoriesAbovePlaybookHeroTile: {
+    flex: 1.18,
+    minWidth: 0,
+  },
+  accessoriesAbovePlaybookHeroImg: {
+    height: 200,
+    borderRadius: 20,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+  },
+  accessoriesAbovePlaybookHeroImgInner: {
+    borderRadius: 20,
+  },
+  accessoriesAbovePlaybookHeroCopy: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 14,
+  },
+  accessoriesAbovePlaybookHeroKicker: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "rgba(255,255,255,0.85)",
+    letterSpacing: 1.4,
+  },
+  accessoriesAbovePlaybookHeroHeadline: {
+    marginTop: 4,
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: -0.2,
+  },
+  accessoriesAbovePlaybookHeroPill: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.94)",
+  },
+  accessoriesAbovePlaybookHeroPillTxt: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0c4a6e",
+  },
+  accessoriesAbovePlaybookStackCol: {
+    flex: 1,
+    height: 200,
+    justifyContent: "space-between",
+    minWidth: 0,
+  },
+  accessoriesAbovePlaybookMiniA: {
+    height: 95,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  accessoriesAbovePlaybookMiniB: {
+    height: 95,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  accessoriesAbovePlaybookMiniImg: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "flex-end",
+  },
+  accessoriesAbovePlaybookMiniImgInner: {
+    borderRadius: 16,
+    borderBottomRightRadius: 6,
+  },
+  accessoriesAbovePlaybookMiniImgInnerB: {
+    borderRadius: 16,
+    borderTopLeftRadius: 6,
+  },
+  accessoriesAbovePlaybookMiniLabel: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#fff",
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  accessoriesAbovePlaybookRail: {
+    paddingTop: 16,
+    paddingBottom: 8,
+    gap: 12,
+    paddingRight: 4,
+  },
+  accessoriesAbovePlaybookRailCard: {
+    width: 154,
+  },
+  accessoriesAbovePlaybookRailFrame: {
+    height: 132,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  accessoriesAbovePlaybookRailImg: {
+    ...StyleSheet.absoluteFillObject,
+    width: undefined,
+    height: undefined,
+  },
+  accessoriesAbovePlaybookRailShade: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  accessoriesAbovePlaybookRailCopy: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
+  },
+  accessoriesAbovePlaybookRailTag: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "rgba(255,255,255,0.9)",
+    letterSpacing: 1.2,
+  },
+  accessoriesAbovePlaybookRailTitle: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#fff",
+    lineHeight: 18,
   },
 
   /* The Athlete's Playbook */
   springBookOuter: {
-  marginTop: 26,              // थोड़ा spacing बढ़ाया
-  marginHorizontal: 10,       // side से थोड़ा ज्यादा width मिलेगा
-  marginBottom: 12,
-  
-  maxWidth: NOTEBOOK_MAX_W + 20, // 👉 width बढ़ाया
-  alignSelf: "center",
-  width: "100%",
-
-  backgroundColor: "skyblue",
-  borderRadius: 20,
-
-  paddingVertical: 22,        // 👉 height feel बढ़ाने के लिए
-  paddingHorizontal: 14,
-
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 3 },
-  shadowOpacity: 0.12,
-  shadowRadius: 10,
-  elevation: 5,
-},
+    marginTop: 26,
+    marginHorizontal: 10,
+    marginBottom: 12,
+    maxWidth: NOTEBOOK_MAX_W + 20,
+    alignSelf: "center",
+    width: "100%",
+    backgroundColor: "skyblue",
+    borderRadius: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
+  },
 
   diaryTitle: {
     textAlign: "center",
@@ -2508,21 +3321,38 @@ const styles = StyleSheet.create({
     borderColor: "#c2185b",
   },
 
-  /* Glass-style vertical deals (below playbook) */
+  /* Glass-style vertical deals */
   glassDealsSection: {
-    backgroundColor: "#1d324e",
-    marginTop: 6,
+    marginTop: 8,
+    marginHorizontal: 10,
     paddingHorizontal: 14,
-    paddingTop: 22,
-    paddingBottom: 10,
+    paddingTop: 18,
+    paddingBottom: 14,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    borderColor: "rgba(56,189,248,0.28)",
+  },
+
+  glassDealsSectionRibbon: {
+    alignSelf: "center",
+    width: "72%",
+    maxWidth: 280,
+    height: 4,
+    borderRadius: 4,
+    marginBottom: 16,
+    opacity: 1,
   },
 
   glassDealsSectionTitle: {
     fontSize: 25,
     fontWeight: "800",
-    color: "#ece2d5",
+    color: "#ecfeff",
     marginBottom: 16,
     letterSpacing: 0.3,
+    textShadowColor: "rgba(232,121,249,0.45)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
   },
 
   angledWrap: {
@@ -2598,7 +3428,6 @@ const styles = StyleSheet.create({
 
   glassDealBgImage: {
     borderRadius: 28,
-    height:300,
   },
 
   glassDealTopRow: {
@@ -2746,39 +3575,213 @@ colorcontainer: {
 
   // sports footwear
 
-  trendsSection: {
-  marginTop: 10,
-  paddingVertical: 20,
-  backgroundColor: "#1a0000",
-},
-
-  trendsTitleRow: {
+  accessoriesCarouselOuter: {
+    paddingHorizontal: 12,
+  },
+  accessoriesCarouselHeader: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  accessoriesCarouselEyebrow: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+    color: "#FF6F00",
+  },
+  accessoriesCarouselTitle: {
+    marginTop: 2,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0F172A",
+    letterSpacing: 0.2,
+  },
+  accessoriesCarouselAllBtn: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 15,
-    marginLeft: 12,
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+  },
+  accessoriesCarouselAllText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+  accessoriesCarouselScroll: {
+    paddingRight: 12,
+  },
+  accessoriesCarouselCard: {
+    width: 258,
+    height: 210,
+    marginRight: 12,
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "#0B1220",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+  },
+  accessoriesCarouselImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  accessoriesCarouselShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+  accessoriesCarouselFooter: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+  },
+  accessoriesCarouselName: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+    marginBottom: 10,
+  },
+  accessoriesCarouselCta: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#FF6F00",
+  },
+  accessoriesCarouselCtaText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
 
-trendsTitle: {
-  color: "#111",
-  fontSize: 20,
-  fontWeight: "900",
-  textAlign: "center",
-  letterSpacing: 2,
-  paddingHorizontal: 14,
-  paddingVertical: 8,
-  alignSelf: "flex-start",
-  borderRadius: 999,
-  backgroundColor: "rgba(255,255,255,0.95)",
-  borderWidth: 2,
-  borderColor: "#ff6f00",
-},
-
-  accessoryApiErrorText: {
-    color: "#ffcdd2",
-    fontSize: 12,
-    marginLeft: 16,
+  accessoriesCollageScroll: {
+    paddingHorizontal: 12,
+  },
+  accessoriesCollagePage: {
+    width: width - 24,
+    paddingBottom: 8,
+  },
+  accessoriesCollageTopRow: {
+    flexDirection: "row",
+    gap: 10,
     marginBottom: 10,
+  },
+  accessoriesCollageBig: {
+    flex: 1,
+    height: 210,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#0B1220",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+  },
+  accessoriesCollageRightCol: {
+    width: 150,
+    gap: 10,
+  },
+  accessoriesCollageSmall: {
+    height: 100,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#0B1220",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+    justifyContent: "flex-end",
+  },
+  accessoriesCollageWide: {
+    height: 120,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#0B1220",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.10)",
+  },
+  accessoriesCollageImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  accessoriesCollageShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.32)",
+  },
+  accessoriesCollageShadeLite: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  accessoriesCollageLabel: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+  },
+  accessoriesCollageTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    lineHeight: 20,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+    marginBottom: 10,
+  },
+  accessoriesCollagePill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#FF6F00",
+  },
+  accessoriesCollagePillText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  accessoriesCollageSmallTitle: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
+  accessoriesCollageWideRow: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  accessoriesCollageWideTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
   },
 
 trendCard: {
@@ -2853,14 +3856,6 @@ bannerTitle: {
   letterSpacing: 2,
 },
 
-mensApiErrorText: {
-  color: "#b71c1c",
-  fontSize: 12,
-  marginHorizontal: 16,
-  marginBottom: 8,
-  textAlign: "center",
-},
-
 shopAll: {
   marginTop: 10,
   fontSize: 16,
@@ -2879,6 +3874,7 @@ productImage: {
   width: "100%",
   height: 160,
   borderRadius: 12,
+  resizeMode: "cover",
 },
 
 productOverlay: {
@@ -2939,14 +3935,6 @@ storeTitle: {
   fontWeight: "bold",
   color: "#fff",
   letterSpacing: 2,
-},
-
-womensApiErrorText: {
-  color: "#b71c1c",
-  fontSize: 12,
-  marginHorizontal: 16,
-  marginBottom: 8,
-  textAlign: "center",
 },
 
 storeShopAll: {
@@ -3051,8 +4039,211 @@ container2: {
     justifyContent: "center",
   },
 
+  footwearPromoSection: {
+    marginTop: 28,
+    marginHorizontal: 10,
+    marginBottom: 0,
+  },
+  footwearPromoSurface: {
+    borderRadius: 22,
+    paddingTop: 16,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.22)",
+  },
+  footwearPromoRibbon: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: "#fbbf24",
+    opacity: 0.9,
+  },
+  footwearPromoHeader: {
+    marginBottom: 14,
+  },
+  footwearPromoEyebrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,23,42,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.35)",
+  },
+  footwearPromoEyebrowText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#fde68a",
+    letterSpacing: 1.2,
+  },
+  footwearPromoHeadline: {
+    marginTop: 12,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#f8fafc",
+    letterSpacing: -0.3,
+  },
+  footwearPromoSub: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "600",
+    color: "#94a3b8",
+  },
+  footwearPromoDuoRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+  footwearPromoDuoLeft: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 16,
+    overflow: "hidden",
+    minHeight: 118,
+  },
+  footwearPromoDuoRight: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 16,
+    overflow: "hidden",
+    minHeight: 118,
+  },
+  footwearPromoDuoImg: {
+    width: "100%",
+    height: 118,
+    justifyContent: "flex-end",
+  },
+  footwearPromoDuoImgInner: {
+    borderRadius: 16,
+    borderBottomRightRadius: 6,
+  },
+  footwearPromoDuoImgInnerR: {
+    borderRadius: 16,
+    borderBottomLeftRadius: 6,
+  },
+  footwearPromoDuoCopy: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
+  },
+  footwearPromoDuoTag: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "rgba(248,250,252,0.85)",
+    letterSpacing: 1.1,
+  },
+  footwearPromoDuoTitle: {
+    marginTop: 4,
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#fff",
+  },
+  footwearPromoHeroWrap: {
+    borderRadius: 18,
+    overflow: "hidden",
+    marginBottom: 14,
+  },
+  footwearPromoHeroBg: {
+    height: 148,
+    width: "100%",
+    justifyContent: "space-between",
+  },
+  footwearPromoHeroImgRadius: {
+    borderRadius: 18,
+  },
+  footwearPromoHeroBadge: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    marginLeft: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(251,191,36,0.95)",
+  },
+  footwearPromoHeroBadgeTxt: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: 0.8,
+  },
+  footwearPromoHeroFooter: {
+    padding: 14,
+  },
+  footwearPromoHeroTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#fff",
+  },
+  footwearPromoHeroCta: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.95)",
+  },
+  footwearPromoHeroCtaTxt: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#0c4a6e",
+  },
+  footwearPromoRail: {
+    gap: 12,
+    paddingRight: 6,
+    paddingBottom: 2,
+  },
+  footwearPromoRailCard: {
+    width: 132,
+  },
+  footwearPromoRailFrame: {
+    height: 118,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  footwearPromoRailImg: {
+    ...StyleSheet.absoluteFillObject,
+    width: undefined,
+    height: undefined,
+  },
+  footwearPromoRailShade: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  footwearPromoRailCopy: {
+    position: "absolute",
+    left: 10,
+    right: 8,
+    bottom: 10,
+  },
+  footwearPromoRailTag: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "rgba(255,255,255,0.92)",
+    letterSpacing: 1,
+  },
+  footwearPromoRailLabel: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#fff",
+    lineHeight: 16,
+  },
+
   spotlightSection: {
-    marginTop: 34,
+    marginTop: 14,
     marginHorizontal: 12,
     borderRadius: 14,
     backgroundColor: "#d9d9d9",
@@ -3079,12 +4270,6 @@ container2: {
     color: "#ff6f00",
     letterSpacing: 1.1,
     textTransform: "uppercase",
-  },
-  footwearApiErrorText: {
-    color: "#b71c1c",
-    fontSize: 12,
-    marginBottom: 10,
-    marginLeft: 4,
   },
   spotlightScroll: {
     paddingRight: 10,
@@ -3113,73 +4298,129 @@ container2: {
 
   ptbSection: {
     marginTop: 18,
-    paddingTop: 14,
-    paddingBottom: 18,
+    paddingBottom: 20,
     backgroundColor: "#fff",
   },
-  ptbHeaderRow: {
-    paddingHorizontal: 14,
+  ptbHeaderSimple: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
-  ptbTitle: {
+  ptbHeading: {
     fontSize: 18,
-    fontWeight: "900",
-    color: "#111",
-    letterSpacing: 0.2,
+    fontWeight: "800",
+    color: "#0f172a",
   },
-  ptbSeeAll: {
-    fontSize: 13,
+  ptbSeeAllText: {
+    fontSize: 14,
     fontWeight: "700",
-    color: "#ff6f00",
+    color: "#ea580c",
   },
-  ptbScroll: {
-    paddingHorizontal: 14,
-    gap: 12,
-    paddingRight: 20,
+  ptbGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: PTB_GRID_GAP,
   },
   ptbCard: {
-    width: 150,
-    borderRadius: 14,
     backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#eee",
-    padding: 10,
-  },
-  ptbImage: {
-    width: "100%",
-    height: 100,
     borderRadius: 12,
-    resizeMode: "cover",
-    backgroundColor: "#f3f3f3",
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.08)",
+    overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    paddingBottom: 10,
   },
-  ptbName: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#111",
+  ptbCardImageWrap: {
+    width: "100%",
+    aspectRatio: 1,
+    backgroundColor: "#f1f5f9",
+    position: "relative",
   },
-  ptbPrice: {
-    marginTop: 2,
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#111",
-    marginBottom: 8,
-  },
-  ptbBtn: {
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: "#111",
+  ptbDiscountBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    zIndex: 2,
+    minWidth: 36,
+    height: 36,
+    paddingHorizontal: 6,
+    borderRadius: 18,
+    backgroundColor: "#ea580c",
     alignItems: "center",
     justifyContent: "center",
   },
-  ptbBtnText: {
+  ptbDiscountBadgeText: {
     color: "#fff",
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  ptbCardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  ptbCardBody: {
+    paddingHorizontal: 10,
+    paddingTop: 10,
+  },
+  ptbCardName: {
     fontSize: 12,
-    letterSpacing: 0.3,
+    fontWeight: "700",
+    color: "#0f172a",
+    lineHeight: 16,
+  },
+  ptbRatingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 6,
+    gap: 2,
+  },
+  ptbRatingMeta: {
+    marginLeft: 4,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  ptbPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+    marginTop: 8,
+    gap: 8,
+  },
+  ptbMrp: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  ptbSalePrice: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#ea580c",
+  },
+  ptbAddToCart: {
+    marginTop: 10,
+    marginHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#ea580c",
+  },
+  ptbAddToCartText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   title: {
@@ -3231,6 +4472,7 @@ container2: {
     width: "100%",
     height: "100%",
     position: "absolute",
+    resizeMode: "cover",
   },
 
   circleText: {
