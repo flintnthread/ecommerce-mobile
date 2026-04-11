@@ -24,6 +24,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { VideoView, useVideoPlayer } from "expo-video";
 import api from "../services/api";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import {
   GestureHandlerRootView,
   TouchableOpacity as GestureTouchableOpacity,
@@ -1718,8 +1719,11 @@ export default function Accessories() {
       <View style={styles.topFixedArea}>
         <View style={styles.header}>
           <View style={styles.headerBrand}>
-            <Text style={styles.brandF}>F</Text>
-            <Text style={styles.brandT}>T</Text>
+            <Image
+              source={require("../assets/images/logo.png")}
+              style={styles.headerBrandLogo}
+              resizeMode="contain"
+            />
           </View>
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={18} color="#9aa0a6" />
@@ -3547,29 +3551,10 @@ export default function Accessories() {
         </View>
       </ScrollView>
 
-      <View style={styles.bottomTab}>
-        <TabItem icon="home-outline" label="Home" onPress={() => router.push("/home")} />
-        <TabItem icon="storefront-outline" label="Explore" onPress={() => router.push("/categories")} />
-        <TabItem icon="pricetags-outline" label="TRNDin" onPress={() => router.push("/promote")} />
-        <TabItem icon="grid-outline" label="Categories" onPress={() => router.push("/categories")} />
-        <TabItem icon="person-outline" label="Account" onPress={() => router.push("/account")} />
-      </View>
+      <HomeBottomTabBar />
     </View>
   );
 }
-
-type TabItemProps = {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  label: string;
-  onPress: () => void;
-};
-
-const TabItem = ({ icon, label, onPress }: TabItemProps) => (
-  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
-    <Ionicons name={icon} size={22} color="#1d324e" />
-    <Text style={styles.tabLabel}>{label}</Text>
-  </TouchableOpacity>
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -3590,7 +3575,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: 70,
+    paddingBottom: 90,
   },
   header: {
     paddingTop: 50,
@@ -3601,23 +3586,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerBrand: {
-    flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 8,
-    paddingBottom: 1,
+    width: 30,
+    height: 30,
   },
-  brandF: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#1d324e",
-    letterSpacing: -0.5,
-  },
-  brandT: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#ef7b1a",
-    letterSpacing: -0.5,
-    marginLeft: 1,
+  headerBrandLogo: {
+    width: "100%",
+    height: "100%",
   },
   searchBox: {
     flex: 1,
@@ -6733,28 +6710,6 @@ const styles = StyleSheet.create({
     marginTop: 3,
     color: "#69798c",
     fontSize: 11,
-    fontWeight: "600",
-  },
-  bottomTab: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: "#fff",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#69798c",
-  },
-  tabItem: {
-    alignItems: "center",
-  },
-  tabLabel: {
-    fontSize: 11,
-    marginTop: 3,
-    color: "#1d324e",
     fontWeight: "600",
   },
 });
