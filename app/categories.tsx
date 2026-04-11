@@ -427,6 +427,11 @@ export default function Categories() {
                       router.push("/kids" as Href);
                       return;
                     }
+                    if (cat.key === "indoorPlayEquipments") {
+                      setIsSideBarOpen(false);
+                      router.push("/indoorplay" as Href);
+                      return;
+                    }
                     setActiveCategory(cat.key);
                     setIsSideBarOpen(false);
                   }}
@@ -493,6 +498,10 @@ export default function Categories() {
                         }
                         if (cat.key === "footwear") {
                           router.push("/footwear" as Href);
+                          return;
+                        }
+                        if (cat.key === "indoorPlayEquipments") {
+                          router.push("/indoorplay" as Href);
                           return;
                         }
                         router.push({
