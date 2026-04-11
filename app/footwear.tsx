@@ -12,14 +12,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import {
-  fetchSubcategoriesTable,
-  FOOTWEAR_WOMENS_CATEGORY_ID,
-  FOOTWEAR_MENS_CATEGORY_ID,
-  FOOTWEAR_KIDS_CATEGORY_ID,
-  subcategoryTableImageUrl,
-} from "../services/api";
 import { VideoView, useVideoPlayer } from "expo-video";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const { width } = Dimensions.get("window");
 const DESK_INNER_WIDTH = width - 20; // deskSection marginHorizontal: 10 × 2
@@ -34,7 +28,7 @@ const FW4 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.
 const FW5 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM (1).jpeg");
 const FW6 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.33 AM.jpeg");
 const FW7 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.21.01 AM.jpeg");
-const BOTTOM3_MAIN_BANNER = require("../assets/footwearimages/bottom 3 of main banners.png");
+const BOTTOM3_MAIN_BANNER = require("../assets/footwearimages/main.png");
 const HEADER_FAVICON = require("../assets/footwearimages/Fav Icon.png");
 
 /**
@@ -80,7 +74,7 @@ const TOP_TIER_KICKS_CARDS = [
 const MOOD_IMAGE_ACTIVE_SPORTY = require("../assets/footwearimages/mood-active-sporty.png");
 const MOOD_IMAGE_TRAVEL_EXPLORE = require("../assets/footwearimages/mood-travel-explore.png");
 
-/** Shown until women’s API loads or if the request fails */
+/** Static women’s subcategory tiles (no API). */
 const WOMENS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[] = [
   { id: "w1", label: "Heels", image: FW2 },
   { id: "w2", label: "Flats", image: FW5 },
@@ -90,7 +84,7 @@ const WOMENS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[]
   { id: "w6", label: "Wedges", image: FW7 },
 ];
 
-/** Shown until men’s API loads or if the request fails */
+/** Static men’s subcategory tiles (no API). */
 const MENS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[] = [
   { id: "m1", label: "Sneakers", image: FW1 },
   { id: "m2", label: "Formal Shoes", image: FW4 },
@@ -100,7 +94,7 @@ const MENS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[] =
   { id: "m6", label: "Sandals", image: FW2 },
 ];
 
-/** Shown until kids’ API loads or if the request fails */
+/** Static kids’ subcategory tiles (no API). */
 const KIDS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[] = [
   { id: "k1", label: "School Shoes", image: FW3 },
   { id: "k2", label: "Sandals", image: FW5 },
@@ -161,93 +155,12 @@ export default function FootwearScreen() {
   const [headerHeight, setHeaderHeight] = useState(96);
   type TopMenuKey = "footwear" | "womens-footwear" | "mens-footwear" | "kids-footwear" | "trendnow";
   const [activeTopMenu, setActiveTopMenu] = useState<TopMenuKey>("footwear");
-  const [womensSubcategories, setWomensSubcategories] = useState<
-    { id: string; label: string; image: any }[]
-  >(WOMENS_SUBCATEGORIES_FALLBACK);
-  const [mensSubcategories, setMensSubcategories] = useState<
-    { id: string; label: string; image: any }[]
-  >(MENS_SUBCATEGORIES_FALLBACK);
-  const [kidsSubcategories, setKidsSubcategories] = useState<
-    { id: string; label: string; image: any }[]
-  >(KIDS_SUBCATEGORIES_FALLBACK);
+  const womensSubcategories = WOMENS_SUBCATEGORIES_FALLBACK;
+  const mensSubcategories = MENS_SUBCATEGORIES_FALLBACK;
+  const kidsSubcategories = KIDS_SUBCATEGORIES_FALLBACK;
 
   const getAbsoluteY = (y: number, insideAnimated = false) =>
     insideAnimated ? animatedBlockYRef.current + y : y;
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await fetchSubcategoriesTable(FOOTWEAR_WOMENS_CATEGORY_ID);
-        const first = rows[0];
-        if (cancelled || !first?.subcategories?.length) return;
-        setWomensSubcategories(
-          first.subcategories.map((s) => ({
-            id: String(s.id),
-            label: s.name,
-            image: s.image
-              ? { uri: subcategoryTableImageUrl(s.image) }
-              : FW2,
-          }))
-        );
-      } catch {
-        /* keep WOMENS_SUBCATEGORIES_FALLBACK */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await fetchSubcategoriesTable(FOOTWEAR_MENS_CATEGORY_ID);
-        const first = rows[0];
-        if (cancelled || !first?.subcategories?.length) return;
-        setMensSubcategories(
-          first.subcategories.map((s) => ({
-            id: String(s.id),
-            label: s.name,
-            image: s.image
-              ? { uri: subcategoryTableImageUrl(s.image) }
-              : FW1,
-          }))
-        );
-      } catch {
-        /* keep MENS_SUBCATEGORIES_FALLBACK */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await fetchSubcategoriesTable(FOOTWEAR_KIDS_CATEGORY_ID);
-        const first = rows[0];
-        if (cancelled || !first?.subcategories?.length) return;
-        setKidsSubcategories(
-          first.subcategories.map((s) => ({
-            id: String(s.id),
-            label: s.name,
-            image: s.image
-              ? { uri: subcategoryTableImageUrl(s.image) }
-              : FW3,
-          }))
-        );
-      } catch {
-        /* keep KIDS_SUBCATEGORIES_FALLBACK */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Temporary tall video banner until you provide final asset.
   const tallBannerPlayer = useVideoPlayer(
@@ -524,6 +437,7 @@ export default function FootwearScreen() {
         contentContainerStyle={{
           ...styles.contentContainer,
           paddingTop: headerHeight + MENU_BAR_HEIGHT + 2,
+          paddingBottom: 108,
         }}
         onScroll={handleMainScroll}
         scrollEventThrottle={16}
@@ -531,7 +445,7 @@ export default function FootwearScreen() {
         <View style={styles.dualBannerCard}>
           <Image source={BOTTOM3_MAIN_BANNER} style={styles.dualBannerTopImage} />
           <View style={styles.dualBannerDivider} />
-          <Image source={BOTTOM3_MAIN_BANNER} style={styles.dualBannerBottomImage} />
+          
         </View>
 
         <Animated.View
@@ -1035,6 +949,14 @@ export default function FootwearScreen() {
                 key={product.id}
                 style={styles.relatedProductCard}
                 activeOpacity={0.9}
+                onPress={() =>
+                  router.push({
+                    pathname: "/productdetail",
+                    params: { id: product.id },
+                  } as any)
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`${product.name}, view details`}
               >
                 <View style={styles.relatedProductInner}>
                   <Image
@@ -1066,6 +988,8 @@ export default function FootwearScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <HomeBottomTabBar />
     </View>
   );
 }
@@ -1185,8 +1109,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   dualBannerTopImage: {
-    width: "100%",
-    height: 210,
+    width: "118%",
+    height: 280,
     resizeMode: "cover",
   },
   dualBannerDivider: {
@@ -1195,7 +1119,7 @@ const styles = StyleSheet.create({
   },
   dualBannerBottomImage: {
     width: "100%",
-    height: 170,
+    height: 280,
     resizeMode: "cover",
   },
   tileRow: {

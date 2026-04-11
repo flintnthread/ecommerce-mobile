@@ -12,15 +12,9 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
-import {
-  fetchSubcategoriesTable,
-  SWEETS_DRY_CATEGORY_ID,
-  SWEETS_MILK_CATEGORY_ID,
-  subcategoryTableImageUrl,
-} from "../services/api";
-
 type SweetsSubItem = {
   id: string;
   name: string;
@@ -31,6 +25,7 @@ type SweetsSubItem = {
 
 const DRY_SWEET_TILE_COLORS = ["#FFE7D4", "#FFF2C9", "#EAFBF2", "#F4E9FF"];
 
+/** Static dry-sweets tiles (no API). */
 const DRY_SUBS_FALLBACK: SweetsSubItem[] = [
   {
     id: "d1",
@@ -57,6 +52,7 @@ const DRY_SUBS_FALLBACK: SweetsSubItem[] = [
 
 const MILK_SWEET_TILE_COLORS = ["#FFE7D4", "#F4E9FF", "#FFF2C9", "#EAFBF2"];
 
+/** Static milk-sweets tiles (no API). */
 const MILK_SUBS_FALLBACK: SweetsSubItem[] = [
   {
     id: "m1",
@@ -71,6 +67,75 @@ const MILK_SUBS_FALLBACK: SweetsSubItem[] = [
     note: "Milky fudge",
     color: "#F4E9FF",
     image: require("../assets/sweetsimages/48.png"),
+  },
+];
+
+/** Product tiles for the bottom grid — ids `sw*` are registered in `productdetail` ALL_PRODUCTS. */
+type SweetsHubProduct = {
+  id: string;
+  name: string;
+  tag: string;
+  price: number;
+  rating: number;
+  image: any;
+};
+
+const RELATED_SWEETS_PRODUCTS: SweetsHubProduct[] = [
+  {
+    id: "sw1",
+    name: "Festive Gulab Jamun",
+    tag: "Milk sweets",
+    price: 449,
+    rating: 4.7,
+    image: require("../assets/sweetsimages/jamun.jpg"),
+  },
+  {
+    id: "sw2",
+    name: "Boondi Laddu Pack",
+    tag: "Dry sweets",
+    price: 399,
+    rating: 4.5,
+    image: require("../assets/sweetsimages/laddu.jpg"),
+  },
+  {
+    id: "sw3",
+    name: "Sununda Special",
+    tag: "Traditional",
+    price: 329,
+    rating: 4.6,
+    image: require("../assets/sweetsimages/sununda.jpg"),
+  },
+  {
+    id: "sw4",
+    name: "Dry Fruit Laddu",
+    tag: "Premium nuts",
+    price: 549,
+    rating: 4.8,
+    image: require("../assets/sweetsimages/dry fruit laddu.jpg"),
+  },
+  {
+    id: "sw5",
+    name: "Milk Kalakand",
+    tag: "Milk sweets",
+    price: 479,
+    rating: 4.4,
+    image: require("../assets/sweetsimages/48.png"),
+  },
+  {
+    id: "sw6",
+    name: "Assorted Mithai Box",
+    tag: "Gift box",
+    price: 899,
+    rating: 4.7,
+    image: require("../assets/sweetsimages/49.png"),
+  },
+  {
+    id: "sw7",
+    name: "Signature Asvi Collection",
+    tag: "House special",
+    price: 649,
+    rating: 4.6,
+    image: require("../assets/sweetsimages/Asvi.png"),
   },
 ];
 
@@ -103,10 +168,8 @@ export default function Sweets() {
   type CategoryKey = "dry" | "milk";
   const [active, setActive] = useState<CategoryKey>("dry");
   const [query, setQuery] = useState("");
-  const [drySubcategories, setDrySubcategories] =
-    useState<SweetsSubItem[]>(DRY_SUBS_FALLBACK);
-  const [milkSubcategories, setMilkSubcategories] =
-    useState<SweetsSubItem[]>(MILK_SUBS_FALLBACK);
+  const drySubcategories = DRY_SUBS_FALLBACK;
+  const milkSubcategories = MILK_SUBS_FALLBACK;
 
   const sectionY = useRef<Record<CategoryKey, number>>({
     dry: 0,
@@ -164,60 +227,6 @@ export default function Sweets() {
     return () => clearInterval(t);
   }, [MID_PROMO_BANNERS.length, midBannerItemW]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await fetchSubcategoriesTable(SWEETS_DRY_CATEGORY_ID);
-        const first = rows[0];
-        if (cancelled || !first?.subcategories?.length) return;
-        setDrySubcategories(
-          first.subcategories.map((s, i) => ({
-            id: String(s.id),
-            name: s.name,
-            note: "Dry sweet",
-            color: DRY_SWEET_TILE_COLORS[i % DRY_SWEET_TILE_COLORS.length],
-            image: s.image
-              ? { uri: subcategoryTableImageUrl(s.image) }
-              : require("../assets/sweetsimages/laddu.jpg"),
-          }))
-        );
-      } catch {
-        /* keep DRY_SUBS_FALLBACK */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await fetchSubcategoriesTable(SWEETS_MILK_CATEGORY_ID);
-        const first = rows[0];
-        if (cancelled || !first?.subcategories?.length) return;
-        setMilkSubcategories(
-          first.subcategories.map((s, i) => ({
-            id: String(s.id),
-            name: s.name,
-            note: "Milk sweet",
-            color: MILK_SWEET_TILE_COLORS[i % MILK_SWEET_TILE_COLORS.length],
-            image: s.image
-              ? { uri: subcategoryTableImageUrl(s.image) }
-              : require("../assets/sweetsimages/jamun.jpg"),
-          }))
-        );
-      } catch {
-        /* keep MILK_SUBS_FALLBACK */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const SUB: Record<CategoryKey, SweetsSubItem[]> = useMemo(
     () => ({
       dry: drySubcategories,
@@ -235,6 +244,15 @@ export default function Sweets() {
     });
     return out;
   }, [SUB, query]);
+
+  const relatedSweetsFiltered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return RELATED_SWEETS_PRODUCTS;
+    return RELATED_SWEETS_PRODUCTS.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) || p.tag.toLowerCase().includes(q)
+    );
+  }, [query]);
 
   const scrollTo = (key: CategoryKey) => {
     setActive(key);
@@ -430,6 +448,34 @@ export default function Sweets() {
           />
         </View>
 
+        <TouchableOpacity
+          style={styles.beautyPromoRow}
+          activeOpacity={0.92}
+          onPress={() => router.push("/beauty-personal-care")}
+          accessibilityRole="button"
+          accessibilityLabel="Open Beauty and Personal Care"
+        >
+          <LinearGradient
+            colors={["#fce4ec", "#f8bbd0", "#e1bee7"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.beautyPromoGradient}
+          >
+            <View style={styles.beautyPromoInner}>
+              <View style={styles.beautyPromoIconWrap}>
+                <Ionicons name="sparkles" size={22} color="#6a1b9a" />
+              </View>
+              <View style={styles.beautyPromoTextCol}>
+                <Text style={styles.beautyPromoTitle}>Beauty & Personal Care</Text>
+                <Text style={styles.beautyPromoSubtitle}>
+                  Skincare, hair, makeup & more — tap to explore
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color="#4a148c" />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+
         {renderCategorySection("dry")}
 
         <View style={styles.midPromoBlock}>
@@ -496,6 +542,51 @@ export default function Sweets() {
         </View>
 
         {renderCategorySection("milk")}
+
+        <View style={styles.sweetsProductsSection}>
+          <View style={styles.sweetsProductsHeaderRow}>
+            <Text style={styles.sweetsProductsTitle}>Popular sweet picks</Text>
+            <Text style={styles.sweetsProductsCount}>
+              {relatedSweetsFiltered.length} items
+            </Text>
+          </View>
+          <View style={styles.sweetsProductsGrid}>
+            {relatedSweetsFiltered.map((product) => (
+              <TouchableOpacity
+                key={product.id}
+                style={styles.sweetsProductCard}
+                activeOpacity={0.9}
+                onPress={() =>
+                  router.push({
+                    pathname: "/productdetail",
+                    params: { id: product.id },
+                  } as any)
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`${product.name}, view details`}
+              >
+                <View style={styles.sweetsProductInner}>
+                  <Image source={product.image} style={styles.sweetsProductImage} />
+                  <View style={styles.sweetsProductMeta}>
+                    <Text style={styles.sweetsProductName} numberOfLines={2}>
+                      {product.name}
+                    </Text>
+                    <Text style={styles.sweetsProductTag}>{product.tag}</Text>
+                    <View style={styles.sweetsProductBottomRow}>
+                      <Text style={styles.sweetsProductPrice}>Rs {product.price}</Text>
+                      <View style={styles.sweetsProductRatingPill}>
+                        <Ionicons name="star" size={12} color="#c2410c" />
+                        <Text style={styles.sweetsProductRatingText}>
+                          {product.rating}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
         <View style={styles.sweetsVideoSection}>
           <Text style={styles.sweetsVideoTitle}>Behind the sweets</Text>
@@ -610,6 +701,53 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "rgba(0,0,0,0.10)",
   },
+  beautyPromoRow: {
+    marginTop: 14,
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#1d324e",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  beautyPromoGradient: {
+    borderRadius: 16,
+    padding: 2,
+  },
+  beautyPromoInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.55)",
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(106,27,154,0.15)",
+  },
+  beautyPromoIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  beautyPromoTextCol: { flex: 1 },
+  beautyPromoTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#311b92",
+    letterSpacing: 0.2,
+  },
+  beautyPromoSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5e35b1",
+    opacity: 0.95,
+  },
   midPromoBlock: {
     marginTop: 18,
     marginBottom: 4,
@@ -675,6 +813,101 @@ const styles = StyleSheet.create({
   midPromoDotActive: {
     width: 18,
     backgroundColor: "#1d324e",
+  },
+  sweetsProductsSection: {
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  sweetsProductsHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  sweetsProductsTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#1d324e",
+    flex: 1,
+    paddingRight: 8,
+  },
+  sweetsProductsCount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5a6578",
+  },
+  sweetsProductsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+  },
+  sweetsProductCard: {
+    width: "49%",
+    borderRadius: 12,
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 14,
+    overflow: "visible",
+  },
+  sweetsProductInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  sweetsProductImage: {
+    width: "100%",
+    height: 124,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  sweetsProductMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  sweetsProductName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 30,
+  },
+  sweetsProductTag: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#6f7a8d",
+    fontWeight: "600",
+  },
+  sweetsProductBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sweetsProductPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  sweetsProductRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  sweetsProductRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
   },
   giftBoxWrap: {
     borderRadius: 14,
