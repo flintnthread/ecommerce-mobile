@@ -10,13 +10,17 @@ import {
   TextInput,
   Modal,
   Dimensions,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import NotificationPermission from "./notification";
 import * as ImagePicker from "expo-image-picker";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+const PROMOTE_WITH_US_URL = "https://flintnthread.in/ads-panel/index";
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -244,43 +248,11 @@ export default function AccountScreen() {
   };
 
   const handleBecomeSellerPress = () => {
-    Alert.alert(
-      "Become a Seller",
-      "Would you like to start selling on our platform?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Get Started",
-          onPress: () => {
-            Alert.alert(
-              "Seller Registration",
-              "We'll guide you through the seller registration process. This feature will be available soon!",
-              [{ text: "OK" }]
-            );
-          },
-        },
-      ]
-    );
+    router.push("/startselling");
   };
 
   const handlePromoteWithUsPress = () => {
-    Alert.alert(
-      "Promote with Us",
-      "Partner with us to promote your products and services!",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Learn More",
-          onPress: () => {
-            Alert.alert(
-              "Promotion Partnership",
-              "Join our promotion program to reach more customers and grow your business. Our team will contact you soon!",
-              [{ text: "OK" }]
-            );
-          },
-        },
-      ]
-    );
+    Linking.openURL(PROMOTE_WITH_US_URL);
   };
 
   const handleOtherPress = () => {
@@ -1587,6 +1559,7 @@ export default function AccountScreen() {
           </View>
         </Modal>
       </ScrollView>
+      <HomeBottomTabBar />
     </View>
   );
 }
@@ -1634,7 +1607,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
   topRow: {
     marginTop: 16,

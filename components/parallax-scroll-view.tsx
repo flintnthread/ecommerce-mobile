@@ -27,8 +27,8 @@ export default function ParallaxScrollView({
   const colorScheme = useColorScheme() ?? 'light';
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const scrollOffset = useScrollOffset(scrollRef);
-  const headerAnimatedStyle = useAnimatedStyle(() => {
-    return {
+  const headerAnimatedStyle = useAnimatedStyle(
+    () => ({
       transform: [
         {
           translateY: interpolate(
@@ -38,11 +38,16 @@ export default function ParallaxScrollView({
           ),
         },
         {
-          scale: interpolate(scrollOffset.value, [-HEADER_HEIGHT, 0, HEADER_HEIGHT], [2, 1, 1]),
+          scale: interpolate(
+            scrollOffset.value,
+            [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
+            [2, 1, 1]
+          ),
         },
-      ],
-    };
-  });
+      ] as any,
+    }),
+    []
+  ) as any;
 
   return (
     <Animated.ScrollView
