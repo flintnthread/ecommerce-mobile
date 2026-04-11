@@ -200,6 +200,8 @@ const categoryOptions = [
   "Bike Covers",
   "Blouses",
   "Bluetooth Headphones",
+  "Skincare Tools & Devices",
+  "Facial Devices",
 ];
 
 /** Preview tiles per category on the browse screen (2×2). */
