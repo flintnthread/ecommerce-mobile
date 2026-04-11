@@ -26,6 +26,7 @@ import * as IntentLauncher from "expo-intent-launcher";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import { addProductToCart } from "../lib/shopStorage";
 import { requestForegroundLocation } from "../lib/requestForegroundLocation";
 import * as ImagePicker from "expo-image-picker";
 
@@ -34,6 +35,9 @@ const HIDE_TOP_BAR_H = 66;
 const CARD_WIDTH = width * 0.6;
 const USER_PICK_CARD_WIDTH = Math.min(Math.round(width * 0.38), 148);
 const USER_PICK_ITEM_GAP = 12;
+
+/** Suggested for you — gap between the two columns in each row */
+const SUGGESTED_CARD_GAP = 12;
 
 /** Category strip: fixed chip width for horizontal scroll. */
 const CATEGORY_CHIP_WIDTH = 86;
@@ -915,6 +919,30 @@ useEffect(() => {
     }
   };
 
+  const clearCategoryModalSelections = () => {
+    setSelectedCategory([]);
+    setSelectedFilters((prev) => {
+      const next = { ...prev };
+      delete next.Category;
+      return next;
+    });
+  };
+
+  const clearGenderModalSelection = () => {
+    setSelectedGender("");
+    setSelectedFilters((prev) => {
+      const next = { ...prev };
+      delete next.Gender;
+      return next;
+    });
+  };
+
+  const clearFilterModalSelections = () => {
+    setSelectedFilters({});
+    setSelectedCategory([]);
+    setSelectedGender("");
+  };
+
   const displayedCategories = categoryOptions.filter((item) =>
     item.toLowerCase().includes(searchCategoryText.toLowerCase())
   );
@@ -1053,39 +1081,47 @@ const focusBanners = [
   };
 
 
-    // suggested
+    // suggested — cart ids sg1–sg4 match shopStorage PRODUCT_IMAGES
     const suggestedProducts = [
   {
-    id: '1',
-    name: 'Fresh Apple',
-    image: require('../assets/images/suggest1.png'),
-    oldPrice: '₹120',
-    price: '₹99',
-    rating: '4.5',
+    cartId: "sg1",
+    name: "Women floral cotton dress",
+    image: require("../assets/images/look1.png"),
+    oldPrice: "₹499",
+    price: "₹299",
+    rating: "4.5",
+    priceNum: 299,
+    mrpNum: 499,
   },
   {
-    id: '2',
-    name: 'Banana',
-    image: require('../assets/images/suggest2.png'),
-    oldPrice: '₹80',
-    price: '₹60',
-    rating: '4.2',
+    cartId: "sg2",
+    name: "Casual summer A-line look",
+    image: require("../assets/images/look2.png"),
+    oldPrice: "₹899",
+    price: "₹449",
+    rating: "4.2",
+    priceNum: 449,
+    mrpNum: 899,
   },
   {
-    id: '3',
-    name: 'Mango',
-    image: require('../assets/images/suggest3.png'),
-    oldPrice: '₹150',
-    price: '₹130',
-    rating: '4.8',
+    cartId: "sg3",
+    name: "Printed kurta & dupatta set",
+    image: require("../assets/images/look3.png"),
+    oldPrice: "₹1,299",
+    price: "₹599",
+    rating: "4.8",
+    priceNum: 599,
+    mrpNum: 1299,
   },
   {
-    id: '4',
-    name: 'Orange',
-    image: require('../assets/images/suggest4.png'),
-    oldPrice: '₹100',
-    price: '₹85',
-    rating: '4.3',
+    cartId: "sg4",
+    name: "Gym quick-dry training tee",
+    image: require("../assets/images/sports2.png"),
+    oldPrice: "₹699",
+    price: "₹399",
+    rating: "4.3",
+    priceNum: 399,
+    mrpNum: 699,
   },
 ];
 
@@ -1682,6 +1718,9 @@ const categoryData = [
                     : undefined,
                 ]}
                 activeOpacity={0.88}
+                onPress={() => router.push("/products")}
+                accessibilityRole="button"
+                accessibilityLabel={`Top pick: ${item.name}, open products`}
               >
                 <Image
                   source={item.image}
@@ -1729,7 +1768,7 @@ const categoryData = [
 
           <TouchableOpacity
             style={styles.freshArrow}
-            onPress={() => router.push("/startselling")}
+            onPress={() => router.push("/products")}
           >
             <Ionicons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
@@ -1774,6 +1813,9 @@ const categoryData = [
                   <TouchableOpacity
                     activeOpacity={0.9}
                     style={{ width: FRESH_IMG_60 }}
+                    onPress={() => router.push("/products")}
+                    accessibilityRole="button"
+                    accessibilityLabel="Fresh find, open products"
                   >
                     <Image
                       source={left.image}
@@ -1785,6 +1827,9 @@ const categoryData = [
                     <TouchableOpacity
                       activeOpacity={0.9}
                       style={{ width: FRESH_IMG_30 }}
+                      onPress={() => router.push("/products")}
+                      accessibilityRole="button"
+                      accessibilityLabel="Fresh find, open products"
                     >
                       <Image
                         source={right.image}
@@ -1867,44 +1912,79 @@ const categoryData = [
     </View>
     <TouchableOpacity
       style={styles.productArrowButton}
-      onPress={() => router.push("/sportswear")}
+      onPress={() => router.push("/products")}
     >
       <Ionicons name="arrow-forward" size={22} color="#fff" />
     </TouchableOpacity>
   </View>
 
-  <View style={styles.productGridWrapper}>
-    {suggestedProducts.map((item) => (
-      <TouchableOpacity key={item.id} style={styles.productCard}>
-        <View style={styles.productImageWrap}>
-          <Image
-            source={item.image}
-            style={styles.productCardImage}
-            resizeMode="cover"
-          />
-          {item.rating ? (
-            <View style={styles.ratingBadge}>
-              <Text style={styles.ratingText}>{item.rating}</Text>
-            </View>
-          ) : null}
-        </View>
+  <View style={styles.suggestedGridOuter}>
+    {Array.from(
+      { length: Math.ceil(suggestedProducts.length / 2) },
+      (_, rowIdx) => {
+        const pair = suggestedProducts.slice(rowIdx * 2, rowIdx * 2 + 2);
+        return (
+          <View key={`sug-row-${rowIdx}`} style={styles.suggestedTwoColRow}>
+            {pair.map((item) => (
+              <TouchableOpacity
+                key={item.cartId}
+                style={[styles.productCard, styles.suggestedCardHalf]}
+                activeOpacity={0.88}
+                onPress={() => router.push("/products")}
+                accessibilityRole="button"
+                accessibilityLabel={`Suggested: ${item.name}, open products`}
+              >
+                <View style={styles.productImageWrap}>
+                  <Image
+                    source={item.image}
+                    style={styles.productCardImage}
+                    resizeMode="cover"
+                  />
+                  {item.rating ? (
+                    <View style={styles.ratingBadge}>
+                      <Text style={styles.ratingText}>{item.rating}</Text>
+                    </View>
+                  ) : null}
+                </View>
 
-        <Text style={styles.productName} numberOfLines={1}>
-          {item.name}
-        </Text>
+                <Text style={styles.productName} numberOfLines={2}>
+                  {item.name}
+                </Text>
 
-        <View style={styles.priceRow}>
-          <Text style={styles.oldPrice}>{item.oldPrice}</Text>
-          <Text style={styles.newPrice}> {item.price}</Text>
-        </View>
+                <View style={styles.priceRow}>
+                  <Text style={styles.oldPrice}>{item.oldPrice}</Text>
+                  <Text style={styles.newPrice}> {item.price}</Text>
+                </View>
 
-        <View style={styles.addCartContainer}>
-          <TouchableOpacity style={styles.addCartButton}>
-            <Text style={styles.addCartText}>Add to Cart</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    ))}
+                <View style={styles.addCartContainer}>
+                  <TouchableOpacity
+                    style={styles.addCartButton}
+                    onPress={() => {
+                      void (async () => {
+                        await addProductToCart({
+                          id: item.cartId,
+                          name: item.name,
+                          price: item.priceNum,
+                          mrp: item.mrpNum,
+                        });
+                        Alert.alert(
+                          "Added to cart",
+                          `${item.name} is in your cart.`
+                        );
+                      })();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add ${item.name} to cart`}
+                  >
+                    <Text style={styles.addCartText}>Add to Cart</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        );
+      }
+    )}
   </View>
 </View>
 
@@ -1959,7 +2039,14 @@ const categoryData = [
 
     <View style={styles.premiumGrid}>
       {premiumProducts.map((item) => (
-        <TouchableOpacity key={item.id} style={styles.premiumCard}>
+        <TouchableOpacity
+          key={item.id}
+          style={styles.premiumCard}
+          activeOpacity={0.88}
+          onPress={() => router.push("/products")}
+          accessibilityRole="button"
+          accessibilityLabel={`Premium: ${item.name}, open products`}
+        >
           <View style={styles.premiumImageWrap}>
             <Image
               source={item.image}
@@ -2057,12 +2144,18 @@ const categoryData = [
     keyExtractor={(item) => item.id}
     contentContainerStyle={styles.storeList}
     renderItem={({ item }) => (
-      <View style={styles.storeItem}>
+      <TouchableOpacity
+        style={styles.storeItem}
+        activeOpacity={0.88}
+        onPress={() => router.push("/products")}
+        accessibilityRole="button"
+        accessibilityLabel={`Shop by store: ${item.title}, open products`}
+      >
         <View style={styles.arcContainer}>
           <Image source={item.image} style={styles.arcImage} />
         </View>
         <Text style={styles.storeText}>{item.title}</Text>
-      </View>
+      </TouchableOpacity>
     )}
   />
 </View>
@@ -2163,7 +2256,14 @@ const categoryData = [
 
     <View style={styles.megaGrid}>
       {megaProducts.map((item) => (
-        <TouchableOpacity key={item.id} style={styles.megaCard}>
+        <TouchableOpacity
+          key={item.id}
+          style={styles.megaCard}
+          activeOpacity={0.88}
+          onPress={() => router.push("/products")}
+          accessibilityRole="button"
+          accessibilityLabel={`Mega discount: ${item.name}, open products`}
+        >
           <View style={styles.megaImageWrap}>
             <Image
               source={item.image}
@@ -2722,7 +2822,14 @@ const categoryData = [
             </ScrollView>
 
             <View style={styles.bottomActionBar}>
-              <Text style={styles.productCount}>1000+ Products</Text>
+              <TouchableOpacity
+                onPress={clearCategoryModalSelections}
+                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear category selections"
+              >
+                <Text style={styles.clearFiltersButtonText}>Clear</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.doneButton}
                 onPress={() => setCategoryModalVisible(false)}
@@ -2770,7 +2877,14 @@ const categoryData = [
             </View>
 
             <View style={styles.bottomActionBar}>
-              <Text style={styles.productCount}>1000+ Products</Text>
+              <TouchableOpacity
+                onPress={clearGenderModalSelection}
+                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear gender selection"
+              >
+                <Text style={styles.clearFiltersButtonText}>Clear</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.doneButton}
                 onPress={() => setGenderModalVisible(false)}
@@ -2888,7 +3002,14 @@ const categoryData = [
             </View>
 
             <View style={styles.bottomActionBar}>
-              <Text style={styles.productCount}>1000+ Products</Text>
+              <TouchableOpacity
+                onPress={clearFilterModalSelections}
+                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear all filters"
+              >
+                <Text style={styles.clearFiltersButtonText}>Clear</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.doneButton}
                 onPress={() => setFilterModalVisible(false)}
@@ -4183,6 +4304,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
+  clearFiltersButtonText: {
+    fontSize: 16,
+    color: "#A0208C",
+    fontWeight: "700",
+  },
+
   doneButton: {
     backgroundColor: "#205194",
     paddingHorizontal: 34,
@@ -4257,22 +4384,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  productGridWrapper: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
+  suggestedGridOuter: {
     paddingHorizontal: 4,
     marginBottom: 0,
   },
 
+  suggestedTwoColRow: {
+    flexDirection: "row",
+    gap: SUGGESTED_CARD_GAP,
+    marginBottom: SUGGESTED_CARD_GAP,
+  },
+
+  suggestedCardHalf: {
+    flex: 1,
+    minWidth: 0,
+  },
+
   productCard: {
-    width: "31%",
-    marginBottom: 24,
+    marginBottom: 0,
   },
 
   productImageWrap: {
     width: "100%",
-    height: 150,
+    height: 210,
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#E5E5E5",
@@ -4302,10 +4436,11 @@ const styles = StyleSheet.create({
   },
 
   productName: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: "#333",
-    marginBottom: 6,
+    marginBottom: 8,
+    lineHeight: 18,
   },
 
   priceRow: {
@@ -4315,15 +4450,15 @@ const styles = StyleSheet.create({
   },
 
   oldPrice: {
-    fontSize: 11,
+    fontSize: 12,
     color: "#888",
     textDecorationLine: "line-through",
   },
 
   newPrice: {
-    fontSize: 12,
+    fontSize: 15,
     color: "#222",
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   buyText: {
@@ -4332,20 +4467,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 addCartContainer: {
-  marginTop: 6,
+  marginTop: 8,
 },
 
 addCartButton: {
   backgroundColor: "#FF7A00",
-  paddingVertical: 6,
-  borderRadius: 6,
+  paddingVertical: 10,
+  borderRadius: 8,
   alignItems: "center",
 },
 
 addCartText: {
   color: "#fff",
-  fontSize: 12,
-  fontWeight: "600",
+  fontSize: 13,
+  fontWeight: "700",
 },
 
 videoBannerContainer: {
