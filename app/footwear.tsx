@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const { width } = Dimensions.get("window");
 const DESK_INNER_WIDTH = width - 20; // deskSection marginHorizontal: 10 × 2
@@ -21,14 +22,31 @@ const HERO_SIDE_INSET = 20;
 const HERO_SLIDE_WIDTH = DESK_INNER_WIDTH - HERO_SIDE_INSET * 2;
 
 const FW1 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM.jpeg");
-const FW2 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM (1).jpeg");
+const FW2 = require("../assets/footwearimages/hub-men-footwear.png");
 const FW3 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM (2).jpeg");
 const FW4 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM.jpeg");
 const FW5 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM (1).jpeg");
 const FW6 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.33 AM.jpeg");
 const FW7 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.21.01 AM.jpeg");
-const BOTTOM3_MAIN_BANNER = require("../assets/footwearimages/bottom 3 of main banners.png");
+const BOTTOM3_MAIN_BANNER = require("../assets/footwearimages/main.png");
 const HEADER_FAVICON = require("../assets/footwearimages/Fav Icon.png");
+
+/**
+ * Sticky top menu bar — one asset per tab. Change only the string inside each require().
+ *
+ * | Tab key           | Constant              | Suggested file (assets/footwearimages/) |
+ * |------------------|-----------------------|----------------------------------------|
+ * | footwear         | TOP_MENU_ICON_FOOTWEAR | menu-footwear.png (or your name)       |
+ * | womens-footwear  | TOP_MENU_ICON_WOMENS   | menu-womens.png                        |
+ * | mens-footwear    | TOP_MENU_ICON_MENS     | menu-mens.png                          |
+ * | kids-footwear    | TOP_MENU_ICON_KIDS     | menu-kids.png                          |
+ * | trendnow         | TOP_MENU_ICON_TRENDNOW | menu-trendnow.png                      |
+ */
+const TOP_MENU_ICON_FOOTWEAR = require("../assets/footwearimages/Kids.png");
+const TOP_MENU_ICON_WOMENS = require("../assets/footwearimages/Women.png");
+const TOP_MENU_ICON_MENS = require("../assets/footwearimages/Men.png");
+const TOP_MENU_ICON_KIDS = require("../assets/footwearimages/Kids.png");
+const TOP_MENU_ICON_TRENDNOW = require("../assets/footwearimages/trendnow.png");
 
 const BANNER_IMAGES = [
   require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM.jpeg"),
@@ -37,49 +55,71 @@ const BANNER_IMAGES = [
 ];
 
 const CATEGORY_TILES = [
-  { id: "all", label: "Footwear", image: require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM.jpeg") },
-  { id: "women", label: "Womens-Footwear", image: require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM (1).jpeg") },
-  { id: "kids", label: "Kids-Footwear", image: require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.02 AM (2).jpeg") },
-  { id: "men", label: "Mens-Footwear", image: require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.21.01 AM.jpeg") },
-  { id: "brands", label: "Top Brands", image: require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM.jpeg") },
+  { id: "all", label: "Footwear", image: require("../assets/footwearimages/Kids.png") },
+  { id: "women", label: "Womens-Footwear", image: require("../assets/footwearimages/Women.png") },
+  { id: "kids", label: "Kids-Footwear", image: require("../assets/footwearimages/Kids.png") },
+  { id: "men", label: "Mens-Footwear", image: require("../assets/footwearimages/Men.png") },
+  { id: "brands", label: "Top Brands", image: require("../assets/footwearimages/trendnow.png") },
 ];
 
-const SUBCATEGORY_MAP: Record<
-  string,
-  { id: string; label: string; image: any }[]
-> = {
-  women: [
-    { id: "w1", label: "Heels", image: FW2 },
-    { id: "w2", label: "Flats", image: FW5 },
-    { id: "w3", label: "Sandals", image: FW3 },
-    { id: "w4", label: "Wedges", image: FW7 },
-    { id: "w5", label: "Boots", image: FW4 },
-    { id: "w6", label: "Sneakers", image: FW1 },
-  ],
-  kids: [
-    { id: "k1", label: "School Shoes", image: FW3 },
-    { id: "k2", label: "Sports Shoes", image: FW6 },
-    { id: "k3", label: "Slip-ons", image: FW2 },
-    { id: "k4", label: "Sandals", image: FW5 },
-    { id: "k5", label: "Party Shoes", image: FW7 },
-    { id: "k6", label: "Sneakers", image: FW1 },
-  ],
-  men: [
-    { id: "m1", label: "Sneakers", image: FW1 },
-    { id: "m2", label: "Formal Shoes", image: FW4 },
-    { id: "m3", label: "Loafers", image: FW6 },
-    { id: "m4", label: "Boots", image: FW5 },
-    { id: "m5", label: "Sports Shoes", image: FW3 },
-    { id: "m6", label: "Sandals", image: FW2 },
-  ],
-};
+/** “Top-tier Kicks” section only — swap PNGs in assets/footwearimages/ if you replace art */
+const TOP_TIER_KICKS_CARDS = [
+  { id: "sandals", image: require("../assets/footwearimages/top-tier-sandals.png") },
+  { id: "wedges", image: require("../assets/footwearimages/top-tier-wedges.png") },
+  { id: "sneakers", image: require("../assets/footwearimages/top-tier-sneakers.png") },
+  { id: "boots", image: require("../assets/footwearimages/top-tier-boots.png") },
+];
+
+/** “Move With Your Mood” — Active & Sporty / Travel & Explore */
+const MOOD_IMAGE_ACTIVE_SPORTY = require("../assets/footwearimages/mood-active-sporty.png");
+const MOOD_IMAGE_TRAVEL_EXPLORE = require("../assets/footwearimages/mood-travel-explore.png");
+
+/** Static women’s subcategory tiles (no API). */
+const WOMENS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[] = [
+  { id: "w1", label: "Heels", image: FW2 },
+  { id: "w2", label: "Flats", image: FW5 },
+  { id: "w3", label: "Casual Shoes", image: FW1 },
+  { id: "w4", label: "Boots", image: FW4 },
+  { id: "w5", label: "Ballet Flats", image: FW5 },
+  { id: "w6", label: "Wedges", image: FW7 },
+];
+
+/** Static men’s subcategory tiles (no API). */
+const MENS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[] = [
+  { id: "m1", label: "Sneakers", image: FW1 },
+  { id: "m2", label: "Formal Shoes", image: FW4 },
+  { id: "m3", label: "Loafers", image: FW6 },
+  { id: "m4", label: "Boots", image: FW5 },
+  { id: "m5", label: "Sports Shoes", image: FW3 },
+  { id: "m6", label: "Sandals", image: FW2 },
+];
+
+/** Static kids’ subcategory tiles (no API). */
+const KIDS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[] = [
+  { id: "k1", label: "School Shoes", image: FW3 },
+  { id: "k2", label: "Sandals", image: FW5 },
+  { id: "k3", label: "Flip Flops", image: FW2 },
+  { id: "k4", label: "Booties", image: FW7 },
+  { id: "k5", label: "Socks", image: FW6 },
+  { id: "k6", label: "Casual Shoes", image: FW1 },
+];
 
 type GenderCategoryId = "women" | "kids" | "men";
 
+/** Banner above Womens-Footwear subcategories (`Image` at ~589) */
+const WOMEN_FOOTWEAR_SUBCATEGORIES_BANNER = require("../assets/footwearimages/women-footwear-subcategories-banner.png");
+
 const GENDER_SECTION_BANNER: Record<GenderCategoryId, number> = {
-  women: FW2,
+  women: WOMEN_FOOTWEAR_SUBCATEGORIES_BANNER,
   men: FW7,
   kids: FW3,
+};
+
+/** “Footwear Categories” hub grid only — Womens / Mens / Kids hero tiles */
+const HUB_CATEGORY_IMAGE: Record<GenderCategoryId, number> = {
+  women: require("../assets/footwearimages/hub-women-footwear.png"),
+  men: require("../assets/footwearimages/hub-men-footwear.png"),
+  kids: require("../assets/footwearimages/hub-kids-footwear.png"),
 };
 
 const RELATED_FOOTWEAR_PRODUCTS = [
@@ -111,10 +151,14 @@ export default function FootwearScreen() {
   const activeBannerRef = useRef<GenderCategoryId | null>(null);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [query, setQuery] = useState("");
-  const MENU_BAR_HEIGHT = 72;
+  const MENU_BAR_HEIGHT = 86;
   const [headerHeight, setHeaderHeight] = useState(96);
   type TopMenuKey = "footwear" | "womens-footwear" | "mens-footwear" | "kids-footwear" | "trendnow";
   const [activeTopMenu, setActiveTopMenu] = useState<TopMenuKey>("footwear");
+  const womensSubcategories = WOMENS_SUBCATEGORIES_FALLBACK;
+  const mensSubcategories = MENS_SUBCATEGORIES_FALLBACK;
+  const kidsSubcategories = KIDS_SUBCATEGORIES_FALLBACK;
+
   const getAbsoluteY = (y: number, insideAnimated = false) =>
     insideAnimated ? animatedBlockYRef.current + y : y;
 
@@ -180,6 +224,24 @@ export default function FootwearScreen() {
       // Keep simple: go back to the top of the screen.
       mainScrollRef.current?.scrollTo({ y: 0, animated: true });
     }
+  };
+
+  const handleFootwearSubcategoryPress = (
+    section: GenderCategoryId,
+    sub: { id: string; label: string; image: any }
+  ) => {
+    const mainBySection: Record<GenderCategoryId, string> = {
+      women: "womenswear",
+      men: "menswear",
+      kids: "kidswear",
+    };
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: mainBySection[section],
+        subCategory: sub.label,
+      },
+    });
   };
 
   const animateGenderBanner = (gender: GenderCategoryId | null) => {
@@ -338,27 +400,11 @@ export default function FootwearScreen() {
       >
         {(
           [
-            {
-              key: "footwear",
-              label: "Footwear",
-              image: CATEGORY_TILES[0].image,
-            },
-            {
-              key: "womens-footwear",
-              label: "Womens",
-              image: FW2,
-            },
-            {
-              key: "mens-footwear",
-              label: "Mens",
-              image: FW7,
-            },
-            {
-              key: "kids-footwear",
-              label: "Kids",
-              image: FW3,
-            },
-            { key: "trendnow", label: "TrendNow", image: BANNER_IMAGES[0] },
+            { key: "footwear", label: "Footwear", image: TOP_MENU_ICON_FOOTWEAR },
+            { key: "womens-footwear", label: "Womens", image: TOP_MENU_ICON_WOMENS },
+            { key: "mens-footwear", label: "Mens", image: TOP_MENU_ICON_MENS },
+            { key: "kids-footwear", label: "Kids", image: TOP_MENU_ICON_KIDS },
+            { key: "trendnow", label: "TrendNow", image: TOP_MENU_ICON_TRENDNOW },
           ] as { key: TopMenuKey; label: string; image?: number }[]
         ).map((item) => (
           <TouchableOpacity
@@ -391,6 +437,7 @@ export default function FootwearScreen() {
         contentContainerStyle={{
           ...styles.contentContainer,
           paddingTop: headerHeight + MENU_BAR_HEIGHT + 2,
+          paddingBottom: 108,
         }}
         onScroll={handleMainScroll}
         scrollEventThrottle={16}
@@ -398,7 +445,7 @@ export default function FootwearScreen() {
         <View style={styles.dualBannerCard}>
           <Image source={BOTTOM3_MAIN_BANNER} style={styles.dualBannerTopImage} />
           <View style={styles.dualBannerDivider} />
-          <Image source={BOTTOM3_MAIN_BANNER} style={styles.dualBannerBottomImage} />
+          
         </View>
 
         <Animated.View
@@ -421,8 +468,8 @@ export default function FootwearScreen() {
           <View style={styles.topTierSection}>
             <Text style={styles.sectionTitle}>Top-tier Kicks</Text>
             <View style={styles.grid2}>
-              {CATEGORY_TILES.slice(0, 4).map((card, idx) => (
-                <TouchableOpacity key={`${card.id}-${idx}`} style={styles.promoCard} activeOpacity={0.9}>
+              {TOP_TIER_KICKS_CARDS.map((card, idx) => (
+                <TouchableOpacity key={card.id} style={styles.promoCard} activeOpacity={0.9}>
                   <Image source={card.image} style={styles.promoImage} />
                   <View style={styles.promoBadge}>
                     <Text style={styles.promoBadgeText}>Min {30 + idx * 10}% OFF*</Text>
@@ -453,7 +500,7 @@ export default function FootwearScreen() {
                 onPress={() => handleCategoryTilePress(id)}
               >
                 <Image
-                  source={GENDER_SECTION_BANNER[id]}
+                  source={HUB_CATEGORY_IMAGE[id]}
                   style={styles.hubCardImage}
                 />
                 <Text style={styles.hubCardLabel}>
@@ -472,11 +519,11 @@ export default function FootwearScreen() {
             <Text style={styles.sectionTitles}>Move With Your Mood</Text>
             <View style={styles.moodRow}>
               <TouchableOpacity style={styles.moodCard} activeOpacity={0.9}>
-                <Image source={BANNER_IMAGES[1]} style={styles.moodImage} />
+                <Image source={MOOD_IMAGE_ACTIVE_SPORTY} style={styles.moodImage} />
                 <Text style={styles.moodText}>Active & Sporty</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.moodCard} activeOpacity={0.9}>
-                <Image source={BANNER_IMAGES[2]} style={styles.moodImage} />
+                <Image source={MOOD_IMAGE_TRAVEL_EXPLORE} style={styles.moodImage} />
                 <Text style={styles.moodText}>Travel & Explore</Text>
               </TouchableOpacity>
             </View>
@@ -599,11 +646,12 @@ export default function FootwearScreen() {
           </View>
           <View style={[styles.genderSubWrap, styles.womenGenderSubWrap]}>
             <View style={styles.subGrid}>
-              {SUBCATEGORY_MAP.women.map((sub) => (
+              {womensSubcategories.map((sub) => (
                 <TouchableOpacity
                   key={sub.id}
                   style={[styles.subCard, styles.womenSubCard]}
                   activeOpacity={0.9}
+                  onPress={() => handleFootwearSubcategoryPress("women", sub)}
                 >
                   <Image source={sub.image} style={styles.subCardImage} />
                   <Text
@@ -746,11 +794,12 @@ export default function FootwearScreen() {
           </View>
           <View style={[styles.genderSubWrap, styles.menGenderSubWrap]}>
             <View style={styles.subGrid}>
-              {SUBCATEGORY_MAP.men.map((sub) => (
+              {mensSubcategories.map((sub) => (
                 <TouchableOpacity
                   key={sub.id}
                   style={[styles.subCard, styles.menSubCard]}
                   activeOpacity={0.9}
+                  onPress={() => handleFootwearSubcategoryPress("men", sub)}
                 >
                   <Image source={sub.image} style={styles.subCardImage} />
                   <Text
@@ -866,11 +915,12 @@ export default function FootwearScreen() {
           </View>
           <View style={[styles.genderSubWrap, styles.kidsGenderSubWrap]}>
             <View style={styles.subGrid}>
-              {SUBCATEGORY_MAP.kids.map((sub) => (
+              {kidsSubcategories.map((sub) => (
                 <TouchableOpacity
                   key={sub.id}
                   style={[styles.subCard, styles.kidsSubCard]}
                   activeOpacity={0.9}
+                  onPress={() => handleFootwearSubcategoryPress("kids", sub)}
                 >
                   <Image source={sub.image} style={styles.subCardImage} />
                   <Text
@@ -899,6 +949,14 @@ export default function FootwearScreen() {
                 key={product.id}
                 style={styles.relatedProductCard}
                 activeOpacity={0.9}
+                onPress={() =>
+                  router.push({
+                    pathname: "/productdetail",
+                    params: { id: product.id },
+                  } as any)
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`${product.name}, view details`}
               >
                 <View style={styles.relatedProductInner}>
                   <Image
@@ -930,6 +988,8 @@ export default function FootwearScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <HomeBottomTabBar />
     </View>
   );
 }
@@ -997,9 +1057,9 @@ const styles = StyleSheet.create({
     color: "#1d324e",
   },
   topMenuTabIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     marginBottom: 6,
     resizeMode: "cover",
   },
@@ -1049,8 +1109,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   dualBannerTopImage: {
-    width: "100%",
-    height: 210,
+    width: "118%",
+    height: 280,
     resizeMode: "cover",
   },
   dualBannerDivider: {
@@ -1059,7 +1119,7 @@ const styles = StyleSheet.create({
   },
   dualBannerBottomImage: {
     width: "100%",
-    height: 170,
+    height: 280,
     resizeMode: "cover",
   },
   tileRow: {
@@ -1360,7 +1420,7 @@ const styles = StyleSheet.create({
   },
   subCardImage: {
     width: "100%",
-    height: 110,
+    height: 160,
     resizeMode: "cover",
   },
   subCardLabel: {
@@ -1447,11 +1507,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 8,
     right: 8,
-    bottom: 8,
-    backgroundColor: "#1d324e",
+    bottom: 0,
+    backgroundColor: "#1b98e066",
     borderRadius: 8,
     alignItems: "center",
     paddingVertical: 6,
+    
   },
   promoBadgeText: {
     fontSize: 12,
@@ -1474,7 +1535,7 @@ const styles = StyleSheet.create({
   },
   moodImage: {
     width: "100%",
-    height: 120,
+    height: 150,
     resizeMode: "cover",
   },
   moodText: {
