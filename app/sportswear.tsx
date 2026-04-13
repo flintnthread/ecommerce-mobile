@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -491,6 +491,11 @@ const FOOTWEAR_PROMO_STRIP: {
   },
 ];
 
+const FOOTWEAR_PROMO_RAIL_CARD_WIDTH = 132;
+const FOOTWEAR_PROMO_RAIL_GAP = 12;
+const FOOTWEAR_PROMO_RAIL_STRIDE =
+  FOOTWEAR_PROMO_RAIL_CARD_WIDTH + FOOTWEAR_PROMO_RAIL_GAP;
+
 const PRODUCTS_TO_BUY: {
   id: string;
   name: string;
@@ -821,6 +826,10 @@ export default function SportsWearSection() {
     router.push("/products");
   }, [router]);
 
+  const goSubcatProducts = useCallback(() => {
+    router.push("/subcatProducts" as Href);
+  }, [router]);
+
   const scrollToSpotlightFootwear = useCallback(() => {
     scrollRef.current?.scrollTo({ y: spotlightFootwearY.current, animated: true });
   }, []);
@@ -846,6 +855,9 @@ export default function SportsWearSection() {
 
   const movingGridScrollRef = useRef<ScrollView>(null);
   const [movingGridPage, setMovingGridPage] = useState(0);
+
+  const footwearPromoScrollRef = useRef<ScrollView>(null);
+  const footwearPromoBannerIndexRef = useRef(0);
 
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
@@ -939,6 +951,22 @@ const rotate = rotateAnim.interpolate({
       });
     }, 3200);
 
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const n = FOOTWEAR_PROMO_STRIP.length;
+    if (n <= 1) return undefined;
+    const interval = setInterval(() => {
+      const prev = footwearPromoBannerIndexRef.current;
+      const next = (prev + 1) % n;
+      footwearPromoBannerIndexRef.current = next;
+      footwearPromoScrollRef.current?.scrollTo({
+        x: next * FOOTWEAR_PROMO_RAIL_STRIDE,
+        y: 0,
+        animated: true,
+      });
+    }, 3200);
     return () => clearInterval(interval);
   }, []);
 
@@ -1274,7 +1302,7 @@ const rotate = rotateAnim.interpolate({
             <TouchableOpacity
               style={styles.accessoriesAbovePlaybookHeroTile}
               activeOpacity={0.92}
-              onPress={goShop}
+              onPress={goSubcatProducts}
               accessibilityRole="button"
               accessibilityLabel="Shop sports accessories collection"
             >
@@ -1306,7 +1334,7 @@ const rotate = rotateAnim.interpolate({
               <TouchableOpacity
                 style={styles.accessoriesAbovePlaybookMiniA}
                 activeOpacity={0.9}
-                onPress={goShop}
+                onPress={goSubcatProducts}
               >
                 <ImageBackground
                   source={ACCESSORIES_MASONRY_ITEMS[0]!.image}
@@ -1326,7 +1354,7 @@ const rotate = rotateAnim.interpolate({
               <TouchableOpacity
                 style={styles.accessoriesAbovePlaybookMiniB}
                 activeOpacity={0.9}
-                onPress={goShop}
+                onPress={goSubcatProducts}
               >
                 <ImageBackground
                   source={ACCESSORIES_MASONRY_ITEMS[1]!.image}
@@ -1355,7 +1383,7 @@ const rotate = rotateAnim.interpolate({
               <TouchableOpacity
                 key={b.id}
                 activeOpacity={0.9}
-                onPress={goShop}
+                onPress={goSubcatProducts}
                 style={styles.accessoriesAbovePlaybookRailCard}
                 accessibilityRole="button"
                 accessibilityLabel={b.title}
@@ -1475,7 +1503,7 @@ const rotate = rotateAnim.interpolate({
         <Text style={styles.storeTitle}>WOMEN SPORTS WEAR</Text>
       </View>
 
-      <TouchableOpacity onPress={goShop}>
+      <TouchableOpacity onPress={goSubcatProducts}>
         <Text style={styles.storeShopAll}>Shop All</Text>
       </TouchableOpacity>
     </View>
@@ -1588,7 +1616,7 @@ const rotate = rotateAnim.interpolate({
         <Text style={styles.bannerTitle}>MEN&apos;S SPORTS WEAR</Text>
       </View>
 
-      <TouchableOpacity onPress={goShop}>
+      <TouchableOpacity onPress={goSubcatProducts}>
         <Text style={styles.shopAll}>Shop All</Text>
       </TouchableOpacity>
     </View>
@@ -1719,7 +1747,7 @@ const rotate = rotateAnim.interpolate({
           </View>
           <Text style={styles.footwearPromoHeadline}>Built for every stride</Text>
           <Text style={styles.footwearPromoSub}>
-            Road, gym, court, and trail — fast picks before the carousel below.
+            Road, gym, court, and trail — banners auto-scroll; swipe the rail anytime.
           </Text>
         </View>
 
@@ -1787,28 +1815,24 @@ const rotate = rotateAnim.interpolate({
             imageStyle={styles.footwearPromoHeroImgRadius}
             resizeMode="cover"
           >
-            <LinearGradient
-              colors={["rgba(15,23,42,0.15)", "rgba(15,23,42,0.5)", "rgba(15,23,42,0.92)"]}
-              locations={[0, 0.55, 1]}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.footwearPromoHeroBadge}>
-              <Text style={styles.footwearPromoHeroBadgeTxt}>NEW SEASON</Text>
-            </View>
-            <View style={styles.footwearPromoHeroFooter}>
-              <Text style={styles.footwearPromoHeroTitle}>Footwear drops</Text>
-              <View style={styles.footwearPromoHeroCta}>
-                <Text style={styles.footwearPromoHeroCtaTxt}>Explore</Text>
-                <Ionicons name="arrow-forward-circle" size={20} color="#0c4a6e" />
-              </View>
-            </View>
+            <View style={styles.footwearPromoHeroImageFill} />
           </ImageBackground>
         </TouchableOpacity>
 
         <ScrollView
+          ref={footwearPromoScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          snapToInterval={FOOTWEAR_PROMO_RAIL_STRIDE}
+          snapToAlignment="start"
           contentContainerStyle={styles.footwearPromoRail}
+          onMomentumScrollEnd={(e) => {
+            const x = e.nativeEvent.contentOffset.x;
+            const page = Math.round(x / FOOTWEAR_PROMO_RAIL_STRIDE);
+            const max = FOOTWEAR_PROMO_STRIP.length - 1;
+            footwearPromoBannerIndexRef.current = Math.max(0, Math.min(page, max));
+          }}
         >
           {FOOTWEAR_PROMO_STRIP.map((row) => (
             <TouchableOpacity
@@ -4155,57 +4179,20 @@ container2: {
   footwearPromoHeroBg: {
     height: 148,
     width: "100%",
-    justifyContent: "space-between",
   },
   footwearPromoHeroImgRadius: {
     borderRadius: 18,
   },
-  footwearPromoHeroBadge: {
-    alignSelf: "flex-start",
-    marginTop: 12,
-    marginLeft: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(251,191,36,0.95)",
-  },
-  footwearPromoHeroBadgeTxt: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: 0.8,
-  },
-  footwearPromoHeroFooter: {
-    padding: 14,
-  },
-  footwearPromoHeroTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#fff",
-  },
-  footwearPromoHeroCta: {
-    marginTop: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.95)",
-  },
-  footwearPromoHeroCtaTxt: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#0c4a6e",
+  footwearPromoHeroImageFill: {
+    flex: 1,
   },
   footwearPromoRail: {
-    gap: 12,
+    gap: FOOTWEAR_PROMO_RAIL_GAP,
     paddingRight: 6,
     paddingBottom: 2,
   },
   footwearPromoRailCard: {
-    width: 132,
+    width: FOOTWEAR_PROMO_RAIL_CARD_WIDTH,
   },
   footwearPromoRailFrame: {
     height: 118,
