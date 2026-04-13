@@ -8,8 +8,8 @@
   "ios": "expo start --ios",
   "web": "expo start --web",
 
-  "build": "expo export:web",
-  "build:azure": "expo export:web",
+  "build": "expo export",
+  "build:azure": "expo export",
 
   "lint": "expo lint"
 },
