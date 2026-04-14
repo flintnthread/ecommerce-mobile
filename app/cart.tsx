@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -12,6 +13,14 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import {
+  addProductToCart,
+  adjustCartQuantity,
+  loadCart,
+  removeCartLine,
+  resolveProductImage,
+  type PersistedCartLine,
+} from "../lib/shopStorage";
 
 const { width, height } = Dimensions.get("window");
 
@@ -36,39 +45,31 @@ interface SimilarProduct {
   reviews?: number;
 }
 
+function persistedToCartItem(line: PersistedCartLine): CartItem {
+  return {
+    id: line.id,
+    name: line.name,
+    image: resolveProductImage(line.id),
+    price: line.price,
+    originalPrice: line.mrp > line.price ? line.mrp : undefined,
+    quantity: line.quantity,
+  };
+}
+
 export default function CartScreen() {
   const router = useRouter();
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    {
-      id: "1",
-      name: "Premium Cotton T-Shirt",
-      image: require("../assets/images/age5.png"),
-      price: 1299,
-      originalPrice: 1999,
-      quantity: 2,
-      size: "M",
-      color: "Blue",
-    },
-    {
-      id: "2",
-      name: "Designer Denim Jeans",
-      image: require("../assets/images/age6.png"),
-      price: 2499,
-      quantity: 1,
-      size: "L",
-      color: "Dark Blue",
-    },
-    {
-      id: "3",
-      name: "Casual Sneakers",
-      image: require("../assets/images/age5.png"),
-      price: 3499,
-      originalPrice: 4999,
-      quantity: 1,
-      size: "42",
-      color: "White",
-    },
-  ]);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+
+  const reloadCartFromStorage = useCallback(async () => {
+    const lines = await loadCart();
+    setCartItems(lines.map(persistedToCartItem));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadCartFromStorage();
+    }, [reloadCartFromStorage])
+  );
 
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
@@ -148,15 +149,10 @@ export default function CartScreen() {
 
   // Update quantity
   const updateQuantity = (id: string, change: number) => {
-    setCartItems((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const newQuantity = Math.max(1, item.quantity + change);
-          return { ...item, quantity: newQuantity };
-        }
-        return item;
-      })
-    );
+    void (async () => {
+      await adjustCartQuantity(id, change);
+      await reloadCartFromStorage();
+    })();
   };
 
   // Remove product
@@ -170,8 +166,11 @@ export default function CartScreen() {
           text: "Remove",
           style: "destructive",
           onPress: () => {
-            setCartItems((prev) => prev.filter((item) => item.id !== id));
-            Alert.alert("Removed", "Item has been removed from your cart.");
+            void (async () => {
+              await removeCartLine(id);
+              await reloadCartFromStorage();
+              Alert.alert("Removed", "Item has been removed from your cart.");
+            })();
           },
         },
       ]
@@ -213,25 +212,16 @@ export default function CartScreen() {
 
   // Add similar product to cart
   const addSimilarProductToCart = (product: SimilarProduct) => {
-    const existingItem = cartItems.find((item) => item.id === product.id);
-    
-    if (existingItem) {
-      // If product already in cart, increase quantity
-      updateQuantity(product.id, 1);
-      Alert.alert("Added", `${product.name} quantity increased in cart!`);
-    } else {
-      // Add new product to cart
-      const newCartItem: CartItem = {
+    void (async () => {
+      await addProductToCart({
         id: product.id,
         name: product.name,
-        image: product.image,
         price: product.price,
-        originalPrice: product.originalPrice,
-        quantity: 1,
-      };
-      setCartItems((prev) => [...prev, newCartItem]);
+        mrp: product.originalPrice ?? product.price,
+      });
+      await reloadCartFromStorage();
       Alert.alert("Added to Cart", `${product.name} has been added to your cart!`);
-    }
+    })();
   };
 
   // Proceed to checkout

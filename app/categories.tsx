@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   Image,
   TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
@@ -31,7 +32,7 @@ type SideCategory = {
   image: any;
 };
 
-const SIDE_CATEGORIES: SideCategory[] = [
+const SIDE_CATEGORIES_FALLBACK: SideCategory[] = [
   {
     key: "womenswear",
     label: "Women",
@@ -88,6 +89,68 @@ const SIDE_CATEGORIES: SideCategory[] = [
     image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
   },
 ];
+
+type ApiMainCategory = {
+  bannerImage: string | null;
+  categoryName: string;
+  createdAt: string;
+  gstPercentage: number;
+  hsnCode: string;
+  id: number;
+  image: string;
+  mobileImage: string | null;
+  parentId: number | null;
+  sellerId: number | null;
+  status: number;
+};
+
+const MAIN_CATEGORIES_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/main";
+
+function categoryNameToKey(name: string): CategoryKey | null {
+  const normalized = name.trim().toLowerCase();
+  if (normalized === "women") return "womenswear";
+  if (normalized === "men") return "menswear";
+  if (normalized === "kids") return "kidswear";
+  if (normalized === "homely hub") return "homelyHub";
+  if (normalized === "sportswear") return "sportswear";
+  if (normalized === "footwear") return "footwear";
+  if (normalized === "accessories") return "accessories";
+  if (normalized === "sweets") return "sweets";
+  if (normalized === "beauty & personal care") return "beautyPersonalCare";
+  if (normalized === "gaargi") return "gaargi";
+  if (normalized === "indoor play") return "indoorPlayEquipments";
+  return null;
+}
+
+function fallbackImageForKey(key: CategoryKey) {
+  switch (key) {
+    case "womenswear":
+      return require("../assets/MainCatImages/images/Women.png");
+    case "menswear":
+      return require("../assets/MainCatImages/images/Men.png");
+    case "kidswear":
+      return require("../assets/MainCatImages/images/Kids.png");
+    case "homelyHub":
+      return require("../assets/MainCatImages/images/HomelyHub.png");
+    case "sportswear":
+      return require("../assets/MainCatImages/images/Sportswear.png");
+    case "footwear":
+      return require("../assets/MainCatImages/images/Footwear.png");
+    case "accessories":
+      return require("../assets/MainCatImages/images/Accessories.png");
+    case "sweets":
+      return require("../assets/MainCatImages/images/Sweets.png");
+    case "beautyPersonalCare":
+      return require("../assets/MainCatImages/images/Beauty&PersonalCare.png");
+    case "gaargi":
+      return require("../assets/MainCatImages/images/Gaargi.png");
+    case "indoorPlayEquipments":
+      return require("../assets/MainCatImages/images/IndoorPlayEquipments.png");
+    default:
+      return require("../assets/MainCatImages/images/Women.png");
+  }
+}
 
 type SubItem = {
   id: string;
@@ -287,16 +350,20 @@ export default function Categories() {
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSideBarOpen, setIsSideBarOpen] = useState(false);
+  const [sideCategories, setSideCategories] = useState<SideCategory[]>(
+    SIDE_CATEGORIES_FALLBACK
+  );
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
 
   const sections = CATEGORY_CONTENT[activeCategory] || [];
 
   // All sections from every main category, used for global search
-  const allSections = React.useMemo(
+  const allSections = useMemo(
     () => Object.values(CATEGORY_CONTENT).flat(),
     []
   );
 
-  const filteredSections = React.useMemo(() => {
+  const filteredSections = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
     // When there is no search text, show only the active category's sections
@@ -314,14 +381,58 @@ export default function Categories() {
       .filter((section) => section.items.length > 0);
   }, [sections, allSections, searchQuery]);
 
-  const mainCategoryCards = React.useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return SIDE_CATEGORIES;
+  useEffect(() => {
+    let isMounted = true;
 
-    return SIDE_CATEGORIES.filter((c) =>
+    const load = async () => {
+      try {
+        setIsLoadingCategories(true);
+        const res = await fetch(MAIN_CATEGORIES_URL);
+        const json = (await res.json()) as ApiMainCategory[];
+        if (!isMounted) return;
+
+        const mapped: SideCategory[] = (Array.isArray(json) ? json : [])
+          .filter((c) => c && c.status === 1 && typeof c.categoryName === "string")
+          .map((c) => {
+            const key = categoryNameToKey(c.categoryName);
+            if (!key) return null;
+            // If API doesn't provide mobileImage, keep manual image for that category.
+            const img = c.mobileImage ? { uri: c.mobileImage } : fallbackImageForKey(key);
+            return { key, label: c.categoryName, image: img };
+          })
+          .filter(Boolean) as SideCategory[];
+
+        // Order requirement:
+        // 1) Show API categories first (in API order)
+        // 2) Then append any manual categories missing from API
+        const apiKeys = new Set(mapped.map((c) => c.key));
+        const missingManual = SIDE_CATEGORIES_FALLBACK.filter(
+          (manual) => !apiKeys.has(manual.key)
+        );
+        setSideCategories([...mapped, ...missingManual]);
+      } catch {
+        if (!isMounted) return;
+        setSideCategories(SIDE_CATEGORIES_FALLBACK);
+      } finally {
+        if (!isMounted) return;
+        setIsLoadingCategories(false);
+      }
+    };
+
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const mainCategoryCards = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return sideCategories;
+
+    return sideCategories.filter((c) =>
       c.label.toLowerCase().includes(query)
     );
-  }, [searchQuery]);
+  }, [searchQuery, sideCategories]);
 
   const handleCategoriesHeaderBack = () => {
     if (isSearchVisible) {
@@ -406,7 +517,7 @@ export default function Categories() {
             contentContainerStyle={styles.sideBarContent}
             showsVerticalScrollIndicator={false}
           >
-            {SIDE_CATEGORIES.map((cat) => {
+            {sideCategories.map((cat) => {
               const isActive = cat.key === activeCategory;
               return (
                 <TouchableOpacity
@@ -460,6 +571,11 @@ export default function Categories() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.sectionBlock}>
+            {isLoadingCategories ? (
+              <View style={{ paddingVertical: 18, alignItems: "center" }}>
+                <ActivityIndicator size="small" color="#ef7b1a" />
+              </View>
+            ) : null}
             <View style={styles.itemsGrid}>
               {mainCategoryCards.map((cat) => (
                     <TouchableOpacity

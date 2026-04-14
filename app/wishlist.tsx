@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -12,6 +13,14 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import {
+  addProductToCart,
+  loadWishlist,
+  removeWishlistLine,
+  resolveProductImage,
+  saveWishlist,
+  type PersistedWishlistLine,
+} from "../lib/shopStorage";
 
 const { width } = Dimensions.get("window");
 
@@ -27,51 +36,32 @@ interface WishlistItem {
   color?: string;
 }
 
+function persistedToWishlistItem(line: PersistedWishlistLine): WishlistItem {
+  return {
+    id: line.id,
+    name: line.name,
+    image: resolveProductImage(line.id),
+    price: line.price,
+    originalPrice: line.mrp > line.price ? line.mrp : undefined,
+    addedDate: "Recently",
+    inStock: true,
+  };
+}
+
 export default function WishlistScreen() {
   const router = useRouter();
-  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([
-    {
-      id: "1",
-      name: "Premium Cotton T-Shirt",
-      image: require("../assets/images/age5.png"),
-      price: 1299,
-      originalPrice: 1999,
-      addedDate: "2 days ago",
-      inStock: true,
-      size: "M",
-      color: "Blue",
-    },
-    {
-      id: "2",
-      name: "Designer Denim Jeans",
-      image: require("../assets/images/age6.png"),
-      price: 2499,
-      addedDate: "5 days ago",
-      inStock: true,
-      size: "L",
-      color: "Dark Blue",
-    },
-    {
-      id: "3",
-      name: "Casual Sneakers",
-      image: require("../assets/images/age5.png"),
-      price: 3499,
-      originalPrice: 4999,
-      addedDate: "1 week ago",
-      inStock: false,
-      size: "42",
-      color: "White",
-    },
-    {
-      id: "4",
-      name: "Leather Jacket",
-      image: require("../assets/images/age6.png"),
-      price: 4999,
-      originalPrice: 6999,
-      addedDate: "3 days ago",
-      inStock: true,
-    },
-  ]);
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+
+  const reloadWishlistFromStorage = useCallback(async () => {
+    const lines = await loadWishlist();
+    setWishlistItems(lines.map(persistedToWishlistItem));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadWishlistFromStorage();
+    }, [reloadWishlistFromStorage])
+  );
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProductName, setNewProductName] = useState("");
@@ -88,10 +78,17 @@ export default function WishlistScreen() {
         {
           text: "Add to Cart",
           onPress: () => {
-            // Here you would typically add to cart state/context
-            Alert.alert("Success", `${item.name} has been added to your cart!`);
-            // Optionally remove from wishlist after adding to cart
-            // setWishlistItems((prev) => prev.filter((i) => i.id !== item.id));
+            void (async () => {
+              await addProductToCart({
+                id: item.id,
+                name: item.name,
+                price: item.price,
+                mrp: item.originalPrice ?? item.price,
+              });
+              await removeWishlistLine(item.id);
+              await reloadWishlistFromStorage();
+              Alert.alert("Success", `${item.name} has been added to your cart!`);
+            })();
           },
         },
       ]
@@ -109,8 +106,11 @@ export default function WishlistScreen() {
           text: "Remove",
           style: "destructive",
           onPress: () => {
-            setWishlistItems((prev) => prev.filter((item) => item.id !== id));
-            Alert.alert("Removed", "Item has been removed from your wishlist.");
+            void (async () => {
+              await removeWishlistLine(id);
+              await reloadWishlistFromStorage();
+              Alert.alert("Removed", "Item has been removed from your wishlist.");
+            })();
           },
         },
       ]
@@ -118,7 +118,7 @@ export default function WishlistScreen() {
   };
 
   // Add new item to wishlist
-  const handleAddToWishlist = () => {
+  const handleAddToWishlist = async () => {
     if (!newProductName.trim() || !newProductPrice.trim()) {
       Alert.alert("Missing Info", "Please enter product name and price.");
       return;
@@ -142,17 +142,17 @@ export default function WishlistScreen() {
       return;
     }
 
-    const newItem: WishlistItem = {
-      id: `item_${Date.now()}`,
+    const newId = `manual_${Date.now()}`;
+    const persisted: PersistedWishlistLine = {
+      id: newId,
       name: newProductName.trim(),
-      image: require("../assets/images/age5.png"), // Default image
-      price: price,
-      originalPrice: originalPrice,
-      addedDate: "Just now",
-      inStock: true,
+      price,
+      mrp: originalPrice ?? price,
     };
 
-    setWishlistItems((prev) => [newItem, ...prev]);
+    const list = await loadWishlist();
+    await saveWishlist([persisted, ...list]);
+    await reloadWishlistFromStorage();
     setNewProductName("");
     setNewProductPrice("");
     setNewProductOriginalPrice("");
