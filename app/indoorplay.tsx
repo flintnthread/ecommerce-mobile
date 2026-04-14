@@ -916,6 +916,7 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: "#ffffff",
   },
+
   hero: {
     marginHorizontal: 0,
     marginTop: 12,
