@@ -772,11 +772,33 @@ export default function ProductDetail() {
 
         {/* SOLD BY */}
         <View style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>Sold by:</Text>
-          <Text style={styles.sellerName}>
-            Fashion Hub Retail Pvt. Ltd.{" "}
-            <Text style={styles.sellerInfo}>• 4.3 ★ • 10k+ followers</Text>
-          </Text>
+          <TouchableOpacity
+            style={styles.soldByCard}
+            activeOpacity={0.85}
+            onPress={() =>
+              router.push({
+                pathname: "/sellerstore",
+                params: { name: "@ SHIV CREATION", rating: "4.1" },
+              } as any)
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Open seller store"
+          >
+            <View style={styles.soldByLeft}>
+              <Text style={styles.soldByLabel}>Sold by</Text>
+              <Text style={styles.soldByName} numberOfLines={1}>
+                @ SHIV CREATION
+              </Text>
+            </View>
+
+            <View style={styles.soldByRight}>
+              <View style={styles.soldByRatingPill}>
+                <Text style={styles.soldByRatingText}>4.1</Text>
+                <Ionicons name="star" size={14} color="#0F766E" style={{ marginLeft: 4 }} />
+              </View>
+              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* REVIEWS */}
@@ -1419,6 +1441,67 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#555555",
     marginTop: 2,
+  },
+
+  soldByCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#EEF2F7",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+
+  soldByLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  soldByLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+    marginBottom: 6,
+  },
+
+  soldByName: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0F172A",
+    letterSpacing: -0.2,
+  },
+
+  soldByRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginLeft: 12,
+    flexShrink: 0,
+  },
+
+  soldByRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: "#10B981",
+  },
+
+  soldByRatingText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0F766E",
   },
   reviewsRow: {
     flexDirection: "row",
