@@ -99,6 +99,7 @@ type MainCategoryApi = {
   id: number;
   categoryName: string;
   image: string | null;
+  mobileImage?: string | null;
   status?: number;
 };
 
@@ -113,6 +114,93 @@ function getMainCategoryImageUri(filename: string | null | undefined): string {
   if (!f) return `${MAIN_UPLOADS_BASE}/uploads/`;
   if (/^https?:\/\//i.test(f)) return f;
   return `${MAIN_UPLOADS_BASE}/uploads/${f}`;
+}
+
+type HomeCategoryKey =
+  | "womenswear"
+  | "menswear"
+  | "kidswear"
+  | "homelyHub"
+  | "sportswear"
+  | "footwear"
+  | "accessories"
+  | "sweets"
+  | "beautyPersonalCare"
+  | "gaargi"
+  | "indoorPlayEquipments";
+
+function categoryNameToHomeKey(name: string): HomeCategoryKey | null {
+  const normalized = name.trim().toLowerCase();
+  if (normalized === "women") return "womenswear";
+  if (normalized === "men") return "menswear";
+  if (normalized === "kids") return "kidswear";
+  if (normalized === "homely hub") return "homelyHub";
+  if (normalized === "sportswear") return "sportswear";
+  if (normalized === "footwear") return "footwear";
+  if (normalized === "accessories") return "accessories";
+  if (normalized === "sweets") return "sweets";
+  if (normalized === "beauty & personal care") return "beautyPersonalCare";
+  if (normalized === "gaargi") return "gaargi";
+  if (normalized === "indoor play") return "indoorPlayEquipments";
+  return null;
+}
+
+function fallbackImageForHomeKey(key: HomeCategoryKey) {
+  switch (key) {
+    case "womenswear":
+      return require("../assets/MainCatImages/images/Women.png");
+    case "menswear":
+      return require("../assets/MainCatImages/images/Men.png");
+    case "kidswear":
+      return require("../assets/MainCatImages/images/Kids.png");
+    case "homelyHub":
+      return require("../assets/MainCatImages/images/HomelyHub.png");
+    case "sportswear":
+      return require("../assets/MainCatImages/images/Sportswear.png");
+    case "footwear":
+      return require("../assets/MainCatImages/images/Footwear.png");
+    case "accessories":
+      return require("../assets/MainCatImages/images/Accessories.png");
+    case "sweets":
+      return require("../assets/MainCatImages/images/Sweets.png");
+    case "beautyPersonalCare":
+      return require("../assets/MainCatImages/images/Beauty&PersonalCare.png");
+    case "gaargi":
+      return require("../assets/MainCatImages/images/Gaargi.png");
+    case "indoorPlayEquipments":
+      return require("../assets/MainCatImages/images/IndoorPlayEquipments.png");
+    default:
+      return require("../assets/MainCatImages/images/Women.png");
+  }
+}
+
+function hrefForHomeKey(key: HomeCategoryKey): Href {
+  switch (key) {
+    case "womenswear":
+      return "/women";
+    case "menswear":
+      return "/men";
+    case "kidswear":
+      return "/kids";
+    case "indoorPlayEquipments":
+      return "/indoorplay" as Href;
+    case "homelyHub":
+      return "/gifts";
+    case "accessories":
+      return "/accessories";
+    case "sportswear":
+      return "/sportswear";
+    case "sweets":
+      return "/sweets";
+    case "footwear":
+      return "/footwear";
+    case "beautyPersonalCare":
+      return "/beauty-personal-care" as Href;
+    case "gaargi":
+      return "/subcate";
+    default:
+      return "/home" as Href;
+  }
 }
 
 /** Hero carousel — swap keys on each slide’s `image` to use other `banner*.png` files */
@@ -648,6 +736,86 @@ export default function Home() {
     "live" | "cached" | "fallback"
   >("fallback");
 
+  const topCategoriesFallback = useMemo(
+    () =>
+      ([
+        {
+          key: "kidswear",
+          name: "Kids",
+          image: require("../assets/MainCatImages/images/Kids.png"),
+          href: "/kids",
+        },
+        {
+          key: "menswear",
+          name: "Men",
+          image: require("../assets/MainCatImages/images/Men.png"),
+          href: "/men",
+        },
+        {
+          key: "womenswear",
+          name: "Women",
+          image: require("../assets/MainCatImages/images/Women.png"),
+          href: "/women",
+        },
+        {
+          key: "indoorPlayEquipments",
+          name: "Indoor Play",
+          image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
+          href: "/indoorplay" as Href,
+        },
+        {
+          key: "gaargi",
+          name: "Gaargi",
+          image: require("../assets/MainCatImages/images/Gaargi.png"),
+          href: "/subcate" as Href,
+        },
+        {
+          key: "sweets",
+          name: "Sweets",
+          image: require("../assets/MainCatImages/images/Sweets.png"),
+          href: "/sweets",
+        },
+        {
+          key: "footwear",
+          name: "Footwear",
+          image: require("../assets/MainCatImages/images/Footwear.png"),
+          href: "/footwear",
+        },
+        {
+          key: "sportswear",
+          name: "Sportswear",
+          image: require("../assets/MainCatImages/images/Sportswear.png"),
+          href: "/sportswear",
+        },
+        {
+          key: "accessories",
+          name: "Accessories",
+          image: require("../assets/MainCatImages/images/Accessories.png"),
+          href: "/accessories",
+        },
+        {
+          key: "homelyHub",
+          name: "Homely Hub",
+          image: require("../assets/MainCatImages/images/HomelyHub.png"),
+          href: "/gifts",
+        },
+        {
+          key: "beautyPersonalCare",
+          name: "Beauty & Personal Care",
+          image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
+          href: "/beauty-personal-care" as Href,
+        },
+      ] as const).map((x) => ({
+        ...x,
+        key: x.key as HomeCategoryKey,
+      })),
+    []
+  );
+
+  const [topCategories, setTopCategories] = useState<
+    { key: HomeCategoryKey; name: string; image: ImageSourcePropType; href: Href }[]
+  >(topCategoriesFallback);
+
   const parseRupee = useCallback((value?: string) => {
     const raw = String(value ?? "").replace(/[^\d.]/g, "");
     const n = Number.parseFloat(raw);
@@ -677,14 +845,52 @@ export default function Home() {
         const json = data;
         if (cancelled) return;
         const rows = Array.isArray(json) ? json : [];
-        const mapped = rows
-          .filter((x) => (typeof x.status === "number" ? x.status === 1 : true))
-          .map((x) => ({
-            id: String(x.id),
-            title: x.categoryName,
-            image: { uri: getMainCategoryImageUri(x.image) } as const,
-          }));
-        setMainCategories(mapped);
+
+        const activeRows = rows.filter((x) =>
+          typeof x.status === "number" ? x.status === 1 : true
+        );
+
+        // Top categories (chips): API first, then missing manual. If mobileImage is null -> keep manual image.
+        const apiTop = activeRows
+          .map((x) => {
+            const key = categoryNameToHomeKey(x.categoryName);
+            if (!key) return null;
+            const href = hrefForHomeKey(key);
+            const image =
+              x.mobileImage && String(x.mobileImage).trim()
+                ? ({ uri: String(x.mobileImage).trim() } as const)
+                : fallbackImageForHomeKey(key);
+            return { key, name: x.categoryName, image, href };
+          })
+          .filter(Boolean) as {
+          key: HomeCategoryKey;
+          name: string;
+          image: ImageSourcePropType;
+          href: Href;
+        }[];
+
+        const apiKeys = new Set(apiTop.map((c) => c.key));
+        const missingManual = topCategoriesFallback.filter((m) => !apiKeys.has(m.key));
+        setTopCategories([...apiTop, ...missingManual]);
+
+        // Shop by Store (FlatList): show live categories with mobileImage preferred
+        const mappedStores = activeRows
+          .map((x) => {
+            const key = categoryNameToHomeKey(x.categoryName);
+            const img =
+              x.mobileImage && String(x.mobileImage).trim()
+                ? ({ uri: String(x.mobileImage).trim() } as const)
+                : key
+                  ? fallbackImageForHomeKey(key)
+                  : ({ uri: getMainCategoryImageUri(x.image) } as const);
+            return {
+              id: String(x.id),
+              title: x.categoryName,
+              image: img,
+            };
+          });
+
+        setMainCategories(mappedStores);
         setMainCategoriesSource("live");
         await AsyncStorage.setItem(MAIN_CATEGORIES_CACHE_KEY, JSON.stringify(rows));
       } catch {
@@ -693,17 +899,54 @@ export default function Home() {
           const cached = await AsyncStorage.getItem(MAIN_CATEGORIES_CACHE_KEY);
           const parsed = cached ? (JSON.parse(cached) as MainCategoryApi[]) : [];
           const rows = Array.isArray(parsed) ? parsed : [];
-          const mapped = rows
-            .filter((x) => (typeof x.status === "number" ? x.status === 1 : true))
-            .map((x) => ({
+          const activeRows = rows.filter((x) =>
+            typeof x.status === "number" ? x.status === 1 : true
+          );
+
+          const apiTop = activeRows
+            .map((x) => {
+              const key = categoryNameToHomeKey(x.categoryName);
+              if (!key) return null;
+              const href = hrefForHomeKey(key);
+              const image =
+                x.mobileImage && String(x.mobileImage).trim()
+                  ? ({ uri: String(x.mobileImage).trim() } as const)
+                  : fallbackImageForHomeKey(key);
+              return { key, name: x.categoryName, image, href };
+            })
+            .filter(Boolean) as {
+            key: HomeCategoryKey;
+            name: string;
+            image: ImageSourcePropType;
+            href: Href;
+          }[];
+
+          const apiKeys = new Set(apiTop.map((c) => c.key));
+          const missingManual = topCategoriesFallback.filter(
+            (m) => !apiKeys.has(m.key)
+          );
+          setTopCategories([...apiTop, ...missingManual]);
+
+          const mappedStores = activeRows.map((x) => {
+            const key = categoryNameToHomeKey(x.categoryName);
+            const img =
+              x.mobileImage && String(x.mobileImage).trim()
+                ? ({ uri: String(x.mobileImage).trim() } as const)
+                : key
+                  ? fallbackImageForHomeKey(key)
+                  : ({ uri: getMainCategoryImageUri(x.image) } as const);
+            return {
               id: String(x.id),
               title: x.categoryName,
-              image: { uri: getMainCategoryImageUri(x.image) } as const,
-            }));
-          setMainCategories(mapped);
-          setMainCategoriesSource(rows.length ? "cached" : "fallback");
+              image: img,
+            };
+          });
+
+          setMainCategories(mappedStores);
+          setMainCategoriesSource(activeRows.length ? "cached" : "fallback");
         } catch {
           setMainCategories([]);
+          setTopCategories(topCategoriesFallback);
           setMainCategoriesSource("fallback");
         }
       }
@@ -894,70 +1137,15 @@ useEffect(() => {
 
   return () => clearInterval(interval);
 }, []);
-
-
-
-  const categories: {
-    name: string;
-    image: ReturnType<typeof require>;
-    href: Href;
-  }[] = [
-    {
-      name: "Kids Wear",
-      image: require("../assets/MainCatImages/images/Kids.png"),
-      href: "/kids",
-    },
-    {
-      name: "Mens Wear",
-      image: require("../assets/MainCatImages/images/Men.png"),
-      href: "/men",
-    },
-    {
-      name: "Womens Wear",
-      image: require("../assets/MainCatImages/images/Women.png"),
-      href: "/women",
-    },
-    {
-      name: "Play",
-      image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
-      href: "/indoorplay" as Href,
-    },
-    {
-      name: "Gargi",
-      image: require("../assets/MainCatImages/images/Gaargi.png"),
-      href: "/subcate",
-    },
-    {
-      name: "Sweets",
-      image: require("../assets/MainCatImages/images/Sweets.png"),
-      href: "/sweets",
-    },
-    {
-      name: "Foot Wear",
-      image: require("../assets/MainCatImages/images/Footwear.png"),
-      href: "/footwear",
-    },
-    {
-      name: "Sports Wear",
-      image: require("../assets/MainCatImages/images/Sportswear.png"),
-      href: "/sportswear",
-    },
-    {
-      name: "Accessories",
-      image: require("../assets/MainCatImages/images/Accessories.png"),
-      href: "/accessories",
-    },
-    {
-      name: "Homelyhub",
-      image: require("../assets/MainCatImages/images/HomelyHub.png"),
-      href: "/gifts",
-    },
-    {
-      name: "Skin and Beauty",
-      image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
-      href: "/beauty-personal-care" as Href,
-    },
-  ];
+  const categories = useMemo(
+    () =>
+      topCategories.map((c) => ({
+        name: c.name,
+        image: c.image as any,
+        href: c.href,
+      })),
+    [topCategories]
+  );
 
   const sortOptions = [
     "Relevance",
