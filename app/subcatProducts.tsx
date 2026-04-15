@@ -13,6 +13,20 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+const API_ORIGIN = "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
+const PRODUCTS_BY_SUBCATEGORY_URL = (subcategoryId: number) =>
+  `${API_ORIGIN}/api/products/subcategory/${subcategoryId}`;
+
+type ApiProductBySubcategory = {
+  categoryId: number;
+  id: number;
+  image: string; // e.g. "uploads/products/xxxx.jpg"
+  name: string;
+  sku: string | null;
+  status: string;
+  subcategoryId: number;
+};
+
 type BestDressItem = {
   id: string;
   title: string;
@@ -452,6 +466,7 @@ export default function SubcategoriesScreen() {
   const params = useLocalSearchParams<{
     mainCat?: string | string[];
     subCategory?: string | string[];
+    subcategoryId?: string | string[];
   }>();
   const mainCat = Array.isArray(params.mainCat)
     ? params.mainCat[0]
@@ -459,6 +474,12 @@ export default function SubcategoriesScreen() {
   const selectedSubCategory = Array.isArray(params.subCategory)
     ? params.subCategory[0]
     : params.subCategory;
+  const routedSubcategoryIdRaw = Array.isArray(params.subcategoryId)
+    ? params.subcategoryId[0]
+    : params.subcategoryId;
+  const routedSubcategoryId = routedSubcategoryIdRaw
+    ? Number.parseInt(String(routedSubcategoryIdRaw), 10)
+    : NaN;
   const pageTitle = (selectedSubCategory || "Products").toUpperCase();
 
   const [sortModalVisible, setSortModalVisible] = useState(false);
@@ -486,6 +507,8 @@ export default function SubcategoriesScreen() {
   const [wishlistModalVisible, setWishlistModalVisible] = useState(false);
   /** null = browse by category (preview grids); string = full catalog for that category */
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
+  const [apiRoutedProducts, setApiRoutedProducts] = useState<ProductItem[]>([]);
 
   const handleFilterPress = (label: string) => {
     if (label === "Sort") setSortModalVisible(true);
@@ -627,6 +650,68 @@ export default function SubcategoriesScreen() {
 
   const hasSubCategoryFromRoute = Boolean(selectedSubCategory?.trim());
 
+  const safeText = (v: string): string =>
+    String(v ?? "").replace(/\u0019/g, "'").trim();
+
+  const getAssetUriFromApiPath = (pathOrUrl: string): string => {
+    const raw = String(pathOrUrl ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `${API_ORIGIN}/${raw.replace(/^\/+/, "")}`;
+  };
+
+  useEffect(() => {
+    if (!Number.isFinite(routedSubcategoryId) || routedSubcategoryId <= 0) {
+      setApiRoutedProducts([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(PRODUCTS_BY_SUBCATEGORY_URL(routedSubcategoryId), {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as unknown;
+        if (!Array.isArray(data)) return;
+
+        const mapped: ProductItem[] = (data as ApiProductBySubcategory[])
+          .filter(
+            (p) =>
+              p &&
+              typeof p.id === "number" &&
+              typeof p.name === "string" &&
+              typeof p.image === "string"
+          )
+          .map((p, idx) => {
+            const price = 999 + ((p.id + idx) % 9) * 50;
+            const mrp = price + 400;
+            return {
+              id: String(p.id),
+              title: safeText(p.name),
+              price,
+              mrp,
+              discount: "Best price",
+              payLaterText: "",
+              benefitText: "Free Delivery",
+              rating: "4.3",
+              ratingCount: "•",
+              image: { uri: getAssetUriFromApiPath(p.image) },
+              catalogCategory: selectedSubCategory || "Footwear",
+              gender: "Men",
+            };
+          });
+
+        setApiRoutedProducts(mapped);
+      } catch {
+        // ignore network errors
+      }
+    })();
+
+    return () => controller.abort();
+  }, [routedSubcategoryId, selectedSubCategory]);
+
   /** Products for the subcategory opened from subcate (tile tap). */
   const routedSubcategoryProducts = React.useMemo(() => {
     if (!selectedSubCategory?.trim()) return [];
@@ -662,10 +747,13 @@ export default function SubcategoriesScreen() {
     return categoryProducts;
   }, [selectedSubCategory, categoryProducts, mainCat, selectedGender]);
 
+  const effectiveRoutedSubcategoryProducts =
+    apiRoutedProducts.length > 0 ? apiRoutedProducts : routedSubcategoryProducts;
+
   const filteredRoutedProducts = React.useMemo(() => {
     if (!selectedSubCategory?.trim()) return [];
     return runProductPipeline(
-      routedSubcategoryProducts,
+      effectiveRoutedSubcategoryProducts,
       searchQuery,
       selectedFilters,
       selectedCategory,
@@ -674,7 +762,7 @@ export default function SubcategoriesScreen() {
     );
   }, [
     selectedSubCategory,
-    routedSubcategoryProducts,
+    effectiveRoutedSubcategoryProducts,
     searchQuery,
     selectedFilters,
     selectedCategory,
@@ -715,7 +803,7 @@ export default function SubcategoriesScreen() {
 
   /** Catalog used for “matching products” counts inside filter / category / gender modals */
   const filterPipelineBaseProducts = React.useMemo(() => {
-    if (hasSubCategoryFromRoute) return routedSubcategoryProducts;
+    if (hasSubCategoryFromRoute) return effectiveRoutedSubcategoryProducts;
     if (expandedCategory)
       return buildProductsForCategory(
         expandedCategory,
@@ -726,7 +814,7 @@ export default function SubcategoriesScreen() {
   }, [
     hasSubCategoryFromRoute,
     expandedCategory,
-    routedSubcategoryProducts,
+    effectiveRoutedSubcategoryProducts,
     allBrowseCatalogFlat,
     mainCat,
     selectedGender,

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,13 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import {
+  addProductToCart,
+  loadCart,
+  loadWishlist,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 
 type CatalogProduct = {
   id: string;
@@ -459,21 +466,41 @@ export default function ProductDetail() {
 
   const mainImage = product.images[activeImageIndex] ?? product.images[0];
 
+  const refreshCartAndWishlistState = useCallback(async () => {
+    const [cart, wishlist] = await Promise.all([loadCart(), loadWishlist()]);
+    setCartCount(cart.reduce((sum, l) => sum + (l.quantity ?? 0), 0));
+    setWishlistCount(wishlist.length);
+    setHasAddedToCart(cart.some((l) => l.id === product.id));
+    const wish = wishlist.some((l) => l.id === product.id);
+    setIsWishlisted(wish);
+    setHasCountedWishlist(wish);
+  }, [product.id]);
+
   useEffect(() => {
     setActiveImageIndex(0);
     setSelectedSize(null);
-    setIsWishlisted(false);
-    setHasAddedToCart(false);
-    setHasCountedWishlist(false);
     setSearchQuery("");
+    void refreshCartAndWishlistState();
   }, [productId]);
 
+  useFocusEffect(
+    useCallback(() => {
+      void refreshCartAndWishlistState();
+    }, [refreshCartAndWishlistState])
+  );
+
   const handleAddToBag = () => {
-    // Only increase cart badge count once for this product
-    if (!hasAddedToCart) {
-      setCartCount((prev) => prev + 1);
+    if (hasAddedToCart) return;
+    void (async () => {
+      await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        mrp: product.mrp,
+      });
+      await refreshCartAndWishlistState();
       setHasAddedToCart(true);
-    }
+    })();
   };
 
   const currentAddress = `${savedAddressType} - ${savedAddressLine}, ${savedCity} - ${savedPincode}`;
@@ -717,11 +744,15 @@ export default function ProductDetail() {
                   if (isWishlisted) {
                     router.push("/wishlist");
                   } else {
-                    setIsWishlisted(true);
-                    if (!hasCountedWishlist) {
-                      setWishlistCount((prev) => prev + 1);
-                      setHasCountedWishlist(true);
-                    }
+                    void (async () => {
+                      await toggleWishlistProduct({
+                        id: product.id,
+                        name: product.name,
+                        price: product.price,
+                        mrp: product.mrp,
+                      });
+                      await refreshCartAndWishlistState();
+                    })();
                   }
                 }}
               >

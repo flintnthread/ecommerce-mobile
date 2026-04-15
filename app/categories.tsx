@@ -608,6 +608,10 @@ export default function Categories() {
                           router.push("/sportswear" as Href);
                           return;
                         }
+                        if (cat.key === "beautyPersonalCare") {
+                          router.push("/beauty-personal-care" as Href);
+                          return;
+                        }
                         if (cat.key === "sweets") {
                           router.push("/sweets" as Href);
                           return;
