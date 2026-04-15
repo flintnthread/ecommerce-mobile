@@ -4,7 +4,6 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
-
 import {
   View,
   Text,
@@ -2215,7 +2214,7 @@ const categoryData = [
       style={styles.videoBanner}
       contentFit="cover"
       nativeControls={false}
-      allowsFullscreen={false}
+      fullscreenOptions={{ enabled: false }}
     />
   </View>
 </View>

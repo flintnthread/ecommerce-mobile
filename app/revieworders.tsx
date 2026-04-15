@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import DeliveryLocationSection from "../components/DeliveryLocationSection";
 
 type ReviewItem = {
   id: string;
@@ -52,18 +53,8 @@ export default function ReviewOrdersScreen() {
     },
   ]);
 
-  const [savedAddress, setSavedAddress] = useState({
-    name: "Ravi Kumar",
-    phone: "98765 43210",
-    line1: "12-34, Market Road",
-    city: "Hyderabad",
-    state: "Telangana",
-    pincode: "500001",
-    type: "Home" as "Home" | "Work" | "Other",
-  });
-
-  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
-  const [editAddress, setEditAddress] = useState(savedAddress);
+  // Delivery location is handled via the shared `DeliveryLocationSection`
+  // (same behaviour as Home/Subcategory screens).
 
   const updateQty = (id: string, delta: number) => {
     setItems((prev) =>
@@ -93,11 +84,6 @@ export default function ReviewOrdersScreen() {
     () => items.reduce((sum, item) => sum + item.quantity, 0),
     [items]
   );
-
-  const handleSaveAddress = () => {
-    setSavedAddress(editAddress);
-    setIsAddressModalOpen(false);
-  };
 
   const handlePlaceOrder = () => {
     router.push("/payment-selection" as any);
@@ -132,52 +118,11 @@ export default function ReviewOrdersScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Address */}
+        {/* Delivery location (Home-style picker) */}
         <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>Delivery address</Text>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => {
-                setEditAddress(savedAddress);
-                setIsAddressModalOpen(true);
-              }}
-              style={styles.changeBtn}
-            >
-              <Text style={styles.changeBtnText}>Change</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.addressRow}>
-            <View style={styles.addressLeft}>
-              <View style={styles.addressNameRow}>
-                <Text style={styles.addressName}>{savedAddress.name}</Text>
-                <View style={styles.addressTypePill}>
-                  <Text style={styles.addressTypeText}>{savedAddress.type}</Text>
-                </View>
-              </View>
-              <Text style={styles.addressText}>{savedAddress.phone}</Text>
-              <Text style={styles.addressText}>
-                {savedAddress.line1}, {savedAddress.city}, {savedAddress.state} -{" "}
-                {savedAddress.pincode}
-              </Text>
-            </View>
-            <Ionicons name="location-outline" size={20} color="#ef7b1a" />
-          </View>
-
-          <View style={styles.pillRow}>
-            <View style={[styles.pill, { backgroundColor: "#E8F6EC" }]}>
-              <Ionicons name="refresh-outline" size={14} color="#10893E" />
-              <Text style={[styles.pillText, { color: "#10893E" }]}>
-                7 days return
-              </Text>
-            </View>
-            <View style={[styles.pill, { backgroundColor: "#FFF4E8" }]}>
-              <Ionicons name="cash-outline" size={14} color="#ef7b1a" />
-              <Text style={[styles.pillText, { color: "#ef7b1a" }]}>
-                Cash on delivery
-              </Text>
-            </View>
+          <Text style={styles.cardTitle}>Delivery location</Text>
+          <View style={{ marginTop: 10 }}>
+            <DeliveryLocationSection />
           </View>
         </View>
 
@@ -302,128 +247,6 @@ export default function ReviewOrdersScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Address modal */}
-      <Modal
-        visible={isAddressModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsAddressModalOpen(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit address</Text>
-              <TouchableOpacity
-                onPress={() => setIsAddressModalOpen(false)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="close" size={22} color="#1d324e" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.inputLabel}>Name</Text>
-              <TextInput
-                value={editAddress.name}
-                onChangeText={(t) => setEditAddress((p) => ({ ...p, name: t }))}
-                style={styles.input}
-                placeholder="Full name"
-                placeholderTextColor="#8A96A3"
-              />
-
-              <Text style={styles.inputLabel}>Phone</Text>
-              <TextInput
-                value={editAddress.phone}
-                onChangeText={(t) => setEditAddress((p) => ({ ...p, phone: t }))}
-                style={styles.input}
-                placeholder="Mobile number"
-                placeholderTextColor="#8A96A3"
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.inputLabel}>Address</Text>
-              <TextInput
-                value={editAddress.line1}
-                onChangeText={(t) => setEditAddress((p) => ({ ...p, line1: t }))}
-                style={styles.input}
-                placeholder="House no, street, area"
-                placeholderTextColor="#8A96A3"
-              />
-
-              <View style={styles.row2}>
-                <View style={{ flex: 1, marginRight: 10 }}>
-                  <Text style={styles.inputLabel}>City</Text>
-                  <TextInput
-                    value={editAddress.city}
-                    onChangeText={(t) =>
-                      setEditAddress((p) => ({ ...p, city: t }))
-                    }
-                    style={styles.input}
-                    placeholder="City"
-                    placeholderTextColor="#8A96A3"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.inputLabel}>State</Text>
-                  <TextInput
-                    value={editAddress.state}
-                    onChangeText={(t) =>
-                      setEditAddress((p) => ({ ...p, state: t }))
-                    }
-                    style={styles.input}
-                    placeholder="State"
-                    placeholderTextColor="#8A96A3"
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.inputLabel}>Pincode</Text>
-              <TextInput
-                value={editAddress.pincode}
-                onChangeText={(t) =>
-                  setEditAddress((p) => ({ ...p, pincode: t }))
-                }
-                style={styles.input}
-                placeholder="Pincode"
-                placeholderTextColor="#8A96A3"
-                keyboardType="number-pad"
-              />
-
-              <Text style={styles.inputLabel}>Address type</Text>
-              <View style={styles.typeRow}>
-                {(["Home", "Work", "Other"] as const).map((t) => {
-                  const active = editAddress.type === t;
-                  return (
-                    <TouchableOpacity
-                      key={t}
-                      style={[styles.typeChip, active && styles.typeChipActive]}
-                      onPress={() => setEditAddress((p) => ({ ...p, type: t }))}
-                      activeOpacity={0.85}
-                    >
-                      <Text
-                        style={[styles.typeChipText, active && styles.typeChipTextActive]}
-                      >
-                        {t}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.saveBtn}
-              activeOpacity={0.9}
-              onPress={handleSaveAddress}
-            >
-              <Text style={styles.saveBtnText}>Save address</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }

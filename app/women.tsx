@@ -9,11 +9,13 @@ import {
   TouchableOpacity,
   Pressable,
   Modal,
+  ActivityIndicator,
   useWindowDimensions,
   type ImageSourcePropType,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from "react-native";
+import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -155,6 +157,33 @@ type WomenCategoryBlock = {
   railFrom: string;
   railTo: string;
   subs: SubLabel[];
+};
+
+type WomenSubcategoryApiRow = {
+  bannerImage: string | null;
+  categoryName: string;
+  createdAt: string;
+  gstPercentage: number;
+  hsnCode: string;
+  id: number;
+  image: string | null;
+  mobileImage: string | null;
+  parentId: number | null;
+  sellerId: number | null;
+  status: number;
+};
+
+type WomenSubcategoriesTableSubRow = {
+  id: number;
+  name: string;
+  image: string | null;
+  mobileImage: string | null;
+};
+
+type WomenSubcategoriesTableRow = {
+  categoryName: string;
+  mobileImage: string | null;
+  subcategories: WomenSubcategoriesTableSubRow[];
 };
 
 const WOMEN_IMG = require("../assets/MainCatImages/images/Women.png");
@@ -668,6 +697,343 @@ export default function WomenScreen() {
   const shopAllScrollDirRef = useRef(1);
   const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
 
+  const SUBCATEGORIES_API_BASE =
+    "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
+  const WOMEN_PARENT_ID = 61;
+  const [womenApiCats, setWomenApiCats] = useState<WomenSubcategoryApiRow[]>([]);
+  const [womenApiLoading, setWomenApiLoading] = useState<boolean>(true);
+  const [womenApiError, setWomenApiError] = useState<string | null>(null);
+
+  const WOMEN_ETHNIC_WEAR_TABLE_ID = 63;
+  const [ethnicWearTable, setEthnicWearTable] = useState<WomenSubcategoriesTableRow | null>(
+    null
+  );
+  const [ethnicWearTableLoading, setEthnicWearTableLoading] = useState<boolean>(false);
+  const [ethnicWearTableError, setEthnicWearTableError] = useState<string | null>(null);
+
+  const WOMEN_LINGERIE_SLEEPWEAR_TABLE_ID = 64;
+  const [lingerieWearTable, setLingerieWearTable] =
+    useState<WomenSubcategoriesTableRow | null>(null);
+  const [lingerieWearTableLoading, setLingerieWearTableLoading] = useState<boolean>(false);
+  const [lingerieWearTableError, setLingerieWearTableError] = useState<string | null>(null);
+
+  const WOMEN_WESTERN_WEAR_TABLE_ID = 62;
+  const [westernWearTable, setWesternWearTable] =
+    useState<WomenSubcategoriesTableRow | null>(null);
+  const [westernWearTableLoading, setWesternWearTableLoading] = useState<boolean>(false);
+  const [westernWearTableError, setWesternWearTableError] = useState<string | null>(null);
+
+  const WOMEN_WINTER_WEAR_TABLE_ID = 65;
+  const [winterWearTable, setWinterWearTable] =
+    useState<WomenSubcategoriesTableRow | null>(null);
+  const [winterWearTableLoading, setWinterWearTableLoading] = useState<boolean>(false);
+  const [winterWearTableError, setWinterWearTableError] = useState<string | null>(null);
+
+  const WOMEN_ACTIVE_WEAR_TABLE_ID = 87;
+  const [activeWearTable, setActiveWearTable] =
+    useState<WomenSubcategoriesTableRow | null>(null);
+  const [activeWearTableLoading, setActiveWearTableLoading] = useState<boolean>(false);
+  const [activeWearTableError, setActiveWearTableError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setWomenApiLoading(true);
+        setWomenApiError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_PARENT_ID}/subcategories`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as WomenSubcategoryApiRow[]) : [];
+        if (cancelled) return;
+        setWomenApiCats(list);
+      } catch (e: any) {
+        if (cancelled) return;
+        setWomenApiCats([]);
+        setWomenApiError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load women categories"
+        );
+      } finally {
+        if (cancelled) return;
+        setWomenApiLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setEthnicWearTableLoading(true);
+        setEthnicWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_ETHNIC_WEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setEthnicWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setEthnicWearTable(null);
+        setEthnicWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Ethnic wear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setEthnicWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLingerieWearTableLoading(true);
+        setLingerieWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_LINGERIE_SLEEPWEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setLingerieWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setLingerieWearTable(null);
+        setLingerieWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Lingerie & Sleepwear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setLingerieWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setWesternWearTableLoading(true);
+        setWesternWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_WESTERN_WEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setWesternWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setWesternWearTable(null);
+        setWesternWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Western wear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setWesternWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setWinterWearTableLoading(true);
+        setWinterWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_WINTER_WEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setWinterWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setWinterWearTable(null);
+        setWinterWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Winter wear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setWinterWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setActiveWearTableLoading(true);
+        setActiveWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_ACTIVE_WEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setActiveWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setActiveWearTable(null);
+        setActiveWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Women's Clothing subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setActiveWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  const normalize = useCallback((s: string) => String(s ?? "").trim().toLowerCase(), []);
+  const normKey = useCallback(
+    (s: string) =>
+      normalize(s)
+        // Remove weird control chars/punctuation from API (e.g. "Womens").
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\bwomen\s+s\b/g, "womens")
+        .replace(/\s+/g, " ")
+        .trim(),
+    [normalize]
+  );
+
+  const isWomensClothingTitle = useCallback(
+    (title: string) => {
+      const compact = normKey(title).replace(/\s+/g, " ").trim();
+      if (compact === "womens clothing") return true;
+      if (compact === "women clothing") return true;
+      if (compact === "women s clothing") return true;
+      return compact.includes("womens clothing") || compact.includes("women clothing");
+    },
+    [normKey]
+  );
+
+  const womenCategoriesForUi = useMemo(() => {
+    const apiActive = womenApiCats.filter((r) =>
+      typeof r.status === "number" ? r.status === 1 : true
+    );
+    if (!apiActive.length) return WOMEN_CATEGORIES;
+
+    const byName = new Map(apiActive.map((r) => [normKey(r.categoryName), r]));
+
+    return WOMEN_CATEGORIES.map((block) => {
+      const row = byName.get(normKey(block.title));
+      if (!row) return block;
+      const title = String(row.categoryName ?? block.title).trim() || block.title;
+      const shopImage = row.mobileImage
+        ? ({ uri: row.mobileImage } as any)
+        : row.image
+          ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+          : block.shopImage;
+      return { ...block, title, shopImage };
+    });
+  }, [normKey, womenApiCats]);
+
+  const womenStripItems = useMemo(() => {
+    const apiActive = womenApiCats.filter((r) =>
+      typeof r.status === "number" ? r.status === 1 : true
+    );
+    if (!apiActive.length) {
+      return womenCategoriesForUi.map((b) => ({
+        key: b.key,
+        title: b.title,
+        image: b.shopImage,
+        mappedKey: b.key,
+      }));
+    }
+
+    // Render ALL API categoryName entries in the strip, even if they don't
+    // exist as hardcoded blocks (so user sees everything from Postman).
+    const keyByName = new Map(
+      womenCategoriesForUi.map((b) => [normKey(b.title), b.key] as const)
+    );
+
+    return apiActive
+      .map((row) => {
+        const title = String(row.categoryName ?? "").trim() || "Category";
+        return { row, title };
+      })
+      .map(({ row, title }) => {
+        const normTitle = normKey(title);
+        const image: ImageSourcePropType =
+          row.mobileImage
+            ? ({ uri: row.mobileImage } as any)
+            : row.image
+              ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+              : WOMEN_IMG;
+        return {
+          key: `api-${row.id}`,
+          title,
+          image,
+          mappedKey:
+            keyByName.get(normTitle) ??
+            (isWomensClothingTitle(title) ? "active" : null),
+        };
+      });
+  }, [SUBCATEGORIES_API_BASE, isWomensClothingTitle, normKey, womenApiCats, womenCategoriesForUi]);
+
+  useEffect(() => {
+    if (womenCategoriesForUi.some((c) => c.key === selectedKey)) return;
+    setSelectedKey(womenCategoriesForUi[0]?.key ?? WOMEN_CATEGORIES[0].key);
+  }, [selectedKey, womenCategoriesForUi]);
+
   const styleLabOpen = useMemo(
     () => FC_STYLE_LAB.find((l) => l.key === styleLabOpenKey) ?? null,
     [styleLabOpenKey]
@@ -687,14 +1053,158 @@ export default function WomenScreen() {
   }, []);
 
   const activeBlock = useMemo(
-    () => WOMEN_CATEGORIES.find((c) => c.key === selectedKey) ?? WOMEN_CATEGORIES[0],
-    [selectedKey]
+    () =>
+      womenCategoriesForUi.find((c) => c.key === selectedKey) ?? womenCategoriesForUi[0],
+    [selectedKey, womenCategoriesForUi]
   );
+
+  const ethnicBlock = useMemo(
+    () =>
+      womenCategoriesForUi.find((c) => c.key === "ethnic") ??
+      WOMEN_CATEGORIES.find((c) => c.key === "ethnic") ??
+      WOMEN_CATEGORIES[0],
+    [womenCategoriesForUi]
+  );
+
+  const ethnicRailSubs = useMemo((): SubLabel[] => {
+    if (ethnicWearTable?.subcategories?.length) {
+      return ethnicWearTable.subcategories.map((s) => ({
+        id: `api-ethnic-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return ethnicBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, ethnicBlock.subs, ethnicWearTable]);
+
+  const lingerieBlock = useMemo(
+    () =>
+      womenCategoriesForUi.find((c) => c.key === "lingerie") ??
+      WOMEN_CATEGORIES.find((c) => c.key === "lingerie") ??
+      WOMEN_CATEGORIES[0],
+    [womenCategoriesForUi]
+  );
+
+  const lingerieRailSubs = useMemo((): SubLabel[] => {
+    if (lingerieWearTable?.subcategories?.length) {
+      return lingerieWearTable.subcategories.map((s) => ({
+        id: `api-lingerie-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return lingerieBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, lingerieBlock.subs, lingerieWearTable]);
+
+  const westernBlock = useMemo(
+    () =>
+      womenCategoriesForUi.find((c) => c.key === "western") ??
+      WOMEN_CATEGORIES.find((c) => c.key === "western") ??
+      WOMEN_CATEGORIES[0],
+    [womenCategoriesForUi]
+  );
+
+  const westernRailSubs = useMemo((): SubLabel[] => {
+    if (westernWearTable?.subcategories?.length) {
+      return westernWearTable.subcategories.map((s) => ({
+        id: `api-western-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return westernBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, westernBlock.subs, westernWearTable]);
+
+  const winterBlock = useMemo(
+    () =>
+      womenCategoriesForUi.find((c) => c.key === "winter") ??
+      WOMEN_CATEGORIES.find((c) => c.key === "winter") ??
+      WOMEN_CATEGORIES[0],
+    [womenCategoriesForUi]
+  );
+
+  const winterRailSubs = useMemo((): SubLabel[] => {
+    if (winterWearTable?.subcategories?.length) {
+      return winterWearTable.subcategories.map((s) => ({
+        id: `api-winter-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return winterBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, winterBlock.subs, winterWearTable]);
+
+  const activeBlockForTable = useMemo(
+    () =>
+      womenCategoriesForUi.find((c) => c.key === "active") ??
+      WOMEN_CATEGORIES.find((c) => c.key === "active") ??
+      WOMEN_CATEGORIES[0],
+    [womenCategoriesForUi]
+  );
+
+  const activeRailSubs = useMemo((): SubLabel[] => {
+    if (activeWearTable?.subcategories?.length) {
+      return activeWearTable.subcategories.map((s) => ({
+        id: `api-active-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return activeBlockForTable.subs;
+  }, [SUBCATEGORIES_API_BASE, activeBlockForTable.subs, activeWearTable]);
+
+  const activeRailSubsForUi = useMemo((): SubLabel[] => {
+    if (activeBlock.key === "ethnic") return ethnicRailSubs;
+    if (activeBlock.key === "lingerie") return lingerieRailSubs;
+    if (activeBlock.key === "western") return westernRailSubs;
+    if (activeBlock.key === "winter") return winterRailSubs;
+    if (activeBlock.key === "active") return activeRailSubs;
+    return activeBlock.subs;
+  }, [
+    activeBlock.key,
+    activeBlock.subs,
+    activeRailSubs,
+    ethnicRailSubs,
+    lingerieRailSubs,
+    westernRailSubs,
+    winterRailSubs,
+  ]);
 
   const allWomenSubItems = useMemo(
     () =>
-      WOMEN_CATEGORIES.flatMap((cat) =>
-        cat.subs.map((s) => ({
+      womenCategoriesForUi.flatMap((cat) =>
+        (cat.key === "ethnic"
+          ? ethnicRailSubs
+          : cat.key === "lingerie"
+            ? lingerieRailSubs
+            : cat.key === "western"
+              ? westernRailSubs
+              : cat.key === "winter"
+                ? winterRailSubs
+                : cat.key === "active"
+                  ? activeRailSubs
+            : cat.subs
+        ).map((s) => ({
           flatId: `${cat.key}-${s.id}`,
           label: s.label,
           image: (s.image ?? cat.shopImage) as ImageSourcePropType,
@@ -703,8 +1213,63 @@ export default function WomenScreen() {
           deptColor: cat.railTo,
         }))
       ),
-    []
+    [
+      activeRailSubs,
+      ethnicRailSubs,
+      lingerieRailSubs,
+      westernRailSubs,
+      winterRailSubs,
+      womenCategoriesForUi,
+    ]
   );
+
+  const womenDeptRailAwaitingTable = useMemo(() => {
+    if (activeBlock.key === "ethnic") return ethnicWearTableLoading && !ethnicWearTable;
+    if (activeBlock.key === "lingerie")
+      return lingerieWearTableLoading && !lingerieWearTable;
+    if (activeBlock.key === "western") return westernWearTableLoading && !westernWearTable;
+    if (activeBlock.key === "winter") return winterWearTableLoading && !winterWearTable;
+    if (activeBlock.key === "active") return activeWearTableLoading && !activeWearTable;
+    return false;
+  }, [
+    activeBlock.key,
+    activeWearTable,
+    activeWearTableLoading,
+    ethnicWearTable,
+    ethnicWearTableLoading,
+    lingerieWearTable,
+    lingerieWearTableLoading,
+    westernWearTable,
+    westernWearTableLoading,
+    winterWearTable,
+    winterWearTableLoading,
+  ]);
+
+  const womenDeptRailTableErrorText = useMemo(() => {
+    if (activeBlock.key === "ethnic")
+      return !ethnicWearTableLoading ? ethnicWearTableError : null;
+    if (activeBlock.key === "lingerie")
+      return !lingerieWearTableLoading ? lingerieWearTableError : null;
+    if (activeBlock.key === "western")
+      return !westernWearTableLoading ? westernWearTableError : null;
+    if (activeBlock.key === "winter")
+      return !winterWearTableLoading ? winterWearTableError : null;
+    if (activeBlock.key === "active")
+      return !activeWearTableLoading ? activeWearTableError : null;
+    return null;
+  }, [
+    activeBlock.key,
+    activeWearTableLoading,
+    activeWearTableError,
+    ethnicWearTableLoading,
+    ethnicWearTableError,
+    lingerieWearTableLoading,
+    lingerieWearTableError,
+    westernWearTableLoading,
+    westernWearTableError,
+    winterWearTableLoading,
+    winterWearTableError,
+  ]);
 
   const shopAllGridRows = useMemo(() => {
     const rows: (typeof allWomenSubItems)[] = [];
@@ -745,6 +1310,22 @@ export default function WomenScreen() {
       });
     },
     [router]
+  );
+
+  const onPressStripItem = useCallback(
+    (item: { mappedKey: string | null; title: string }) => {
+      if (item.mappedKey) {
+        onSelectShopCategory(item.mappedKey);
+        return;
+      }
+      if (isWomensClothingTitle(item.title)) {
+        onSelectShopCategory("active");
+        return;
+      }
+      // If this API category doesn't exist as a rail block, still allow "shop" navigation.
+      openWomenSubcategoryProducts(item.title);
+    },
+    [isWomensClothingTitle, onSelectShopCategory, openWomenSubcategoryProducts]
   );
 
   const onStyleLabShopPicks = useCallback(() => {
@@ -922,17 +1503,37 @@ export default function WomenScreen() {
               contentContainerStyle={styles.quickStrip}
               nestedScrollEnabled
             >
-              {WOMEN_CATEGORIES.map((c) => {
-                const selected = c.key === selectedKey;
+              {womenApiLoading ? (
+                <View style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <ActivityIndicator size="small" color="#ef7b1a" />
+                </View>
+              ) : null}
+              {!womenApiLoading && womenApiError ? (
+                <View style={{ paddingHorizontal: 10, paddingVertical: 6, maxWidth: 260 }}>
+                  <Text
+                    style={{ color: "#b91c1c", fontWeight: "700", fontSize: 12 }}
+                    numberOfLines={2}
+                  >
+                    {womenApiError}
+                  </Text>
+                </View>
+              ) : null}
+
+              {womenStripItems.map((c) => {
+                const selected = Boolean(c.mappedKey) && c.mappedKey === selectedKey;
                 const clipId = `womenHex-${c.key}`;
                 return (
                   <TouchableOpacity
                     key={c.key}
                     style={styles.quickItem}
                     activeOpacity={0.85}
-                    onPress={() => onSelectShopCategory(c.key)}
+                    onPress={() => onPressStripItem({ mappedKey: c.mappedKey, title: c.title })}
                     accessibilityRole="button"
-                    accessibilityLabel={`Show only ${c.title} subcategories`}
+                    accessibilityLabel={
+                      c.mappedKey
+                        ? `Show only ${c.title} subcategories`
+                        : `Shop ${c.title}`
+                    }
                     accessibilityState={{ selected }}
                   >
                     <View
@@ -942,7 +1543,7 @@ export default function WomenScreen() {
                       ]}
                     >
                       <HexagonShopBadge
-                        source={c.shopImage}
+                        source={c.image}
                         clipId={clipId}
                         selected={selected}
                       />
@@ -987,7 +1588,24 @@ export default function WomenScreen() {
                 contentContainerStyle={styles.railScroll}
                 nestedScrollEnabled
               >
-                {activeBlock.subs.map((s) => {
+                {womenDeptRailAwaitingTable ? (
+                  <View
+                    style={{ paddingVertical: 18, paddingHorizontal: 8, justifyContent: "center" }}
+                  >
+                    <ActivityIndicator size="small" color={activeBlock.railTo} />
+                  </View>
+                ) : null}
+                {womenDeptRailTableErrorText ? (
+                  <View style={{ paddingVertical: 10, paddingHorizontal: 8, maxWidth: 280 }}>
+                    <Text
+                      style={{ color: "#b91c1c", fontWeight: "700", fontSize: 12 }}
+                      numberOfLines={3}
+                    >
+                      {womenDeptRailTableErrorText}
+                    </Text>
+                  </View>
+                ) : null}
+                {(womenDeptRailAwaitingTable ? [] : activeRailSubsForUi).map((s) => {
                   const tileImage = s.image ?? activeBlock.shopImage;
                   return (
                     <TouchableOpacity
@@ -2240,7 +2858,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   railCardArt: {
-    height: 108,
+    height: Math.round(RAIL_CARD_H * 0.75),
     overflow: "hidden",
     backgroundColor: "#e2e8f0",
   },
@@ -2263,9 +2881,9 @@ const styles = StyleSheet.create({
   railCardBody: {
     flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 12,
+    paddingVertical: 9,
     justifyContent: "center",
-    minHeight: 72,
+    minHeight: Math.round(RAIL_CARD_H * 0.25),
   },
   railCardLabel: {
     fontSize: 13,
