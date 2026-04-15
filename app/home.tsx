@@ -25,7 +25,19 @@ import * as IntentLauncher from "expo-intent-launcher";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import { addProductToCart } from "../lib/shopStorage";
+import api from "../services/api";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadWishlist,
+  toggleWishlistProduct,
+  type PersistedWishlistLine,
+} from "../lib/shopStorage";
+import {
+  RATE_PURCHASE_CARDS,
+  RATE_STAR_LABELS,
+  type RatePurchaseCard,
+} from "../lib/ratePurchaseCatalog";
 import { requestForegroundLocation } from "../lib/requestForegroundLocation";
 import * as ImagePicker from "expo-image-picker";
 
@@ -73,6 +85,35 @@ type HeroPromoCard = {
   footer: string;
   image: ImageSourcePropType;
 };
+
+type HomeWishlistCandidate = {
+  id: string;
+  name: string;
+  image: ImageSourcePropType;
+  price: string;
+  oldPrice?: string;
+};
+
+type MainCategoryApi = {
+  id: number;
+  categoryName: string;
+  image: string | null;
+  mobileImage?: string | null;
+  status?: number;
+};
+
+const MAIN_CATEGORIES_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/main";
+const MAIN_UPLOADS_BASE =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
+const MAIN_CATEGORIES_CACHE_KEY = "@main_categories_cache_v1";
+
+function getMainCategoryImageUri(filename: string | null | undefined): string {
+  const f = String(filename ?? "").trim();
+  if (!f) return `${MAIN_UPLOADS_BASE}/uploads/`;
+  if (/^https?:\/\//i.test(f)) return f;
+  return `${MAIN_UPLOADS_BASE}/uploads/${f}`;
+}
 
 /** Hero carousel — swap keys on each slide’s `image` to use other `banner*.png` files */
 const HERO_BANNER_ASSETS = {
@@ -272,13 +313,6 @@ const PROMO_HERO_IMAGE = require("../assets/images/getpromoting1.png");
 const PROMO_CHAR_LEFT = require("../assets/images/getpromoting2.png");
 const PROMO_CHAR_RIGHT = require("../assets/images/getpromoting3.png");
 
-type RateCard = {
-  id: string;
-  brand: string;
-  title: string;
-  image: ImageSourcePropType;
-};
-
 interface FilterItemProps {
   icon: keyof typeof MaterialIcons.glyphMap;
   label: string;
@@ -332,6 +366,12 @@ export default function Home() {
  const [activeIndex, setActiveIndex] = useState(0);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const openSubcatProducts = useCallback(
+    (subCategory: string) => {
+      router.push({ pathname: "/subcatProducts", params: { subCategory } } as any);
+    },
+    [router]
+  );
   const placeholderTexts = [
     " Shoes",
     " Womens Wear",
@@ -570,6 +610,9 @@ export default function Home() {
   const bannerCarousel2Ref = useRef<FlatList<ImageSourcePropType> | null>(null);
   const rateCarouselRef = useRef<ScrollView>(null);
   const [rateIndex, setRateIndex] = useState(0);
+  const [rateSelectionByCard, setRateSelectionByCard] = useState<
+    Record<string, number>
+  >({});
 
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -593,6 +636,132 @@ export default function Home() {
 
   const isHomeFocused = useIsFocused();
 
+  const [wishlistCount, setWishlistCount] = useState(0);
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
+  const [saveToWishlistChecked, setSaveToWishlistChecked] = useState(true);
+  const [createCollectionVisible, setCreateCollectionVisible] = useState(false);
+  const [collectionName, setCollectionName] = useState("");
+  const [collectionPrivacy, setCollectionPrivacy] = useState<
+    "private" | "shared" | "public"
+  >("private");
+  const [pendingWishlist, setPendingWishlist] =
+    useState<HomeWishlistCandidate | null>(null);
+  const [mainCategories, setMainCategories] = useState<
+    { id: string; title: string; image: ImageSourcePropType; href: Href }[]
+  >([]);
+  const [mainCategoriesSource, setMainCategoriesSource] = useState<
+    "live" | "cached" | "fallback"
+  >("fallback");
+
+  const categoryNameToHref = useCallback((name: string): Href => {
+    const normalized = String(name ?? "").trim().toLowerCase();
+    if (normalized === "kids") return "/kids";
+    if (normalized === "men") return "/men";
+    if (normalized === "women") return "/women";
+    if (normalized === "sportswear") return "/sportswear";
+    if (normalized === "footwear") return "/footwear";
+    if (normalized === "accessories") return "/accessories";
+    if (normalized === "sweets") return "/sweets";
+    if (normalized === "homely hub") return "/gifts";
+    if (normalized === "beauty & personal care")
+      return "/beauty-personal-care" as Href;
+    // Default: open the full categories screen
+    return "/categories";
+  }, []);
+
+  const parseRupee = useCallback((value?: string) => {
+    const raw = String(value ?? "").replace(/[^\d.]/g, "");
+    const n = Number.parseFloat(raw);
+    return Number.isFinite(n) ? n : 0;
+  }, []);
+
+  const reloadWishlistBadge = useCallback(async () => {
+    const list = await loadWishlist();
+    const ids = await getWishlistIds();
+    setWishlistCount(list.length);
+    setWishlistIds(ids);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadWishlistBadge();
+    }, [reloadWishlistBadge])
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<MainCategoryApi[]>("/api/categories/main", {
+          baseURL: MAIN_UPLOADS_BASE,
+        });
+        const json = data;
+        if (cancelled) return;
+        const rows = Array.isArray(json) ? json : [];
+        const mappedFromApi = rows
+          .filter((x) => (typeof x.status === "number" ? x.status === 1 : true))
+          .map((x) => ({
+            id: String(x.id),
+            title: x.categoryName,
+            image: ({ uri: x.mobileImage ? x.mobileImage : getMainCategoryImageUri(x.image) } as const),
+            href: categoryNameToHref(x.categoryName),
+          }));
+
+        // Keep API order first, then append any manual categories missing from backend.
+        const apiHrefs = new Set(mappedFromApi.map((c) => String(c.href)));
+        const manualFallback = categories.map((cat) => ({
+          id: `manual-${cat.name}`,
+          title: cat.name,
+          image: cat.image as unknown as ImageSourcePropType,
+          href: cat.href,
+        }));
+        const missingManual = manualFallback.filter(
+          (m) => !apiHrefs.has(String(m.href))
+        );
+
+        setMainCategories([...mappedFromApi, ...missingManual]);
+        setMainCategoriesSource("live");
+        await AsyncStorage.setItem(MAIN_CATEGORIES_CACHE_KEY, JSON.stringify(rows));
+      } catch {
+        if (cancelled) return;
+        try {
+          const cached = await AsyncStorage.getItem(MAIN_CATEGORIES_CACHE_KEY);
+          const parsed = cached ? (JSON.parse(cached) as MainCategoryApi[]) : [];
+          const rows = Array.isArray(parsed) ? parsed : [];
+          const mappedFromCache = rows
+            .filter((x) => (typeof x.status === "number" ? x.status === 1 : true))
+            .map((x) => ({
+              id: String(x.id),
+              title: x.categoryName,
+              image: ({ uri: x.mobileImage ? x.mobileImage : getMainCategoryImageUri(x.image) } as const),
+              href: categoryNameToHref(x.categoryName),
+            }));
+
+          const cacheHrefs = new Set(mappedFromCache.map((c) => String(c.href)));
+          const manualFallback = categories.map((cat) => ({
+            id: `manual-${cat.name}`,
+            title: cat.name,
+            image: cat.image as unknown as ImageSourcePropType,
+            href: cat.href,
+          }));
+          const missingManual = manualFallback.filter(
+            (m) => !cacheHrefs.has(String(m.href))
+          );
+
+          setMainCategories([...mappedFromCache, ...missingManual]);
+          setMainCategoriesSource(rows.length ? "cached" : "fallback");
+        } catch {
+          setMainCategories([]);
+          setMainCategoriesSource("fallback");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryNameToHref]);
+
   /** Sync play/pause with screen focus. Do not use useFocusEffect cleanup to pause — it can run after expo-video's shared player is released (native crash / rejection). */
   useEffect(() => {
     if (!isHomeFocused) {
@@ -602,6 +771,45 @@ export default function Home() {
     safeVideoPlayback(videoBannerPlayer, "play");
   }, [isHomeFocused, videoBannerPlayer]);
 
+  const openSaveToWishlistSheet = useCallback((p: HomeWishlistCandidate) => {
+    setPendingWishlist(p);
+    setSaveToWishlistChecked(true);
+    setSaveToWishlistVisible(true);
+  }, []);
+
+  const handleConfirmSaveToWishlist = useCallback(async () => {
+    if (!pendingWishlist) {
+      setSaveToWishlistVisible(false);
+      return;
+    }
+
+    if (!saveToWishlistChecked) {
+      setSaveToWishlistVisible(false);
+      setPendingWishlist(null);
+      return;
+    }
+
+    const line: PersistedWishlistLine = {
+      id: pendingWishlist.id,
+      name: pendingWishlist.name,
+      price: parseRupee(pendingWishlist.price),
+      mrp: Math.max(
+        parseRupee(pendingWishlist.oldPrice),
+        parseRupee(pendingWishlist.price)
+      ),
+    };
+
+    await toggleWishlistProduct(line);
+    await reloadWishlistBadge();
+    setSaveToWishlistVisible(false);
+    setPendingWishlist(null);
+  }, [
+    parseRupee,
+    pendingWishlist,
+    reloadWishlistBadge,
+    saveToWishlistChecked,
+  ]);
+
 const banners2 = [
   require("../assets/images/banner6.png"),
   require("../assets/images/banner7.png"),
@@ -609,26 +817,22 @@ const banners2 = [
    require("../assets/images/banner9.png"),
 ];
 
-  const rateCards: RateCard[] = [
-    {
-      id: "r1",
-      brand: "AVANOVA",
-      title: "Women Ruched Fit & Flare Dress",
-      image: require("../assets/images/premium1.png"),
+  const rateCards = RATE_PURCHASE_CARDS;
+
+  const openShareExperience = useCallback(
+    (card: RatePurchaseCard, rating: number) => {
+      const r = Math.min(5, Math.max(1, Math.round(rating)));
+      setRateSelectionByCard((prev) => ({ ...prev, [card.id]: r }));
+      router.push({
+        pathname: "/share-experience",
+        params: {
+          productId: card.id,
+          rating: String(r),
+        },
+      } as Href);
     },
-    {
-      id: "r2",
-      brand: "NIKE",
-      title: "Air Zoom Running Shoes",
-      image: require("../assets/images/sports6.png"),
-    },
-    {
-      id: "r3",
-      brand: "ADIDAS",
-      title: "Gym Training Tee",
-      image: require("../assets/images/sports2.png"),
-    },
-  ];
+    [router]
+  );
 
   const serviceItems: {
     id: number;
@@ -765,7 +969,7 @@ useEffect(() => {
     {
       name: "Play",
       image: require("../assets/MainCatImages/images/IndoorPlayEquipments.png"),
-      href: "/indoorplay",
+      href: "/indoorplay" as Href,
     },
     {
       name: "Gargi",
@@ -800,7 +1004,7 @@ useEffect(() => {
     {
       name: "Skin and Beauty",
       image: require("../assets/MainCatImages/images/Beauty&PersonalCare.png"),
-      href: "/",
+      href: "/beauty-personal-care" as Href,
     },
   ];
 
@@ -882,7 +1086,7 @@ useEffect(() => {
     Price: ["Below ₹299", "₹300 - ₹499", "₹500 - ₹999", "Above ₹1000"],
     Rating: ["4★ & above", "3★ & above", "2★ & above"],
     Occassion: ["Casual", "Party", "Festive", "Wedding"],
-    "combo of": ["Pack of 1", "Pack of 1", "Pack of 3", "Pack of 5"],
+    "combo of": ["Pack of 1", "Pack of 2", "Pack of 3", "Pack of 5"],
     "Kurta Fabric": ["Cotton", "Silk", "Rayon", "Georgette"],
     "Dupatta Color": ["Pink", "Red", "Yellow", "Blue", "White"],
   };
@@ -1150,10 +1354,6 @@ const premiumProducts = [
     name: 'mens wear',
     subtitle: 'Best Seller',
     image: require('../assets/images/premium4.png'),
-  
- 
-  
-  
   },
 ];
 // latest products
@@ -1357,6 +1557,13 @@ const categoryData = [
                 accessibilityLabel="Wishlist"
               >
                 <Ionicons name="heart-outline" size={24} color="#FFFFFF" />
+                {wishlistCount > 0 ? (
+                  <View style={styles.headerWishlistBadge}>
+                    <Text style={styles.headerWishlistBadgeText}>
+                      {wishlistCount > 99 ? "99+" : String(wishlistCount)}
+                    </Text>
+                  </View>
+                ) : null}
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => router.push("/notifications")}
@@ -1514,17 +1721,25 @@ const categoryData = [
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoryScrollContent}
             >
-              {categories.map((cat, index) => (
+              {(mainCategories.length
+                ? mainCategories
+                : categories.map((cat) => ({
+                    id: String(cat.name),
+                    title: cat.name,
+                    image: cat.image as unknown as ImageSourcePropType,
+                    href: cat.href,
+                  }))
+              ).map((cat, index, arr) => (
                 <TouchableOpacity
-                  key={`${String(cat.href)}-${cat.name}`}
+                  key={`${cat.id}-${String(cat.href)}`}
                   style={[
                     styles.categoryChip,
-                    index < categories.length - 1 && styles.categoryChipSpacing,
+                    index < arr.length - 1 && styles.categoryChipSpacing,
                   ]}
                   activeOpacity={0.82}
                   onPress={() => router.push(cat.href)}
                   accessibilityRole="button"
-                  accessibilityLabel={cat.name}
+                  accessibilityLabel={cat.title}
                 >
                   <View style={styles.categoryImageCard}>
                     <Image
@@ -1534,7 +1749,7 @@ const categoryData = [
                     />
                   </View>
                   <Text style={styles.categoryChipLabelChrome} numberOfLines={2}>
-                    {cat.name}
+                    {cat.title}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1721,7 +1936,7 @@ const categoryData = [
                     : undefined,
                 ]}
                 activeOpacity={0.88}
-                onPress={() => router.push("/products")}
+                onPress={() => openSubcatProducts(item.name)}
                 accessibilityRole="button"
                 accessibilityLabel={`Top pick: ${item.name}, open products`}
               >
@@ -1771,7 +1986,7 @@ const categoryData = [
 
           <TouchableOpacity
             style={styles.freshArrow}
-            onPress={() => router.push("/products")}
+            onPress={() => router.push("/subcatProducts")}
           >
             <Ionicons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
@@ -1816,7 +2031,7 @@ const categoryData = [
                   <TouchableOpacity
                     activeOpacity={0.9}
                     style={{ width: FRESH_IMG_60 }}
-                    onPress={() => router.push("/products")}
+                    onPress={() => openSubcatProducts("Fresh finds")}
                     accessibilityRole="button"
                     accessibilityLabel="Fresh find, open products"
                   >
@@ -1830,7 +2045,7 @@ const categoryData = [
                     <TouchableOpacity
                       activeOpacity={0.9}
                       style={{ width: FRESH_IMG_30 }}
-                      onPress={() => router.push("/products")}
+                      onPress={() => openSubcatProducts("Fresh finds")}
                       accessibilityRole="button"
                       accessibilityLabel="Fresh find, open products"
                     >
@@ -1915,7 +2130,7 @@ const categoryData = [
     </View>
     <TouchableOpacity
       style={styles.productArrowButton}
-      onPress={() => router.push("/products")}
+      onPress={() => openSubcatProducts("Suggested For You")}
     >
       <Ionicons name="arrow-forward" size={22} color="#fff" />
     </TouchableOpacity>
@@ -1933,7 +2148,7 @@ const categoryData = [
                 key={item.cartId}
                 style={[styles.productCard, styles.suggestedCardHalf]}
                 activeOpacity={0.88}
-                onPress={() => router.push("/products")}
+                onPress={() => openSubcatProducts(item.name)}
                 accessibilityRole="button"
                 accessibilityLabel={`Suggested: ${item.name}, open products`}
               >
@@ -2033,7 +2248,7 @@ const categoryData = [
 
       <TouchableOpacity
         style={styles.premiumArrowButton}
-        onPress={() => router.push("/products")}
+        onPress={() => openSubcatProducts("Premium finds")}
         activeOpacity={0.88}
       >
         <Ionicons name="arrow-forward" size={22} color="#1E40AF" />
@@ -2046,7 +2261,7 @@ const categoryData = [
           key={item.id}
           style={styles.premiumCard}
           activeOpacity={0.88}
-          onPress={() => router.push("/products")}
+          onPress={() => openSubcatProducts(item.name)}
           accessibilityRole="button"
           accessibilityLabel={`Premium: ${item.name}, open products`}
         >
@@ -2098,10 +2313,30 @@ const categoryData = [
             <Text style={styles.rateCardTitle} numberOfLines={2}>
               {card.title}
             </Text>
-            <View style={styles.rateStarsRow} pointerEvents="none">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Ionicons key={i} name="star-outline" size={28} color="#94A3B8" />
-              ))}
+            <View style={styles.rateStarsRow}>
+              {[1, 2, 3, 4, 5].map((star) => {
+                const selected = rateSelectionByCard[card.id] ?? 0;
+                const filled = selected >= star;
+                return (
+                  <TouchableOpacity
+                    key={`${card.id}-star-${star}`}
+                    style={styles.rateStarColumn}
+                    onPress={() => openShareExperience(card, star)}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${RATE_STAR_LABELS[star - 1]}, ${star} star${star > 1 ? "s" : ""}`}
+                  >
+                    <Ionicons
+                      name={filled ? "star" : "star-outline"}
+                      size={28}
+                      color={filled ? "#EAB308" : "#94A3B8"}
+                    />
+                    <Text style={styles.rateStarLabel}>
+                      {RATE_STAR_LABELS[star - 1]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
             <Text style={styles.rateCardHint} numberOfLines={2}>
               Tap on the stars to rate the product
@@ -2141,7 +2376,7 @@ const categoryData = [
   </View>
 
   <FlatList
-    data={categoryData}
+    data={mainCategories.length ? mainCategories : categoryData}
     horizontal
     showsHorizontalScrollIndicator={false}
     keyExtractor={(item) => item.id}
@@ -2150,7 +2385,7 @@ const categoryData = [
       <TouchableOpacity
         style={styles.storeItem}
         activeOpacity={0.88}
-        onPress={() => router.push("/products")}
+        onPress={() => openSubcatProducts(item.title)}
         accessibilityRole="button"
         accessibilityLabel={`Shop by store: ${item.title}, open products`}
       >
@@ -2197,7 +2432,7 @@ const categoryData = [
       <TouchableOpacity
         key={item.id}
         activeOpacity={0.92}
-        onPress={() => router.push("/products")}
+        onPress={() => openSubcatProducts("In Focus")}
         style={[
           styles.focusCarouselCard,
           { width: FOCUS_CARD_WIDTH },
@@ -2250,7 +2485,7 @@ const categoryData = [
 
       <TouchableOpacity
         style={styles.megaArrowButton}
-        onPress={() => router.push("/products")}
+        onPress={() => openSubcatProducts("Mega Discounts")}
         activeOpacity={0.88}
       >
         <Ionicons name="arrow-forward" size={22} color="#BE123C" />
@@ -2263,7 +2498,7 @@ const categoryData = [
           key={item.id}
           style={styles.megaCard}
           activeOpacity={0.88}
-          onPress={() => router.push("/products")}
+          onPress={() => openSubcatProducts(item.name)}
           accessibilityRole="button"
           accessibilityLabel={`Mega discount: ${item.name}, open products`}
         >
@@ -2294,8 +2529,8 @@ const categoryData = [
           <Text style={styles.sellerGalleryBadgeLabel}>Vendors</Text>
         </View>
         <Text style={styles.sellerGalleryTitleLine}>
-          <Text style={styles.sellerGalleryTitleItalic}>Seller </Text>
-          <Text style={styles.sellerGalleryTitleBold}>Gallery</Text>
+          <Text style={styles.sellerGalleryTitleItalic}>Store </Text>
+          <Text style={styles.sellerGalleryTitleBold}>Spotlight</Text>
         </Text>
       </View>
       <TouchableOpacity
@@ -2328,65 +2563,302 @@ const categoryData = [
 
 {/* More products for you — vertical list rows (thumbnail + details + action) */}
 <View style={styles.latestSection}>
-  <View style={styles.latestListHead}>
-    <View style={styles.latestListHeadAccent} />
-    <View style={styles.latestListHeadText}>
-      <Text style={styles.latestListHeadLabel}>Recommended</Text>
-      <Text style={styles.latestListHeadTitle}>
-        <Text style={styles.latestListHeadTitleMain}>More products</Text>
-        <Text style={styles.latestListHeadTitleSub}> for you</Text>
-      </Text>
+  <View style={styles.latestHeaderCard}>
+    <View style={styles.latestHeaderLeft}>
+      <View style={styles.latestHeaderIconTile}>
+        <MaterialIcons name="local-offer" size={22} color="#C2410C" />
+      </View>
+      <View style={styles.latestHeaderTextCol}>
+        <Text style={styles.latestHeaderEyebrow}>Recommended for you</Text>
+        <Text style={styles.latestHeaderTitle}>More picks</Text>
+        <Text style={styles.latestHeaderSub} numberOfLines={1}>
+          Deals and essentials picked today
+        </Text>
+      </View>
     </View>
+
+    <TouchableOpacity
+      style={styles.latestHeaderCtaBtn}
+      activeOpacity={0.9}
+      onPress={() => openSubcatProducts("More picks")}
+      accessibilityRole="button"
+      accessibilityLabel="See all recommended products"
+    >
+      <Ionicons name="arrow-forward" size={20} color="#7C2D12" />
+    </TouchableOpacity>
   </View>
 
-  <View style={styles.latestListStack}>
-    {latestProducts.map((item) => (
-      <TouchableOpacity
-        key={item.id}
-        activeOpacity={0.9}
-        style={styles.latestRowCard}
-      >
-        <View style={styles.latestRowThumbWrap}>
-          <Image
-            source={item.image}
-            style={styles.latestRowThumb}
-            resizeMode="cover"
-          />
-          {item.discount ? (
-            <View style={styles.latestRowDiscountPill}>
-              <Text style={styles.latestRowDiscountPillText}>
-                {item.discount}
-              </Text>
+  <FlatList
+    data={latestProducts}
+    keyExtractor={(item) => item.id}
+    numColumns={2}
+    scrollEnabled={false}
+    contentContainerStyle={styles.latestGrid}
+    columnWrapperStyle={styles.latestGridRow}
+    renderItem={({ item, index }) => {
+      const ratingValue = Number.parseFloat(String(item.rating).split(" ")[0]) || 0;
+      const col = index % 2;
+      return (
+        <View style={styles.latestGridCell}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={[
+              styles.latestGridCard,
+              col === 0 ? styles.latestGridCardDividerRight : null,
+              styles.latestGridCardDividerBottom,
+            ]}
+            onPress={() => openSubcatProducts(item.name)}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.name}, open product`}
+          >
+            <View style={styles.latestGridImageWrap}>
+              <Image source={item.image} style={styles.latestGridImage} resizeMode="cover" />
+
+              <TouchableOpacity
+                style={styles.latestGridWishBtn}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${item.name} to wishlist`}
+                onPress={() =>
+                  openSaveToWishlistSheet({
+                    id: item.id,
+                    name: item.name,
+                    image: item.image,
+                    price: item.price,
+                    oldPrice: item.oldPrice,
+                  })
+                }
+              >
+                <Ionicons
+                  name={wishlistIds.has(item.id) ? "heart" : "heart-outline"}
+                  size={18}
+                  color={wishlistIds.has(item.id) ? "#E11D48" : "#111827"}
+                />
+              </TouchableOpacity>
+
+              {item.discount ? (
+                <View style={styles.latestGridDiscountPill}>
+                  <Text style={styles.latestGridDiscountPillText}>{item.discount} off</Text>
+                </View>
+              ) : null}
             </View>
-          ) : null}
-        </View>
 
-        <View style={styles.latestRowCenter}>
-          <Text style={styles.latestRowTitle} numberOfLines={2}>
-            {item.name}
-          </Text>
-          <View style={styles.latestRowMeta}>
-            <Text style={styles.latestRowStars}>★★★★★</Text>
-            <Text style={styles.latestRowRatingText}>{item.rating}</Text>
-          </View>
-          <View style={styles.latestRowPriceLine}>
-            {item.oldPrice ? (
-              <Text style={styles.latestRowStrike}>{item.oldPrice}</Text>
-            ) : null}
-            <Text style={styles.latestRowPrice}>{item.price}</Text>
-          </View>
-        </View>
+            <View style={styles.latestGridBody}>
+              <Text style={styles.latestGridTitle} numberOfLines={2}>
+                {item.name}
+              </Text>
 
-        <TouchableOpacity style={styles.latestRowFab} activeOpacity={0.88}>
-          <Ionicons name="cart-outline" size={21} color="#C2410C" />
-        </TouchableOpacity>
-      </TouchableOpacity>
-    ))}
-  </View>
+              <View style={styles.latestGridPriceRow}>
+                <Text style={styles.latestGridPrice}>{item.price}</Text>
+                {item.oldPrice ? (
+                  <Text style={styles.latestGridOldPrice}>{item.oldPrice}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.latestGridMetaRow}>
+                <View style={styles.latestGridRatingPill}>
+                  <Ionicons name="star" size={14} color="#FFFFFF" />
+                  <Text style={styles.latestGridRatingText}>{ratingValue.toFixed(1)}</Text>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      );
+    }}
+  />
 </View>
 
         </LinearGradient>
       </Animated.ScrollView>
+
+      {/* Save to wishlist — bottom sheet (like native “Save item to…”) */}
+      <Modal
+        visible={saveToWishlistVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSaveToWishlistVisible(false)}
+      >
+        <View style={styles.saveSheetOverlay}>
+          <Pressable
+            style={styles.saveSheetBackdrop}
+            onPress={() => setSaveToWishlistVisible(false)}
+          />
+          <View style={[styles.saveSheetCard, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <View style={styles.saveSheetHeader}>
+              <TouchableOpacity
+                onPress={() => setSaveToWishlistVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={26} color="#111827" />
+              </TouchableOpacity>
+              <Text style={styles.saveSheetTitle}>Save item to...</Text>
+              <View style={{ width: 26 }} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.saveSheetRow}
+              activeOpacity={0.85}
+              onPress={() => {
+                setSaveToWishlistVisible(false);
+                setCreateCollectionVisible(true);
+              }}
+            >
+              <View style={styles.saveSheetCreateIcon}>
+                <Ionicons name="add" size={26} color="#2563EB" />
+              </View>
+              <Text style={styles.saveSheetCreateText}>Create a new collection</Text>
+            </TouchableOpacity>
+
+            <View style={styles.saveSheetDivider} />
+
+            <TouchableOpacity
+              style={styles.saveSheetRow}
+              activeOpacity={0.85}
+              onPress={() => setSaveToWishlistChecked((v) => !v)}
+            >
+              <View style={styles.saveSheetWishlistIcon}>
+                <Ionicons name="heart" size={22} color="#E11D48" />
+              </View>
+              <View style={styles.saveSheetWishlistTextCol}>
+                <Text style={styles.saveSheetWishlistTitle}>My Wishlist</Text>
+                <Text style={styles.saveSheetWishlistSub}>
+                  Private • {wishlistCount} items
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.saveSheetCheckBox,
+                  !saveToWishlistChecked ? styles.saveSheetCheckBoxOff : null,
+                ]}
+              >
+                {saveToWishlistChecked ? (
+                  <Ionicons name="checkmark" size={20} color="#2563EB" />
+                ) : null}
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.saveSheetDoneBtn}
+              activeOpacity={0.9}
+              onPress={() => void handleConfirmSaveToWishlist()}
+            >
+              <Text style={styles.saveSheetDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create a new collection — modal */}
+      <Modal
+        visible={createCollectionVisible}
+        animationType="slide"
+        onRequestClose={() => setCreateCollectionVisible(false)}
+      >
+        <View style={styles.collectionRoot}>
+          <View style={[styles.collectionTopBar, { paddingTop: insets.top }]}>
+            <TouchableOpacity
+              onPress={() => setCreateCollectionVisible(false)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={28} color="#0F172A" />
+            </TouchableOpacity>
+            <Text style={styles.collectionTopTitle}>Create a new collection</Text>
+            <View style={{ width: 28 }} />
+          </View>
+
+          <ScrollView contentContainerStyle={styles.collectionScroll} showsVerticalScrollIndicator={false}>
+            {pendingWishlist ? (
+              <View style={styles.collectionPreviewWrap}>
+                <Image source={pendingWishlist.image} style={styles.collectionPreviewImage} />
+              </View>
+            ) : null}
+
+            <Text style={styles.collectionLabel}>Collection name*</Text>
+            <View style={styles.collectionInputRow}>
+              <TextInput
+                value={collectionName}
+                onChangeText={setCollectionName}
+                placeholder="Enter collection name"
+                placeholderTextColor="#9CA3AF"
+                style={styles.collectionInput}
+              />
+              {collectionName ? (
+                <TouchableOpacity onPress={() => setCollectionName("")}>
+                  <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <Text style={styles.collectionRequired}>*Required</Text>
+
+            <Text style={styles.collectionSectionTitle}>Suggestions</Text>
+            <View style={styles.collectionChipsRow}>
+              {["My Birthday Wishlist", "Clothing Must Haves"].map((chip) => (
+                <TouchableOpacity
+                  key={chip}
+                  style={styles.collectionChip}
+                  activeOpacity={0.85}
+                  onPress={() => setCollectionName(chip)}
+                >
+                  <Text style={styles.collectionChipText}>{chip}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.collectionSectionTitle}>Share settings</Text>
+            {[
+              { id: "private", title: "Private", sub: "Only you can view" },
+              { id: "shared", title: "Shared", sub: "Only people with link can view" },
+              { id: "public", title: "Public", sub: "Anyone can search for and view" },
+            ].map((o) => {
+              const selected = collectionPrivacy === o.id;
+              return (
+                <TouchableOpacity
+                  key={o.id}
+                  style={styles.collectionRadioRow}
+                  activeOpacity={0.85}
+                  onPress={() => setCollectionPrivacy(o.id as any)}
+                >
+                  <View style={styles.collectionRadioLeft}>
+                    <Ionicons
+                      name={
+                        o.id === "private"
+                          ? "lock-closed-outline"
+                          : o.id === "shared"
+                          ? "people-outline"
+                          : "globe-outline"
+                      }
+                      size={20}
+                      color="#64748B"
+                    />
+                    <View style={styles.collectionRadioTextCol}>
+                      <Text style={styles.collectionRadioTitle}>{o.title}</Text>
+                      <Text style={styles.collectionRadioSub}>{o.sub}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.collectionRadioOuter, selected ? styles.collectionRadioOuterOn : null]}>
+                    {selected ? <View style={styles.collectionRadioInner} /> : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <View style={[styles.collectionFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <TouchableOpacity
+              style={styles.collectionCreateBtn}
+              activeOpacity={0.9}
+              onPress={() => {
+                // UI only for now: close and return to save sheet
+                setCreateCollectionVisible(false);
+                setSaveToWishlistVisible(true);
+              }}
+            >
+              <Text style={styles.collectionCreateBtnText}>Create collection</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Select delivery address — bottom sheet */}
       <Modal
@@ -3068,6 +3540,224 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
 
 
 const styles = StyleSheet.create({
+  headerWishlistBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 999,
+    backgroundColor: "#E11D48",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  headerWishlistBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+
+  saveSheetOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  saveSheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  saveSheetCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 10,
+    paddingHorizontal: 18,
+  },
+  saveSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingBottom: 12,
+  },
+  saveSheetTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  saveSheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    gap: 14,
+  },
+  saveSheetCreateIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#93C5FD",
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#EFF6FF",
+  },
+  saveSheetCreateText: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2563EB",
+  },
+  saveSheetDivider: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+  },
+  saveSheetWishlistIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  saveSheetWishlistTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  saveSheetWishlistTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  saveSheetWishlistSub: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#9CA3AF",
+  },
+  saveSheetCheckBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#2563EB",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#EFF6FF",
+  },
+  saveSheetCheckBoxOff: {
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
+  },
+  saveSheetDoneBtn: {
+    marginTop: 14,
+    marginBottom: 14,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#2563EB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  saveSheetDoneText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+  },
+
+  collectionRoot: { flex: 1, backgroundColor: "#F3F4F6" },
+  collectionTopBar: {
+    backgroundColor: "#DBEAFE",
+    paddingHorizontal: 16,
+    height: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#BFDBFE",
+  },
+  collectionTopTitle: { fontSize: 18, fontWeight: "800", color: "#0F172A" },
+  collectionScroll: { padding: 16, paddingBottom: 18 },
+  collectionPreviewWrap: {
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  collectionPreviewImage: { width: 80, height: 80, resizeMode: "contain" },
+  collectionLabel: { fontSize: 13, fontWeight: "800", color: "#64748B", marginBottom: 8 },
+  collectionInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#94A3B8",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 48,
+  },
+  collectionInput: { flex: 1, fontSize: 16, fontWeight: "700", color: "#0F172A" },
+  collectionRequired: { marginTop: 8, fontSize: 12, fontWeight: "700", color: "#9CA3AF" },
+  collectionSectionTitle: { marginTop: 18, fontSize: 16, fontWeight: "900", color: "#0F172A" },
+  collectionChipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
+  collectionChip: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  collectionChipText: { fontSize: 13, fontWeight: "800", color: "#0F172A" },
+  collectionRadioRow: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  collectionRadioLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
+  collectionRadioTextCol: { flex: 1, minWidth: 0 },
+  collectionRadioTitle: { fontSize: 15, fontWeight: "900", color: "#0F172A" },
+  collectionRadioSub: { marginTop: 4, fontSize: 12.5, fontWeight: "700", color: "#64748B" },
+  collectionRadioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#94A3B8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  collectionRadioOuterOn: { borderColor: "#2563EB" },
+  collectionRadioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#2563EB" },
+  collectionFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    backgroundColor: "#F3F4F6",
+  },
+  collectionCreateBtn: {
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: "#2563EB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  collectionCreateBtnText: { fontSize: 16, fontWeight: "900", color: "#FFFFFF" },
   container: { flex: 1, backgroundColor: HOME_PAGE_BG },
 
   homeScrollContent: {
@@ -3644,8 +4334,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: CATEGORY_IMAGE_INNER_INSET,
-    borderWidth: 1,
-    borderColor: "#E7E5E4",
+    borderWidth: 0,
+    borderColor: "transparent",
     marginBottom: 5,
     overflow: "hidden",
     shadowColor: "#000",
@@ -4686,8 +5376,21 @@ premiumSubtitle: {
   },
   rateStarsRow: {
     flexDirection: "row",
-    gap: 10,
+    justifyContent: "space-between",
     marginBottom: 10,
+    paddingRight: 4,
+  },
+  rateStarColumn: {
+    alignItems: "center",
+    gap: 4,
+    flex: 1,
+    maxWidth: 56,
+  },
+  rateStarLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#64748B",
+    textAlign: "center",
   },
   rateCardHint: {
     fontSize: 12,
@@ -5040,35 +5743,252 @@ latestSection: {
     minWidth: 0,
   },
 
-  latestListHeadLabel: {
+  latestListHeadBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+
+  latestListHeadBadge: {
     fontSize: 11,
-    fontWeight: "800",
-    color: "#9CA3AF",
-    letterSpacing: 1.3,
+    fontWeight: "900",
+    color: "#7C2D12",
+    letterSpacing: 1.2,
     textTransform: "uppercase",
-    marginBottom: 2,
+    backgroundColor: "#FFEDD5",
+    borderWidth: 1,
+    borderColor: "#FDBA74",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
 
-  latestListHeadTitle: {
-    flexShrink: 1,
-  },
-
-  latestListHeadTitleMain: {
+  latestListHeadTitleNew: {
     fontSize: 22,
     fontWeight: "900",
     color: "#111827",
     letterSpacing: -0.3,
   },
 
-  latestListHeadTitleSub: {
+  latestHeaderCard: {
+    marginHorizontal: 14,
+    marginBottom: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  latestHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+
+  latestHeaderIconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#FFEDD5",
+    borderWidth: 1,
+    borderColor: "#FDBA74",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  latestHeaderTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  latestHeaderEyebrow: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#94A3B8",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+
+  latestHeaderTitle: {
     fontSize: 22,
-    fontWeight: "500",
-    color: "#6B7280",
-    letterSpacing: -0.2,
+    fontWeight: "900",
+    color: "#0F172A",
+    letterSpacing: -0.4,
+    marginBottom: 2,
+  },
+
+  latestHeaderSub: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+
+  latestHeaderCtaBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
   },
 
   latestListStack: {
     paddingHorizontal: 14,
+  },
+
+  latestGrid: {
+    paddingHorizontal: 14,
+    paddingBottom: 2,
+  },
+
+  latestGridRow: {
+    gap: 0,
+  },
+
+  latestGridCell: {
+    flex: 1,
+  },
+
+  latestGridCard: {
+    borderRadius: 0,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 0,
+    margin: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+
+  latestGridCardDividerRight: {
+    borderRightWidth: 2,
+    borderRightColor: "#E5E7EB",
+  },
+
+  latestGridCardDividerBottom: {
+    borderBottomWidth: 2,
+    borderBottomColor: "#E5E7EB",
+  },
+
+  latestGridImageWrap: {
+    width: "100%",
+    height: 170,
+    backgroundColor: "#F3F4F6",
+    position: "relative",
+  },
+
+  latestGridImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  latestGridWishBtn: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  latestGridDiscountPill: {
+    position: "absolute",
+    left: 10,
+    bottom: 10,
+    backgroundColor: "rgba(16,185,129,0.92)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.65)",
+  },
+
+  latestGridDiscountPillText: {
+    color: "#064E3B",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+
+  latestGridBody: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 8,
+  },
+
+  latestGridTitle: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#111827",
+    lineHeight: 18,
+    minHeight: 36,
+  },
+
+  latestGridPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  latestGridPrice: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#111827",
+    letterSpacing: -0.2,
+  },
+
+  latestGridOldPrice: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#9CA3AF",
+    textDecorationLine: "line-through",
+  },
+
+  latestGridMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  latestGridRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#16A34A",
+  },
+
+  latestGridRatingText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
   },
 
   latestRowCard: {
