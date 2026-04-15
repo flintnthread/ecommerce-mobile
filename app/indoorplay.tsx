@@ -9,15 +9,17 @@ import {
   TouchableOpacity,
   Platform,
   TextInput,
+  type ImageSourcePropType,
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api from "../services/api";
 
 const HEADER_BRAND_LOGO = require("../assets/images/logo.png");
 const INDOOR_IMAGE = require("../assets/MainCatImages/images/IndoorPlayEquipments.png");
@@ -39,12 +41,28 @@ const IMG_TOP_RATED = require("../assets/images/toprated.png");
  * Subcategory strings are passed to subcatProducts as `subCategory`.
  */
 /** Main aisle headings — image-backed cards (names match site + `openProducts`). */
-const MAIN_CATEGORY_SHOWCASE: {
+type MainCategoryShowcaseItem = {
   title: string;
   tagline: string;
-  image: number;
+  image: ImageSourcePropType;
   overlay: [string, string];
-}[] = [
+};
+
+type IndoorMainCategoryApiItem = {
+  id?: number;
+  categoryName?: string;
+  image?: string | null;
+  bannerImage?: string | null;
+  mobileImage?: string | null;
+  parentId?: number;
+  sellerId?: number | null;
+  gstPercentage?: number;
+  hsnCode?: string;
+  createdAt?: string;
+  status?: number | null;
+};
+
+const MAIN_CATEGORY_SHOWCASE: MainCategoryShowcaseItem[] = [
   {
     title: "Educational Materials",
     tagline: "Blocks · threading · linking · shapes",
@@ -83,6 +101,13 @@ const MAIN_CATEGORY_SHOWCASE: {
   },
 ];
 
+const MAIN_CATEGORY_API_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/80/subcategories";
+
+const MAIN_CATEGORY_FALLBACK_BY_NAME = new Map(
+  MAIN_CATEGORY_SHOWCASE.map((item) => [item.title.trim().toLowerCase(), item])
+);
+
 const DEAL_PROMO_CAROUSEL: { image: number; headline: string; sub: string; openTarget: string }[] = [
   { image: IMG_PROMO_A, headline: "Today’s play picks", sub: "Tap to shop educational toys", openTarget: "Educational Materials" },
   { image: IMG_PROMO_B, headline: "Fill the playroom", sub: "Slides, rockers & more", openTarget: "Pre Indoor Play Items" },
@@ -98,9 +123,123 @@ const EDUCATIONAL_SUBS = [
 
 const EDU_MOSAIC_THUMBS = [IMG_BANNER_ART, IMG_GAARGI, INDOOR_IMAGE, IMG_TOP_RATED] as const;
 
+type EducationalSubcategoryApiItem = {
+  id?: number;
+  name?: string;
+  image?: string | null;
+  mobileImage?: string | null;
+};
+
+type EducationalSubcategoriesTableItem = {
+  categoryName?: string;
+  mobileImage?: string | null;
+  subcategories?: EducationalSubcategoryApiItem[];
+};
+
+type EducationalMosaicItem = {
+  name: string;
+  image: ImageSourcePropType;
+  aspectRatio: number;
+};
+
+const EDUCATIONAL_SUBCATEGORIES_API_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/84/subcategories-table";
+
+const DEFAULT_EDU_IMAGE_ASPECT_RATIO = 1.45;
+
+function getLocalImageAspectRatio(source: ImageSourcePropType): number {
+  const asset = Image.resolveAssetSource(source);
+  if (asset?.width && asset?.height && asset.height > 0) {
+    return asset.width / asset.height;
+  }
+  return DEFAULT_EDU_IMAGE_ASPECT_RATIO;
+}
+
+async function getRemoteImageAspectRatio(uri: string): Promise<number> {
+  return new Promise((resolve) => {
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (width > 0 && height > 0) {
+          resolve(width / height);
+          return;
+        }
+        resolve(DEFAULT_EDU_IMAGE_ASPECT_RATIO);
+      },
+      () => resolve(DEFAULT_EDU_IMAGE_ASPECT_RATIO)
+    );
+  });
+}
+
+const EDUCATIONAL_MOSAIC_FALLBACK: EducationalMosaicItem[] = EDUCATIONAL_SUBS.map((name, idx) => ({
+  name,
+  image: EDU_MOSAIC_THUMBS[idx % EDU_MOSAIC_THUMBS.length],
+  aspectRatio: getLocalImageAspectRatio(EDU_MOSAIC_THUMBS[idx % EDU_MOSAIC_THUMBS.length]),
+}));
+
 const PRE_INDOOR_SUBS = ["Rocking Toys", "Slides"] as const;
 
+type PreIndoorCardItem = {
+  name: string;
+  image: ImageSourcePropType;
+};
+
+const PRE_INDOOR_SUBCATEGORIES_API_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/82/subcategories-table";
+
+const PRE_INDOOR_IMAGE_FALLBACK_BY_NAME = new Map<string, ImageSourcePropType>([
+  ["rocking toys", IMG_KIDS_CATE],
+  ["slides", IMG_SPORTS_BANNER],
+]);
+
+const PRE_INDOOR_FALLBACK_CARDS: PreIndoorCardItem[] = PRE_INDOOR_SUBS.map((name) => ({
+  name,
+  image:
+    PRE_INDOOR_IMAGE_FALLBACK_BY_NAME.get(name.trim().toLowerCase()) ??
+    IMG_KIDS_CATE,
+}));
+
 const PRESCHOOL_FURNITURE_SUBS = ["Chairs", "Dustbins"] as const;
+
+type PreschoolFurnitureCardItem = {
+  name: string;
+  image: ImageSourcePropType;
+  aspectRatio: number;
+};
+
+const PRESCHOOL_FURNITURE_SUBCATEGORIES_API_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/86/subcategories-table";
+
+const PRESCHOOL_INDOOR_SUBCATEGORIES_API_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/83/subcategories-table";
+
+const PRESCHOOL_OUTDOOR_SPORTS_SUBCATEGORIES_API_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/85/subcategories-table";
+
+const SCHOOL_FURNITURE_SUBCATEGORIES_API_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/81/subcategories-table";
+
+const PRESCHOOL_FURNITURE_IMAGE_FALLBACK_BY_NAME = new Map<
+  string,
+  ImageSourcePropType
+>([
+  ["chairs", IMG_HOME_CATES],
+  ["dustbins", IMG_HOME_CATE],
+]);
+
+const PRESCHOOL_FURNITURE_FALLBACK_CARDS: PreschoolFurnitureCardItem[] =
+  PRESCHOOL_FURNITURE_SUBS.map((name) => ({
+    name,
+    image:
+      PRESCHOOL_FURNITURE_IMAGE_FALLBACK_BY_NAME.get(
+        name.trim().toLowerCase()
+      ) ?? IMG_HOME_CATES,
+    aspectRatio: getLocalImageAspectRatio(
+      PRESCHOOL_FURNITURE_IMAGE_FALLBACK_BY_NAME.get(
+        name.trim().toLowerCase()
+      ) ?? IMG_HOME_CATES
+    ),
+  }));
 
 const BROWSE_ONLY_PARENTS = [
   "Preschool Indoor",
@@ -197,11 +336,79 @@ const GIFT_IDEAS = [
   { label: "Little reader chair", sub: "Chairs" },
 ] as const;
 
-const PARENT_TIPS = [
-  "Mix construction toys with sorting games for longer focus",
-  "Rotate between active (slides) and calm (threading) play",
-  "Keep preschool furniture at child height for independence",
-  "Label dustbins with icons so clean-up feels like a game",
+const ALL_INDOOR_PLAY_CATALOG = "All Indoor Play";
+
+const INDOOR_PLAY_PREVIEW_PRODUCTS: {
+  title: string;
+  subCategory: string;
+  price: number;
+  mrp: number;
+  rating: number;
+  reviews: number;
+  image: number;
+}[] = [
+  {
+    title: "Builder blocks set",
+    subCategory: "Building Blocks/Block Construction Set",
+    price: 799,
+    mrp: 1599,
+    rating: 4.8,
+    reviews: 412,
+    image: IMG_BANNER_ART,
+  },
+  {
+    title: "Lacing threading kit",
+    subCategory: "Lacing & Threading Toys",
+    price: 649,
+    mrp: 1299,
+    rating: 4.7,
+    reviews: 356,
+    image: IMG_GAARGI,
+  },
+  {
+    title: "Rocking indoor toy",
+    subCategory: "Rocking Toys",
+    price: 1399,
+    mrp: 2799,
+    rating: 4.9,
+    reviews: 278,
+    image: IMG_KIDS_CATE,
+  },
+  {
+    title: "Preschool chair",
+    subCategory: "Chairs",
+    price: 1199,
+    mrp: 2399,
+    rating: 4.6,
+    reviews: 194,
+    image: IMG_HOME_CATES,
+  },
+];
+
+const SCHOOL_FURNITURE_ITEMS: {
+  text: string;
+  subCategory: string;
+  image: ImageSourcePropType;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+  {
+    text: "Classroom chairs for daily seating comfort",
+    subCategory: "Chairs",
+    image: IMG_HOME_CATES,
+    icon: "body-outline",
+  },
+  {
+    text: "Durable dustbins for clean school spaces",
+    subCategory: "Dustbins",
+    image: IMG_HOME_CATE,
+    icon: "trash-outline",
+  },
+  {
+    text: "Browse complete school furniture catalogue",
+    subCategory: "School Furniture",
+    image: IMG_HOME_CATES,
+    icon: "library-outline",
+  },
 ] as const;
 
 /** Full-bleed snap carousel between Playroom tips and Shop all — each slide opens products. */
@@ -246,14 +453,6 @@ const TIPS_TO_SHOP_BANNERS: {
     accent: ["#db2777", "#be185d"],
   },
 ];
-
-/** Every leaf + browse parent for one-tap shopping. */
-const SHOP_ALL_CHIPS = [
-  ...EDUCATIONAL_SUBS,
-  ...PRE_INDOOR_SUBS,
-  ...PRESCHOOL_FURNITURE_SUBS,
-  ...BROWSE_ONLY_PARENTS,
-] as const;
 
 function SectionTitle({ icon, title, subtitle }: { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle?: string }) {
   return (
@@ -446,7 +645,7 @@ function MainCategoryShowcaseCard({
 }: {
   title: string;
   tagline: string;
-  image: number;
+  image: ImageSourcePropType;
   overlay: [string, string];
   onPress: () => void;
 }) {
@@ -455,9 +654,6 @@ function MainCategoryShowcaseCard({
       <Image source={image} style={styles.mainCatCardImage} resizeMode="cover" />
       <LinearGradient colors={overlay} start={{ x: 0, y: 0.35 }} end={{ x: 0, y: 1 }} style={styles.mainCatCardOverlay} />
       <View style={styles.mainCatCardContent}>
-        <View style={styles.mainCatRibbon}>
-          <Text style={styles.mainCatRibbonText}>MAIN CATEGORY</Text>
-        </View>
         <Text style={styles.mainCatCardTitle}>{title}</Text>
         <Text style={styles.mainCatCardTagline} numberOfLines={2}>
           {tagline}
@@ -474,6 +670,385 @@ function MainCategoryShowcaseCard({
 export default function IndoorPlayScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const mainScrollRef = useRef<ScrollView>(null);
+  const educationalSectionY = useRef(0);
+  const preIndoorSectionY = useRef(0);
+  const preschoolFurnitureSectionY = useRef(0);
+  const pairIdeasSectionY = useRef(0);
+  const quickShortcutsSectionY = useRef(0);
+  const playroomTipsSectionY = useRef(0);
+  const [mainCategoryCards, setMainCategoryCards] = useState<MainCategoryShowcaseItem[]>(MAIN_CATEGORY_SHOWCASE);
+  const [educationalMosaicCards, setEducationalMosaicCards] =
+    useState<EducationalMosaicItem[]>(EDUCATIONAL_MOSAIC_FALLBACK);
+  const [preIndoorCards, setPreIndoorCards] =
+    useState<PreIndoorCardItem[]>(PRE_INDOOR_FALLBACK_CARDS);
+  const [preschoolFurnitureCards, setPreschoolFurnitureCards] = useState<
+    PreschoolFurnitureCardItem[]
+  >(PRESCHOOL_FURNITURE_FALLBACK_CARDS);
+  const [preschoolIndoorBannerImage, setPreschoolIndoorBannerImage] =
+    useState<ImageSourcePropType>(INDOOR_IMAGE);
+  const [preschoolOutdoorBannerImage, setPreschoolOutdoorBannerImage] =
+    useState<ImageSourcePropType>(IMG_SPORTS_BANNER);
+  const [schoolFurnitureBannerImage, setSchoolFurnitureBannerImage] =
+    useState<ImageSourcePropType>(IMG_HOME_CATES);
+
+  useEffect(() => {
+    let active = true;
+    const loadMainCategories = async () => {
+      try {
+        const res = await api.get<IndoorMainCategoryApiItem[]>(MAIN_CATEGORY_API_URL);
+        const payload = Array.isArray(res.data) ? res.data : [];
+        if (payload.length === 0) return;
+
+        const activeItems = payload.filter(
+          (item) => (item?.status == null || item.status === 1) && item?.categoryName?.trim()
+        );
+        if (activeItems.length === 0) return;
+
+        const cardsFromApi: MainCategoryShowcaseItem[] = activeItems.map((item) => {
+          const title = item.categoryName!.trim();
+          const key = title.toLowerCase();
+          const fallback = MAIN_CATEGORY_FALLBACK_BY_NAME.get(key);
+          const remoteImage =
+            item.mobileImage && /^https?:\/\//i.test(item.mobileImage)
+              ? { uri: item.mobileImage }
+              : null;
+
+          return {
+            title,
+            tagline: fallback?.tagline ?? "Tap to explore this indoor category",
+            image: remoteImage ?? fallback?.image ?? INDOOR_IMAGE,
+            overlay: fallback?.overlay ?? ["rgba(30,41,59,0.75)", "rgba(15,23,42,0.9)"],
+          };
+        });
+
+        if (active && cardsFromApi.length > 0) setMainCategoryCards(cardsFromApi);
+      } catch {
+        // keep existing static cards as fallback
+      }
+    };
+
+    loadMainCategories();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadEducationalSubcategories = async () => {
+      try {
+        const res = await api.get<EducationalSubcategoriesTableItem[]>(
+          EDUCATIONAL_SUBCATEGORIES_API_URL
+        );
+        const payload = Array.isArray(res.data) ? res.data : [];
+        if (payload.length === 0) return;
+
+        const target =
+          payload.find(
+            (item) =>
+              item.categoryName?.trim().toLowerCase() ===
+              "educational materials"
+          ) ?? payload[0];
+        const subcategories = target?.subcategories ?? [];
+        if (subcategories.length === 0) return;
+
+        const fallbackByName = new Map(
+          EDUCATIONAL_MOSAIC_FALLBACK.map((item) => [
+            item.name.trim().toLowerCase(),
+            item.image,
+          ])
+        );
+
+        const filtered = subcategories.filter((item) => item.name?.trim());
+        const mapped: EducationalMosaicItem[] = await Promise.all(
+          filtered.map(async (item, idx) => {
+            const name = item.name!.trim();
+            const fallbackImage =
+              fallbackByName.get(name.toLowerCase()) ??
+              EDU_MOSAIC_THUMBS[idx % EDU_MOSAIC_THUMBS.length];
+            const remoteUri =
+              item.mobileImage && /^https?:\/\//i.test(item.mobileImage)
+                ? item.mobileImage
+                : null;
+            const aspectRatio = remoteUri
+              ? await getRemoteImageAspectRatio(remoteUri)
+              : getLocalImageAspectRatio(fallbackImage);
+            return {
+              name,
+              image: remoteUri ? { uri: remoteUri } : fallbackImage,
+              aspectRatio,
+            };
+          })
+        );
+
+        if (active && mapped.length > 0) {
+          setEducationalMosaicCards(mapped);
+        }
+      } catch {
+        // keep fallback educational subcategory cards
+      }
+    };
+
+    loadEducationalSubcategories();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadPreIndoorSubcategories = async () => {
+      try {
+        const res = await api.get<EducationalSubcategoriesTableItem[]>(
+          PRE_INDOOR_SUBCATEGORIES_API_URL
+        );
+        const payload = Array.isArray(res.data) ? res.data : [];
+        if (payload.length === 0) return;
+
+        const target =
+          payload.find(
+            (item) =>
+              item.categoryName?.trim().toLowerCase() === "pre indoor play items"
+          ) ?? payload[0];
+        const subcategories = target?.subcategories ?? [];
+        if (subcategories.length === 0) return;
+
+        const mapped: PreIndoorCardItem[] = subcategories
+          .filter((item) => item.name?.trim())
+          .map((item) => {
+            const name = item.name!.trim();
+            const fallbackImage =
+              PRE_INDOOR_IMAGE_FALLBACK_BY_NAME.get(name.toLowerCase()) ??
+              IMG_KIDS_CATE;
+            const remoteImage =
+              item.mobileImage && /^https?:\/\//i.test(item.mobileImage)
+                ? { uri: item.mobileImage }
+                : null;
+            return {
+              name,
+              image: remoteImage ?? fallbackImage,
+            };
+          });
+
+        if (active && mapped.length > 0) {
+          setPreIndoorCards(mapped);
+        }
+      } catch {
+        // keep fallback pre indoor cards
+      }
+    };
+
+    loadPreIndoorSubcategories();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadPreschoolFurnitureSubcategories = async () => {
+      try {
+        const res = await api.get<EducationalSubcategoriesTableItem[]>(
+          PRESCHOOL_FURNITURE_SUBCATEGORIES_API_URL
+        );
+        const payload = Array.isArray(res.data) ? res.data : [];
+        if (payload.length === 0) return;
+
+        const target =
+          payload.find(
+            (item) =>
+              item.categoryName?.trim().toLowerCase() ===
+              "preschool furniture"
+          ) ?? payload[0];
+        const subcategories = target?.subcategories ?? [];
+        if (subcategories.length === 0) return;
+
+        const mapped: PreschoolFurnitureCardItem[] = subcategories
+          .filter((item) => item.name?.trim())
+          .map((item) => {
+            const name = item.name!.trim();
+            const fallbackImage =
+              PRESCHOOL_FURNITURE_IMAGE_FALLBACK_BY_NAME.get(
+                name.toLowerCase()
+              ) ?? IMG_HOME_CATES;
+            const remoteUri =
+              item.mobileImage && /^https?:\/\//i.test(item.mobileImage)
+                ? item.mobileImage
+                : null;
+            return {
+              name,
+              image: remoteUri ? { uri: remoteUri } : fallbackImage,
+              aspectRatio: remoteUri
+                ? DEFAULT_EDU_IMAGE_ASPECT_RATIO
+                : getLocalImageAspectRatio(fallbackImage),
+            };
+          });
+
+        const mappedWithRatios = await Promise.all(
+          mapped.map(async (item) => {
+            const uri =
+              typeof item.image === "object" &&
+              item.image !== null &&
+              "uri" in item.image &&
+              typeof item.image.uri === "string"
+                ? item.image.uri
+                : null;
+            if (!uri) return item;
+            return {
+              ...item,
+              aspectRatio: await getRemoteImageAspectRatio(uri),
+            };
+          })
+        );
+
+        if (active && mappedWithRatios.length > 0) {
+          setPreschoolFurnitureCards(mappedWithRatios);
+        }
+      } catch {
+        // keep fallback preschool furniture cards
+      }
+    };
+
+    loadPreschoolFurnitureSubcategories();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadPreschoolIndoorBanner = async () => {
+      try {
+        const res = await api.get<EducationalSubcategoriesTableItem[]>(
+          PRESCHOOL_INDOOR_SUBCATEGORIES_API_URL
+        );
+        const payload = Array.isArray(res.data) ? res.data : [];
+        if (payload.length === 0) return;
+
+        const target =
+          payload.find(
+            (item) =>
+              item.categoryName?.trim().toLowerCase() === "preschool indoor"
+          ) ?? payload[0];
+        const remoteUri =
+          target?.mobileImage && /^https?:\/\//i.test(target.mobileImage)
+            ? target.mobileImage
+            : null;
+        if (active && remoteUri) {
+          setPreschoolIndoorBannerImage({ uri: remoteUri });
+        }
+      } catch {
+        // keep fallback preschool indoor banner image
+      }
+    };
+
+    loadPreschoolIndoorBanner();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadPreschoolOutdoorSportsBanner = async () => {
+      try {
+        const res = await api.get<EducationalSubcategoriesTableItem[]>(
+          PRESCHOOL_OUTDOOR_SPORTS_SUBCATEGORIES_API_URL
+        );
+        const payload = Array.isArray(res.data) ? res.data : [];
+        if (payload.length === 0) return;
+
+        const target =
+          payload.find(
+            (item) =>
+              item.categoryName?.trim().toLowerCase() ===
+              "preschool outdoor sports items"
+          ) ?? payload[0];
+        const remoteUri =
+          target?.mobileImage && /^https?:\/\//i.test(target.mobileImage)
+            ? target.mobileImage
+            : null;
+        if (active && remoteUri) {
+          setPreschoolOutdoorBannerImage({ uri: remoteUri });
+        }
+      } catch {
+        // keep fallback preschool outdoor sports banner image
+      }
+    };
+
+    loadPreschoolOutdoorSportsBanner();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadSchoolFurnitureBanner = async () => {
+      try {
+        const res = await api.get<EducationalSubcategoriesTableItem[]>(
+          SCHOOL_FURNITURE_SUBCATEGORIES_API_URL
+        );
+        const payload = Array.isArray(res.data) ? res.data : [];
+        if (payload.length === 0) return;
+
+        const target =
+          payload.find(
+            (item) =>
+              item.categoryName?.trim().toLowerCase() === "school furniture"
+          ) ?? payload[0];
+        const remoteUri =
+          target?.mobileImage && /^https?:\/\//i.test(target.mobileImage)
+            ? target.mobileImage
+            : null;
+        if (active && remoteUri) {
+          setSchoolFurnitureBannerImage({ uri: remoteUri });
+        }
+      } catch {
+        // keep fallback school furniture banner image
+      }
+    };
+
+    loadSchoolFurnitureBanner();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const openMainCategory = (title: string) => {
+    if (title === "Educational Materials") {
+      const targetY = Math.max(0, educationalSectionY.current - 8);
+      mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
+      return;
+    }
+    if (title === "Pre Indoor Play Items") {
+      const targetY = Math.max(0, preIndoorSectionY.current - 8);
+      mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
+      return;
+    }
+    if (title === "Preschool Furniture") {
+      const targetY = Math.max(0, preschoolFurnitureSectionY.current - 8);
+      mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
+      return;
+    }
+    if (title === "Preschool Indoor") {
+      const targetY = Math.max(0, pairIdeasSectionY.current - 8);
+      mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
+      return;
+    }
+    if (title === "Preschool Outdoor Sports Items") {
+      const targetY = Math.max(0, quickShortcutsSectionY.current - 8);
+      mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
+      return;
+    }
+    if (title === "School Furniture") {
+      const targetY = Math.max(0, playroomTipsSectionY.current - 8);
+      mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
+      return;
+    }
+    openProducts(title);
+  };
 
   const openProducts = (subCategory: string) => {
     router.push({
@@ -538,6 +1113,7 @@ export default function IndoorPlayScreen() {
       </View>
 
       <ScrollView
+        ref={mainScrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -553,9 +1129,7 @@ export default function IndoorPlayScreen() {
           <View style={styles.heroContent}>
             <Text style={styles.heroKicker}>Indoor Play</Text>
             <Text style={styles.heroTitle}>Shop indoor play online</Text>
-            <Text style={styles.heroSub}>
-              Educational materials, pre-indoor play, preschool furniture — same categories as on the web store.
-            </Text>
+            
           </View>
         </LinearGradient>
 
@@ -594,41 +1168,63 @@ export default function IndoorPlayScreen() {
         </View>
 
         <View style={styles.mainCategoriesSection}>
-          <LinearGradient colors={["#4c1d95", "#7c3aed", "#a855f7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.mainCategoriesHeaderBand}>
-            <Text style={styles.mainCategoriesKicker}>SHOP BY AISLE</Text>
-            <Text style={styles.mainCategoriesHeading}>Main categories</Text>
+          <View style={styles.mainCategoriesHeaderBand}>
+            <View style={styles.mainCategoriesIconRow}>
+              <View style={styles.mainCategoriesIconPill}>
+                <Ionicons name="barbell-outline" size={13} color="#7c3aed" />
+                <Text style={styles.mainCategoriesIconText}>Slides</Text>
+              </View>
+              <View style={styles.mainCategoriesIconPill}>
+                <Ionicons name="football-outline" size={13} color="#0f766e" />
+                <Text style={styles.mainCategoriesIconText}>Sports</Text>
+              </View>
+              <View style={styles.mainCategoriesIconPill}>
+                <Ionicons name="school-outline" size={13} color="#1d4ed8" />
+                <Text style={styles.mainCategoriesIconText}>Classroom</Text>
+              </View>
+            </View>
+            <Text style={styles.mainCategoriesHeading}>Playground Equipment Categories</Text>
             <Text style={styles.mainCategoriesSub}>
-              The six Indoor Play departments — tap a card to open products and book your picks.
+              Explore indoor learning, active play, and school setup sections.
             </Text>
-          </LinearGradient>
+          </View>
           <View style={styles.mainCatGrid}>
-            {MAIN_CATEGORY_SHOWCASE.map((cat) => (
+            {mainCategoryCards.map((cat) => (
               <MainCategoryShowcaseCard
                 key={cat.title}
                 title={cat.title}
                 tagline={cat.tagline}
                 image={cat.image}
                 overlay={cat.overlay}
-                onPress={() => openProducts(cat.title)}
+                onPress={() => openMainCategory(cat.title)}
               />
             ))}
           </View>
         </View>
 
-        <View style={[styles.section, styles.sectionAccentTeal]}>
+        <View
+          style={[styles.section, styles.sectionAccentTeal]}
+          onLayout={(event) => {
+            educationalSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <SectionTitle icon="library-outline" title="Educational Materials" subtitle="Blocks, threading, linking & shape play" />
           <View style={styles.eduMosaic}>
-            {EDUCATIONAL_SUBS.map((sub, i) => (
+            {educationalMosaicCards.map((sub, i) => (
               <TouchableOpacity
-                key={sub}
+                key={sub.name}
                 style={[styles.eduMosaicCell, i % 2 === 0 ? styles.eduMosaicCellA : styles.eduMosaicCellB]}
-                onPress={() => openProducts(sub)}
+                onPress={() => openProducts(sub.name)}
                 activeOpacity={0.92}
               >
-                <Image source={EDU_MOSAIC_THUMBS[i]} style={styles.eduMosaicThumb} resizeMode="cover" />
+                <Image
+                  source={sub.image}
+                  style={[styles.eduMosaicThumb, { aspectRatio: sub.aspectRatio || DEFAULT_EDU_IMAGE_ASPECT_RATIO }]}
+                  resizeMode="contain"
+                />
                 <Text style={styles.eduMosaicIndex}>{String(i + 1).padStart(2, "0")}</Text>
                 <Text style={styles.eduMosaicTitle} numberOfLines={3}>
-                  {sub}
+                  {sub.name}
                 </Text>
                 <View style={styles.eduMosaicFoot}>
                   <Text style={styles.eduMosaicCta}>Shop</Text>
@@ -654,7 +1250,53 @@ export default function IndoorPlayScreen() {
           />
         </View>
 
+        <View style={styles.section}>
+          <SectionTitle icon="flame-outline" title="Popular picks" subtitle="Trending types from the catalogue" />
+          <ScrollView
+            horizontal
+            nestedScrollEnabled={Platform.OS === "android"}
+            showsHorizontalScrollIndicator={false}
+            style={styles.hCarousel}
+            contentContainerStyle={styles.hCarouselContent}
+          >
+            {CAROUSEL_PICKS.map((item) => (
+              <TouchableOpacity key={item.sub} style={styles.cardTall} onPress={() => openProducts(item.sub)}>
+                <Image source={item.image} style={styles.cardTallImage} resizeMode="cover" />
+                <LinearGradient colors={["transparent", "rgba(15,23,42,0.78)"]} style={styles.cardTallFade} />
+                <Text style={styles.cardTallText}>{item.sub}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View
+          style={[styles.section, styles.sectionAccentRose]}
+          onLayout={(event) => {
+            preIndoorSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
+          <SectionTitle icon="barbell-outline" title="Pre Indoor Play Items" subtitle="Slides, rockers & active play" />
+          <View style={styles.dualFeatured}>
+            {preIndoorCards.map((item) => (
+              <TouchableOpacity key={item.name} style={styles.dualCard} onPress={() => openProducts(item.name)} activeOpacity={0.92}>
+                <Image source={item.image} style={styles.dualCardImage} resizeMode="cover" />
+                <LinearGradient colors={["transparent", "rgba(15,23,42,0.5)"]} style={styles.dualCardFade} />
+                <Text style={styles.dualCardTitle}>{item.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity style={styles.ghostLink} onPress={() => openProducts("Pre Indoor Play Items")}>
+            <Text style={styles.ghostLinkText}>View entire Pre Indoor aisle</Text>
+            <Ionicons name="chevron-forward" size={16} color="#be185d" />
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.storyWrap}>
+          <SectionTitle
+            icon="sparkles-outline"
+            title="Spotlight stories"
+            subtitle="Quick collections you can open instantly"
+          />
           {FEATURE_STORIES.map((story, index) => (
             <TouchableOpacity
               key={story.title}
@@ -678,56 +1320,45 @@ export default function IndoorPlayScreen() {
           ))}
         </View>
 
-        <View style={styles.section}>
-          <SectionTitle icon="flame-outline" title="Popular picks" subtitle="Trending types from the catalogue" />
-          <ScrollView
-            horizontal
-            nestedScrollEnabled={Platform.OS === "android"}
-            showsHorizontalScrollIndicator={false}
-            style={styles.hCarousel}
-            contentContainerStyle={styles.hCarouselContent}
-          >
-            {CAROUSEL_PICKS.map((item) => (
-              <TouchableOpacity key={item.sub} style={styles.cardTall} onPress={() => openProducts(item.sub)}>
-                <Image source={item.image} style={styles.cardTallImage} resizeMode="cover" />
-                <LinearGradient colors={["transparent", "rgba(15,23,42,0.78)"]} style={styles.cardTallFade} />
-                <Text style={styles.cardTallText}>{item.sub}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={[styles.section, styles.sectionAccentRose]}>
-          <SectionTitle icon="barbell-outline" title="Pre Indoor Play Items" subtitle="Slides, rockers & active play" />
-          <View style={styles.dualFeatured}>
-            {PRE_INDOOR_SUBS.map((sub, idx) => (
-              <TouchableOpacity key={sub} style={styles.dualCard} onPress={() => openProducts(sub)} activeOpacity={0.92}>
-                <Image source={idx === 0 ? IMG_KIDS_CATE : IMG_SPORTS_BANNER} style={styles.dualCardImage} resizeMode="cover" />
-                <LinearGradient colors={["transparent", "rgba(15,23,42,0.75)"]} style={styles.dualCardFade} />
-                <Text style={styles.dualCardTitle}>{sub}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.ghostLink} onPress={() => openProducts("Pre Indoor Play Items")}>
-            <Text style={styles.ghostLinkText}>View entire Pre Indoor aisle</Text>
-            <Ionicons name="chevron-forward" size={16} color="#be185d" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
+        <View
+          style={styles.section}
+          onLayout={(event) => {
+            preschoolFurnitureSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <SectionTitle icon="construct-outline" title="Preschool Furniture" subtitle="Chairs, bins & room helpers" />
           <View style={styles.furnitureRow}>
-            {PRESCHOOL_FURNITURE_SUBS.map((sub) => (
-              <TouchableOpacity key={sub} style={styles.furnitureCard} onPress={() => openProducts(sub)} activeOpacity={0.9}>
+            {preschoolFurnitureCards.map((item) => (
+              <TouchableOpacity key={item.name} style={styles.furnitureCard} onPress={() => openProducts(item.name)} activeOpacity={0.9}>
                 <Image
-                  source={sub === "Chairs" ? IMG_HOME_CATES : IMG_HOME_CATE}
-                  style={styles.furniturePhoto}
-                  resizeMode="cover"
+                  source={item.image}
+                  style={[
+                    styles.furniturePhoto,
+                    {
+                      aspectRatio:
+                        item.aspectRatio || DEFAULT_EDU_IMAGE_ASPECT_RATIO,
+                    },
+                  ]}
+                  resizeMode="contain"
                 />
-                <View style={styles.furnitureIconWrap}>
-                  <Ionicons name={sub === "Chairs" ? "body-outline" : "trash-outline"} size={22} color="#0369a1" />
+                <View style={styles.furnitureMetaRow}>
+                  <View style={styles.furnitureIconWrap}>
+                    {item.name.toLowerCase() === "chairs" ? (
+                      <MaterialCommunityIcons
+                        name="chair-rolling"
+                        size={18}
+                        color="#0369a1"
+                      />
+                    ) : (
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color="#0369a1"
+                      />
+                    )}
+                  </View>
+                  <Text style={styles.furnitureTitle}>{item.name}</Text>
                 </View>
-                <Text style={styles.furnitureTitle}>{sub}</Text>
                 <Text style={styles.furnitureHint}>Tap to browse</Text>
               </TouchableOpacity>
             ))}
@@ -759,8 +1390,38 @@ export default function IndoorPlayScreen() {
           />
         </View>
 
-        <View style={styles.section}>
-          <SectionTitle icon="git-compare-outline" title="Pair ideas" subtitle="Shop two complementary types" />
+        <View
+          style={styles.section}
+          onLayout={(event) => {
+            pairIdeasSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
+          <SectionTitle icon="git-compare-outline" title="Preschool Indoor" subtitle="Shop two complementary types" />
+          <TouchableOpacity
+            style={styles.targetedSectionBanner}
+            activeOpacity={0.92}
+            onPress={() => openProducts("Preschool Indoor")}
+            accessibilityRole="button"
+            accessibilityLabel="Preschool Indoor banner"
+          >
+            <Image
+              source={INDOOR_IMAGE}
+              style={styles.targetedSectionBannerImage}
+              resizeMode="cover"
+            />
+            <LinearGradient colors={["rgba(30,27,75,0.2)", "rgba(30,27,75,0.88)"]} style={styles.targetedSectionBannerOverlay} />
+            <View style={styles.targetedSectionBannerInner}>
+              <View style={styles.targetedSectionBannerIconWrap}>
+                <Ionicons name="school-outline" size={16} color="#e0e7ff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.targetedSectionBannerKicker}>PRESCHOOL INDOOR</Text>
+                <Text style={styles.targetedSectionBannerText}>Preschool Indoor combos and room pairings</Text>
+                <Text style={styles.targetedSectionBannerSub}>Tap to open indoor preschool collections</Text>
+              </View>
+              <Ionicons name="arrow-forward-circle" size={18} color="#e0e7ff" />
+            </View>
+          </TouchableOpacity>
           <View style={styles.comboWrap}>
             {PAIR_IDEAS.map((pair) => (
               <TouchableOpacity
@@ -783,8 +1444,38 @@ export default function IndoorPlayScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <SectionTitle icon="color-wand-outline" title="Quick shortcuts" subtitle="One tap into a top subcategory" />
+        <View
+          style={styles.section}
+          onLayout={(event) => {
+            quickShortcutsSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
+          <SectionTitle icon="color-wand-outline" title="Preschool Outdoor Sports Items" subtitle="One tap into a top subcategory" />
+          <TouchableOpacity
+            style={styles.targetedSectionBanner}
+            activeOpacity={0.92}
+            onPress={() => openProducts("Preschool Outdoor Sports Items")}
+            accessibilityRole="button"
+            accessibilityLabel="Preschool Outdoor Sports Items banner"
+          >
+            <Image
+              source={preschoolOutdoorBannerImage}
+              style={styles.targetedSectionBannerImage}
+              resizeMode="cover"
+            />
+            <LinearGradient colors={["rgba(6,78,59,0.18)", "rgba(6,78,59,0.9)"]} style={styles.targetedSectionBannerOverlay} />
+            <View style={styles.targetedSectionBannerInner}>
+              <View style={styles.targetedSectionBannerIconWrap}>
+                <Ionicons name="football-outline" size={16} color="#d1fae5" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.targetedSectionBannerKicker}>PRESCHOOL OUTDOOR SPORTS</Text>
+                <Text style={styles.targetedSectionBannerText}>Outdoor sports quick starts for preschoolers</Text>
+                <Text style={styles.targetedSectionBannerSub}>Tap to browse active outdoor picks</Text>
+              </View>
+              <Ionicons name="arrow-forward-circle" size={18} color="#d1fae5" />
+            </View>
+          </TouchableOpacity>
           <View style={styles.challengeWrap}>
             {QUICK_LINKS.map((q) => (
               <TouchableOpacity key={q.label} style={styles.challengeCard} onPress={() => openProducts(q.sub)}>
@@ -795,14 +1486,49 @@ export default function IndoorPlayScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <SectionTitle icon="book-outline" title="Playroom tips" subtitle="Ideas that pair with our aisles" />
-          {PARENT_TIPS.map((tip) => (
-            <View key={tip} style={styles.tipRow}>
-              <Image source={INDOOR_IMAGE} style={styles.tipImage} resizeMode="cover" />
-              <Ionicons name="bulb-outline" size={18} color="#f59e0b" />
-              <Text style={styles.tipText}>{tip}</Text>
+        <View
+          style={styles.section}
+          onLayout={(event) => {
+            playroomTipsSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
+          <SectionTitle icon="book-outline" title="School Furniture" subtitle="Ideas that pair with our aisles" />
+          <TouchableOpacity
+            style={styles.targetedSectionBanner}
+            activeOpacity={0.92}
+            onPress={() => openProducts("School Furniture")}
+            accessibilityRole="button"
+            accessibilityLabel="School Furniture banner"
+          >
+            <Image
+              source={schoolFurnitureBannerImage}
+              style={styles.targetedSectionBannerImage}
+              resizeMode="cover"
+            />
+            <LinearGradient colors={["rgba(120,53,15,0.18)", "rgba(120,53,15,0.9)"]} style={styles.targetedSectionBannerOverlay} />
+            <View style={styles.targetedSectionBannerInner}>
+              <View style={styles.targetedSectionBannerIconWrap}>
+                <Ionicons name="library-outline" size={16} color="#fef3c7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.targetedSectionBannerKicker}>SCHOOL FURNITURE</Text>
+                <Text style={styles.targetedSectionBannerText}>School furniture setup tips and layout ideas</Text>
+                <Text style={styles.targetedSectionBannerSub}>Tap to open desks, storage and classroom essentials</Text>
+              </View>
+              <Ionicons name="arrow-forward-circle" size={18} color="#fef3c7" />
             </View>
+          </TouchableOpacity>
+          {SCHOOL_FURNITURE_ITEMS.map((item) => (
+            <TouchableOpacity
+              key={`${item.subCategory}-${item.text}`}
+              style={styles.tipRow}
+              onPress={() => openProducts(item.subCategory)}
+              activeOpacity={0.92}
+            >
+              <Image source={item.image} style={styles.tipImage} resizeMode="cover" />
+              <Ionicons name={item.icon} size={18} color="#f59e0b" />
+              <Text style={styles.tipText}>{item.text}</Text>
+            </TouchableOpacity>
           ))}
         </View>
 
@@ -825,17 +1551,60 @@ export default function IndoorPlayScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <SectionTitle icon="bag-check-outline" title="Shop all Indoor Play" subtitle="Every subcategory & collection in one grid" />
-          <View style={styles.shopAllWrap}>
-            {SHOP_ALL_CHIPS.map((item) => (
-              <TouchableOpacity key={item} style={styles.shopAllCard} onPress={() => openProducts(item)}>
-                <Text style={styles.shopAllText} numberOfLines={2}>
-                  {item}
+        <View style={[styles.section, styles.productPreviewSection]}>
+          <SectionTitle icon="grid-outline" title="Featured products" />
+          <View style={styles.productPreviewGrid}>
+            {INDOOR_PLAY_PREVIEW_PRODUCTS.map((p, idx) => (
+              <TouchableOpacity
+                key={p.subCategory}
+                style={[styles.productPreviewCard, idx % 2 === 1 && styles.productPreviewCardRight]}
+                activeOpacity={0.92}
+                onPress={() => openProducts(p.subCategory)}
+                accessibilityRole="button"
+                accessibilityLabel={p.title}
+              >
+                <Image source={p.image} style={styles.productPreviewImage} resizeMode="contain" />
+                <Text style={styles.productPreviewTitle} numberOfLines={2}>
+                  {p.title}
                 </Text>
+                <Text style={styles.productPreviewSub} numberOfLines={2}>
+                  {p.subCategory}
+                </Text>
+                <View style={styles.productPreviewRatingRow}>
+                  <Ionicons name="star" size={13} color="#f59e0b" />
+                  <Text style={styles.productPreviewRatingText}>
+                    {p.rating.toFixed(1)} ({p.reviews})
+                  </Text>
+                </View>
+                <View style={styles.productPreviewPriceRow}>
+                  <Text style={styles.productPreviewPrice}>₹{p.price}</Text>
+                  <Text style={styles.productPreviewMrp}>₹{p.mrp}</Text>
+                </View>
+                <View style={styles.productPreviewOpenPill}>
+                  <Ionicons name="cart-outline" size={14} color="#ffffff" />
+                  <Text style={styles.productPreviewOpenText}>Add to cart</Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
+          <TouchableOpacity
+            style={styles.allIndoorItemsBtn}
+            activeOpacity={0.9}
+            onPress={() => openProducts(ALL_INDOOR_PLAY_CATALOG)}
+            accessibilityRole="button"
+            accessibilityLabel="All Indoor Play Items"
+          >
+            <LinearGradient
+              colors={["#0d9488", "#0f766e"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.allIndoorItemsBtnInner}
+            >
+              <Ionicons name="apps-outline" size={18} color="#ecfeff" />
+              <Text style={styles.allIndoorItemsBtnText}>All Indoor Play Items</Text>
+              <Ionicons name="chevron-forward" size={18} color="#ecfeff" />
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         {/* Fills space above overlay tab bar; white so no gray strip after last section */}
@@ -1039,21 +1808,46 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: "#c4b5fd",
-    backgroundColor: "#fff",
+    backgroundColor: "transparent",
   },
-  mainCategoriesHeaderBand: { paddingVertical: 16, paddingHorizontal: 14 },
+  mainCategoriesHeaderBand: {
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: "transparent",
+    borderBottomWidth: 1,
+    borderColor: "rgba(196, 181, 253, 0.45)",
+  },
+  mainCategoriesIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 9,
+    flexWrap: "wrap",
+  },
+  mainCategoriesIconPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "rgba(203, 213, 225, 0.9)",
+  },
+  mainCategoriesIconText: { fontSize: 10, fontWeight: "800", color: "#334155" },
   mainCategoriesKicker: {
     color: "rgba(255,255,255,0.9)",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.2,
   },
-  mainCategoriesHeading: { color: "#fff", fontSize: 22, fontWeight: "900", marginTop: 6 },
+  mainCategoriesHeading: { color: "#1d324e", fontSize: 21, fontWeight: "900" },
   mainCategoriesSub: {
-    color: "rgba(255,255,255,0.92)",
+    color: "#475569",
     fontSize: 12,
-    marginTop: 8,
-    lineHeight: 18,
+    marginTop: 6,
+    lineHeight: 17,
     fontWeight: "600",
   },
   mainCatGrid: {
@@ -1075,23 +1869,54 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderColor: "rgba(226, 232, 240, 0.9)",
   },
+  mainCatCardEmphasis: {
+    borderColor: "rgba(253, 224, 71, 0.85)",
+    borderWidth: 1.2,
+  },
   mainCatCardImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
-  mainCatCardOverlay: { ...StyleSheet.absoluteFillObject },
+  mainCatCardOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.28 },
+  mainCatMediaArea: {
+    height: 128,
+    backgroundColor: "#ffffff",
+  },
+  mainCatEmphasisBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(15, 23, 42, 0.68)",
+    borderWidth: 1,
+    borderColor: "rgba(253, 224, 71, 0.95)",
+  },
+  mainCatEmphasisBadgeText: {
+    color: "#fef9c3",
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
   mainCatCardContent: {
     flex: 1,
     justifyContent: "flex-end",
     padding: 10,
     paddingBottom: 12,
   },
-  mainCatRibbon: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.95)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 6,
+  mainCatCardContentOutside: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: "#fff",
   },
-  mainCatRibbonText: { fontSize: 8, fontWeight: "900", color: "#5b21b6", letterSpacing: 0.6 },
+  mainCatCardContentOutsideEmphasis: {
+    backgroundColor: "#111827",
+    borderTopWidth: 1,
+    borderColor: "rgba(250, 204, 21, 0.65)",
+  },
   mainCatCardTitle: { color: "#fff", fontSize: 13, fontWeight: "900", lineHeight: 17 },
   mainCatCardTagline: { color: "rgba(255,255,255,0.9)", fontSize: 10, marginTop: 4, lineHeight: 14, fontWeight: "600" },
   mainCatShopPill: {
@@ -1105,7 +1930,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 999,
   },
+  mainCatShopPillEmphasis: {
+    backgroundColor: "rgba(15, 23, 42, 0.62)",
+    borderWidth: 1,
+    borderColor: "rgba(253, 224, 71, 0.9)",
+  },
   mainCatShopPillText: { fontSize: 10, fontWeight: "900", color: "#312e81" },
+  mainCatShopPillTextEmphasis: { color: "#fef9c3" },
   eduMosaic: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1126,10 +1957,9 @@ const styles = StyleSheet.create({
   },
   eduMosaicThumb: {
     width: "100%",
-    height: 56,
     borderRadius: 0,
     marginBottom: 4,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "transparent",
   },
   eduMosaicCellA: {
     backgroundColor: "#ecfeff",
@@ -1307,22 +2137,29 @@ const styles = StyleSheet.create({
   },
   furniturePhoto: {
     width: "100%",
-    height: 76,
     borderRadius: 0,
     marginBottom: 8,
-    backgroundColor: "#e0f2fe",
+    backgroundColor: "transparent",
   },
   furnitureIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#7dd3fc",
   },
-  furnitureTitle: { marginTop: 4, fontSize: 13, fontWeight: "900", color: "#0c4a6e", textAlign: "center" },
+  furnitureMetaRow: {
+    marginTop: 4,
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  furnitureTitle: { fontSize: 13, fontWeight: "900", color: "#0c4a6e", textAlign: "left" },
   furnitureHint: { marginTop: 4, fontSize: 10, fontWeight: "700", color: "#0369a1" },
   listRow: {
     flexDirection: "row",
@@ -1346,6 +2183,58 @@ const styles = StyleSheet.create({
   listRowText: { fontSize: 13, fontWeight: "800", color: "#1d324e" },
   listRowHint: { fontSize: 10, color: "#64748b", fontWeight: "600", marginTop: 2 },
   comboWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 10 },
+  targetedSectionBanner: {
+    marginHorizontal: 14,
+    marginBottom: 10,
+    borderRadius: 12,
+    overflow: "hidden",
+    minHeight: 118,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.35)",
+  },
+  targetedSectionBannerImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  targetedSectionBannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  targetedSectionBannerInner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  targetedSectionBannerIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  targetedSectionBannerKicker: {
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+  targetedSectionBannerText: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  targetedSectionBannerSub: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 2,
+  },
   comboCard: { width: "50%", flexGrow: 0 },
   comboInner: {
     borderRadius: 0,
@@ -1465,17 +2354,99 @@ const styles = StyleSheet.create({
   },
   giftImage: { width: 24, height: 24, borderRadius: 8 },
   giftText: { flex: 1, fontSize: 12, fontWeight: "700", color: "#6b21a8" },
-  shopAllWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", rowGap: 0 },
-  shopAllCard: {
+  productPreviewSection: {
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+  },
+  productPreviewGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    rowGap: 0,
+  },
+  productPreviewCard: {
     width: "50%",
-    borderRadius: 0,
-    backgroundColor: "#ecfeff",
-    borderWidth: 0,
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
     borderRightWidth: 1,
-    borderColor: "#a5f3fc",
+    borderColor: "#d1d5db",
     paddingVertical: 8,
     paddingHorizontal: 10,
+    minHeight: 220,
   },
-  shopAllText: { fontSize: 11, fontWeight: "700", color: "#0f766e", lineHeight: 15 },
+  productPreviewCardRight: { borderRightWidth: 0 },
+  productPreviewImage: {
+    width: "100%",
+    height: 114,
+    marginBottom: 10,
+    backgroundColor: "#ffffff",
+  },
+  productPreviewTitle: {
+    fontSize: 31 / 2,
+    fontWeight: "900",
+    color: "#1f2937",
+    lineHeight: 20,
+  },
+  productPreviewSub: {
+    marginTop: 2,
+    fontSize: 15 / 1.25,
+    color: "#4b5563",
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  productPreviewRatingRow: {
+    marginTop: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  productPreviewRatingText: {
+    fontSize: 11,
+    color: "#374151",
+    fontWeight: "700",
+  },
+  productPreviewPriceRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  productPreviewPrice: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  productPreviewMrp: {
+    fontSize: 11,
+    color: "#6b7280",
+    textDecorationLine: "line-through",
+  },
+  productPreviewOpenPill: {
+    marginTop: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    alignSelf: "stretch",
+    backgroundColor: "#0f766e",
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  productPreviewOpenText: { fontSize: 12, fontWeight: "800", color: "#ffffff" },
+  allIndoorItemsBtn: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  allIndoorItemsBtnInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  allIndoorItemsBtnText: { color: "#ecfeff", fontSize: 13, fontWeight: "900" },
 });

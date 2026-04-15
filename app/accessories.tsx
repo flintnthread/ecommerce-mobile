@@ -32,17 +32,48 @@ import {
 
 type BagsSubcategoryApi = {
   id: number;
-  name: string;
-  image: string;
+  name?: string | null;
+  image?: string | null;
+  mobileImage?: string | null;
+  mobileimage?: string | null;
+  subcategoryName?: string | null;
+  subcategoryImage?: string | null;
 };
 
 type BagsSubcategoryTableRow = {
   categoryName: string;
+  mobileImage?: string | null;
+  mobileimage?: string | null;
   subcategories: BagsSubcategoryApi[];
 };
 
+type AccessoriesCategoryApi = {
+  id: number;
+  categoryName: string;
+  image: string | null;
+  mobileImage: string | null;
+  status?: number;
+};
+
+const ACCESSORIES_PARENT_CATEGORY_ID = 28;
+const ACCESSORIES_CATEGORIES_ENDPOINT =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/28/subcategories";
+const JEWELLERY_SUBCATEGORIES_TABLE_ENDPOINT =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/40/subcategories-table";
+const OTHER_ACCESSORIES_SUBCATEGORIES_TABLE_ENDPOINT =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/43/subcategories-table";
+const WATCHES_SUBCATEGORIES_TABLE_ENDPOINT =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/41/subcategories-table";
+const ACCESSORIES_API_ORIGIN = (() => {
+  try {
+    return new URL(ACCESSORIES_CATEGORIES_ENDPOINT).origin;
+  } catch {
+    return "";
+  }
+})();
+
 /** Backend category id for Bags (GET /api/categories/:id/subcategories-table). */
-const BAGS_CATEGORY_ID = 39;
+const BAGS_CATEGORY_ID_FALLBACK = 39;
 
 /**
  * Maps each Bags showcase card to API subcategory ids so chips reflect live data.
@@ -55,11 +86,36 @@ const BAGS_CARD_SUBCATEGORY_IDS: Record<string, number[]> = {
   w4: [70],
 };
 
-function getSubcategoryTableImageUri(filename: string): string {
-  const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+function getSubcategoryTableImageUri(filename: string | null | undefined): string {
+  const base = String(ACCESSORIES_API_ORIGIN || api.defaults.baseURL || "").replace(/\/$/, "");
   if (!filename?.trim()) return `${base}/uploads/`;
   if (/^https?:\/\//i.test(filename)) return filename;
   return `${base}/uploads/${filename}`;
+}
+
+function getApiImageSourceOrFallback(
+  filename: string | null | undefined,
+  fallbackSource: any
+): any {
+  if (!filename?.trim()) return fallbackSource;
+  return { uri: getSubcategoryTableImageUri(filename) } as const;
+}
+
+function getSubcategoryDisplayName(sub: BagsSubcategoryApi): string {
+  return sanitizeApiLabel(sub.name ?? sub.subcategoryName ?? "");
+}
+
+function getSubcategoryImageFilename(sub: BagsSubcategoryApi): string | null {
+  return sub.mobileImage ?? sub.mobileimage ?? sub.image ?? sub.subcategoryImage ?? null;
+}
+
+function getSubcategoryImageSourceOrFallback(sub: BagsSubcategoryApi, fallbackSource: any): any {
+  return getApiImageSourceOrFallback(getSubcategoryImageFilename(sub), fallbackSource);
+}
+
+function sanitizeApiLabel(text: string | null | undefined): string {
+  if (!text) return "";
+  return text.replace(/\u0019/g, "'").replace(/[\u0000-\u001f\u007f]/g, "").trim();
 }
 
 function getSubcategoriesForBagsCard(
@@ -72,8 +128,26 @@ function getSubcategoriesForBagsCard(
   return wanted.map((id) => byId.get(id)).filter((s): s is BagsSubcategoryApi => Boolean(s));
 }
 
+function normalizeSubcategory(item: BagsSubcategoryApi): BagsSubcategoryApi {
+  return {
+    ...item,
+    name: item.name ?? item.subcategoryName ?? null,
+    image: item.image ?? item.subcategoryImage ?? null,
+    mobileImage: item.mobileImage ?? item.mobileimage ?? null,
+    mobileimage: item.mobileimage ?? item.mobileImage ?? null,
+  };
+}
+
+function getNormalizedRowSubcategories(
+  rows: BagsSubcategoryTableRow[] | undefined
+): BagsSubcategoryApi[] {
+  const first = Array.isArray(rows) ? rows[0] : undefined;
+  const list = Array.isArray(first?.subcategories) ? first.subcategories : [];
+  return list.map(normalizeSubcategory);
+}
+
 /** Backend category id for Belts & Caps (GET /api/categories/:id/subcategories-table). */
-const BELTS_CAPS_CATEGORY_ID = 42;
+const BELTS_CAPS_CATEGORY_ID_FALLBACK = 42;
 
 /**
  * Maps each Belts & Caps showcase card to API subcategory ids.
@@ -97,10 +171,10 @@ function getSubcategoriesForBeltsCapsCard(
 }
 
 /** Backend category id for Jewellery (GET /api/categories/:id/subcategories-table). */
-const JEWELLERY_CATEGORY_ID = 28;
+const JEWELLERY_CATEGORY_ID_FALLBACK = 40;
 
 /** Watches category subcategories table (GET /api/categories/:id/subcategories-table). Postman uses 41. */
-const WATCHES_SUBCATEGORIES_CATEGORY_ID = 41;
+const WATCHES_SUBCATEGORIES_CATEGORY_ID_FALLBACK = 41;
 
 /**
  * Maps each jewellery carousel card index (0–6, aligned with womanYouAreCardFooters) to API subcategory ids.
@@ -126,7 +200,10 @@ function getSubcategoriesForJewelleryCarouselIndex(
 }
 
 /** Backend category id for Other Accessories (GET /api/categories/:id/subcategories-table). */
-const OTHER_ACCESSORIES_CATEGORY_ID = 43;
+const OTHER_ACCESSORIES_CATEGORY_ID_FALLBACK = 43;
+
+/** Backend category id for Gadgets Accessories (GET /api/categories/:id/subcategories-table). */
+const GADGETS_CATEGORY_ID_FALLBACK = 103;
 
 /** Single source of truth for hero card titles = API subcategory names (5 rows). */
 const OTHER_ACCESSORIES_DEAL_TITLES: Record<string, string> = {
@@ -181,7 +258,7 @@ function getOtherAccessoriesSubcategoriesForSelectedDeal(
   const title = OTHER_ACCESSORIES_DEAL_TITLES[dealId]?.trim();
   if (!title || deduped.length === 0) return [];
   const lower = title.toLowerCase();
-  const hit = deduped.find((s) => s.name.trim().toLowerCase() === lower);
+  const hit = deduped.find((s) => getSubcategoryDisplayName(s).toLowerCase() === lower);
   return hit ? [hit] : [];
 }
 
@@ -232,6 +309,27 @@ type TopCategory = {
   image: any;
 };
 
+function normalizeCategoryLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const TOP_CATEGORY_ID_BY_API_NAME: Record<string, string> = {
+  bags: "bags",
+  "belts and caps": "belts_caps",
+  "gadgets accessories": "gadgets",
+  jewellery: "jewellery",
+  "other accessories": "other_accessories",
+  watches: "watches",
+};
+
+function mapApiCategoryNameToTopCategoryId(categoryName: string): string | null {
+  return TOP_CATEGORY_ID_BY_API_NAME[normalizeCategoryLabel(categoryName)] ?? null;
+}
+
 type CollectionItem = {
   id: string;
   title: string;
@@ -252,7 +350,7 @@ type SplitProductItem = {
   reviewCount?: number;
 };
 
-const topCategories: TopCategory[] = [
+const topCategoriesFallback: TopCategory[] = [
   { id: "bags", label: "Bags", image: require("../assets/images/handbag.png") },
   { id: "belts_caps", label: "Belts & Caps", image: require("../assets/images/product6.png") },
   { id: "gadgets", label: "Gadgets Accessories", image: require("../assets/images/product2.png") },
@@ -529,6 +627,24 @@ const gadgetsQuickLinkSubcategories: Record<string, string[]> = {
   gq3: ["Power banks", "USB-C & lightning cables", "Wireless chargers", "GaN wall adapters"],
   gq4: ["Phone cases & covers", "Tablet cases", "Tempered glass", "Skins & lens protectors"],
 };
+
+/** API-to-lane map for gadgets quick links (same lane ids gq1–gq4). */
+const GADGETS_QUICK_LINK_SUBCATEGORY_IDS: Record<string, number[]> = {
+  gq1: [],
+  gq2: [357], // Clothing Accessories (from /api/categories/103/subcategories-table)
+  gq3: [],
+  gq4: [],
+};
+
+function getSubcategoriesForGadgetsQuickLink(
+  quickLinkId: string,
+  all: BagsSubcategoryApi[]
+): BagsSubcategoryApi[] {
+  const wanted = GADGETS_QUICK_LINK_SUBCATEGORY_IDS[quickLinkId];
+  if (!wanted?.length || !all.length) return [];
+  const byId = new Map(all.map((s) => [s.id, s]));
+  return wanted.map((id) => byId.get(id)).filter((s): s is BagsSubcategoryApi => Boolean(s));
+}
 
 const gadgetsSubcategoryImages: Record<string, any> = {
   "Wireless earbuds": require("../assets/images/product2.png"),
@@ -1016,6 +1132,7 @@ export default function Accessories() {
     Math.min(118, Math.max(86, windowWidth * 0.24))
   );
   const [activeTopCategory, setActiveTopCategory] = useState("other_accessories");
+  const [topCategoriesFromApi, setTopCategoriesFromApi] = useState<AccessoriesCategoryApi[]>([]);
   const [womenSectionY, setWomenSectionY] = useState(0);
   const [menSectionY, setMenSectionY] = useState(0);
   const [kidsYouAreSectionY, setKidsYouAreSectionY] = useState(0);
@@ -1043,6 +1160,10 @@ export default function Accessories() {
   const [otherAccessoriesSubcategoriesFromApi, setOtherAccessoriesSubcategoriesFromApi] = useState<
     BagsSubcategoryApi[]
   >([]);
+  const [gadgetsSubcategoriesFromApi, setGadgetsSubcategoriesFromApi] = useState<BagsSubcategoryApi[]>(
+    []
+  );
+  const [gadgetsCategoryNameFromApi, setGadgetsCategoryNameFromApi] = useState<string | null>(null);
   const [watchesSubcategoriesFromApi, setWatchesSubcategoriesFromApi] = useState<BagsSubcategoryApi[]>(
     []
   );
@@ -1066,38 +1187,131 @@ export default function Accessories() {
   const leftShowcaseViewportHeightRef = useRef(0);
   const [selectedGadgetsQuickLinkId, setSelectedGadgetsQuickLinkId] = useState("gq1");
   const [selectedWatchesShowcaseCardId, setSelectedWatchesShowcaseCardId] = useState("wc1");
-  const watchesSubcategoriesScrollRef = useRef<ScrollView | null>(null);
+  const accessoriesApiBaseUrl = ACCESSORIES_API_ORIGIN;
+
+  const categoryIdsByTopId = useMemo(() => {
+    const resolved = {
+      bags: BAGS_CATEGORY_ID_FALLBACK,
+      belts_caps: BELTS_CAPS_CATEGORY_ID_FALLBACK,
+      gadgets: GADGETS_CATEGORY_ID_FALLBACK,
+      jewellery: JEWELLERY_CATEGORY_ID_FALLBACK,
+      other_accessories: OTHER_ACCESSORIES_CATEGORY_ID_FALLBACK,
+      watches: WATCHES_SUBCATEGORIES_CATEGORY_ID_FALLBACK,
+    };
+
+    for (const category of topCategoriesFromApi) {
+      const topId = mapApiCategoryNameToTopCategoryId(category.categoryName);
+      if (
+        topId &&
+        Object.prototype.hasOwnProperty.call(resolved, topId) &&
+        Number.isFinite(category.id)
+      ) {
+        (resolved as Record<string, number>)[topId] = category.id;
+      }
+    }
+    return resolved;
+  }, [topCategoriesFromApi]);
+
+  const topCategoriesResolved = useMemo<TopCategory[]>(() => {
+    if (topCategoriesFromApi.length === 0) return topCategoriesFallback;
+
+    const byTopId = new Map<string, AccessoriesCategoryApi>();
+    for (const row of topCategoriesFromApi) {
+      const topId = mapApiCategoryNameToTopCategoryId(row.categoryName);
+      if (topId && !byTopId.has(topId)) byTopId.set(topId, row);
+    }
+
+    return topCategoriesFallback.map((fallback) => {
+      const apiCategory = byTopId.get(fallback.id);
+      if (!apiCategory) return fallback;
+
+      const source = apiCategory.mobileImage?.trim()
+        ? { uri: apiCategory.mobileImage.trim() }
+        : fallback.image;
+
+      return {
+        id: fallback.id,
+        label: apiCategory.categoryName || fallback.label,
+        image: source,
+      };
+    });
+  }, [topCategoriesFromApi]);
 
   const watchesShowcaseCardsResolved = useMemo((): WatchesShowcaseCard[] => {
     if (watchesSubcategoriesFromApi.length > 0) {
-      return watchesSubcategoriesFromApi.slice(0, 5).map((s, i) => ({
+      return watchesSubcategoriesFromApi.slice(0, 3).map((s, i) => ({
         id: `wc${i + 1}`,
-        title: s.name,
+        title: getSubcategoryDisplayName(s) || `Watch ${i + 1}`,
         offer: "UP TO 60% OFF",
         brandsLine: "Titan · Fossil · Fastrack",
-        image: { uri: getSubcategoryTableImageUri(s.image) },
+        image: getSubcategoryImageSourceOrFallback(s, watchesShowcaseCards[i]?.image),
       }));
     }
     return watchesShowcaseCards;
   }, [watchesSubcategoriesFromApi]);
 
-  const watchLaneSubcategoriesList = useMemo(() => {
-    const list = watchesCardSubcategories[selectedWatchesShowcaseCardId];
-    return Array.isArray(list) ? list : [];
-  }, [selectedWatchesShowcaseCardId]);
-
-  const selectedWatchCategoryTitle = useMemo(
-    () =>
-      watchesShowcaseCardsResolved.find((c) => c.id === selectedWatchesShowcaseCardId)?.title ??
-      "category",
-    [selectedWatchesShowcaseCardId, watchesShowcaseCardsResolved]
+  const fetchSubcategoriesTable = useCallback(
+    async (categoryId: number) => {
+      const path = `/api/categories/${categoryId}/subcategories-table`;
+      try {
+        if (accessoriesApiBaseUrl) {
+          const absoluteUrl = `${accessoriesApiBaseUrl}${path}`;
+          const { data } = await api.get<BagsSubcategoryTableRow[]>(absoluteUrl, {
+            withCredentials: false,
+          });
+          return data;
+        }
+      } catch {
+        // Fall through to app baseURL request to preserve existing behavior.
+      }
+      const { data } = await api.get<BagsSubcategoryTableRow[]>(path);
+      return data;
+    },
+    [accessoriesApiBaseUrl]
   );
+
+  const gadgetsQuickLinkSubcategoriesResolved = useMemo<Record<string, string[]>>(() => {
+    if (gadgetsSubcategoriesFromApi.length === 0) return gadgetsQuickLinkSubcategories;
+    return {
+      gq1: getSubcategoriesForGadgetsQuickLink("gq1", gadgetsSubcategoriesFromApi)
+        .map((s) => getSubcategoryDisplayName(s))
+        .filter(Boolean),
+      gq2: getSubcategoriesForGadgetsQuickLink("gq2", gadgetsSubcategoriesFromApi)
+        .map((s) => getSubcategoryDisplayName(s))
+        .filter(Boolean),
+      gq3: getSubcategoriesForGadgetsQuickLink("gq3", gadgetsSubcategoriesFromApi)
+        .map((s) => getSubcategoryDisplayName(s))
+        .filter(Boolean),
+      gq4: getSubcategoriesForGadgetsQuickLink("gq4", gadgetsSubcategoriesFromApi)
+        .map((s) => getSubcategoryDisplayName(s))
+        .filter(Boolean),
+    };
+  }, [gadgetsSubcategoriesFromApi]);
+
+  const gadgetsSubcategoryImagesResolved = useMemo<Record<string, any>>(() => {
+    const resolved = { ...gadgetsSubcategoryImages };
+    gadgetsSubcategoriesFromApi.forEach((sub) => {
+      const label = getSubcategoryDisplayName(sub);
+      const filename = getSubcategoryImageFilename(sub);
+      if (label && filename?.trim()) {
+        resolved[label] = { uri: getSubcategoryTableImageUri(filename) };
+      }
+    });
+    return resolved;
+  }, [gadgetsSubcategoriesFromApi]);
+
+  const selectedGadgetsQuickLinkLabel = useMemo(() => {
+    if (selectedGadgetsQuickLinkId === "gq1" && gadgetsCategoryNameFromApi?.trim()) {
+      return gadgetsCategoryNameFromApi.trim();
+    }
+    return (
+      gadgetsAccessoryQuickLinks.find((l) => l.id === selectedGadgetsQuickLinkId)?.label ??
+      "Gadgets accessories"
+    );
+  }, [selectedGadgetsQuickLinkId, gadgetsCategoryNameFromApi]);
 
   const onWatchShowcaseLanePress = useCallback((laneId: string) => {
     setSelectedWatchesShowcaseCardId(laneId);
-    requestAnimationFrame(() => {
-      watchesSubcategoriesScrollRef.current?.scrollTo({ x: 0, y: 0, animated: true });
-    });
   }, []);
 
   const sparkleFloat = useRef(new Animated.Value(0)).current;
@@ -1449,14 +1663,21 @@ export default function Accessories() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await api.get<BagsSubcategoryTableRow[]>(
-          `/api/categories/${BAGS_CATEGORY_ID}/subcategories-table`
+        const { data } = await api.get<AccessoriesCategoryApi[]>(
+          ACCESSORIES_CATEGORIES_ENDPOINT
         );
         if (cancelled) return;
-        const first = Array.isArray(data) ? data[0] : undefined;
-        setBagsSubcategoriesFromApi(first?.subcategories ?? []);
+        setTopCategoriesFromApi(Array.isArray(data) ? data : []);
       } catch {
-        if (!cancelled) setBagsSubcategoriesFromApi([]);
+        try {
+          const { data } = await api.get<AccessoriesCategoryApi[]>(
+            `/api/categories/${ACCESSORIES_PARENT_CATEGORY_ID}/subcategories`
+          );
+          if (cancelled) return;
+          setTopCategoriesFromApi(Array.isArray(data) ? data : []);
+        } catch {
+          if (!cancelled) setTopCategoriesFromApi([]);
+        }
       }
     })();
     return () => {
@@ -1464,14 +1685,37 @@ export default function Accessories() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchSubcategoriesTable(categoryIdsByTopId.bags);
+        if (cancelled) return;
+        setBagsSubcategoriesFromApi(getNormalizedRowSubcategories(data));
+      } catch {
+        if (!cancelled) setBagsSubcategoriesFromApi([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryIdsByTopId.bags, fetchSubcategoriesTable]);
+
   const bagsRelatedChips = useMemo(() => {
     const fromApi = getSubcategoriesForBagsCard(selectedWomenItemId, bagsSubcategoriesFromApi);
     if (fromApi.length > 0) {
-      return fromApi.map((s) => ({
-        key: `bag-sub-${s.id}`,
-        label: s.name,
-        source: { uri: getSubcategoryTableImageUri(s.image) } as const,
-      }));
+      return fromApi.map((s) => {
+        const label = getSubcategoryDisplayName(s);
+        return {
+          key: `bag-sub-${s.id}`,
+          label,
+          source: getSubcategoryImageSourceOrFallback(
+            s,
+            bagsRelatedCategoryImagesFallback[label] ??
+              require("../assets/images/accessoriescate.png")
+          ),
+        };
+      });
     }
     const fallback = bagsRelatedCategoriesFallback[selectedWomenItemId] ?? [];
     return fallback.map((label) => ({
@@ -1486,12 +1730,9 @@ export default function Accessories() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await api.get<BagsSubcategoryTableRow[]>(
-          `/api/categories/${BELTS_CAPS_CATEGORY_ID}/subcategories-table`
-        );
+        const data = await fetchSubcategoriesTable(categoryIdsByTopId.belts_caps);
         if (cancelled) return;
-        const first = Array.isArray(data) ? data[0] : undefined;
-        setBeltsCapsSubcategoriesFromApi(first?.subcategories ?? []);
+        setBeltsCapsSubcategoriesFromApi(getNormalizedRowSubcategories(data));
       } catch {
         if (!cancelled) setBeltsCapsSubcategoriesFromApi([]);
       }
@@ -1499,68 +1740,107 @@ export default function Accessories() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [categoryIdsByTopId.belts_caps, fetchSubcategoriesTable]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const { data } = await api.get<BagsSubcategoryTableRow[]>(
-          `/api/categories/${JEWELLERY_CATEGORY_ID}/subcategories-table`
+          JEWELLERY_SUBCATEGORIES_TABLE_ENDPOINT,
+          { withCredentials: false }
         );
         if (cancelled) return;
-        const first = Array.isArray(data) ? data[0] : undefined;
-        setJewellerySubcategoriesFromApi(first?.subcategories ?? []);
+        setJewellerySubcategoriesFromApi(getNormalizedRowSubcategories(data));
       } catch {
-        if (!cancelled) setJewellerySubcategoriesFromApi([]);
+        try {
+          const data = await fetchSubcategoriesTable(categoryIdsByTopId.jewellery);
+          if (cancelled) return;
+          setJewellerySubcategoriesFromApi(getNormalizedRowSubcategories(data));
+        } catch {
+          if (!cancelled) setJewellerySubcategoriesFromApi([]);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [categoryIdsByTopId.jewellery, fetchSubcategoriesTable]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const { data } = await api.get<BagsSubcategoryTableRow[]>(
-          `/api/categories/${OTHER_ACCESSORIES_CATEGORY_ID}/subcategories-table`
+          OTHER_ACCESSORIES_SUBCATEGORIES_TABLE_ENDPOINT,
+          { withCredentials: false }
         );
         if (cancelled) return;
-        const first = Array.isArray(data) ? data[0] : undefined;
-        setOtherAccessoriesSubcategoriesFromApi(first?.subcategories ?? []);
+        setOtherAccessoriesSubcategoriesFromApi(getNormalizedRowSubcategories(data));
       } catch {
-        if (!cancelled) setOtherAccessoriesSubcategoriesFromApi([]);
+        try {
+          const data = await fetchSubcategoriesTable(categoryIdsByTopId.other_accessories);
+          if (cancelled) return;
+          setOtherAccessoriesSubcategoriesFromApi(getNormalizedRowSubcategories(data));
+        } catch {
+          if (!cancelled) setOtherAccessoriesSubcategoriesFromApi([]);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [categoryIdsByTopId.other_accessories, fetchSubcategoriesTable]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchSubcategoriesTable(categoryIdsByTopId.gadgets);
+        if (cancelled) return;
+        const first = Array.isArray(data) ? data[0] : undefined;
+        setGadgetsCategoryNameFromApi(first?.categoryName ?? null);
+        setGadgetsSubcategoriesFromApi(getNormalizedRowSubcategories(data));
+      } catch {
+        if (!cancelled) {
+          setGadgetsCategoryNameFromApi(null);
+          setGadgetsSubcategoriesFromApi([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryIdsByTopId.gadgets, fetchSubcategoriesTable]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const { data } = await api.get<BagsSubcategoryTableRow[]>(
-          `/api/categories/${WATCHES_SUBCATEGORIES_CATEGORY_ID}/subcategories-table`
+          WATCHES_SUBCATEGORIES_TABLE_ENDPOINT,
+          { withCredentials: false }
         );
         if (cancelled) return;
-        const first = Array.isArray(data) ? data[0] : undefined;
-        setWatchesSubcategoriesFromApi(first?.subcategories ?? []);
+        setWatchesSubcategoriesFromApi(getNormalizedRowSubcategories(data));
       } catch {
-        if (!cancelled) setWatchesSubcategoriesFromApi([]);
+        try {
+          const data = await fetchSubcategoriesTable(categoryIdsByTopId.watches);
+          if (cancelled) return;
+          setWatchesSubcategoriesFromApi(getNormalizedRowSubcategories(data));
+        } catch {
+          if (!cancelled) setWatchesSubcategoriesFromApi([]);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [categoryIdsByTopId.watches, fetchSubcategoriesTable]);
 
   useEffect(() => {
     if (watchesSubcategoriesFromApi.length === 0) return;
-    const n = Math.min(watchesSubcategoriesFromApi.length, 5);
+    const n = Math.min(watchesSubcategoriesFromApi.length, 3);
     const valid = new Set(Array.from({ length: n }, (_, i) => `wc${i + 1}`));
     if (!valid.has(selectedWatchesShowcaseCardId)) {
       setSelectedWatchesShowcaseCardId("wc1");
@@ -1570,11 +1850,18 @@ export default function Accessories() {
   const beltsCapsRelatedChips = useMemo(() => {
     const fromApi = getSubcategoriesForBeltsCapsCard(selectedMenItemId, beltsCapsSubcategoriesFromApi);
     if (fromApi.length > 0) {
-      return fromApi.map((s) => ({
-        key: `belts-caps-sub-${s.id}`,
-        label: s.name,
-        source: { uri: getSubcategoryTableImageUri(s.image) } as const,
-      }));
+      return fromApi.map((s) => {
+        const label = getSubcategoryDisplayName(s);
+        return {
+          key: `belts-caps-sub-${s.id}`,
+          label,
+          source: getSubcategoryImageSourceOrFallback(
+            s,
+            menRelatedCategoryImagesFallback[label] ??
+              require("../assets/images/accessoriescate.png")
+          ),
+        };
+      });
     }
     const fallback = menRelatedCategoriesFallback[selectedMenItemId] ?? [];
     return fallback.map((label) => ({
@@ -1591,11 +1878,17 @@ export default function Accessories() {
       jewellerySubcategoriesFromApi
     );
     if (fromApi.length > 0) {
-      return fromApi.map((s) => ({
-        key: `jewellery-sub-${s.id}`,
-        label: s.name,
-        source: { uri: getSubcategoryTableImageUri(s.image) } as const,
-      }));
+      return fromApi.map((s) => {
+        const label = getSubcategoryDisplayName(s);
+        return {
+          key: `jewellery-sub-${s.id}`,
+          label,
+          source: getSubcategoryImageSourceOrFallback(
+            s,
+            jewelleryCarouselFallbackImages[label] ?? require("../assets/images/latest3.png")
+          ),
+        };
+      });
     }
     const fallback =
       jewelleryCarouselFallbackCategories[selectedJewelleryCarouselIndex] ?? [];
@@ -1613,11 +1906,18 @@ export default function Accessories() {
       otherAccessoriesSubcategoriesFromApi
     );
     if (fromApi.length > 0) {
-      return fromApi.map((s) => ({
-        key: `other-acc-sub-${s.id}`,
-        label: s.name,
-        source: { uri: getSubcategoryTableImageUri(s.image) } as const,
-      }));
+      return fromApi.map((s) => {
+        const label = getSubcategoryDisplayName(s);
+        return {
+          key: `other-acc-sub-${s.id}`,
+          label,
+          source: getSubcategoryImageSourceOrFallback(
+            s,
+            accessoriesRelatedCategoryImagesFallback[label] ??
+              require("../assets/images/accessariescate.png")
+          ),
+        };
+      });
     }
     const label = OTHER_ACCESSORIES_DEAL_TITLES[selectedAccessoriesDealId];
     if (!label) return [];
@@ -1757,7 +2057,7 @@ export default function Accessories() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.topStripContent}
           >
-            {topCategories.map((item) => (
+            {topCategoriesResolved.map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.topCategoryItem}
@@ -2688,8 +2988,7 @@ export default function Accessories() {
                     <View style={styles.gadgetsSubcategoriesTitleTextCol}>
                       <Text style={styles.gadgetsSubcategoriesEyebrow}>GADGET SUBCATEGORIES</Text>
                       <Text style={styles.gadgetsSubcategoriesTitle} numberOfLines={2}>
-                        {gadgetsAccessoryQuickLinks.find((l) => l.id === selectedGadgetsQuickLinkId)
-                          ?.label ?? "Gadgets accessories"}
+                        {selectedGadgetsQuickLinkLabel}
                       </Text>
                     </View>
                   </View>
@@ -2700,7 +2999,7 @@ export default function Accessories() {
                     nestedScrollEnabled
                     contentContainerStyle={styles.gadgetsSubcategoriesScroll}
                   >
-                    {(gadgetsQuickLinkSubcategories[selectedGadgetsQuickLinkId] || []).map((sub) => (
+                    {(gadgetsQuickLinkSubcategoriesResolved[selectedGadgetsQuickLinkId] || []).map((sub) => (
                       <TouchableOpacity
                         key={sub}
                         style={styles.gadgetsSubcategoryCard}
@@ -2724,7 +3023,7 @@ export default function Accessories() {
                           <View style={styles.gadgetsSubcategoryImageWrap}>
                             <Image
                               source={
-                                gadgetsSubcategoryImages[sub] ??
+                                gadgetsSubcategoryImagesResolved[sub] ??
                                 require("../assets/images/accessoriescate.png")
                               }
                               style={styles.gadgetsSubcategoryImage}
@@ -3434,60 +3733,6 @@ export default function Accessories() {
               })}
             </ScrollView>
           </GestureHandlerRootView>
-
-          <View style={styles.watchesCardSubcategoriesWrap}>
-            <View style={styles.watchesCardSubcategoriesHeader}>
-              <Ionicons name="list-outline" size={16} color="#9A3412" />
-              <Text style={styles.watchesCardSubcategoriesTitle} numberOfLines={2}>
-                Related subcategories for {selectedWatchCategoryTitle}
-              </Text>
-            </View>
-            <ScrollView
-              ref={watchesSubcategoriesScrollRef}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              nestedScrollEnabled
-              keyboardShouldPersistTaps="handled"
-              style={styles.watchesCardSubcategoriesHorizontalScroll}
-              contentContainerStyle={styles.watchesCardSubcategoriesScroll}
-            >
-              {watchLaneSubcategoriesList.map((sub) => (
-                <TouchableOpacity
-                  key={`${selectedWatchesShowcaseCardId}-${sub}`}
-                  style={styles.watchesCardSubcategoryChip}
-                  activeOpacity={0.88}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/subcatProducts",
-                      params: {
-                        mainCat: "accessories",
-                        subCategory: sub,
-                        watchLaneId: selectedWatchesShowcaseCardId,
-                        watchCategory:
-                          watchesShowcaseCardsResolved.find(
-                            (c) => c.id === selectedWatchesShowcaseCardId
-                          )?.title ?? "",
-                      },
-                    })
-                  }
-                >
-                  <View style={styles.watchesCardSubcategoryThumb}>
-                    <Image
-                      source={
-                        watchesSubcategoryThumbImages[sub] ??
-                        require("../assets/images/accessoriescate.png")
-                      }
-                      style={styles.watchesCardSubcategoryThumbImg}
-                      resizeMode="cover"
-                    />
-                  </View>
-                  <Text style={styles.watchesCardSubcategoryLabel} numberOfLines={2}>
-                    {sub}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
         </View>
 
         <View style={styles.finalUniqueSection}>
