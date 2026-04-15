@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
@@ -10,6 +10,9 @@ import {
   TextInput,
   Alert,
   Dimensions,
+  Animated,
+  Easing,
+  type LayoutChangeEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -23,6 +26,9 @@ import {
 } from "../lib/shopStorage";
 
 const { width, height } = Dimensions.get("window");
+const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
+const RUNNER_W = 170;
+const RUNNER_H = 64;
 
 interface CartItem {
   id: string;
@@ -59,6 +65,111 @@ function persistedToCartItem(line: PersistedCartLine): CartItem {
 export default function CartScreen() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [headerSearchQuery, setHeaderSearchQuery] = useState("");
+  const [logoLayout, setLogoLayout] = useState<{ x: number; y: number; w: number; h: number } | null>(
+    null
+  );
+  const [searchLayout, setSearchLayout] = useState<{ x: number; y: number; w: number; h: number } | null>(
+    null
+  );
+  const [headerLayout, setHeaderLayout] = useState<{ w: number; h: number } | null>(null);
+
+  const animProgress = useRef(new Animated.Value(0)).current;
+  const animOpacity = useRef(new Animated.Value(1)).current;
+  const walkBob = useRef(new Animated.Value(0)).current;
+
+  const animationRange = useMemo(() => {
+    if (!logoLayout || !searchLayout || !headerLayout) return null;
+    // Leave a little gap so the track doesn't appear right near the logo.
+    const startX = Math.max(0, logoLayout.x + logoLayout.w + 22);
+    // Stop the runner just before the search icon (account for runner width).
+    const endX = Math.max(startX + 24, searchLayout.x - RUNNER_W - 2);
+    const y = Math.max(2, headerLayout.h / 2 - RUNNER_H / 2);
+    return { startX, endX, y };
+  }, [logoLayout, searchLayout, headerLayout]);
+
+  useEffect(() => {
+    if (!animationRange) return;
+
+    animProgress.setValue(0);
+    animOpacity.setValue(1);
+    walkBob.setValue(0);
+
+    const bobLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(walkBob, {
+          toValue: 1,
+          duration: 260,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(walkBob, {
+          toValue: 0,
+          duration: 260,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(animProgress, {
+            toValue: 1,
+            duration: 2200,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(animOpacity, {
+            toValue: 1,
+            duration: 2200,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.timing(animOpacity, {
+          toValue: 0,
+          duration: 220,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(animProgress, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animOpacity, {
+          toValue: 1,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    bobLoop.start();
+    loop.start();
+    return () => {
+      bobLoop.stop();
+      loop.stop();
+    };
+  }, [animationRange, animOpacity, animProgress, walkBob]);
+
+  const onHeaderLayout = (e: LayoutChangeEvent) => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    setHeaderLayout({ w, h });
+  };
+
+  const onLogoLayout = (e: LayoutChangeEvent) => {
+    const { x, y, width: w, height: h } = e.nativeEvent.layout;
+    setLogoLayout({ x, y, w, h });
+  };
+
+  const onSearchIconLayout = (e: LayoutChangeEvent) => {
+    const { x, y, width: w, height: h } = e.nativeEvent.layout;
+    setSearchLayout({ x, y, w, h });
+  };
 
   const reloadCartFromStorage = useCallback(async () => {
     const lines = await loadCart();
@@ -236,19 +347,94 @@ export default function CartScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Your Cart</Text>
-            <Text style={styles.headerSubtitle}>
-              {cartItems.length} {cartItems.length === 1 ? "item" : "items"}
-            </Text>
-          </View>
+      <View style={styles.header} onLayout={onHeaderLayout}>
+        <View onLayout={onLogoLayout}>
           <TouchableOpacity
-            style={styles.closeBtn}
             onPress={() => router.back()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
-            <Ionicons name="close-circle" size={32} color="#666" />
+            <Image
+              source={require("../assets/MainCatImages/images/fntfav.png")}
+              style={styles.headerFavicon}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        </View>
+
+        {animationRange ? (
+          <>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.headerRunner,
+                {
+                  top: animationRange.y,
+                  opacity: animOpacity,
+                  transform: [
+                    {
+                      translateX: animProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [animationRange.startX, animationRange.endX],
+                      }),
+                    },
+                    {
+                      translateY: walkBob.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -2.5],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Image source={runnerBoyCartImg} style={styles.runnerImage} resizeMode="contain" />
+            </Animated.View>
+          </>
+        ) : null}
+
+        {isSearchVisible ? (
+          <View style={styles.headerSearchWrapper}>
+            <Ionicons
+              name="search-outline"
+              size={18}
+              color="#69798c"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              placeholder="Search cart"
+              placeholderTextColor="#69798c"
+              value={headerSearchQuery}
+              onChangeText={setHeaderSearchQuery}
+              style={styles.searchInputHeader}
+              autoFocus
+            />
+          </View>
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
+
+        <View style={styles.headerIcons}>
+          <TouchableOpacity
+            onPress={() => setIsSearchVisible((prev) => !prev)}
+            style={styles.headerIcon}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle search"
+            onLayout={onSearchIconLayout}
+          >
+            <Ionicons name="search-outline" size={20} color="#ef7b1a" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push("/wishlist")}
+            style={styles.headerIcon}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Wishlist"
+          >
+            <Ionicons name="heart" size={20} color="red" />
           </TouchableOpacity>
         </View>
       </View>
@@ -544,44 +730,64 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   header: {
-    backgroundColor: "#F8F9FA",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E5E5",
-    flexShrink: 0,
-  },
-  headerTop: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
+    alignItems: "center",
+    paddingTop: 48,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e5e5e5",
+    zIndex: 10,
+    elevation: 10,
   },
-  headerTitleContainer: {
-    flex: 1,
+  backButton: {
+    paddingRight: 8,
+    paddingVertical: 4,
+    justifyContent: "center",
     alignItems: "center",
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#000",
-    marginBottom: 8,
-    letterSpacing: 0.5,
+  headerFavicon: {
+    width: 36,
+    height: 36,
   },
-  headerSubtitle: {
+  headerSearchWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e5e5e5",
+  },
+  searchIcon: {
+    marginRight: 6,
+  },
+  searchInputHeader: {
+    flex: 1,
     fontSize: 14,
-    fontWeight: "500",
-    color: "#666",
-    textAlign: "center",
+    color: "#1d324e",
+    paddingVertical: 2,
   },
-  closeBtn: {
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerIcon: {
+    marginRight: 14,
+  },
+  headerRunner: {
     position: "absolute",
-    top: 40,
-    right: 10,
-    padding: 4,
+    left: 0,
+    zIndex: 31,
+    elevation: 31,
+  },
+  runnerImage: {
+    width: RUNNER_W,
+    height: RUNNER_H,
   },
   content: {
     flex: 1,
