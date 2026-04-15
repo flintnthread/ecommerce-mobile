@@ -15,12 +15,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
+import api from "../services/api";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 type SweetsSubItem = {
   id: string;
   name: string;
   note: string;
   color: string;
-  image?: any;
+  image?: any; // local require(...) or { uri }
 };
 
 const DRY_SWEET_TILE_COLORS = ["#FFE7D4", "#FFF2C9", "#EAFBF2", "#F4E9FF"];
@@ -153,7 +155,7 @@ export default function Sweets() {
   const midBannerGap = 12;
   const midBannerCardW = Math.min(280, width - 56);
   const midBannerItemW = midBannerCardW + midBannerGap;
-  const MENU_BAR_HEIGHT = 56;
+  const MENU_BAR_HEIGHT = 62;
   const [headerHeight, setHeaderHeight] = useState(96);
   const HEADER_FAVICON = require("../assets/images/fntfav.png");
 
@@ -168,21 +170,150 @@ export default function Sweets() {
   type CategoryKey = "dry" | "milk";
   const [active, setActive] = useState<CategoryKey>("dry");
   const [query, setQuery] = useState("");
-  const drySubcategories = DRY_SUBS_FALLBACK;
-  const milkSubcategories = MILK_SUBS_FALLBACK;
+  const [drySubcategories, setDrySubcategories] =
+    useState<SweetsSubItem[]>(DRY_SUBS_FALLBACK);
+  const [milkSubcategories, setMilkSubcategories] =
+    useState<SweetsSubItem[]>(MILK_SUBS_FALLBACK);
+  const [categoryIconUrls, setCategoryIconUrls] = useState<
+    Partial<Record<CategoryKey, string>>
+  >({});
 
   const sectionY = useRef<Record<CategoryKey, number>>({
     dry: 0,
     milk: 0,
   });
 
-  const CATEGORIES: { key: CategoryKey; label: string; icon: any }[] = useMemo(
+  const CATEGORIES: { key: CategoryKey; label: string; image: any }[] = useMemo(
     () => [
-      { key: "dry", label: "Dry Sweets", icon: "leaf-outline" },
-      { key: "milk", label: "Milk Sweets", icon: "cafe-outline" },
+      {
+        key: "dry",
+        label: "Dry Sweets",
+        image:
+          categoryIconUrls.dry ??
+          require("../assets/sweetsimages/dry fruit laddu.jpg"),
+      },
+      {
+        key: "milk",
+        label: "Milk Sweets",
+        image: categoryIconUrls.milk ?? require("../assets/sweetsimages/jamun.jpg"),
+      },
     ],
-    []
+    [categoryIconUrls.dry, categoryIconUrls.milk]
   );
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        // Your endpoint returns: [{ categoryName: "Dry Sweets"|"Milk Sweets", mobileImage: "https://..." }, ...]
+        const res = await api.get(
+          "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/53/subcategories"
+        );
+        const data = res.data as Array<{
+          categoryName?: string;
+          mobileImage?: string | null;
+        }>;
+
+        const next: Partial<Record<CategoryKey, string>> = {};
+        for (const item of Array.isArray(data) ? data : []) {
+          const name = (item?.categoryName ?? "").trim().toLowerCase();
+          const url = item?.mobileImage ?? undefined;
+          if (!url) continue;
+          if (name === "dry sweets") next.dry = url;
+          if (name === "milk sweets") next.milk = url;
+        }
+
+        if (alive && (next.dry || next.milk)) setCategoryIconUrls(next);
+      } catch {
+        // keep local fallback images
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api.get(
+          "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/55/subcategories-table"
+        );
+        const data = res.data as Array<{
+          categoryName?: string;
+          mobileImage?: string | null;
+          subcategories?: Array<{
+            id?: number;
+            name?: string;
+            mobileImage?: string | null;
+          }>;
+        }>;
+
+        const dry = (Array.isArray(data) ? data : []).find(
+          (x) => (x?.categoryName ?? "").trim().toLowerCase() === "dry sweets"
+        );
+        const subs = dry?.subcategories ?? [];
+        const mapped: SweetsSubItem[] = subs
+          .filter((s) => !!s && typeof s.name === "string" && !!s.mobileImage)
+          .map((s, idx) => ({
+            id: String(s.id ?? `dry-${idx}`),
+            name: s.name as string,
+            note: "Dry sweet",
+            color: DRY_SWEET_TILE_COLORS[idx % DRY_SWEET_TILE_COLORS.length],
+            image: { uri: s.mobileImage as string },
+          }));
+
+        if (alive && mapped.length) setDrySubcategories(mapped);
+      } catch {
+        // keep local fallback dry tiles
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api.get(
+          "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/56/subcategories-table"
+        );
+        const data = res.data as Array<{
+          categoryName?: string;
+          mobileImage?: string | null;
+          subcategories?: Array<{
+            id?: number;
+            name?: string;
+            mobileImage?: string | null;
+          }>;
+        }>;
+
+        const milk = (Array.isArray(data) ? data : []).find(
+          (x) => (x?.categoryName ?? "").trim().toLowerCase() === "milk sweets"
+        );
+        const subs = milk?.subcategories ?? [];
+        const mapped: SweetsSubItem[] = subs
+          .filter((s) => !!s && typeof s.name === "string" && !!s.mobileImage)
+          .map((s, idx) => ({
+            id: String(s.id ?? `milk-${idx}`),
+            name: s.name as string,
+            note: "Milk sweet",
+            color: MILK_SWEET_TILE_COLORS[idx % MILK_SWEET_TILE_COLORS.length],
+            image: { uri: s.mobileImage as string },
+          }));
+
+        if (alive && mapped.length) setMilkSubcategories(mapped);
+      } catch {
+        // keep local fallback milk tiles
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const BANNERS = useMemo(
     () => [
@@ -257,7 +388,9 @@ export default function Sweets() {
   const scrollTo = (key: CategoryKey) => {
     setActive(key);
     const y = sectionY.current[key] ?? 0;
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+    // Align section header just below the fixed header + tabs bar.
+    const offset = headerHeight + MENU_BAR_HEIGHT + 10;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - offset), animated: true });
   };
 
   const handleSweetsSubcategoryPress = (section: CategoryKey, item: SweetsSubItem) => {
@@ -364,7 +497,7 @@ export default function Sweets() {
       </View>
 
       {/* Sticky top menu bar (chips) */}
-      <View style={[styles.topMenuBar, { top: headerHeight, height: MENU_BAR_HEIGHT }]}>
+      <View style={[styles.topMenuBar, { top: headerHeight, minHeight: MENU_BAR_HEIGHT }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
           {CATEGORIES.map((c) => {
             const isActive = active === c.key;
@@ -375,7 +508,14 @@ export default function Sweets() {
                 activeOpacity={0.9}
                 onPress={() => scrollTo(c.key)}
               >
-                <Ionicons name={c.icon} size={16} color={isActive ? "#ffffff" : "#1d324e"} />
+                <View style={[styles.chipIconWrap, isActive && styles.chipIconWrapActive]}>
+                  <Image
+                    source={
+                      typeof c.image === "string" ? { uri: c.image } : c.image
+                    }
+                    style={styles.chipIconImage}
+                  />
+                </View>
                 <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{c.label}</Text>
               </TouchableOpacity>
             );
@@ -386,9 +526,17 @@ export default function Sweets() {
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingTop: headerHeight + MENU_BAR_HEIGHT + 2 }]}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: headerHeight + MENU_BAR_HEIGHT + 2,
+            paddingBottom: 24 + 92,
+          },
+        ]}
         onScroll={(e) => {
-          const y = e.nativeEvent.contentOffset.y + 160;
+          // Pick the section whose header has crossed under the fixed header + tabs.
+          const y =
+            e.nativeEvent.contentOffset.y + headerHeight + MENU_BAR_HEIGHT + 24;
           let next: CategoryKey = "dry";
           (["dry", "milk"] as CategoryKey[]).forEach((k) => {
             if (y >= sectionY.current[k]) next = k;
@@ -448,33 +596,7 @@ export default function Sweets() {
           />
         </View>
 
-        <TouchableOpacity
-          style={styles.beautyPromoRow}
-          activeOpacity={0.92}
-          onPress={() => router.push("/beauty-personal-care")}
-          accessibilityRole="button"
-          accessibilityLabel="Open Beauty and Personal Care"
-        >
-          <LinearGradient
-            colors={["#fce4ec", "#f8bbd0", "#e1bee7"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.beautyPromoGradient}
-          >
-            <View style={styles.beautyPromoInner}>
-              <View style={styles.beautyPromoIconWrap}>
-                <Ionicons name="sparkles" size={22} color="#6a1b9a" />
-              </View>
-              <View style={styles.beautyPromoTextCol}>
-                <Text style={styles.beautyPromoTitle}>Beauty & Personal Care</Text>
-                <Text style={styles.beautyPromoSubtitle}>
-                  Skincare, hair, makeup & more — tap to explore
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={22} color="#4a148c" />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
+       
 
         {renderCategorySection("dry")}
 
@@ -602,6 +724,8 @@ export default function Sweets() {
 
         <View style={styles.footerSpace} />
       </ScrollView>
+
+      <HomeBottomTabBar />
     </View>
   );
 }
@@ -673,13 +797,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginRight: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(29,50,78,0.12)",
   },
   chipActive: { backgroundColor: "#1d324e", borderColor: "#1d324e" },
-  chipText: { marginLeft: 8, fontSize: 12, fontWeight: "900", color: "#1d324e" },
+  chipIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "rgba(29,50,78,0.06)",
+  },
+  chipIconWrapActive: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  chipIconImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  chipText: { marginLeft: 10, fontSize: 13, fontWeight: "900", color: "#1d324e" },
   chipTextActive: { color: "#ffffff" },
   content: { paddingHorizontal: 10, paddingBottom: 24 },
   bannerWrap: {

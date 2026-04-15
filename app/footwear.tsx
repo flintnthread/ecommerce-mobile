@@ -9,11 +9,13 @@ import {
   TextInput,
   Animated,
   Dimensions,
+  ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api from "../services/api";
 
 const { width } = Dimensions.get("window");
 const DESK_INNER_WIDTH = width - 20; // deskSection marginHorizontal: 10 × 2
@@ -106,6 +108,48 @@ const KIDS_SUBCATEGORIES_FALLBACK: { id: string; label: string; image: any }[] =
 
 type GenderCategoryId = "women" | "kids" | "men";
 
+type FootwearApiSubcategory = {
+  id: number;
+  categoryName: string;
+  mobileImage?: string | null;
+  image?: string | null;
+  bannerImage?: string | null;
+  parentId?: number | null;
+  status?: number;
+  createdAt?: string;
+  gstPercentage?: number;
+  hsnCode?: string;
+  sellerId?: number | null;
+};
+
+const FOOTWEAR_CATEGORIES_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/29/subcategories";
+
+const FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/44/subcategories-table";
+
+const FOOTWEAR_WOMENS_SUBCATEGORIES_TABLE_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/45/subcategories-table";
+
+const FOOTWEAR_KIDS_SUBCATEGORIES_TABLE_URL =
+  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/46/subcategories-table";
+
+const FOOTWEAR_PRODUCTS_BY_SUBCATEGORY_URL = (subcategoryId: number) =>
+  `https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/products/subcategory/${subcategoryId}`;
+
+const RELATED_MENS_SUBCATEGORY_IDS = [94, 95] as const;
+
+type FootwearSubcategoryTableSub = {
+  id: number;
+  name: string;
+  image: string;
+};
+
+type FootwearSubcategoryTableRow = {
+  categoryName: string;
+  subcategories: FootwearSubcategoryTableSub[];
+};
+
 /** Banner above Womens-Footwear subcategories (`Image` at ~589) */
 const WOMEN_FOOTWEAR_SUBCATEGORIES_BANNER = require("../assets/footwearimages/women-footwear-subcategories-banner.png");
 
@@ -155,12 +199,252 @@ export default function FootwearScreen() {
   const [headerHeight, setHeaderHeight] = useState(96);
   type TopMenuKey = "footwear" | "womens-footwear" | "mens-footwear" | "kids-footwear" | "trendnow";
   const [activeTopMenu, setActiveTopMenu] = useState<TopMenuKey>("footwear");
-  const womensSubcategories = WOMENS_SUBCATEGORIES_FALLBACK;
-  const mensSubcategories = MENS_SUBCATEGORIES_FALLBACK;
-  const kidsSubcategories = KIDS_SUBCATEGORIES_FALLBACK;
+  const [womensSubcategoriesApi, setWomensSubcategoriesApi] = useState<
+    { id: string; label: string; image: ImageSourcePropType }[]
+  >([]);
+  const womensSubcategories =
+    womensSubcategoriesApi.length > 0 ? womensSubcategoriesApi : WOMENS_SUBCATEGORIES_FALLBACK;
+  const [mensSubcategoriesApi, setMensSubcategoriesApi] = useState<
+    { id: string; label: string; image: ImageSourcePropType }[]
+  >([]);
+  const mensSubcategories =
+    mensSubcategoriesApi.length > 0 ? mensSubcategoriesApi : MENS_SUBCATEGORIES_FALLBACK;
+  const [kidsSubcategoriesApi, setKidsSubcategoriesApi] = useState<
+    { id: string; label: string; image: ImageSourcePropType }[]
+  >([]);
+  const kidsSubcategories =
+    kidsSubcategoriesApi.length > 0 ? kidsSubcategoriesApi : KIDS_SUBCATEGORIES_FALLBACK;
+
+  const [relatedMensProducts, setRelatedMensProducts] = useState<
+    { id: number; name: string; image: string; subcategoryId: number }[]
+  >([]);
+
+  const relatedMensFetchedIdsRef = useRef(new Set<number>());
+  const relatedMensInFlightIdsRef = useRef(new Set<number>());
+
+  const [apiFootwearCategoriesByGender, setApiFootwearCategoriesByGender] = useState<
+    Partial<Record<GenderCategoryId, FootwearApiSubcategory>>
+  >({});
 
   const getAbsoluteY = (y: number, insideAnimated = false) =>
     insideAnimated ? animatedBlockYRef.current + y : y;
+
+  const normalizeCategoryName = (name: string): string =>
+    name
+      .replace(/\u0019/g, "'")
+      .replace(/[’`]/g, "'")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
+  const safeText = (value: string): string => value.replace(/\u0019/g, "'").trim();
+
+  const getMobileImageUriFromApi = (item: any): string => {
+    const candidate =
+      item?.mobileImage ??
+      item?.mobileimage ??
+      item?.mobile_image ??
+      item?.mobileImg ??
+      "";
+    return String(candidate ?? "").trim();
+  };
+
+  function getUploadsImageUriFromFilename(filename: string): string {
+    // Prefer configured API baseURL when available; otherwise fall back to the endpoint origin.
+    const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    let base = apiBase;
+    if (!base) {
+      try {
+        base = new URL(FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL).origin;
+      } catch {
+        base = "";
+      }
+    }
+    if (!filename?.trim()) return base ? `${base}/uploads/` : "";
+    if (/^https?:\/\//i.test(filename)) return filename;
+    return base ? `${base}/uploads/${filename}` : filename;
+  }
+
+  function getAssetUriFromApiPath(pathOrUrl: string): string {
+    const raw = String(pathOrUrl ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const origin = new URL(FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL).origin;
+    return `${origin}/${raw.replace(/^\/+/, "")}`;
+  }
+
+  const appendRelatedMensProductsForSubcategory = async (
+    subcategoryId: number
+  ): Promise<void> => {
+    if (!Number.isFinite(subcategoryId) || subcategoryId <= 0) return;
+    if (relatedMensFetchedIdsRef.current.has(subcategoryId)) return;
+    if (relatedMensInFlightIdsRef.current.has(subcategoryId)) return;
+
+    relatedMensInFlightIdsRef.current.add(subcategoryId);
+    try {
+      const res = await fetch(FOOTWEAR_PRODUCTS_BY_SUBCATEGORY_URL(subcategoryId));
+      if (!res.ok) return;
+      const data = (await res.json()) as unknown;
+      if (!Array.isArray(data)) return;
+      const mapped = (data as any[])
+        .filter(
+          (p) =>
+            p &&
+            typeof p.id === "number" &&
+            typeof p.name === "string" &&
+            typeof p.image === "string"
+        )
+        .map((p) => ({
+          id: p.id as number,
+          name: p.name as string,
+          image: p.image as string,
+          subcategoryId,
+        }));
+
+      setRelatedMensProducts((prev) => {
+        const byId = new Map<string, (typeof prev)[number]>();
+        for (const p of prev) byId.set(String(p.id), p);
+        for (const p of mapped) byId.set(String(p.id), p);
+        return Array.from(byId.values());
+      });
+
+      relatedMensFetchedIdsRef.current.add(subcategoryId);
+    } catch {
+      // ignore network errors
+    } finally {
+      relatedMensInFlightIdsRef.current.delete(subcategoryId);
+    }
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const res = await fetch(FOOTWEAR_CATEGORIES_URL, { signal: controller.signal });
+        if (!res.ok) return;
+        const data = (await res.json()) as unknown;
+        if (!Array.isArray(data)) return;
+
+        const next: Partial<Record<GenderCategoryId, FootwearApiSubcategory>> = {};
+        for (const item of data as FootwearApiSubcategory[]) {
+          if (!item || typeof item !== "object") continue;
+          if (typeof item.categoryName !== "string") continue;
+          const key = normalizeCategoryName(item.categoryName);
+          if (key.includes("women")) next.women = item;
+          else if (key.includes("men")) next.men = item;
+          else if (key.includes("kids")) next.kids = item;
+        }
+
+        setApiFootwearCategoriesByGender(next);
+      } catch {
+        // ignore network errors; fall back to local assets
+      }
+    })();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const res = await fetch(FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL, {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as unknown;
+        if (!Array.isArray(data) || data.length === 0) return;
+
+        const first = data[0] as FootwearSubcategoryTableRow;
+        const subs = Array.isArray(first?.subcategories) ? first.subcategories : [];
+        const mapped = subs
+          .filter((s) => s && typeof s.id === "number" && typeof s.name === "string")
+          .map((s) => ({
+            id: String(s.id),
+            label: safeText(s.name),
+            // Keep layout same (still render <Image>), but use ONLY `mobileImage` from API.
+            image: { uri: getMobileImageUriFromApi(s) },
+          }));
+
+        if (mapped.length > 0) setMensSubcategoriesApi(mapped);
+      } catch {
+        // ignore network errors; fall back to local assets
+      }
+    })();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const res = await fetch(FOOTWEAR_WOMENS_SUBCATEGORIES_TABLE_URL, {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as unknown;
+        if (!Array.isArray(data) || data.length === 0) return;
+
+        const first = data[0] as FootwearSubcategoryTableRow;
+        const subs = Array.isArray(first?.subcategories) ? first.subcategories : [];
+        const mapped = subs
+          .filter((s) => s && typeof s.id === "number" && typeof s.name === "string")
+          .map((s) => ({
+            id: String(s.id),
+            label: safeText(s.name),
+            image: { uri: getMobileImageUriFromApi(s) },
+          }));
+
+        if (mapped.length > 0) setWomensSubcategoriesApi(mapped);
+      } catch {
+        // ignore network errors; fall back to local assets
+      }
+    })();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const res = await fetch(FOOTWEAR_KIDS_SUBCATEGORIES_TABLE_URL, {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as unknown;
+        if (!Array.isArray(data) || data.length === 0) return;
+
+        const first = data[0] as FootwearSubcategoryTableRow;
+        const subs = Array.isArray(first?.subcategories) ? first.subcategories : [];
+        const mapped = subs
+          .filter((s) => s && typeof s.id === "number" && typeof s.name === "string")
+          .map((s) => ({
+            id: String(s.id),
+            label: safeText(s.name),
+            image: { uri: getMobileImageUriFromApi(s) },
+          }));
+
+        if (mapped.length > 0) setKidsSubcategoriesApi(mapped);
+      } catch {
+        // ignore network errors; fall back to local assets
+      }
+    })();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    // Prefetch both Men subcategory products for the related section.
+    RELATED_MENS_SUBCATEGORY_IDS.forEach((id) => {
+      void appendRelatedMensProductsForSubcategory(id);
+    });
+  }, []);
 
   // Temporary tall video banner until you provide final asset.
   const tallBannerPlayer = useVideoPlayer(
@@ -235,11 +519,25 @@ export default function FootwearScreen() {
       men: "menswear",
       kids: "kidswear",
     };
+    const numericSubcategoryId = Number.parseInt(String(sub.id), 10);
+
+    if (
+      section === "men" &&
+      Number.isFinite(numericSubcategoryId) &&
+      RELATED_MENS_SUBCATEGORY_IDS.includes(numericSubcategoryId as any)
+    ) {
+      void appendRelatedMensProductsForSubcategory(numericSubcategoryId);
+    }
+
     router.push({
       pathname: "/subcatProducts",
       params: {
         mainCat: mainBySection[section],
         subCategory: sub.label,
+        subcategoryId:
+          Number.isFinite(numericSubcategoryId) && numericSubcategoryId > 0
+            ? String(numericSubcategoryId)
+            : undefined,
       },
     });
   };
@@ -499,17 +797,26 @@ export default function FootwearScreen() {
                 activeOpacity={0.9}
                 onPress={() => handleCategoryTilePress(id)}
               >
-                <Image
-                  source={HUB_CATEGORY_IMAGE[id]}
-                  style={styles.hubCardImage}
-                />
-                <Text style={styles.hubCardLabel}>
-                  {id === "women"
-                    ? "Womens Footwear"
-                    : id === "men"
-                      ? "Mens Footwear"
-                      : "Kids Footwear"}
-                </Text>
+                {(() => {
+                  const apiCat = apiFootwearCategoriesByGender[id];
+                  const img: ImageSourcePropType =
+                    apiCat?.mobileImage ? { uri: apiCat.mobileImage } : HUB_CATEGORY_IMAGE[id];
+                  const label =
+                    apiCat?.categoryName && typeof apiCat.categoryName === "string"
+                      ? apiCat.categoryName.replace(/\u0019/g, "'").trim()
+                      : id === "women"
+                        ? "Womens Footwear"
+                        : id === "men"
+                          ? "Mens Footwear"
+                          : "Kids Footwear";
+
+                  return (
+                    <>
+                      <Image source={img} style={styles.hubCardImage} />
+                      <Text style={styles.hubCardLabel}>{label}</Text>
+                    </>
+                  );
+                })()}
               </TouchableOpacity>
             ))}
           </View>
@@ -936,15 +1243,35 @@ export default function FootwearScreen() {
         </View>
 
         <View style={styles.relatedProductsSection}>
+          {(() => {
+            const uniqueProducts = Array.from(
+              new Map(relatedMensProducts.map((p) => [String(p.id), p])).values()
+            );
+            const related = uniqueProducts.map((p) => ({
+              id: String(p.id),
+              name: safeText(p.name),
+              category: p.subcategoryId === 94 ? "Men • Casual Shoes" : "Men • Formal Shoes",
+              price: "",
+              rating: "",
+              image: { uri: getAssetUriFromApiPath(p.image) } as ImageSourcePropType,
+            }));
+
+            return (
+              <>
           <View style={styles.relatedProductsHeaderRow}>
             <Text style={styles.relatedProductsTitle}>All Related Footwear Products</Text>
             <Text style={styles.relatedProductsCount}>
-              {RELATED_FOOTWEAR_PRODUCTS.length} items
+                    {related.length} items
             </Text>
           </View>
 
           <View style={styles.relatedProductsGrid}>
-            {RELATED_FOOTWEAR_PRODUCTS.map((product) => (
+                  {related.length === 0 ? (
+                    <Text style={styles.relatedProductsEmptyText}>
+                      Loading products…
+                    </Text>
+                  ) : null}
+                  {related.map((product: any) => (
               <TouchableOpacity
                 key={product.id}
                 style={styles.relatedProductCard}
@@ -952,7 +1279,7 @@ export default function FootwearScreen() {
                 onPress={() =>
                   router.push({
                     pathname: "/productdetail",
-                    params: { id: product.id },
+                            params: { id: String(product.id) },
                   } as any)
                 }
                 accessibilityRole="button"
@@ -972,12 +1299,12 @@ export default function FootwearScreen() {
                     </Text>
                     <View style={styles.relatedProductBottomRow}>
                       <Text style={styles.relatedProductPrice}>
-                        Rs {product.price}
+                              {product.price ? `Rs ${product.price}` : " "}
                       </Text>
                       <View style={styles.relatedProductRatingPill}>
                         <Ionicons name="star" size={12} color="#ef7b1a" />
                         <Text style={styles.relatedProductRatingText}>
-                          {product.rating}
+                                {product.rating || " "}
                         </Text>
                       </View>
                     </View>
@@ -986,6 +1313,9 @@ export default function FootwearScreen() {
               </TouchableOpacity>
             ))}
           </View>
+              </>
+            );
+          })()}
         </View>
       </ScrollView>
 
@@ -1703,6 +2033,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#5a6578",
+  },
+  relatedProductsEmptyText: {
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    color: "#5a6578",
+    fontWeight: "700",
   },
   relatedProductsGrid: {
     flexDirection: "row",
