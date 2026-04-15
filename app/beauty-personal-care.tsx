@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
+  ImageBackground,
   Dimensions,
   Animated,
   NativeSyntheticEvent,
@@ -24,6 +25,11 @@ const CONTENT_PAD = 20;
 const FULL_W = SCREEN_W - CONTENT_PAD * 2;
 
 const HEADER_FAVICON = require("../assets/images/fntfav.png");
+const DUMMY_BEAUTY_HERO = require("../assets/images/SkincareToolsDevices.png");
+const DUMMY_BEAUTY_1 = require("../assets/images/beauty1.jpg");
+const DUMMY_BEAUTY_2 = require("../assets/images/beauty2.jpg");
+const DUMMY_BEAUTY_3 = require("../assets/images/beauty3.jpg");
+const DUMMY_BEAUTY_4 = require("../assets/images/beauty4.jpg");
 
 const SKINCARE_TOOLS_DEVICES_CATEGORY = "Skincare Tools & Devices";
 const FACIAL_DEVICES_SUBCATEGORY = "Facial Devices";
@@ -202,33 +208,26 @@ export default function BeautyPersonalCareScreen() {
         scrollEventThrottle={16}
       >
         <Animated.View style={{ opacity: introOpacity, transform: [{ translateY: introTrans }] }}>
-          {/* Category hero banner */}
-          <LinearGradient
-            colors={[NAVY_DEEP, NAVY, NAVY_MID]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.categoryHero, { width: FULL_W }]}
+          {/* Image-first hero */}
+          <ImageBackground
+            source={DUMMY_BEAUTY_HERO}
+            style={[styles.visualHero, { width: FULL_W }]}
+            imageStyle={styles.visualHeroImage}
           >
-            <View style={styles.heroOrb1} />
-            <View style={styles.heroOrb2} />
-            <View style={styles.heroRing} />
-            <Text style={styles.heroEyebrow}>F&amp;T Beauty</Text>
-            <Text style={styles.heroCategoryTitle}>{SKINCARE_TOOLS_DEVICES_CATEGORY}</Text>
-            <Text style={styles.heroLead}>
-              Precision tools for cleansing, massage, and at-home facial care — starting with our
-              curated Facial Devices range.
-            </Text>
-            <View style={styles.heroBadgeRow}>
-              <View style={styles.heroBadge}>
-                <Ionicons name="leaf-outline" size={14} color="#FFF7ED" />
-                <Text style={styles.heroBadgeText}>Derm-friendly focus</Text>
-              </View>
-              <View style={styles.heroBadge}>
-                <Ionicons name="shield-checkmark-outline" size={14} color="#FFF7ED" />
-                <Text style={styles.heroBadgeText}>Quality picks</Text>
-              </View>
-            </View>
-          </LinearGradient>
+            <View style={styles.visualHeroScrim} />
+            <Text style={styles.visualHeroEyebrow}>Beauty & Personal Care</Text>
+            
+            <TouchableOpacity
+              style={styles.visualHeroCta}
+              activeOpacity={0.9}
+              onPress={openFacialDevices}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${FACIAL_DEVICES_SUBCATEGORY}`}
+            >
+              <Text style={styles.visualHeroCtaText}>Shop {FACIAL_DEVICES_SUBCATEGORY}</Text>
+              <Ionicons name="chevron-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+          </ImageBackground>
 
           {/* Soft wave — breaks the solid hero edge (different from flat cards) */}
           <View style={[styles.waveUnderHero, { width: FULL_W }]}>
@@ -240,74 +239,38 @@ export default function BeautyPersonalCareScreen() {
             </Svg>
           </View>
 
-          {/* Dark spotlight rail — tech aesthetic vs. mint UI elsewhere */}
-          <LinearGradient
-            colors={[NAVY_DEEP, NAVY, "#122338"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.spotlightShell, { width: FULL_W }]}
-          >
-            <View style={styles.spotlightGlow} />
-            <Animated.View
-              style={[
-                styles.spotlightPulseRing,
-                { transform: [{ scale: pulseScale }] },
-              ]}
-            />
-            <View style={styles.spotlightHeaderRow}>
-              <View style={styles.spotlightBrandDot} />
-              <Text style={styles.spotlightEyebrow}>Device spotlight</Text>
-            </View>
-            <Text style={styles.spotlightTitle}>Tech meets skin</Text>
-            <Text style={styles.spotlightSubtitle}>
-              Same catalog — explore how facial devices show up across these families.
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.spotlightScrollInner}
-            >
-              {SPOTLIGHT_DEVICE_TYPES.map((item) => (
+          {/* Image tiles (dummy) */}
+          <View style={[styles.visualGridShell, { width: FULL_W }]}>
+            <Text style={styles.visualGridTitle}>Explore by vibe</Text>
+            <View style={styles.visualGrid}>
+              {[
+                { title: "Cleansing", img: DUMMY_BEAUTY_1 },
+                { title: "LED therapy", img: DUMMY_BEAUTY_2 },
+                { title: "Microcurrent", img: DUMMY_BEAUTY_3 },
+                { title: "Tools", img: DUMMY_BEAUTY_4 },
+              ].map((t) => (
                 <TouchableOpacity
-                  key={item.id}
-                  style={[styles.spotlightCard, { borderLeftColor: item.accent }]}
-                  activeOpacity={0.88}
+                  key={t.title}
+                  style={styles.visualTile}
+                  activeOpacity={0.9}
                   onPress={openFacialDevices}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${item.label}, open ${FACIAL_DEVICES_SUBCATEGORY}`}
                 >
-                  <View style={styles.spotlightIconBlob}>
-                    <View
-                      style={[
-                        styles.spotlightIconBlobFill,
-                        { backgroundColor: item.accent },
-                      ]}
-                    />
-                    <Ionicons name={item.icon} size={22} color={item.accent} />
-                  </View>
-                  <Text style={styles.spotlightCardLabel}>{item.label}</Text>
-                  <Text style={styles.spotlightCardHint}>{item.hint}</Text>
+                  <ImageBackground
+                    source={t.img}
+                    style={styles.visualTileImage}
+                    imageStyle={styles.visualTileImageInner}
+                  >
+                    <View style={styles.visualTileScrim} />
+                    <Text style={styles.visualTileText} numberOfLines={1}>
+                      {t.title}
+                    </Text>
+                  </ImageBackground>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
-          </LinearGradient>
-
-          {/* Decorative ribbon — category only */}
-          <View style={[styles.designRibbon, { width: FULL_W }]}>
-            <LinearGradient
-              colors={[ORANGE_SOFT, ORANGE_LIGHT, "#FFFFFF", ORANGE_HOT]}
-              locations={[0, 0.35, 0.62, 1]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={styles.designRibbonInner}
-            >
-              <View style={styles.ribbonNotch} />
-              <Text style={styles.ribbonText}>{SKINCARE_TOOLS_DEVICES_CATEGORY.toUpperCase()}</Text>
-              <View style={styles.ribbonLine} />
-            </LinearGradient>
+            </View>
           </View>
 
-          {/* Subcategory feature banner */}
+          {/* Subcategory CTA (keep one) */}
           <TouchableOpacity
             style={[styles.facialBanner, { width: FULL_W }]}
             activeOpacity={0.92}
@@ -343,36 +306,7 @@ export default function BeautyPersonalCareScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Design strip — visual only */}
-          <View style={[styles.stripRow, { width: FULL_W }]}>
-            <View style={styles.stripDot} />
-            <View style={[styles.stripDot, styles.stripDotMid]} />
-            <View style={styles.stripDot} />
-          </View>
-
-          <LinearGradient
-            colors={[CREAM, PEACH]}
-            style={[styles.bottomPanel, { width: FULL_W }]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.bottomPanelTitle}>Ready to browse?</Text>
-            <Text style={styles.bottomPanelSub}>
-              All products on this hub are tagged under {FACIAL_DEVICES_SUBCATEGORY}.
-            </Text>
-            <TouchableOpacity style={styles.primaryCta} activeOpacity={0.9} onPress={openFacialDevices}>
-              <LinearGradient
-                colors={[ORANGE, ORANGE_HOT, ORANGE_SOFT]}
-                locations={[0, 0.45, 1]}
-                style={styles.primaryCtaGrad}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Text style={styles.primaryCtaText}>View {FACIAL_DEVICES_SUBCATEGORY}</Text>
-                <Ionicons name="chevron-forward" size={20} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
-          </LinearGradient>
+          <View style={{ height: 14 }} />
         </Animated.View>
       </ScrollView>
 
@@ -383,6 +317,83 @@ export default function BeautyPersonalCareScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: CREAM },
+  visualHero: {
+    height: 220,
+    borderRadius: 18,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+    padding: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(234,88,12,0.12)",
+  },
+  visualHeroImage: { resizeMode: "cover" },
+  visualHeroScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15,33,56,0.38)",
+  },
+  visualHeroEyebrow: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  visualHeroTitle: {
+    marginTop: 6,
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  visualHeroCta: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: ORANGE,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  visualHeroCtaText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+  visualGridShell: {
+    marginTop: 14,
+  },
+  visualGridTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: NAVY_TEXT,
+    marginBottom: 10,
+  },
+  visualGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  visualTile: {
+    width: (FULL_W - 10) / 2,
+    height: 130,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.12)",
+    backgroundColor: "#fff",
+  },
+  visualTileImage: { flex: 1, justifyContent: "flex-end" },
+  visualTileImageInner: { resizeMode: "cover" },
+  visualTileScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  visualTileText: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 14,
+  },
   headerShell: {
     position: "absolute",
     top: 0,
