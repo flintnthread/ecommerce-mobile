@@ -461,6 +461,21 @@ export default function SubcategoriesScreen() {
     : params.subCategory;
   const pageTitle = (selectedSubCategory || "Products").toUpperCase();
 
+  useEffect(() => {
+    const norm = String(selectedSubCategory ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\u2019/g, "'"); // normalize curly apostrophe
+    if (
+      norm === "womens clothing" ||
+      norm === "women's clothing" ||
+      norm === "women clothing"
+    ) {
+      if (router.canGoBack()) router.back();
+      else router.replace("/women");
+    }
+  }, [router, selectedSubCategory]);
+
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [genderModalVisible, setGenderModalVisible] = useState(false);

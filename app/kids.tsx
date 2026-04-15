@@ -9,11 +9,13 @@ import {
   TouchableOpacity,
   Pressable,
   Modal,
+  ActivityIndicator,
   useWindowDimensions,
   type ImageSourcePropType,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from "react-native";
+import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -158,6 +160,33 @@ type KidsCategoryBlock = {
   railFrom: string;
   railTo: string;
   subs: SubLabel[];
+};
+
+type KidsSubcategoryApiRow = {
+  bannerImage: string | null;
+  categoryName: string;
+  createdAt: string;
+  gstPercentage: number;
+  hsnCode: string;
+  id: number;
+  image: string | null;
+  mobileImage: string | null;
+  parentId: number | null;
+  sellerId: number | null;
+  status: number;
+};
+
+type KidsSubcategoriesTableSubRow = {
+  id: number;
+  name: string;
+  image?: string | null;
+  mobileImage?: string | null;
+};
+
+type KidsSubcategoriesTableRow = {
+  categoryName: string;
+  mobileImage?: string | null;
+  subcategories: KidsSubcategoriesTableSubRow[];
 };
 
 const KIDS_BOYS_IMG = require("../assets/kids/BoysClothin.jpeg");
@@ -639,6 +668,265 @@ export default function KidsScreen() {
   const shopAllScrollDirRef = useRef(1);
   const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
 
+  const SUBCATEGORIES_API_BASE =
+    "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
+  const KIDS_PARENT_ID = 30;
+  const [kidsApiCats, setKidsApiCats] = useState<KidsSubcategoryApiRow[]>([]);
+  const [kidsApiLoading, setKidsApiLoading] = useState<boolean>(true);
+  const [kidsApiError, setKidsApiError] = useState<string | null>(null);
+
+  const KIDS_GIRLS_CLOTHING_TABLE_ID = 48;
+  const [girlsClothingTable, setGirlsClothingTable] = useState<KidsSubcategoriesTableRow | null>(
+    null
+  );
+  const [girlsClothingTableLoading, setGirlsClothingTableLoading] = useState<boolean>(false);
+  const [girlsClothingTableError, setGirlsClothingTableError] = useState<string | null>(null);
+
+  const KIDS_BOYS_CLOTHING_TABLE_ID = 49;
+  const [boysClothingTable, setBoysClothingTable] = useState<KidsSubcategoriesTableRow | null>(
+    null
+  );
+  const [boysClothingTableLoading, setBoysClothingTableLoading] = useState<boolean>(false);
+  const [boysClothingTableError, setBoysClothingTableError] = useState<string | null>(null);
+
+  const KIDS_SCHOOL_ESSENTIALS_TABLE_ID = 50;
+  const [schoolEssentialsTable, setSchoolEssentialsTable] =
+    useState<KidsSubcategoriesTableRow | null>(null);
+  const [schoolEssentialsTableLoading, setSchoolEssentialsTableLoading] =
+    useState<boolean>(false);
+  const [schoolEssentialsTableError, setSchoolEssentialsTableError] = useState<string | null>(
+    null
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setKidsApiLoading(true);
+        setKidsApiError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_PARENT_ID}/subcategories`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as KidsSubcategoryApiRow[]) : [];
+        if (cancelled) return;
+        setKidsApiCats(list);
+      } catch (e: any) {
+        if (cancelled) return;
+        setKidsApiCats([]);
+        setKidsApiError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load kids categories"
+        );
+      } finally {
+        if (cancelled) return;
+        setKidsApiLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setGirlsClothingTableLoading(true);
+        setGirlsClothingTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_GIRLS_CLOTHING_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as KidsSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setGirlsClothingTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setGirlsClothingTable(null);
+        setGirlsClothingTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Girls clothing subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setGirlsClothingTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setSchoolEssentialsTableLoading(true);
+        setSchoolEssentialsTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_SCHOOL_ESSENTIALS_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as KidsSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setSchoolEssentialsTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setSchoolEssentialsTable(null);
+        setSchoolEssentialsTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load School Essentials subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setSchoolEssentialsTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setBoysClothingTableLoading(true);
+        setBoysClothingTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_BOYS_CLOTHING_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as KidsSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setBoysClothingTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setBoysClothingTable(null);
+        setBoysClothingTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Boys clothing subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setBoysClothingTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  const normalize = useCallback((s: string) => String(s ?? "").trim().toLowerCase(), []);
+  const normKey = useCallback(
+    (s: string) =>
+      normalize(s)
+        // Remove control chars/punctuation from API payloads.
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    [normalize]
+  );
+
+  const guessKidsMappedKey = useCallback(
+    (title: string): string | null => {
+      const t = normKey(title);
+      if (!t) return null;
+      // Common backend variants / typos should still map to our 3 rail blocks.
+      if (t.includes("boy")) return "boys";
+      if (t.includes("girl")) return "girls";
+      if (t.includes("school")) return "infants";
+      if (t.includes("essential")) return "infants";
+      if (t.includes("infant") || t.includes("baby") || t.includes("newborn")) return "infants";
+      return null;
+    },
+    [normKey]
+  );
+
+  const kidsCategoriesForUi = useMemo(() => {
+    const apiActive = kidsApiCats.filter((r) =>
+      typeof r.status === "number" ? r.status === 1 : true
+    );
+    if (!apiActive.length) return KIDS_CATEGORIES;
+
+    const byName = new Map(apiActive.map((r) => [normKey(r.categoryName), r]));
+    return KIDS_CATEGORIES.map((block) => {
+      const row = byName.get(normKey(block.title));
+      if (!row) return block;
+      const title = String(row.categoryName ?? block.title).trim() || block.title;
+      const shopImage = row.mobileImage
+        ? ({ uri: row.mobileImage } as any)
+        : row.image
+          ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+          : block.shopImage;
+      return { ...block, title, shopImage };
+    });
+  }, [KIDS_CATEGORIES, SUBCATEGORIES_API_BASE, kidsApiCats, normKey]);
+
+  const kidsStripItems = useMemo(() => {
+    const apiActive = kidsApiCats.filter((r) =>
+      typeof r.status === "number" ? r.status === 1 : true
+    );
+    if (!apiActive.length) {
+      return kidsCategoriesForUi.map((b) => ({
+        key: b.key,
+        title: b.title,
+        image: b.shopImage,
+        mappedKey: b.key,
+      }));
+    }
+
+    const keyByName = new Map(
+      kidsCategoriesForUi.map((b) => [normKey(b.title), b.key] as const)
+    );
+
+    return apiActive.map((row) => {
+      const title = String(row.categoryName ?? "").trim() || "Category";
+      const image: ImageSourcePropType =
+        row.mobileImage
+          ? ({ uri: row.mobileImage } as any)
+          : row.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+            : KIDS_IMAGE;
+      return {
+        key: `api-${row.id}`,
+        title,
+        image,
+        mappedKey: keyByName.get(normKey(title)) ?? guessKidsMappedKey(title),
+      };
+    });
+  }, [
+    KIDS_IMAGE,
+    SUBCATEGORIES_API_BASE,
+    kidsApiCats,
+    kidsCategoriesForUi,
+    guessKidsMappedKey,
+    normKey,
+  ]);
+
+  useEffect(() => {
+    if (kidsCategoriesForUi.some((c) => c.key === selectedKey)) return;
+    setSelectedKey(kidsCategoriesForUi[0]?.key ?? KIDS_CATEGORIES[0].key);
+  }, [kidsCategoriesForUi, selectedKey]);
+
   const styleLabOpen = useMemo(
     () => FC_STYLE_LAB.find((l) => l.key === styleLabOpenKey) ?? null,
     [styleLabOpenKey]
@@ -658,23 +946,142 @@ export default function KidsScreen() {
   }, []);
 
   const activeBlock = useMemo(
-    () => KIDS_CATEGORIES.find((c) => c.key === selectedKey) ?? KIDS_CATEGORIES[0],
-    [selectedKey]
+    () => kidsCategoriesForUi.find((c) => c.key === selectedKey) ?? kidsCategoriesForUi[0],
+    [kidsCategoriesForUi, selectedKey]
   );
+
+  const girlsBlock = useMemo(
+    () =>
+      kidsCategoriesForUi.find((c) => c.key === "girls") ??
+      KIDS_CATEGORIES.find((c) => c.key === "girls") ??
+      KIDS_CATEGORIES[0],
+    [kidsCategoriesForUi]
+  );
+
+  const girlsRailSubs = useMemo((): SubLabel[] => {
+    if (girlsClothingTable?.subcategories?.length) {
+      return girlsClothingTable.subcategories.map((s) => ({
+        id: `api-girls-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return girlsBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, girlsBlock.subs, girlsClothingTable]);
+
+  const boysBlock = useMemo(
+    () =>
+      kidsCategoriesForUi.find((c) => c.key === "boys") ??
+      KIDS_CATEGORIES.find((c) => c.key === "boys") ??
+      KIDS_CATEGORIES[0],
+    [kidsCategoriesForUi]
+  );
+
+  const boysRailSubs = useMemo((): SubLabel[] => {
+    if (boysClothingTable?.subcategories?.length) {
+      return boysClothingTable.subcategories.map((s) => ({
+        id: `api-boys-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return boysBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, boysBlock.subs, boysClothingTable]);
+
+  const schoolBlock = useMemo(
+    () =>
+      kidsCategoriesForUi.find((c) => c.key === "infants") ??
+      KIDS_CATEGORIES.find((c) => c.key === "infants") ??
+      KIDS_CATEGORIES[0],
+    [kidsCategoriesForUi]
+  );
+
+  const schoolRailSubs = useMemo((): SubLabel[] => {
+    if (schoolEssentialsTable?.subcategories?.length) {
+      return schoolEssentialsTable.subcategories.map((s) => ({
+        id: `api-school-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return schoolBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, schoolBlock.subs, schoolEssentialsTable]);
+
+  const kidsDeptRailAwaitingTable = useMemo(() => {
+    if (activeBlock.key === "boys") return boysClothingTableLoading && !boysClothingTable;
+    if (activeBlock.key === "girls")
+      return girlsClothingTableLoading && !girlsClothingTable;
+    if (activeBlock.key === "infants")
+      return schoolEssentialsTableLoading && !schoolEssentialsTable;
+    return false;
+  }, [
+    activeBlock.key,
+    boysClothingTable,
+    boysClothingTableLoading,
+    girlsClothingTable,
+    girlsClothingTableLoading,
+    schoolEssentialsTable,
+    schoolEssentialsTableLoading,
+  ]);
+
+  const kidsDeptRailTableErrorText = useMemo(() => {
+    if (activeBlock.key === "boys")
+      return !boysClothingTableLoading ? boysClothingTableError : null;
+    if (activeBlock.key === "girls")
+      return !girlsClothingTableLoading ? girlsClothingTableError : null;
+    if (activeBlock.key === "infants")
+      return !schoolEssentialsTableLoading ? schoolEssentialsTableError : null;
+    return null;
+  }, [
+    activeBlock.key,
+    boysClothingTableError,
+    boysClothingTableLoading,
+    girlsClothingTableError,
+    girlsClothingTableLoading,
+    schoolEssentialsTableError,
+    schoolEssentialsTableLoading,
+  ]);
+
+  const activeRailSubsForUi = useMemo((): SubLabel[] => {
+    if (activeBlock.key === "boys") return boysRailSubs;
+    if (activeBlock.key === "girls") return girlsRailSubs;
+    if (activeBlock.key === "infants") return schoolRailSubs;
+    return activeBlock.subs;
+  }, [activeBlock.key, activeBlock.subs, boysRailSubs, girlsRailSubs, schoolRailSubs]);
 
   const allKidsSubItems = useMemo(
     () =>
-      KIDS_CATEGORIES.flatMap((cat) =>
-        cat.subs.map((s) => ({
+      kidsCategoriesForUi.flatMap((cat) => {
+        const subs =
+          cat.key === "boys"
+            ? boysRailSubs
+            : cat.key === "girls"
+              ? girlsRailSubs
+              : cat.key === "infants"
+                ? schoolRailSubs
+              : cat.subs;
+        return subs.map((s) => ({
           flatId: `${cat.key}-${s.id}`,
           label: s.label,
           image: (s.image ?? cat.shopImage) as ImageSourcePropType,
           deptKey: cat.key,
           deptTitle: cat.title,
           deptColor: cat.railTo,
-        }))
-      ),
-    []
+        }));
+      }),
+    [boysRailSubs, girlsRailSubs, kidsCategoriesForUi, schoolRailSubs]
   );
 
   const shopAllGridRows = useMemo(() => {
@@ -716,6 +1123,22 @@ export default function KidsScreen() {
       });
     },
     [router]
+  );
+
+  const onPressStripItem = useCallback(
+    (item: { mappedKey: string | null; title: string }) => {
+      if (item.mappedKey) {
+        onSelectShopCategory(item.mappedKey);
+        return;
+      }
+      const guessed = guessKidsMappedKey(item.title);
+      if (guessed) {
+        onSelectShopCategory(guessed);
+        return;
+      }
+      openKidsSubcategoryProducts(item.title);
+    },
+    [guessKidsMappedKey, onSelectShopCategory, openKidsSubcategoryProducts]
   );
 
   const onStyleLabShopPicks = useCallback(() => {
@@ -876,17 +1299,35 @@ export default function KidsScreen() {
               contentContainerStyle={styles.quickStrip}
               nestedScrollEnabled
             >
-              {KIDS_CATEGORIES.map((c) => {
-                const selected = c.key === selectedKey;
+              {kidsApiLoading ? (
+                <View style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <ActivityIndicator size="small" color="#ef7b1a" />
+                </View>
+              ) : null}
+              {!kidsApiLoading && kidsApiError ? (
+                <View style={{ paddingHorizontal: 10, paddingVertical: 6, maxWidth: 260 }}>
+                  <Text
+                    style={{ color: "#b91c1c", fontWeight: "700", fontSize: 12 }}
+                    numberOfLines={2}
+                  >
+                    {kidsApiError}
+                  </Text>
+                </View>
+              ) : null}
+
+              {kidsStripItems.map((c) => {
+                const selected = Boolean(c.mappedKey) && c.mappedKey === selectedKey;
                 const clipId = `kidsHex-${c.key}`;
                 return (
                   <TouchableOpacity
                     key={c.key}
                     style={styles.quickItem}
                     activeOpacity={0.85}
-                    onPress={() => onSelectShopCategory(c.key)}
+                    onPress={() => onPressStripItem({ mappedKey: c.mappedKey, title: c.title })}
                     accessibilityRole="button"
-                    accessibilityLabel={`Show only ${c.title} subcategories`}
+                    accessibilityLabel={
+                      c.mappedKey ? `Show only ${c.title} subcategories` : `Shop ${c.title}`
+                    }
                     accessibilityState={{ selected }}
                   >
                     <View
@@ -896,7 +1337,7 @@ export default function KidsScreen() {
                       ]}
                     >
                       <HexagonShopBadge
-                        source={c.shopImage}
+                        source={c.image}
                         clipId={clipId}
                         selected={selected}
                       />
@@ -941,7 +1382,24 @@ export default function KidsScreen() {
                 contentContainerStyle={styles.railScroll}
                 nestedScrollEnabled
               >
-                {activeBlock.subs.map((s) => {
+                {kidsDeptRailAwaitingTable ? (
+                  <View
+                    style={{ paddingVertical: 18, paddingHorizontal: 8, justifyContent: "center" }}
+                  >
+                    <ActivityIndicator size="small" color={activeBlock.railTo} />
+                  </View>
+                ) : null}
+                {kidsDeptRailTableErrorText ? (
+                  <View style={{ paddingVertical: 10, paddingHorizontal: 8, maxWidth: 280 }}>
+                    <Text
+                      style={{ color: "#b91c1c", fontWeight: "700", fontSize: 12 }}
+                      numberOfLines={3}
+                    >
+                      {kidsDeptRailTableErrorText}
+                    </Text>
+                  </View>
+                ) : null}
+                {(kidsDeptRailAwaitingTable ? [] : activeRailSubsForUi).map((s) => {
                   const tileImage = s.image ?? activeBlock.shopImage;
                   return (
                     <TouchableOpacity
@@ -2160,7 +2618,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   railCardArt: {
-    height: 108,
+    height: Math.round(RAIL_CARD_H * 0.7),
     overflow: "hidden",
     backgroundColor: "#e2e8f0",
   },
@@ -2183,9 +2641,9 @@ const styles = StyleSheet.create({
   railCardBody: {
     flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 12,
+    paddingVertical: 10,
     justifyContent: "center",
-    minHeight: 72,
+    minHeight: Math.round(RAIL_CARD_H * 0.3),
   },
   railCardLabel: {
     fontSize: 13,
