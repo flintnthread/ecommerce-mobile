@@ -9,11 +9,13 @@ import {
   TouchableOpacity,
   Pressable,
   Modal,
+  ActivityIndicator,
   useWindowDimensions,
   type ImageSourcePropType,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from "react-native";
+import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -159,6 +161,33 @@ type MenCategoryBlock = {
   railFrom: string;
   railTo: string;
   subs: SubLabel[];
+};
+
+type MenSubcategoryApiRow = {
+  bannerImage: string | null;
+  categoryName: string;
+  createdAt: string;
+  gstPercentage: number;
+  hsnCode: string;
+  id: number;
+  image: string | null;
+  mobileImage: string | null;
+  parentId: number | null;
+  sellerId: number | null;
+  status: number;
+};
+
+type MenSubcategoriesTableSubRow = {
+  id: number;
+  name: string;
+  image: string | null;
+  mobileImage: string | null;
+};
+
+type MenSubcategoriesTableRow = {
+  categoryName: string;
+  mobileImage: string | null;
+  subcategories: MenSubcategoriesTableSubRow[];
 };
 
 /** Model B: light storefront + horizontal rails (no navigation). */
@@ -786,6 +815,283 @@ export default function MenScreen() {
   const shopAllScrollDirRef = useRef(1);
   const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
 
+  const SUBCATEGORIES_API_BASE =
+    "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
+  const MEN_PARENT_ID = 51;
+  const [menApiCats, setMenApiCats] = useState<MenSubcategoryApiRow[]>([]);
+  const [menApiLoading, setMenApiLoading] = useState<boolean>(true);
+  const [menApiError, setMenApiError] = useState<string | null>(null);
+
+  const MEN_BOTTOM_WEAR_TABLE_ID = 54;
+  const [bottomWearTable, setBottomWearTable] = useState<MenSubcategoriesTableRow | null>(
+    null
+  );
+  const [bottomWearTableLoading, setBottomWearTableLoading] = useState<boolean>(false);
+  const [bottomWearTableError, setBottomWearTableError] = useState<string | null>(null);
+
+  const MEN_ETHNIC_WEAR_TABLE_ID = 57;
+  const [ethnicWearTable, setEthnicWearTable] = useState<MenSubcategoriesTableRow | null>(
+    null
+  );
+  const [ethnicWearTableLoading, setEthnicWearTableLoading] = useState<boolean>(false);
+  const [ethnicWearTableError, setEthnicWearTableError] = useState<string | null>(null);
+
+  const MEN_FORMAL_WEAR_TABLE_ID = 58;
+  const [formalWearTable, setFormalWearTable] = useState<MenSubcategoriesTableRow | null>(
+    null
+  );
+  const [formalWearTableLoading, setFormalWearTableLoading] = useState<boolean>(false);
+  const [formalWearTableError, setFormalWearTableError] = useState<string | null>(null);
+
+  const MEN_INNERWEAR_NIGHTWEAR_TABLE_ID = 59;
+  const [innerWearTable, setInnerWearTable] = useState<MenSubcategoriesTableRow | null>(
+    null
+  );
+  const [innerWearTableLoading, setInnerWearTableLoading] = useState<boolean>(false);
+  const [innerWearTableError, setInnerWearTableError] = useState<string | null>(null);
+
+  const MEN_TOP_WEAR_TABLE_ID = 52;
+  const [topWearTable, setTopWearTable] = useState<MenSubcategoriesTableRow | null>(null);
+  const [topWearTableLoading, setTopWearTableLoading] = useState<boolean>(false);
+  const [topWearTableError, setTopWearTableError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setMenApiLoading(true);
+        setMenApiError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_PARENT_ID}/subcategories`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as MenSubcategoryApiRow[]) : [];
+        if (cancelled) return;
+        setMenApiCats(list);
+      } catch (e: any) {
+        if (cancelled) return;
+        setMenApiCats([]);
+        setMenApiError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load men categories"
+        );
+      } finally {
+        if (cancelled) return;
+        setMenApiLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setBottomWearTableLoading(true);
+        setBottomWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_BOTTOM_WEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setBottomWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setBottomWearTable(null);
+        setBottomWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Bottom Wear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setBottomWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setEthnicWearTableLoading(true);
+        setEthnicWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_ETHNIC_WEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setEthnicWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setEthnicWearTable(null);
+        setEthnicWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Ethnic Wear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setEthnicWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setFormalWearTableLoading(true);
+        setFormalWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_FORMAL_WEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setFormalWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setFormalWearTable(null);
+        setFormalWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Formal Wear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setFormalWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setInnerWearTableLoading(true);
+        setInnerWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_INNERWEAR_NIGHTWEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setInnerWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setInnerWearTable(null);
+        setInnerWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Innerwear & Nightwear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setInnerWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setTopWearTableLoading(true);
+        setTopWearTableError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_TOP_WEAR_TABLE_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+        if (cancelled) return;
+        setTopWearTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setTopWearTable(null);
+        setTopWearTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Top Wear subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setTopWearTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE]);
+
+  const menCategoriesForUi = useMemo(() => {
+    const apiActive = menApiCats.filter((r) =>
+      typeof r.status === "number" ? r.status === 1 : true
+    );
+    if (!apiActive.length) return MEN_CATEGORIES;
+
+    const byName = new Map(
+      apiActive.map((r) => [String(r.categoryName ?? "").trim().toLowerCase(), r])
+    );
+
+    // Keep existing structure (subs/tags/colors) but update title + image from API when available.
+    return MEN_CATEGORIES.map((block) => {
+      const row = byName.get(String(block.title).trim().toLowerCase());
+      if (!row) return block;
+      const title = String(row.categoryName ?? block.title).trim() || block.title;
+      const shopImage = row.mobileImage
+        ? ({ uri: row.mobileImage } as any)
+        : row.image
+          ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+          : block.shopImage;
+      return { ...block, title, shopImage };
+    });
+  }, [SUBCATEGORIES_API_BASE, menApiCats]);
+
+  // If a category key becomes invalid (future changes), keep selection safe.
+  useEffect(() => {
+    if (menCategoriesForUi.some((c) => c.key === selectedKey)) return;
+    setSelectedKey(menCategoriesForUi[0]?.key ?? MEN_CATEGORIES[0].key);
+  }, [menCategoriesForUi, selectedKey]);
+
   const styleLabOpen = useMemo(
     () => FC_STYLE_LAB.find((l) => l.key === styleLabOpenKey) ?? null,
     [styleLabOpenKey]
@@ -805,24 +1111,214 @@ export default function MenScreen() {
   }, []);
 
   const activeBlock = useMemo(
-    () => MEN_CATEGORIES.find((c) => c.key === selectedKey) ?? MEN_CATEGORIES[0],
-    [selectedKey]
+    () =>
+      menCategoriesForUi.find((c) => c.key === selectedKey) ?? menCategoriesForUi[0],
+    [menCategoriesForUi, selectedKey]
   );
+
+  const bottomBlock = useMemo(
+    () => menCategoriesForUi.find((c) => c.key === "bottom") ?? MEN_CATEGORIES[0],
+    [menCategoriesForUi]
+  );
+
+  const bottomRailSubs = useMemo((): SubLabel[] => {
+    if (bottomWearTable?.subcategories?.length) {
+      return bottomWearTable.subcategories.map((s) => ({
+        id: `api-bottom-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return bottomBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, bottomBlock.subs, bottomWearTable]);
+
+  const ethnicBlock = useMemo(
+    () =>
+      menCategoriesForUi.find((c) => c.key === "ethnic") ??
+      MEN_CATEGORIES.find((c) => c.key === "ethnic") ??
+      MEN_CATEGORIES[0],
+    [menCategoriesForUi]
+  );
+
+  const ethnicRailSubs = useMemo((): SubLabel[] => {
+    if (ethnicWearTable?.subcategories?.length) {
+      return ethnicWearTable.subcategories.map((s) => ({
+        id: `api-ethnic-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return ethnicBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, ethnicBlock.subs, ethnicWearTable]);
+
+  const formalBlock = useMemo(
+    () =>
+      menCategoriesForUi.find((c) => c.key === "formal") ??
+      MEN_CATEGORIES.find((c) => c.key === "formal") ??
+      MEN_CATEGORIES[0],
+    [menCategoriesForUi]
+  );
+
+  const formalRailSubs = useMemo((): SubLabel[] => {
+    if (formalWearTable?.subcategories?.length) {
+      return formalWearTable.subcategories.map((s) => ({
+        id: `api-formal-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return formalBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, formalBlock.subs, formalWearTable]);
+
+  const innerBlock = useMemo(
+    () =>
+      menCategoriesForUi.find((c) => c.key === "inner") ??
+      MEN_CATEGORIES.find((c) => c.key === "inner") ??
+      MEN_CATEGORIES[0],
+    [menCategoriesForUi]
+  );
+
+  const innerRailSubs = useMemo((): SubLabel[] => {
+    if (innerWearTable?.subcategories?.length) {
+      return innerWearTable.subcategories.map((s) => ({
+        id: `api-inner-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return innerBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, innerBlock.subs, innerWearTable]);
+
+  const topBlock = useMemo(
+    () =>
+      menCategoriesForUi.find((c) => c.key === "top") ??
+      MEN_CATEGORIES.find((c) => c.key === "top") ??
+      MEN_CATEGORIES[0],
+    [menCategoriesForUi]
+  );
+
+  const topRailSubs = useMemo((): SubLabel[] => {
+    if (topWearTable?.subcategories?.length) {
+      return topWearTable.subcategories.map((s) => ({
+        id: `api-top-${s.id}`,
+        label: s.name,
+        image: (s.mobileImage
+          ? ({ uri: s.mobileImage } as any)
+          : s.image
+            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            : undefined) as ImageSourcePropType | undefined,
+      }));
+    }
+    return topBlock.subs;
+  }, [SUBCATEGORIES_API_BASE, topBlock.subs, topWearTable]);
+
+  const activeRailSubs = useMemo((): SubLabel[] => {
+    if (activeBlock.key === "bottom") return bottomRailSubs;
+    if (activeBlock.key === "ethnic") return ethnicRailSubs;
+    if (activeBlock.key === "formal") return formalRailSubs;
+    if (activeBlock.key === "inner") return innerRailSubs;
+    if (activeBlock.key === "top") return topRailSubs;
+    return activeBlock.subs;
+  }, [
+    activeBlock.key,
+    activeBlock.subs,
+    bottomRailSubs,
+    ethnicRailSubs,
+    formalRailSubs,
+    innerRailSubs,
+    topRailSubs,
+  ]);
 
   const allMenSubItems = useMemo(
     () =>
-      MEN_CATEGORIES.flatMap((cat) =>
-        cat.subs.map((s) => ({
+      menCategoriesForUi.flatMap((cat) => {
+        const subs =
+          cat.key === "bottom"
+            ? bottomRailSubs
+            : cat.key === "ethnic"
+              ? ethnicRailSubs
+              : cat.key === "formal"
+                ? formalRailSubs
+                : cat.key === "inner"
+                  ? innerRailSubs
+                  : cat.key === "top"
+                    ? topRailSubs
+                    : cat.subs;
+        return subs.map((s) => ({
           flatId: `${cat.key}-${s.id}`,
           label: s.label,
           image: (s.image ?? cat.shopImage) as ImageSourcePropType,
           deptKey: cat.key,
           deptTitle: cat.title,
           deptColor: cat.railTo,
-        }))
-      ),
-    []
+        }));
+      }),
+    [bottomRailSubs, ethnicRailSubs, formalRailSubs, innerRailSubs, topRailSubs, menCategoriesForUi]
   );
+
+  /** First paint for table-backed departments: wait for subcategories-table before showing rail tiles. */
+  const menDeptRailAwaitingTable = useMemo(() => {
+    if (activeBlock.key === "bottom") return bottomWearTableLoading && !bottomWearTable;
+    if (activeBlock.key === "ethnic") return ethnicWearTableLoading && !ethnicWearTable;
+    if (activeBlock.key === "formal") return formalWearTableLoading && !formalWearTable;
+    if (activeBlock.key === "inner") return innerWearTableLoading && !innerWearTable;
+    if (activeBlock.key === "top") return topWearTableLoading && !topWearTable;
+    return false;
+  }, [
+    activeBlock.key,
+    bottomWearTable,
+    bottomWearTableLoading,
+    ethnicWearTable,
+    ethnicWearTableLoading,
+    formalWearTable,
+    formalWearTableLoading,
+    innerWearTable,
+    innerWearTableLoading,
+    topWearTable,
+    topWearTableLoading,
+  ]);
+
+  const menDeptRailTableErrorText = useMemo(() => {
+    if (activeBlock.key === "bottom")
+      return !bottomWearTableLoading ? bottomWearTableError : null;
+    if (activeBlock.key === "ethnic")
+      return !ethnicWearTableLoading ? ethnicWearTableError : null;
+    if (activeBlock.key === "formal")
+      return !formalWearTableLoading ? formalWearTableError : null;
+    if (activeBlock.key === "inner")
+      return !innerWearTableLoading ? innerWearTableError : null;
+    if (activeBlock.key === "top")
+      return !topWearTableLoading ? topWearTableError : null;
+    return null;
+  }, [
+    activeBlock.key,
+    bottomWearTableLoading,
+    bottomWearTableError,
+    ethnicWearTableLoading,
+    ethnicWearTableError,
+    formalWearTableLoading,
+    formalWearTableError,
+    innerWearTableLoading,
+    innerWearTableError,
+    topWearTableLoading,
+    topWearTableError,
+  ]);
 
   /** Grid: exactly two products per row. */
   const shopAllGridRows = useMemo(() => {
@@ -1036,7 +1532,20 @@ export default function MenScreen() {
               contentContainerStyle={styles.quickStrip}
               nestedScrollEnabled
             >
-              {MEN_CATEGORIES.map((c) => {
+              {menApiLoading ? (
+                <View style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <ActivityIndicator size="small" color="#ef7b1a" />
+                </View>
+              ) : null}
+              {!menApiLoading && menApiError ? (
+                <View style={{ paddingHorizontal: 10, paddingVertical: 6, maxWidth: 260 }}>
+                  <Text style={{ color: "#b91c1c", fontWeight: "700", fontSize: 12 }} numberOfLines={2}>
+                    {menApiError}
+                  </Text>
+                </View>
+              ) : null}
+
+              {menCategoriesForUi.map((c) => {
                 const selected = c.key === selectedKey;
                 const clipId = `menHex-${c.key}`;
                 return (
@@ -1101,7 +1610,19 @@ export default function MenScreen() {
                 contentContainerStyle={styles.railScroll}
                 nestedScrollEnabled
               >
-                {activeBlock.subs.map((s) => {
+                {menDeptRailAwaitingTable ? (
+                  <View style={{ paddingVertical: 18, paddingHorizontal: 8, justifyContent: "center" }}>
+                    <ActivityIndicator size="small" color={activeBlock.railTo} />
+                  </View>
+                ) : null}
+                {menDeptRailTableErrorText ? (
+                  <View style={{ paddingVertical: 10, paddingHorizontal: 8, maxWidth: 280 }}>
+                    <Text style={{ color: "#b91c1c", fontWeight: "700", fontSize: 12 }} numberOfLines={3}>
+                      {menDeptRailTableErrorText}
+                    </Text>
+                  </View>
+                ) : null}
+                {(menDeptRailAwaitingTable ? [] : activeRailSubs).map((s) => {
                   const tileImage = s.image ?? activeBlock.shopImage;
                   return (
                     <TouchableOpacity
@@ -2451,7 +2972,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   railCardArt: {
-    height: 108,
+    height: Math.round(RAIL_CARD_H * 0.75),
     overflow: "hidden",
     backgroundColor: "#e2e8f0",
   },
@@ -2474,9 +2995,9 @@ const styles = StyleSheet.create({
   railCardBody: {
     flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 12,
+    paddingVertical: 9,
     justifyContent: "center",
-    minHeight: 72,
+    minHeight: Math.round(RAIL_CARD_H * 0.25),
   },
   railCardLabel: {
     fontSize: 13,

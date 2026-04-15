@@ -7,7 +7,9 @@ import { View,
   Image,
   ImageBackground,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
+import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -36,6 +38,33 @@ type GiftCategory = {
   bg: string;
   /** When set, shown inside the category circle instead of the emoji */
   circleImage?: any;
+};
+
+type GiftSubcategoryApiRow = {
+  bannerImage: string | null;
+  categoryName: string;
+  createdAt: string;
+  gstPercentage: number;
+  hsnCode: string;
+  id: number;
+  image: string | null;
+  mobileImage: string | null;
+  parentId: number | null;
+  sellerId: number | null;
+  status: number;
+};
+
+type SubcategoriesTableSubRow = {
+  id: number;
+  name: string;
+  image: string | null;
+  mobileImage: string | null;
+};
+
+type SubcategoriesTableRow = {
+  categoryName: string;
+  mobileImage: string | null;
+  subcategories: SubcategoriesTableSubRow[];
 };
 
 type GiftItem = {
@@ -531,6 +560,162 @@ export default function GiftsScreen() {
     null
   );
   const [selectedSubCategory, setSelectedSubCategory] = React.useState<string | null>(null);
+
+  const SUBCATEGORIES_API_BASE =
+    "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
+  const SUBCATEGORIES_PARENT_ID = 89;
+  const [giftApiSubcategories, setGiftApiSubcategories] = React.useState<
+    GiftSubcategoryApiRow[]
+  >([]);
+  const [giftApiLoading, setGiftApiLoading] = React.useState<boolean>(true);
+  const [giftApiError, setGiftApiError] = React.useState<string | null>(null);
+
+  const normalizeGiftName = React.useCallback((name: string) => {
+    return String(name ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }, []);
+
+  const giftNameToStaticId = React.useMemo(() => {
+    // Map API names -> existing hardcoded ids so the rest of the screen
+    // (hero banners + sections) keeps working without a full rewrite.
+    return new Map<string, string>([
+      ["art & creative gifts", "gc1"],
+      ["corporate & promotional gifts", "gc2"],
+      ["corporate gifts", "gc2"],
+      ["event-based gifts", "gc3"],
+      ["everyday utility", "gc4"],
+      ["everyday utility", "gc4"],
+      ["everyday utility", "gc4"],
+      ["gifts for couples", "gc5"],
+      ["couple gifts", "gc5"],
+      ["home decor gifits", "gc6"],
+      ["home decor gifts", "gc6"],
+      ["kids & baby gifts", "gc7"],
+      ["spiritual & festival gifts", "gc8"],
+      ["wearable & personal gifts", "gc9"],
+    ]);
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setGiftApiLoading(true);
+        setGiftApiError(null);
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${SUBCATEGORIES_PARENT_ID}/subcategories`,
+          { timeout: 15000 }
+        );
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as GiftSubcategoryApiRow[]) : [];
+        if (cancelled) return;
+        setGiftApiSubcategories(list);
+      } catch (e: any) {
+        if (cancelled) return;
+        setGiftApiSubcategories([]);
+        setGiftApiError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load gift categories"
+        );
+      } finally {
+        if (cancelled) return;
+        setGiftApiLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const giftCategoriesForUi: GiftCategory[] = React.useMemo(() => {
+    const fallback = GIFT_CATEGORIES;
+    const apiActive = giftApiSubcategories.filter((r) =>
+      typeof r.status === "number" ? r.status === 1 : true
+    );
+    if (!apiActive.length) return fallback;
+
+    return apiActive.map((row) => {
+      const name = String(row.categoryName ?? "").trim() || "Gifts";
+      const mappedId =
+        giftNameToStaticId.get(normalizeGiftName(name)) ?? `api-${row.id}`;
+      return {
+        id: mappedId,
+        title: name,
+        emoji: "🎁",
+        bg: "#FFEFDC",
+        circleImage: row.mobileImage ? ({ uri: row.mobileImage } as any) : undefined,
+      };
+    });
+  }, [giftApiSubcategories, giftNameToStaticId, normalizeGiftName]);
+
+  const ART_CREATIVE_CATEGORY_ID = 101;
+  const [artTable, setArtTable] = React.useState<SubcategoriesTableRow | null>(null);
+  const [artTableLoading, setArtTableLoading] = React.useState<boolean>(false);
+  const [artTableError, setArtTableError] = React.useState<string | null>(null);
+
+  const WEARABLE_PERSONAL_CATEGORY_ID = 94;
+  const [wearableTable, setWearableTable] = React.useState<SubcategoriesTableRow | null>(
+    null
+  );
+  const [wearableTableLoading, setWearableTableLoading] = React.useState<boolean>(false);
+  const [wearableTableError, setWearableTableError] = React.useState<string | null>(
+    null
+  );
+
+  const SPIRITUAL_FESTIVAL_CATEGORY_ID = 97;
+  const [spiritualTable, setSpiritualTable] = React.useState<SubcategoriesTableRow | null>(
+    null
+  );
+  const [spiritualTableLoading, setSpiritualTableLoading] = React.useState<boolean>(false);
+  const [spiritualTableError, setSpiritualTableError] = React.useState<string | null>(
+    null
+  );
+
+  const KIDS_BABY_CATEGORY_ID = 95;
+  const [kidsBabyTable, setKidsBabyTable] = React.useState<SubcategoriesTableRow | null>(
+    null
+  );
+  const [kidsBabyTableLoading, setKidsBabyTableLoading] = React.useState<boolean>(false);
+  const [kidsBabyTableError, setKidsBabyTableError] = React.useState<string | null>(null);
+
+  const HOME_DECOR_CATEGORY_ID = 92;
+  const [homeDecorTable, setHomeDecorTable] = React.useState<SubcategoriesTableRow | null>(
+    null
+  );
+  const [homeDecorTableLoading, setHomeDecorTableLoading] = React.useState<boolean>(false);
+  const [homeDecorTableError, setHomeDecorTableError] = React.useState<string | null>(
+    null
+  );
+
+  const COUPLES_CATEGORY_ID = 96;
+  const [couplesTable, setCouplesTable] = React.useState<SubcategoriesTableRow | null>(
+    null
+  );
+  const [couplesTableLoading, setCouplesTableLoading] = React.useState<boolean>(false);
+  const [couplesTableError, setCouplesTableError] = React.useState<string | null>(null);
+
+  const EVERYDAY_UTILITY_CATEGORY_ID = 93;
+  const [utilityTable, setUtilityTable] = React.useState<SubcategoriesTableRow | null>(
+    null
+  );
+  const [utilityTableLoading, setUtilityTableLoading] = React.useState<boolean>(false);
+  const [utilityTableError, setUtilityTableError] = React.useState<string | null>(null);
+
+  const EVENT_CATEGORY_ID = 100;
+  const [eventTable, setEventTable] = React.useState<SubcategoriesTableRow | null>(null);
+  const [eventTableLoading, setEventTableLoading] = React.useState<boolean>(false);
+  const [eventTableError, setEventTableError] = React.useState<string | null>(null);
+
+  const CORPORATE_CATEGORY_ID = 99;
+  const [corporateTable, setCorporateTable] = React.useState<SubcategoriesTableRow | null>(
+    null
+  );
+  const [corporateTableLoading, setCorporateTableLoading] = React.useState<boolean>(false);
+  const [corporateTableError, setCorporateTableError] = React.useState<string | null>(null);
+
   const isArtCreativeView = selectedCategoryId === "gc1";
   const isCorporateView = selectedCategoryId === "gc2";
   const isEventBasedView = selectedCategoryId === "gc3";
@@ -545,6 +730,357 @@ export default function GiftsScreen() {
   React.useEffect(() => {
     if (selectedSubCategory) setSelectedSubCategory(null);
   }, [selectedCategoryId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!isArtCreativeView) return;
+
+    (async () => {
+      try {
+        setArtTableLoading(true);
+        setArtTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${ART_CREATIVE_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setArtTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setArtTable(null);
+        setArtTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Art & Creative subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setArtTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, isArtCreativeView]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!isEventBasedView) return;
+
+    (async () => {
+      try {
+        setEventTableLoading(true);
+        setEventTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${EVENT_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setEventTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setEventTable(null);
+        setEventTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Event subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setEventTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, isEventBasedView]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!isCorporateView) return;
+
+    (async () => {
+      try {
+        setCorporateTableLoading(true);
+        setCorporateTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${CORPORATE_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setCorporateTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setCorporateTable(null);
+        setCorporateTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Corporate subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setCorporateTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, isCorporateView]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!isCoupleView) return;
+
+    (async () => {
+      try {
+        setCouplesTableLoading(true);
+        setCouplesTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${COUPLES_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setCouplesTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setCouplesTable(null);
+        setCouplesTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Couple subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setCouplesTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, isCoupleView]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!isUtilityView) return;
+
+    (async () => {
+      try {
+        setUtilityTableLoading(true);
+        setUtilityTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${EVERYDAY_UTILITY_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setUtilityTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setUtilityTable(null);
+        setUtilityTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Everyday Utility subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setUtilityTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, isUtilityView]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (selectedCategoryId !== "gc9") return;
+
+    (async () => {
+      try {
+        setWearableTableLoading(true);
+        setWearableTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${WEARABLE_PERSONAL_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setWearableTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setWearableTable(null);
+        setWearableTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Wearable & Personal subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setWearableTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, selectedCategoryId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (selectedCategoryId !== "gc8") return;
+
+    (async () => {
+      try {
+        setSpiritualTableLoading(true);
+        setSpiritualTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${SPIRITUAL_FESTIVAL_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setSpiritualTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setSpiritualTable(null);
+        setSpiritualTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Spiritual & Festival subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setSpiritualTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, selectedCategoryId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (selectedCategoryId !== "gc7") return;
+
+    (async () => {
+      try {
+        setKidsBabyTableLoading(true);
+        setKidsBabyTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_BABY_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setKidsBabyTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setKidsBabyTable(null);
+        setKidsBabyTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Kids & Baby subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setKidsBabyTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, selectedCategoryId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (selectedCategoryId !== "gc6") return;
+
+    (async () => {
+      try {
+        setHomeDecorTableLoading(true);
+        setHomeDecorTableError(null);
+
+        const res = await axios.get(
+          `${SUBCATEGORIES_API_BASE}/api/categories/${HOME_DECOR_CATEGORY_ID}/subcategories-table`,
+          { timeout: 15000 }
+        );
+
+        const rows: unknown = res.data;
+        const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
+        const first = list[0] ?? null;
+
+        if (cancelled) return;
+        setHomeDecorTable(first);
+      } catch (e: any) {
+        if (cancelled) return;
+        setHomeDecorTable(null);
+        setHomeDecorTableError(
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message
+            : "Failed to load Home Decor subcategories"
+        );
+      } finally {
+        if (cancelled) return;
+        setHomeDecorTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [SUBCATEGORIES_API_BASE, selectedCategoryId]);
 
   const activeHero = React.useMemo(() => {
     if (selectedCategoryId && GIFT_CATEGORY_HERO[selectedCategoryId]) {
@@ -806,7 +1342,21 @@ export default function GiftsScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.categoryCircleRow}
           >
-            {GIFT_CATEGORIES.map((category) => {
+            {giftApiLoading ? (
+              <View style={{ paddingHorizontal: 10, paddingVertical: 8 }}>
+                <ActivityIndicator size="small" color="#ef7b1a" />
+              </View>
+            ) : null}
+
+            {!giftApiLoading && giftApiError ? (
+              <View style={{ paddingHorizontal: 10, paddingVertical: 8, maxWidth: 260 }}>
+                <Text style={{ color: "#b91c1c", fontWeight: "700", fontSize: 12 }} numberOfLines={2}>
+                  {giftApiError}
+                </Text>
+              </View>
+            ) : null}
+
+            {giftCategoriesForUi.map((category) => {
               const isSelected = selectedCategoryId === category.id;
               const circleColors: readonly [string, string] =
                 isCorporateView && category.id === "gc2"
@@ -884,7 +1434,7 @@ export default function GiftsScreen() {
             >
               <Text style={styles.heroCategoryTagEyebrow}>CATEGORY SPOTLIGHT</Text>
               <Text style={styles.heroCategoryTagTitle} numberOfLines={2}>
-                {GIFT_CATEGORIES.find((c) => c.id === selectedCategoryId)?.title ?? "Gifts"}
+                {giftCategoriesForUi.find((c) => c.id === selectedCategoryId)?.title ?? "Gifts"}
               </Text>
             </LinearGradient>
           ) : null}
@@ -943,70 +1493,104 @@ export default function GiftsScreen() {
                 style={styles.subCategorySectionAccent}
               />
               <View style={styles.subCategorySectionHeaderText}>
-                <Text style={styles.subCategorySectionEyebrow}>ART & CREATIVE</Text>
-                <Text style={styles.subCategorySectionTitle}>Explore styles</Text>
-                <Text style={styles.subCategorySectionHint}>
-                  Banner above = hero · Here = shoppable collections · Tap row or → for products
+                <View style={styles.artHeadTopRow}>
+                  <Text style={styles.subCategorySectionEyebrow}>ART & CREATIVE</Text>
+                  <View style={styles.artHeadPill}>
+                    <Ionicons name="sparkles" size={12} color="#0f172a" />
+                    <Text style={styles.artHeadPillText}>
+                      {artTable?.subcategories?.length
+                        ? `${artTable.subcategories.length} styles`
+                        : "Curated"}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.artHeadTitle}>Pick a style to personalize</Text>
+                <Text style={styles.artHeadSub}>
+                  Full-image previews · Tap a tile to browse products
                 </Text>
               </View>
             </View>
-            {ART_SUB_CATEGORIES.map((item) => (
-              <View key={item.id} style={[styles.subCard, styles.subCardExplore]}>
+
+            {artTableLoading ? (
+              <View style={{ paddingVertical: 14, alignItems: "center" }}>
+                <ActivityIndicator size="small" color="#ef7b1a" />
+              </View>
+            ) : null}
+
+            {!artTableLoading && artTableError ? (
+              <Text style={{ color: "#b91c1c", fontWeight: "700", fontSize: 12, marginBottom: 8 }}>
+                {artTableError}
+              </Text>
+            ) : null}
+
+            <View style={styles.artList}>
+              {(artTable?.subcategories?.length
+                ? artTable.subcategories.map((s) => ({
+                    id: String(s.id),
+                    title: s.name,
+                    imageUri: s.mobileImage
+                      ? s.mobileImage
+                      : s.image
+                        ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                        : null,
+                  }))
+                : ART_SUB_CATEGORIES.map((s: any) => ({
+                    id: String(s.id),
+                    title: s.title,
+                    imageUri: null,
+                  }))
+              ).map((item: any, idx: number) => {
+                const reversed = idx % 2 === 1;
+                return (
                 <TouchableOpacity
-                  style={styles.subCardMainTap}
+                  key={item.id}
+                  style={[styles.artRowCard, reversed && styles.artRowCardReverse]}
                   activeOpacity={0.9}
-                  onPress={() => setSelectedSubCategory(item.title)}
-                >
-                  <ImageBackground
-                    source={item.image}
-                    style={styles.subCardImageBgFill}
-                    imageStyle={styles.subCardImageStyleRounded}
-                    resizeMode="cover"
-                  >
-                    {item.hideTitle ? null : item.titleLayout === "topLeft" ? (
-                      <>
-                        <LinearGradient
-                          colors={["rgba(15,23,42,0.82)", "rgba(15,23,42,0.45)", "transparent"]}
-                          locations={[0, 0.45, 1]}
-                          start={{ x: 0, y: 0.5 }}
-                          end={{ x: 1, y: 0.5 }}
-                          style={styles.subCardTopLeftScrim}
-                        />
-                        <View style={styles.subCardTitleTopLeftBox}>
-                          <Text style={styles.subCardTitleTopLeftEyebrow}>
-                            {item.topLeftEyebrow ?? "HAND DRAWN"}
-                          </Text>
-                          <Text style={styles.subCardTitleTopLeft}>{item.title}</Text>
-                        </View>
-                      </>
-                    ) : (
-                      <>
-                        <View style={styles.subCardOverlay} />
-                        <View style={styles.subCardTextWrap}>
-                          <Text style={styles.subCardTitle}>{item.title}</Text>
-                        </View>
-                      </>
-                    )}
-                  </ImageBackground>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.arrowWrap}
-                  activeOpacity={0.85}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: {
-                        mainCat: "homelyHub",
-                        subCategory: item.title,
-                      },
+                      params: { mainCat: "homelyHub", subCategory: item.title },
                     })
                   }
                 >
-                  <Ionicons name="chevron-forward" size={22} color="#1d324e" />
+                  <View style={[styles.artRowLeft, reversed && styles.artRowLeftReverse]}>
+                    <Text
+                      style={[styles.artRowTitle, reversed && styles.artRowTitleReverse]}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text
+                      style={[styles.artRowSub, reversed && styles.artRowSubReverse]}
+                    >
+                      Tap to explore
+                    </Text>
+                    <View style={[styles.artRowAction, reversed && styles.artRowActionReverse]}>
+                      <Ionicons name="chevron-down" size={18} color="#111827" />
+                    </View>
+                  </View>
+
+                  <View
+                    style={[styles.artRowSlash, reversed && styles.artRowSlashReverse]}
+                    pointerEvents="none"
+                  />
+
+                  <View style={styles.artRowRight}>
+                    {item.imageUri ? (
+                      <Image
+                        source={{ uri: item.imageUri }}
+                        style={styles.artRowImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.artRowImageFallback}>
+                        <Ionicons name="color-palette-outline" size={22} color="#64748b" />
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
-              </View>
-            ))}
+              );
+              })}
+            </View>
 
             {selectedSubCategory ? (
               <>
@@ -1073,7 +1657,37 @@ export default function GiftsScreen() {
             </View>
 
             <View style={styles.corpGrid}>
-              {CORPORATE_SUB_CATEGORIES.map((item) => (
+              {corporateTableLoading ? (
+                <View style={{ paddingVertical: 14, alignItems: "center", width: "100%" }}>
+                  <ActivityIndicator size="small" color="#4f46e5" />
+                </View>
+              ) : null}
+
+              {!corporateTableLoading && corporateTableError ? (
+                <Text
+                  style={{
+                    color: "#b91c1c",
+                    fontWeight: "700",
+                    fontSize: 12,
+                    marginBottom: 8,
+                  }}
+                >
+                  {corporateTableError}
+                </Text>
+              ) : null}
+
+              {(corporateTable?.subcategories?.length
+                ? corporateTable.subcategories.map((s) => ({
+                    id: String(s.id),
+                    title: s.name,
+                    image: s.mobileImage
+                      ? ({ uri: s.mobileImage } as any)
+                      : s.image
+                        ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+                        : undefined,
+                  }))
+                : CORPORATE_SUB_CATEGORIES
+              ).map((item: any) => (
                 <TouchableOpacity
                   key={item.id}
                   style={[styles.corpCard, styles.corpCardShelf]}
@@ -1081,7 +1695,11 @@ export default function GiftsScreen() {
                   onPress={() => setSelectedSubCategory(item.title)}
                 >
                   <View style={styles.corpImageWrap}>
-                    <Image source={item.image} style={styles.corpImage} resizeMode="cover" />
+                    {item.image ? (
+                      <Image source={item.image} style={styles.corpImage} resizeMode="cover" />
+                    ) : (
+                      <View style={[styles.corpImage, { backgroundColor: "#E2E8F0" }]} />
+                    )}
                     <View style={styles.corpImageScrim} />
                   </View>
                   <View style={styles.corpLabelRow}>
@@ -1194,7 +1812,39 @@ export default function GiftsScreen() {
             </TouchableOpacity>
 
             <View style={styles.eventCircleContainer}>
-              {EVENT_SUB_CATEGORIES.map((item) => (
+              {eventTableLoading ? (
+                <View style={{ paddingVertical: 14, alignItems: "center", width: "100%" }}>
+                  <ActivityIndicator size="small" color="#dc2626" />
+                </View>
+              ) : null}
+
+              {!eventTableLoading && eventTableError ? (
+                <Text
+                  style={{
+                    color: "#b91c1c",
+                    fontWeight: "700",
+                    fontSize: 12,
+                    marginBottom: 8,
+                  }}
+                >
+                  {eventTableError}
+                </Text>
+              ) : null}
+
+              {(eventTable?.subcategories?.length
+                ? eventTable.subcategories.map((s) => ({
+                    id: String(s.id),
+                    title: s.name,
+                    emoji: "🎁",
+                    bg: "#FFE4E6",
+                    image: s.mobileImage
+                      ? ({ uri: s.mobileImage } as any)
+                      : s.image
+                        ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+                        : undefined,
+                  }))
+                : EVENT_SUB_CATEGORIES
+              ).map((item: any) => (
                 <TouchableOpacity
                   key={item.id}
                   style={[
@@ -1303,15 +1953,59 @@ export default function GiftsScreen() {
             </View>
 
             <View style={styles.utilityGrid}>
-              {UTILITY_SUB_CATEGORIES.map((item) => (
+              {utilityTableLoading ? (
+                <View style={{ paddingVertical: 14, alignItems: "center", width: "100%" }}>
+                  <ActivityIndicator size="small" color="#10b981" />
+                </View>
+              ) : null}
+
+              {!utilityTableLoading && utilityTableError ? (
+                <Text
+                  style={{
+                    color: "#b91c1c",
+                    fontWeight: "700",
+                    fontSize: 12,
+                    marginBottom: 8,
+                  }}
+                >
+                  {utilityTableError}
+                </Text>
+              ) : null}
+
+              {(utilityTable?.subcategories?.length
+                ? utilityTable.subcategories.map((s) => ({
+                    id: String(s.id),
+                    title: s.name,
+                    imageUri: s.mobileImage
+                      ? s.mobileImage
+                      : s.image
+                        ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                        : null,
+                    bg: "#ECFDF5",
+                    icon: "🎁",
+                  }))
+                : UTILITY_SUB_CATEGORIES
+              ).map((item: any) => (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.utilityCard, styles.utilityCardShelf, { backgroundColor: item.bg }]}
+                  style={[
+                    styles.utilityCard,
+                    styles.utilityCardShelf,
+                    { backgroundColor: item.bg ?? "#FFFFFF" },
+                  ]}
                   activeOpacity={0.9}
                   onPress={() => setSelectedSubCategory(item.title)}
                 >
                   <View style={styles.utilityIconWrap}>
-                    <Text style={styles.utilityIcon}>{item.icon}</Text>
+                    {item.imageUri ? (
+                      <Image
+                        source={{ uri: item.imageUri }}
+                        style={{ width: 46, height: 46, borderRadius: 12 }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Text style={styles.utilityIcon}>{item.icon}</Text>
+                    )}
                   </View>
                   <Text style={styles.utilityCardTitle} numberOfLines={2}>
                     {item.title}
@@ -1459,19 +2153,63 @@ export default function GiftsScreen() {
             </TouchableOpacity>
 
             <View style={styles.coupleContainer}>
-              {COUPLE_SUB_CATEGORIES.map((item, index) => (
+              {couplesTableLoading ? (
+                <View style={{ paddingVertical: 14, alignItems: "center", width: "100%" }}>
+                  <ActivityIndicator size="small" color="#ec4899" />
+                </View>
+              ) : null}
+
+              {!couplesTableLoading && couplesTableError ? (
+                <Text
+                  style={{
+                    color: "#b91c1c",
+                    fontWeight: "700",
+                    fontSize: 12,
+                    marginBottom: 8,
+                  }}
+                >
+                  {couplesTableError}
+                </Text>
+              ) : null}
+
+              {(couplesTable?.subcategories?.length
+                ? couplesTable.subcategories.map((s) => ({
+                    id: String(s.id),
+                    title: s.name,
+                    imageUri: s.mobileImage
+                      ? s.mobileImage
+                      : s.image
+                        ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                        : null,
+                  }))
+                : COUPLE_SUB_CATEGORIES.map((it) => ({
+                    id: it.id,
+                    title: it.title,
+                    imageUri: null,
+                    emoji: it.emoji,
+                    bg: it.bg,
+                  }))
+              ).map((item: any) => (
                 <TouchableOpacity
                   key={item.id}
                   style={[
                     styles.coupleCard,
                     styles.coupleCardShelf,
-                    { backgroundColor: item.bg },
+                    { backgroundColor: item.bg ?? "#FCE7F3" },
                   ]}
                   activeOpacity={0.9}
                   onPress={() => setSelectedSubCategory(item.title)}
                 >
                   <View style={styles.coupleHeartContainer}>
-                    <Text style={styles.coupleEmoji}>{item.emoji}</Text>
+                    {item.imageUri ? (
+                      <Image
+                        source={{ uri: item.imageUri }}
+                        style={{ width: 34, height: 34, borderRadius: 999 }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Text style={styles.coupleEmoji}>{item.emoji ?? "💞"}</Text>
+                    )}
                   </View>
                   <Text style={styles.coupleCardTitle}>{item.title}</Text>
                 </TouchableOpacity>
@@ -1697,28 +2435,294 @@ export default function GiftsScreen() {
             </View>
 
             <View style={styles.utilityGrid}>
-              {(selectedCategoryId
-                ? HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []
-                : []
-              ).map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.utilityCard,
-                    styles.utilityCardShelf,
-                    { backgroundColor: item.bg },
-                  ]}
-                  activeOpacity={0.9}
-                  onPress={() => setSelectedSubCategory(item.title)}
-                >
-                  <View style={styles.utilityIconWrap}>
-                    <Text style={styles.utilityIcon}>{item.icon}</Text>
-                  </View>
-                  <Text style={styles.utilityCardTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {selectedCategoryId === "gc6" ? (
+                <>
+                  {homeDecorTableLoading ? (
+                    <View style={{ paddingVertical: 14, alignItems: "center", width: "100%" }}>
+                      <ActivityIndicator size="small" color="#b45309" />
+                    </View>
+                  ) : null}
+
+                  {!homeDecorTableLoading && homeDecorTableError ? (
+                    <Text
+                      style={{
+                        color: "#b91c1c",
+                        fontWeight: "700",
+                        fontSize: 12,
+                        marginBottom: 8,
+                      }}
+                    >
+                      {homeDecorTableError}
+                    </Text>
+                  ) : null}
+
+                  {(homeDecorTable?.subcategories?.length
+                    ? homeDecorTable.subcategories.map((s) => ({
+                        id: String(s.id),
+                        title: s.name,
+                        imageUri: s.mobileImage
+                          ? s.mobileImage
+                          : s.image
+                            ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                            : null,
+                      }))
+                    : (HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []).map((it) => ({
+                        id: it.id,
+                        title: it.title,
+                        imageUri: null,
+                        icon: it.icon,
+                        bg: it.bg,
+                      }))
+                  ).map((item: any) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.utilityCard,
+                        styles.utilityCardShelf,
+                        { backgroundColor: item.bg ?? "#FFFFFF" },
+                      ]}
+                      activeOpacity={0.9}
+                      onPress={() => setSelectedSubCategory(item.title)}
+                    >
+                      <View style={styles.utilityIconWrap}>
+                        {item.imageUri ? (
+                          <Image
+                            source={{ uri: item.imageUri }}
+                            style={{ width: 46, height: 46, borderRadius: 12 }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={styles.utilityIcon}>{item.icon ?? "🛋️"}</Text>
+                        )}
+                      </View>
+                      <Text style={styles.utilityCardTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : selectedCategoryId === "gc7" ? (
+                <>
+                  {kidsBabyTableLoading ? (
+                    <View style={{ paddingVertical: 14, alignItems: "center", width: "100%" }}>
+                      <ActivityIndicator size="small" color="#b45309" />
+                    </View>
+                  ) : null}
+
+                  {!kidsBabyTableLoading && kidsBabyTableError ? (
+                    <Text
+                      style={{
+                        color: "#b91c1c",
+                        fontWeight: "700",
+                        fontSize: 12,
+                        marginBottom: 8,
+                      }}
+                    >
+                      {kidsBabyTableError}
+                    </Text>
+                  ) : null}
+
+                  {(kidsBabyTable?.subcategories?.length
+                    ? kidsBabyTable.subcategories.map((s) => ({
+                        id: String(s.id),
+                        title: s.name,
+                        imageUri: s.mobileImage
+                          ? s.mobileImage
+                          : s.image
+                            ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                            : null,
+                      }))
+                    : (HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []).map((it) => ({
+                        id: it.id,
+                        title: it.title,
+                        imageUri: null,
+                        icon: it.icon,
+                        bg: it.bg,
+                      }))
+                  ).map((item: any) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.utilityCard,
+                        styles.utilityCardShelf,
+                        { backgroundColor: item.bg ?? "#FFFFFF" },
+                      ]}
+                      activeOpacity={0.9}
+                      onPress={() => setSelectedSubCategory(item.title)}
+                    >
+                      <View style={styles.utilityIconWrap}>
+                        {item.imageUri ? (
+                          <Image
+                            source={{ uri: item.imageUri }}
+                            style={{ width: 46, height: 46, borderRadius: 12 }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={styles.utilityIcon}>{item.icon ?? "👶"}</Text>
+                        )}
+                      </View>
+                      <Text style={styles.utilityCardTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : selectedCategoryId === "gc8" ? (
+                <>
+                  {spiritualTableLoading ? (
+                    <View style={{ paddingVertical: 14, alignItems: "center", width: "100%" }}>
+                      <ActivityIndicator size="small" color="#b45309" />
+                    </View>
+                  ) : null}
+
+                  {!spiritualTableLoading && spiritualTableError ? (
+                    <Text
+                      style={{
+                        color: "#b91c1c",
+                        fontWeight: "700",
+                        fontSize: 12,
+                        marginBottom: 8,
+                      }}
+                    >
+                      {spiritualTableError}
+                    </Text>
+                  ) : null}
+
+                  {(spiritualTable?.subcategories?.length
+                    ? spiritualTable.subcategories.map((s) => ({
+                        id: String(s.id),
+                        title: s.name,
+                        imageUri: s.mobileImage
+                          ? s.mobileImage
+                          : s.image
+                            ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                            : null,
+                      }))
+                    : (HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []).map((it) => ({
+                        id: it.id,
+                        title: it.title,
+                        imageUri: null,
+                        icon: it.icon,
+                        bg: it.bg,
+                      }))
+                  ).map((item: any) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.utilityCard,
+                        styles.utilityCardShelf,
+                        { backgroundColor: item.bg ?? "#FFFFFF" },
+                      ]}
+                      activeOpacity={0.9}
+                      onPress={() => setSelectedSubCategory(item.title)}
+                    >
+                      <View style={styles.utilityIconWrap}>
+                        {item.imageUri ? (
+                          <Image
+                            source={{ uri: item.imageUri }}
+                            style={{ width: 46, height: 46, borderRadius: 12 }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={styles.utilityIcon}>{item.icon ?? "🪔"}</Text>
+                        )}
+                      </View>
+                      <Text style={styles.utilityCardTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : selectedCategoryId === "gc9" ? (
+                <>
+                  {wearableTableLoading ? (
+                    <View style={{ paddingVertical: 14, alignItems: "center", width: "100%" }}>
+                      <ActivityIndicator size="small" color="#b45309" />
+                    </View>
+                  ) : null}
+
+                  {!wearableTableLoading && wearableTableError ? (
+                    <Text
+                      style={{
+                        color: "#b91c1c",
+                        fontWeight: "700",
+                        fontSize: 12,
+                        marginBottom: 8,
+                      }}
+                    >
+                      {wearableTableError}
+                    </Text>
+                  ) : null}
+
+                  {(wearableTable?.subcategories?.length
+                    ? wearableTable.subcategories.map((s) => ({
+                        id: String(s.id),
+                        title: s.name,
+                        imageUri: s.mobileImage
+                          ? s.mobileImage
+                          : s.image
+                            ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                            : null,
+                      }))
+                    : (HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []).map((it) => ({
+                        id: it.id,
+                        title: it.title,
+                        imageUri: null,
+                        icon: it.icon,
+                        bg: it.bg,
+                      }))
+                  ).map((item: any) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.utilityCard,
+                        styles.utilityCardShelf,
+                        { backgroundColor: item.bg ?? "#FFFFFF" },
+                      ]}
+                      activeOpacity={0.9}
+                      onPress={() => setSelectedSubCategory(item.title)}
+                    >
+                      <View style={styles.utilityIconWrap}>
+                        {item.imageUri ? (
+                          <Image
+                            source={{ uri: item.imageUri }}
+                            style={{ width: 46, height: 46, borderRadius: 12 }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={styles.utilityIcon}>{item.icon ?? "🎀"}</Text>
+                        )}
+                      </View>
+                      <Text style={styles.utilityCardTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : (
+                (selectedCategoryId
+                  ? HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []
+                  : []
+                ).map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.utilityCard,
+                      styles.utilityCardShelf,
+                      { backgroundColor: item.bg },
+                    ]}
+                    activeOpacity={0.9}
+                    onPress={() => setSelectedSubCategory(item.title)}
+                  >
+                    <View style={styles.utilityIconWrap}>
+                      <Text style={styles.utilityIcon}>{item.icon}</Text>
+                    </View>
+                    <Text style={styles.utilityCardTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
             </View>
 
             {selectedSubCategory ? (
@@ -2272,6 +3276,131 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#94a3b8",
     lineHeight: 15,
+  },
+
+  artHeadTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  artHeadPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(239, 123, 26, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 123, 26, 0.22)",
+  },
+  artHeadPillText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  artHeadTitle: {
+    marginTop: 6,
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: 0.2,
+  },
+  artHeadSub: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+    lineHeight: 16,
+  },
+
+  artList: {
+    gap: 12,
+  },
+  artRowCard: {
+    width: "100%",
+    height: 192,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    flexDirection: "row",
+  },
+  artRowCardReverse: {
+    flexDirection: "row-reverse",
+  },
+  artRowLeft: {
+    width: "40%",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    justifyContent: "center",
+  },
+  artRowLeftReverse: {
+    alignItems: "flex-end",
+  },
+  artRowTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#F8FAFC",
+    letterSpacing: 0.2,
+  },
+  artRowTitleReverse: {
+    textAlign: "right",
+  },
+  artRowSub: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(248,250,252,0.72)",
+  },
+  artRowSubReverse: {
+    textAlign: "right",
+  },
+  artRowAction: {
+    marginTop: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+  },
+  artRowActionReverse: {
+    alignSelf: "flex-end",
+  },
+  artRowSlash: {
+    position: "absolute",
+    left: "58%",
+    top: -24,
+    width: 52,
+    height: 140,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    transform: [{ rotate: "-16deg" }],
+    borderLeftWidth: 1,
+    borderLeftColor: "rgba(255,255,255,0.06)",
+    borderRightWidth: 1,
+    borderRightColor: "rgba(0,0,0,0.22)",
+  },
+  artRowSlashReverse: {
+    left: "32%",
+    transform: [{ rotate: "16deg" }],
+  },
+  artRowRight: {
+    width: "60%",
+    backgroundColor: "#0B1220",
+  },
+  artRowImage: {
+    width: "100%",
+    height: "100%",
+  },
+  artRowImageFallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0B1220",
   },
   categoryCircleItem: {
     width: 86,
