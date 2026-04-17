@@ -13,13 +13,14 @@ import {
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
-} from "react-native";
+} from "@/lib/i18n-react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api from "../services/api";
+import { useLanguage } from "@/lib/language";
 
 const HEADER_BRAND_LOGO = require("../assets/images/logo.png");
 const INDOOR_IMAGE = require("../assets/MainCatImages/images/IndoorPlayEquipments.png");
@@ -473,14 +474,15 @@ const TIPS_TO_SHOP_BANNERS: {
 ];
 
 function SectionTitle({ icon, title, subtitle }: { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle?: string }) {
+  const { tr } = useLanguage();
   return (
     <View style={styles.sectionTitleRow}>
       <View style={styles.sectionTitleIconWrap}>
         <Ionicons name={icon} size={15} color="#7c3aed" />
       </View>
       <View style={styles.sectionTitleTextWrap}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+        <Text style={styles.sectionTitle}>{tr(title)}</Text>
+        {subtitle ? <Text style={styles.sectionSubtitle}>{tr(subtitle)}</Text> : null}
       </View>
     </View>
   );
@@ -501,16 +503,17 @@ function BannerAd({
   image: number;
   onPress?: () => void;
 }) {
+  const { tr } = useLanguage();
   const inner = (
     <>
       <Image source={image} style={styles.bannerImage} resizeMode="cover" />
       <LinearGradient colors={["rgba(15,23,42,0.1)", "rgba(15,23,42,0.45)"]} style={styles.bannerImageFade} />
       <View style={styles.bannerGlow} />
       <View style={styles.bannerContent}>
-        <Text style={styles.bannerTitle}>{title}</Text>
-        <Text style={styles.bannerSub}>{sub}</Text>
+        <Text style={styles.bannerTitle}>{tr(title)}</Text>
+        <Text style={styles.bannerSub}>{tr(sub)}</Text>
         <View style={styles.bannerCta}>
-          <Text style={styles.bannerCtaText}>{cta}</Text>
+          <Text style={styles.bannerCtaText}>{tr(cta)}</Text>
           <Ionicons name="arrow-forward" size={14} color="#fff" />
         </View>
       </View>
@@ -531,6 +534,7 @@ function BannerAd({
 const TIPS_CAROUSEL_INTERVAL_MS = 5200;
 
 function TipsToShopBannerCarousel({ onOpen }: { onOpen: (subCategory: string) => void }) {
+  const { tr } = useLanguage();
   const { width: winW } = useWindowDimensions();
   const slideH = Math.min(210, Math.max(172, Math.round(winW * 0.44)));
   const scrollRef = useRef<ScrollView>(null);
@@ -580,9 +584,9 @@ function TipsToShopBannerCarousel({ onOpen }: { onOpen: (subCategory: string) =>
         <View style={styles.tipsShopBannerHeaderRow}>
           <Ionicons name="images-outline" size={20} color="#fde68a" />
           <View style={{ flex: 1 }}>
-            <Text style={styles.tipsShopBannerEyebrow}>SCROLL · SWIPE</Text>
-            <Text style={styles.tipsShopBannerTitle}>Spotlight before you shop all</Text>
-            <Text style={styles.tipsShopBannerSub}>Auto-rotates — tap any slide to open products</Text>
+            <Text style={styles.tipsShopBannerEyebrow}>{tr("SCROLL · SWIPE")}</Text>
+            <Text style={styles.tipsShopBannerTitle}>{tr("Spotlight before you shop all")}</Text>
+            <Text style={styles.tipsShopBannerSub}>{tr("Auto-rotates — tap any slide to open products")}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -614,7 +618,7 @@ function TipsToShopBannerCarousel({ onOpen }: { onOpen: (subCategory: string) =>
             onPress={() => onOpen(item.openTarget)}
             style={[styles.tipsShopBannerPage, { width: winW, height: slideH }]}
             accessibilityRole="button"
-            accessibilityLabel={`${item.title}. ${item.sub}`}
+            accessibilityLabel={`${tr(item.title)}. ${tr(item.sub)}`}
           >
             <Image source={item.image} style={styles.tipsShopBannerImage} resizeMode="cover" />
             <LinearGradient colors={["transparent", "rgba(15,23,42,0.5)", "rgba(15,23,42,0.88)"]} style={styles.tipsShopBannerFade} />
@@ -625,10 +629,10 @@ function TipsToShopBannerCarousel({ onOpen }: { onOpen: (subCategory: string) =>
               style={styles.tipsShopBannerAccentBar}
             />
             <View style={styles.tipsShopBannerTextBlock}>
-              <Text style={styles.tipsShopBannerSlideTitle}>{item.title}</Text>
-              <Text style={styles.tipsShopBannerSlideSub}>{item.sub}</Text>
+              <Text style={styles.tipsShopBannerSlideTitle}>{tr(item.title)}</Text>
+              <Text style={styles.tipsShopBannerSlideSub}>{tr(item.sub)}</Text>
               <View style={styles.tipsShopBannerCta}>
-                <Text style={styles.tipsShopBannerCtaText}>View products</Text>
+                <Text style={styles.tipsShopBannerCtaText}>{tr("View products")}</Text>
                 <Ionicons name="arrow-forward-circle" size={18} color="#fde68a" />
               </View>
             </View>
@@ -667,17 +671,24 @@ function MainCategoryShowcaseCard({
   overlay: [string, string];
   onPress: () => void;
 }) {
+  const { tr } = useLanguage();
   return (
-    <TouchableOpacity style={styles.mainCatCard} onPress={onPress} activeOpacity={0.92} accessibilityRole="button" accessibilityLabel={title}>
+    <TouchableOpacity
+      style={styles.mainCatCard}
+      onPress={onPress}
+      activeOpacity={0.92}
+      accessibilityRole="button"
+      accessibilityLabel={tr(title)}
+    >
       <Image source={image} style={styles.mainCatCardImage} resizeMode="cover" />
       <LinearGradient colors={overlay} start={{ x: 0, y: 0.35 }} end={{ x: 0, y: 1 }} style={styles.mainCatCardOverlay} />
       <View style={styles.mainCatCardContent}>
-        <Text style={styles.mainCatCardTitle}>{title}</Text>
+        <Text style={styles.mainCatCardTitle}>{tr(title)}</Text>
         <Text style={styles.mainCatCardTagline} numberOfLines={2}>
-          {tagline}
+          {tr(tagline)}
         </Text>
         <View style={styles.mainCatShopPill}>
-          <Text style={styles.mainCatShopPillText}>Book / shop</Text>
+          <Text style={styles.mainCatShopPillText}>{tr("Book / shop")}</Text>
           <Ionicons name="arrow-forward" size={14} color="#312e81" />
         </View>
       </View>
@@ -687,6 +698,7 @@ function MainCategoryShowcaseCard({
 
 export default function IndoorPlayScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const mainScrollRef = useRef<ScrollView>(null);
   const educationalSectionY = useRef(0);
@@ -1101,7 +1113,7 @@ export default function IndoorPlayScreen() {
             >
               <Ionicons name="search-outline" size={18} color="#9aa0a6" />
               <TextInput
-                placeholder="Search.."
+                placeholder={tr("Search..")}
                 placeholderTextColor="#b0b5ba"
                 style={styles.searchInput}
                 editable={false}
@@ -1142,11 +1154,11 @@ export default function IndoorPlayScreen() {
           <LinearGradient colors={["rgba(30,27,75,0.2)", "rgba(30,27,75,0.88)"]} style={styles.heroFade} />
           <View style={styles.heroBadge}>
             <Ionicons name="storefront-outline" size={14} color="#fff" />
-            <Text style={styles.heroBadgeText}>Flint n Thread</Text>
+            <Text style={styles.heroBadgeText}>{tr("Flint n Thread")}</Text>
           </View>
           <View style={styles.heroContent}>
-            <Text style={styles.heroKicker}>Indoor Play</Text>
-            <Text style={styles.heroTitle}>Shop indoor play online</Text>
+            <Text style={styles.heroKicker}>{tr("Indoor Play")}</Text>
+            <Text style={styles.heroTitle}>{tr("Shop indoor play online")}</Text>
             
           </View>
         </LinearGradient>
@@ -1154,7 +1166,7 @@ export default function IndoorPlayScreen() {
         <View style={styles.dealStripSection}>
           <View style={styles.dealStripHeader}>
             <Ionicons name="pricetag-outline" size={18} color="#c026d3" />
-            <Text style={styles.dealStripTitle}>Limited-time banners</Text>
+            <Text style={styles.dealStripTitle}>{tr("Limited-time banners")}</Text>
           </View>
           <ScrollView
             horizontal
@@ -1217,18 +1229,18 @@ export default function IndoorPlayScreen() {
             <View style={styles.mainCategoriesIconRow}>
               <View style={styles.mainCategoriesIconPill}>
                 <Ionicons name="barbell-outline" size={13} color="#7c3aed" />
-                <Text style={styles.mainCategoriesIconText}>Slides</Text>
+                <Text style={styles.mainCategoriesIconText}>{tr("Slides")}</Text>
               </View>
               <View style={styles.mainCategoriesIconPill}>
                 <Ionicons name="football-outline" size={13} color="#0f766e" />
-                <Text style={styles.mainCategoriesIconText}>Sports</Text>
+                <Text style={styles.mainCategoriesIconText}>{tr("Sports")}</Text>
               </View>
               <View style={styles.mainCategoriesIconPill}>
                 <Ionicons name="school-outline" size={13} color="#1d4ed8" />
-                <Text style={styles.mainCategoriesIconText}>Classroom</Text>
+                <Text style={styles.mainCategoriesIconText}>{tr("Classroom")}</Text>
               </View>
             </View>
-            <Text style={styles.mainCategoriesHeading}>Playground Equipment Categories</Text>
+            <Text style={styles.mainCategoriesHeading}>{tr("Playground Equipment Categories")}</Text>
             <Text style={styles.mainCategoriesSub}>
               Explore indoor learning, active play, and school setup sections.
             </Text>
@@ -1272,14 +1284,14 @@ export default function IndoorPlayScreen() {
                   {sub.name}
                 </Text>
                 <View style={styles.eduMosaicFoot}>
-                  <Text style={styles.eduMosaicCta}>Shop</Text>
+                  <Text style={styles.eduMosaicCta}>{tr("Shop")}</Text>
                   <Ionicons name="chevron-forward" size={14} color="#0f766e" />
                 </View>
               </TouchableOpacity>
             ))}
           </View>
           <TouchableOpacity style={styles.outlineBtn} onPress={() => openProducts("Educational Materials")}>
-            <Text style={styles.outlineBtnText}>Browse all Educational Materials</Text>
+            <Text style={styles.outlineBtnText}>{tr("Browse all Educational Materials")}</Text>
             <Ionicons name="arrow-forward" size={15} color="#0f766e" />
           </TouchableOpacity>
         </View>
@@ -1331,7 +1343,7 @@ export default function IndoorPlayScreen() {
             ))}
           </View>
           <TouchableOpacity style={styles.ghostLink} onPress={() => openProducts("Pre Indoor Play Items")}>
-            <Text style={styles.ghostLinkText}>View entire Pre Indoor aisle</Text>
+            <Text style={styles.ghostLinkText}>{tr("View entire Pre Indoor aisle")}</Text>
             <Ionicons name="chevron-forward" size={16} color="#be185d" />
           </TouchableOpacity>
         </View>
@@ -1353,11 +1365,11 @@ export default function IndoorPlayScreen() {
                 <Image source={story.image} style={styles.storyImageFill} resizeMode="cover" />
               </View>
               <LinearGradient colors={story.colors} style={styles.storyTextPanel}>
-                <Text style={styles.storyEyebrow}>Spotlight</Text>
+                <Text style={styles.storyEyebrow}>{tr("Spotlight")}</Text>
                 <Text style={styles.storyTitle}>{story.title}</Text>
                 <Text style={styles.storySub}>{story.sub}</Text>
                 <View style={styles.storyCta}>
-                  <Text style={styles.storyCtaText}>Open collection</Text>
+                  <Text style={styles.storyCtaText}>{tr("Open collection")}</Text>
                   <Ionicons name="arrow-forward" size={14} color="#fff" />
                 </View>
               </LinearGradient>
@@ -1404,7 +1416,7 @@ export default function IndoorPlayScreen() {
                   </View>
                   <Text style={styles.furnitureTitle}>{item.name}</Text>
                 </View>
-                <Text style={styles.furnitureHint}>Tap to browse</Text>
+                <Text style={styles.furnitureHint}>{tr("Tap to browse")}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1460,9 +1472,9 @@ export default function IndoorPlayScreen() {
                 <Ionicons name="school-outline" size={16} color="#e0e7ff" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.targetedSectionBannerKicker}>PRESCHOOL INDOOR</Text>
-                <Text style={styles.targetedSectionBannerText}>Preschool Indoor combos and room pairings</Text>
-                <Text style={styles.targetedSectionBannerSub}>Tap to open indoor preschool collections</Text>
+                <Text style={styles.targetedSectionBannerKicker}>{tr("PRESCHOOL INDOOR")}</Text>
+                <Text style={styles.targetedSectionBannerText}>{tr("Preschool Indoor combos and room pairings")}</Text>
+                <Text style={styles.targetedSectionBannerSub}>{tr("Tap to open indoor preschool collections")}</Text>
               </View>
               <Ionicons name="arrow-forward-circle" size={18} color="#e0e7ff" />
             </View>
@@ -1514,9 +1526,9 @@ export default function IndoorPlayScreen() {
                 <Ionicons name="football-outline" size={16} color="#d1fae5" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.targetedSectionBannerKicker}>PRESCHOOL OUTDOOR SPORTS</Text>
-                <Text style={styles.targetedSectionBannerText}>Outdoor sports quick starts for preschoolers</Text>
-                <Text style={styles.targetedSectionBannerSub}>Tap to browse active outdoor picks</Text>
+                <Text style={styles.targetedSectionBannerKicker}>{tr("PRESCHOOL OUTDOOR SPORTS")}</Text>
+                <Text style={styles.targetedSectionBannerText}>{tr("Outdoor sports quick starts for preschoolers")}</Text>
+                <Text style={styles.targetedSectionBannerSub}>{tr("Tap to browse active outdoor picks")}</Text>
               </View>
               <Ionicons name="arrow-forward-circle" size={18} color="#d1fae5" />
             </View>
@@ -1556,9 +1568,9 @@ export default function IndoorPlayScreen() {
                 <Ionicons name="library-outline" size={16} color="#fef3c7" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.targetedSectionBannerKicker}>SCHOOL FURNITURE</Text>
-                <Text style={styles.targetedSectionBannerText}>School furniture setup tips and layout ideas</Text>
-                <Text style={styles.targetedSectionBannerSub}>Tap to open desks, storage and classroom essentials</Text>
+                <Text style={styles.targetedSectionBannerKicker}>{tr("SCHOOL FURNITURE")}</Text>
+                <Text style={styles.targetedSectionBannerText}>{tr("School furniture setup tips and layout ideas")}</Text>
+                <Text style={styles.targetedSectionBannerSub}>{tr("Tap to open desks, storage and classroom essentials")}</Text>
               </View>
               <Ionicons name="arrow-forward-circle" size={18} color="#fef3c7" />
             </View>
@@ -1627,7 +1639,7 @@ export default function IndoorPlayScreen() {
                 </View>
                 <View style={styles.productPreviewOpenPill}>
                   <Ionicons name="cart-outline" size={14} color="#ffffff" />
-                  <Text style={styles.productPreviewOpenText}>Add to cart</Text>
+                  <Text style={styles.productPreviewOpenText}>{tr("Add to cart")}</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -1646,7 +1658,7 @@ export default function IndoorPlayScreen() {
               style={styles.allIndoorItemsBtnInner}
             >
               <Ionicons name="apps-outline" size={18} color="#ecfeff" />
-              <Text style={styles.allIndoorItemsBtnText}>All Indoor Play Items</Text>
+              <Text style={styles.allIndoorItemsBtnText}>{tr("All Indoor Play Items")}</Text>
               <Ionicons name="chevron-forward" size={18} color="#ecfeff" />
             </LinearGradient>
           </TouchableOpacity>
