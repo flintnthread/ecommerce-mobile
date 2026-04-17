@@ -380,7 +380,17 @@ export default function Home() {
   ];
   
   const [searchQuery, setSearchQuery] = useState("");
+  type SearchSuggestionsResponse = {
+    success?: boolean;
+    message?: string;
+    data?: string[];
+  };
+
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [isSearchDropdownVisible, setIsSearchDropdownVisible] = useState(false);
   const [userDisplayName, setUserDisplayName] = useState("Ramya");
+  const lastSearchReqId = useRef(0);
 
   const [deliveryAddressModalVisible, setDeliveryAddressModalVisible] =
     useState(false);
@@ -419,6 +429,42 @@ export default function Home() {
       void loadUserDisplayName();
     }, [loadUserDisplayName])
   );
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchSuggestions([]);
+      setIsSearchLoading(false);
+      return;
+    }
+
+    const reqId = ++lastSearchReqId.current;
+    setIsSearchLoading(true);
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const { data } = await api.get<SearchSuggestionsResponse>(
+            "/api/search/suggestions",
+            { params: { keyword: q } }
+          );
+          if (lastSearchReqId.current !== reqId) return;
+          const rows = Array.isArray(data?.data) ? data.data : [];
+          setSearchSuggestions(
+            rows.filter((s) => typeof s === "string" && s.trim().length > 0)
+          );
+        } catch {
+          if (lastSearchReqId.current !== reqId) return;
+          setSearchSuggestions([]);
+        } finally {
+          if (lastSearchReqId.current === reqId) setIsSearchLoading(false);
+        }
+      })();
+    }, 250);
+
+    return () => {
+      clearTimeout(t);
+    };
+  }, [searchQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1611,9 +1657,21 @@ const categoryData = [
                 placeholderTextColor="#64748B"
                 style={styles.searchInput}
                 value={searchQuery}
-                onChangeText={setSearchQuery}
-                onFocus={() => {
-                  router.push("/search");
+                onChangeText={(t) => {
+                  setSearchQuery(t);
+                  if (!isSearchDropdownVisible) setIsSearchDropdownVisible(true);
+                }}
+                onFocus={() => setIsSearchDropdownVisible(true)}
+                onBlur={() => {
+                  // Small delay so a tap on a dropdown item still registers.
+                  setTimeout(() => setIsSearchDropdownVisible(false), 120);
+                }}
+                returnKeyType="search"
+                onSubmitEditing={() => {
+                  const q = searchQuery.trim();
+                  if (!q) return;
+                  setIsSearchDropdownVisible(false);
+                  router.push({ pathname: "/searchresults", params: { q } });
                 }}
               />
               <TouchableOpacity onPress={openCamera} style={styles.searchBarIconBtn}>
@@ -1630,6 +1688,44 @@ const categoryData = [
                 <Ionicons name="mic-outline" size={24} color="#64748B" />
               </TouchableOpacity>
             </LinearGradient>
+            {isSearchDropdownVisible && (isSearchLoading || searchQuery.trim().length > 0) ? (
+              <View style={styles.searchDropdown}>
+                {isSearchLoading ? (
+                  <View style={styles.searchDropdownItem}>
+                    <Text style={styles.searchDropdownText}>Searching…</Text>
+                  </View>
+                ) : (
+                  searchSuggestions.length > 0 ? (
+                    searchSuggestions.slice(0, 8).map((s) => (
+                      <TouchableOpacity
+                        key={s}
+                        style={[styles.searchDropdownItem, { flexDirection: "row", alignItems: "center" }]}
+                        activeOpacity={0.85}
+                        onPress={() => {
+                          setIsSearchDropdownVisible(false);
+                          setSearchQuery(s);
+                          router.push({ pathname: "/searchresults", params: { q: s } });
+                        }}
+                      >
+                        <Ionicons
+                          name="search-outline"
+                          size={16}
+                          color="#94a3b8"
+                          style={{ marginRight: 10 }}
+                        />
+                        <Text style={styles.searchDropdownText} numberOfLines={1}>
+                          {s}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View style={styles.searchDropdownItem}>
+                      <Text style={styles.searchDropdownText}>No results</Text>
+                    </View>
+                  )
+                )}
+              </View>
+            ) : null}
           </View>
 
           <TouchableOpacity
@@ -2214,7 +2310,7 @@ const categoryData = [
       style={styles.videoBanner}
       contentFit="cover"
       nativeControls={false}
-      fullscreenOptions={{ enabled: false }}
+      fullscreenOptions={{ enable: false }}
     />
   </View>
 </View>

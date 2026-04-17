@@ -236,8 +236,6 @@ export default function WishlistScreen() {
             <Ionicons name="search-outline" size={20} color="#ef7b1a" />
           </TouchableOpacity>
 
-          <Ionicons name="heart" size={20} color="red" style={styles.headerIcon} />
-
           <TouchableOpacity
             onPress={() => router.push("/cart")}
             style={styles.headerIcon}

@@ -13,6 +13,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Platform,
   type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +22,7 @@ import { useRouter, type Href } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import api from "../services/api";
 
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 
@@ -91,21 +93,33 @@ type ApiSubCategory = {
   status?: number;
 };
 
-const SPORTSWEAR_SUBCATEGORIES_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/66/subcategories";
+/** Local backend for category 66 browse cards — set `EXPO_PUBLIC_LOCAL_API_URL` if not localhost. */
+const LOCAL_SPORTSWEAR_API_BASE =
+  (typeof process !== "undefined" && process.env.EXPO_PUBLIC_LOCAL_API_URL?.trim()) ||
+  (Platform.OS === "android" ? "http://10.0.2.2:8080" : "http://localhost:8080");
+
+const SPORTSWEAR_SUBCATEGORIES_PATH = "/api/categories/66/subcategories";
+
+/** Optional API key for local server — set `EXPO_PUBLIC_API_KEY` in `.env` (Expo public vars). */
+const LOCAL_SPORTSWEAR_API_KEY =
+  (typeof process !== "undefined" && process.env.EXPO_PUBLIC_API_KEY?.trim()) || "";
+
+function resolveSportswearMediaUrl(path: string | null | undefined, base: string): string | null {
+  const p = String(path ?? "").trim();
+  if (!p) return null;
+  if (/^https?:\/\//i.test(p)) return p;
+  const root = base.replace(/\/$/, "");
+  return p.startsWith("/") ? `${root}${p}` : `${root}/${p}`;
+}
 
 const WOMEN_BANNER_SLIDES = [
-  require("../assets/images/redsport1.png"),
-  require("../assets/images/redsport2.png"),
-  require("../assets/images/greensport1.png"),
-  require("../assets/images/yellowsport3.png"),
+  require("../assets/images/womensportswearbannernew.png"),
+  require("../assets/images/Women Gym wear.png"),
 ] as const;
 
 const MENS_BANNER_SLIDES = [
-  require("../assets/images/redsport2.png"),
-  require("../assets/images/greensport1.png"),
-  require("../assets/images/blacksport2.png"),
-  require("../assets/images/yellowsport2.png"),
+  require("../assets/images/Sport T-shirts.png"),
+  require("../assets/images/Sports Jearsys.png"),
 ] as const;
 
 // moon shape
@@ -215,7 +229,7 @@ const SHOP_STORE_DATA = [
   {
     id: "1",
     title: "Print Store",
-    image: require("../assets/images/sportsbanner1.png"),
+    image: require("../assets/images/sportsbanner2.png"),
   },
   {
     id: "2",
@@ -245,7 +259,7 @@ const SHOP_STORE_DATA = [
   {
     id: "7",
     title: "Trending Sets",
-    image: require("../assets/images/sportsbanner1.png"),
+    image: require("../assets/images/sportsbanner2.png"),
   },
 ];
 
@@ -277,7 +291,7 @@ const colorOptions = [
 // mens  sports section
 const INTEREST_CIRCLE_SIZE = 110;
 const interests: { name: string; img: ImageSourcePropType }[] = [
-  { name: "Mens Sports Wear", img: require("../assets/images/sportsbanner1.png") },
+  { name: "Mens Sports Wear", img: require("../assets/images/sportsbanner2.png") },
   { name: "Cycling shoes", img: require("../assets/images/sportsbanner2.png") },
   { name: "Hiking shoes", img: require("../assets/images/sports3.png") },
   { name: "Running shoes", img: require("../assets/images/sports4.png") },
@@ -292,7 +306,7 @@ type InterestOrbitItem = { id?: string; name: string; img: ImageSourcePropType }
 // banner section
 
 const banners = [
-  require("../assets/images/sportsbanner1.png"),
+  require("../assets/images/sportsbanner2.png"),
   require("../assets/images/sportsbanner2.png"),
   require("../assets/images/sportsbanner5.png"),
   require("../assets/images/sportsbanner6.png"),
@@ -1199,11 +1213,24 @@ export default function SportsWearSection() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(SPORTSWEAR_SUBCATEGORIES_URL);
-        const json = (await res.json()) as ApiSubCategory[];
+        const { data } = await api.get<ApiSubCategory[] | { data?: ApiSubCategory[] }>(
+          SPORTSWEAR_SUBCATEGORIES_PATH,
+          {
+            baseURL: LOCAL_SPORTSWEAR_API_BASE,
+            ...(LOCAL_SPORTSWEAR_API_KEY
+              ? { headers: { "X-API-Key": LOCAL_SPORTSWEAR_API_KEY } }
+              : {}),
+          }
+        );
+        const raw = data as unknown;
+        const list: ApiSubCategory[] = Array.isArray(raw)
+          ? raw
+          : Array.isArray((raw as { data?: ApiSubCategory[] }).data)
+            ? (raw as { data: ApiSubCategory[] }).data
+            : [];
         if (cancelled) return;
 
-        const mappedFromApi: SportswearBrowseCard[] = (Array.isArray(json) ? json : [])
+        const mappedFromApi: SportswearBrowseCard[] = list
           .filter((c) => c && (typeof c.status === "number" ? c.status === 1 : true))
           .map((c) => {
             const key = normalizeBrowseTitle(c.categoryName);
@@ -1211,10 +1238,13 @@ export default function SportsWearSection() {
             const fallbackForKey =
               SPORTSWEAR_DEAL_CARDS_FALLBACK.find((x) => x.actionKey === key)?.image ??
               SPORTSWEAR_DEAL_CARDS_FALLBACK[0].image;
+            const uri =
+              resolveSportswearMediaUrl(c.mobileImage, LOCAL_SPORTSWEAR_API_BASE) ??
+              resolveSportswearMediaUrl(c.image, LOCAL_SPORTSWEAR_API_BASE);
             return {
               id: String(c.id),
               title: c.categoryName,
-              image: c.mobileImage ? ({ uri: c.mobileImage } as const) : fallbackForKey,
+              image: uri ? ({ uri } as const) : fallbackForKey,
               actionKey: key,
             } satisfies SportswearBrowseCard;
           })
@@ -2473,21 +2503,7 @@ const rotate = rotateAnim.interpolate({
         setMensBannerIndex(Math.max(0, Math.min(page, MENS_BANNER_SLIDES.length - 1)));
       }}
     >
-      {MENS_BANNER_SLIDES.map((img, idx) => (
-        <ImageBackground
-          key={`mens-banner-${idx}`}
-          source={img}
-          style={{ width: width - 20, height: "100%" }}
-          imageStyle={{ borderRadius: 12 }}
-          resizeMode="cover"
-        >
-          <View style={styles.bannerOverlayCenter}>
-            <View style={styles.bannerTitleRow}>
-              <Text style={styles.bannerTitle}>MEN&apos;S SPORTS WEAR</Text>
-            </View>
-          </View>
-        </ImageBackground>
-      ))}
+       
     </ScrollView>
 
     <View style={styles.mensBannerDots}>
