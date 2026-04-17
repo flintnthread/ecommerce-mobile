@@ -30,9 +30,9 @@ const IMG_KIDS_CATE = require("../assets/images/kidscate.png");
 const IMG_HOME_CATES = require("../assets/images/homecates.png");
 const IMG_SPORTS_BANNER = require("../assets/images/sportsbanner1.png");
 const IMG_HOME_CATE = require("../assets/images/homecate.png");
-const IMG_PROMO_A = require("../assets/images/sportsbanner3.png");
-const IMG_PROMO_B = require("../assets/images/getpromoting1.png");
 const IMG_PROMO_C = require("../assets/homelyhub/KidsBabyGifts.png");
+const IMG_INDOORPLAY = require("../assets/images/Indoorplay.png");
+const IMG_INDOORPLAY_1 = require("../assets/images/Indoorplay 1.png");
 const IMG_GAARGI = require("../assets/MainCatImages/images/Gaargi.png");
 const IMG_TOP_RATED = require("../assets/images/toprated.png");
 
@@ -102,15 +102,33 @@ const MAIN_CATEGORY_SHOWCASE: MainCategoryShowcaseItem[] = [
 ];
 
 const MAIN_CATEGORY_API_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/80/subcategories";
+  "/api/categories/80/subcategories";
 
 const MAIN_CATEGORY_FALLBACK_BY_NAME = new Map(
   MAIN_CATEGORY_SHOWCASE.map((item) => [item.title.trim().toLowerCase(), item])
 );
 
-const DEAL_PROMO_CAROUSEL: { image: number; headline: string; sub: string; openTarget: string }[] = [
-  { image: IMG_PROMO_A, headline: "Today’s play picks", sub: "Tap to shop educational toys", openTarget: "Educational Materials" },
-  { image: IMG_PROMO_B, headline: "Fill the playroom", sub: "Slides, rockers & more", openTarget: "Pre Indoor Play Items" },
+const DEAL_PROMO_CAROUSEL: {
+  image: number;
+  headline: string;
+  sub: string;
+  openTarget: string;
+  useFade?: boolean;
+}[] = [
+  {
+    image: IMG_INDOORPLAY,
+    headline: "Today’s play picks",
+    sub: "Tap to shop educational toys",
+    openTarget: "Educational Materials",
+    useFade: false,
+  },
+  {
+    image: IMG_INDOORPLAY_1,
+    headline: "Fill the playroom",
+    sub: "Slides, rockers & more",
+    openTarget: "Pre Indoor Play Items",
+    useFade: false,
+  },
   { image: IMG_PROMO_C, headline: "Gift-ready ideas", sub: "Blocks & learning sets", openTarget: "Building Blocks/Block Construction Set" },
 ];
 
@@ -143,7 +161,7 @@ type EducationalMosaicItem = {
 };
 
 const EDUCATIONAL_SUBCATEGORIES_API_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/84/subcategories-table";
+  "/api/categories/84/subcategories-table";
 
 const DEFAULT_EDU_IMAGE_ASPECT_RATIO = 1.45;
 
@@ -185,7 +203,7 @@ type PreIndoorCardItem = {
 };
 
 const PRE_INDOOR_SUBCATEGORIES_API_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/82/subcategories-table";
+  "/api/categories/82/subcategories-table";
 
 const PRE_INDOOR_IMAGE_FALLBACK_BY_NAME = new Map<string, ImageSourcePropType>([
   ["rocking toys", IMG_KIDS_CATE],
@@ -208,16 +226,16 @@ type PreschoolFurnitureCardItem = {
 };
 
 const PRESCHOOL_FURNITURE_SUBCATEGORIES_API_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/86/subcategories-table";
+  "/api/categories/86/subcategories-table";
 
 const PRESCHOOL_INDOOR_SUBCATEGORIES_API_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/83/subcategories-table";
+  "/api/categories/83/subcategories-table";
 
 const PRESCHOOL_OUTDOOR_SPORTS_SUBCATEGORIES_API_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/85/subcategories-table";
+  "/api/categories/85/subcategories-table";
 
 const SCHOOL_FURNITURE_SUBCATEGORIES_API_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/81/subcategories-table";
+  "/api/categories/81/subcategories-table";
 
 const PRESCHOOL_FURNITURE_IMAGE_FALLBACK_BY_NAME = new Map<
   string,
@@ -1148,18 +1166,45 @@ export default function IndoorPlayScreen() {
             {DEAL_PROMO_CAROUSEL.map((deal, i) => (
               <TouchableOpacity
                 key={i}
-                style={styles.dealStripCard}
+                style={[
+                  styles.dealStripCard,
+                  deal.useFade === false ? styles.dealStripCardNoFade : null,
+                ]}
                 onPress={() => openProducts(deal.openTarget)}
                 activeOpacity={0.92}
               >
                 <Image source={deal.image} style={styles.dealStripImage} resizeMode="cover" />
-                <LinearGradient colors={["transparent", "rgba(15,23,42,0.82)"]} style={styles.dealStripFade} />
-                <View style={styles.dealStripTextBlock}>
-                  <Text style={styles.dealStripHeadline}>{deal.headline}</Text>
-                  <Text style={styles.dealStripSub}>{deal.sub}</Text>
-                  <View style={styles.dealStripCta}>
-                    <Text style={styles.dealStripCtaText}>Shop</Text>
-                    <Ionicons name="chevron-forward" size={14} color="#fff" />
+                {deal.useFade !== false ? (
+                  <LinearGradient
+                    colors={["transparent", "rgba(15,23,42,0.82)"]}
+                    style={styles.dealStripFade}
+                  />
+                ) : null}
+                <View
+                  style={[
+                    styles.dealStripTextBlock,
+                    deal.useFade === false ? styles.dealStripTextBlockSolid : null,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.dealStripCta,
+                      deal.useFade === false ? styles.dealStripCtaNoFill : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.dealStripCtaText,
+                        deal.useFade === false ? styles.dealStripCtaTextDark : null,
+                      ]}
+                    >
+                      Shop
+                    </Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={14}
+                      color={deal.useFade === false ? "#111827" : "#fff"}
+                    />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -1782,11 +1827,35 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.5)",
   },
+  dealStripCardNoFade: {
+    borderColor: "rgba(17, 24, 39, 0.38)",
+  },
   dealStripImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   dealStripFade: { ...StyleSheet.absoluteFillObject },
   dealStripTextBlock: { position: "absolute", left: 12, right: 12, bottom: 10 },
+  dealStripTextBlockSolid: {
+    left: 10,
+    right: 10,
+    bottom: 8,
+    zIndex: 2,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   dealStripHeadline: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  dealStripHeadlineDark: {
+    color: "#111827",
+    textShadowColor: "rgba(255,255,255,0.95)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 5,
+  },
   dealStripSub: { color: "rgba(255,255,255,0.92)", fontSize: 11, marginTop: 4, fontWeight: "600" },
+  dealStripSubDark: {
+    color: "#1f2937",
+    textShadowColor: "rgba(255,255,255,0.92)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
   dealStripCta: {
     marginTop: 8,
     flexDirection: "row",
@@ -1798,7 +1867,18 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 999,
   },
+  dealStripCtaNoFill: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(17,24,39,0.8)",
+  },
   dealStripCtaText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  dealStripCtaTextDark: {
+    color: "#111827",
+    textShadowColor: "rgba(255,255,255,0.95)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
   mainCategoriesSection: {
     marginTop: 0,
     marginHorizontal: 0,
