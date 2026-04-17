@@ -57,20 +57,14 @@ type AccessoriesCategoryApi = {
 
 const ACCESSORIES_PARENT_CATEGORY_ID = 28;
 const ACCESSORIES_CATEGORIES_ENDPOINT =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/28/subcategories";
+  "/api/categories/28/subcategories";
 const JEWELLERY_SUBCATEGORIES_TABLE_ENDPOINT =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/40/subcategories-table";
+  "/api/categories/40/subcategories-table";
 const OTHER_ACCESSORIES_SUBCATEGORIES_TABLE_ENDPOINT =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/43/subcategories-table";
+  "/api/categories/43/subcategories-table";
 const WATCHES_SUBCATEGORIES_TABLE_ENDPOINT =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/41/subcategories-table";
-const ACCESSORIES_API_ORIGIN = (() => {
-  try {
-    return new URL(ACCESSORIES_CATEGORIES_ENDPOINT).origin;
-  } catch {
-    return "";
-  }
-})();
+  "/api/categories/41/subcategories-table";
+const ACCESSORIES_API_ORIGIN = String(api.defaults.baseURL || "").replace(/\/$/, "");
 
 /** Backend category id for Bags (GET /api/categories/:id/subcategories-table). */
 const BAGS_CATEGORY_ID_FALLBACK = 39;
@@ -88,9 +82,15 @@ const BAGS_CARD_SUBCATEGORY_IDS: Record<string, number[]> = {
 
 function getSubcategoryTableImageUri(filename: string | null | undefined): string {
   const base = String(ACCESSORIES_API_ORIGIN || api.defaults.baseURL || "").replace(/\/$/, "");
-  if (!filename?.trim()) return `${base}/uploads/`;
-  if (/^https?:\/\//i.test(filename)) return filename;
-  return `${base}/uploads/${filename}`;
+  const raw = filename?.trim();
+  if (!raw) return `${base}/uploads/`;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("//")) return `https:${raw}`;
+
+  const normalized = raw.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  if (normalized.startsWith("/")) return `${base}${normalized}`;
+  if (normalized.startsWith("uploads/")) return `${base}/${normalized}`;
+  return `${base}/uploads/${normalized}`;
 }
 
 function getApiImageSourceOrFallback(
@@ -1187,8 +1187,6 @@ export default function Accessories() {
   const leftShowcaseViewportHeightRef = useRef(0);
   const [selectedGadgetsQuickLinkId, setSelectedGadgetsQuickLinkId] = useState("gq1");
   const [selectedWatchesShowcaseCardId, setSelectedWatchesShowcaseCardId] = useState("wc1");
-  const accessoriesApiBaseUrl = ACCESSORIES_API_ORIGIN;
-
   const categoryIdsByTopId = useMemo(() => {
     const resolved = {
       bags: BAGS_CATEGORY_ID_FALLBACK,
@@ -1226,7 +1224,7 @@ export default function Accessories() {
       if (!apiCategory) return fallback;
 
       const source = apiCategory.mobileImage?.trim()
-        ? { uri: apiCategory.mobileImage.trim() }
+        ? { uri: getSubcategoryTableImageUri(apiCategory.mobileImage.trim()) }
         : fallback.image;
 
       return {
@@ -1253,21 +1251,10 @@ export default function Accessories() {
   const fetchSubcategoriesTable = useCallback(
     async (categoryId: number) => {
       const path = `/api/categories/${categoryId}/subcategories-table`;
-      try {
-        if (accessoriesApiBaseUrl) {
-          const absoluteUrl = `${accessoriesApiBaseUrl}${path}`;
-          const { data } = await api.get<BagsSubcategoryTableRow[]>(absoluteUrl, {
-            withCredentials: false,
-          });
-          return data;
-        }
-      } catch {
-        // Fall through to app baseURL request to preserve existing behavior.
-      }
       const { data } = await api.get<BagsSubcategoryTableRow[]>(path);
       return data;
     },
-    [accessoriesApiBaseUrl]
+    []
   );
 
   const gadgetsQuickLinkSubcategoriesResolved = useMemo<Record<string, string[]>>(() => {
@@ -1320,7 +1307,7 @@ export default function Accessories() {
   const heroStarOp1 = useRef(new Animated.Value(1)).current;
   const heroStarOp2 = useRef(new Animated.Value(1)).current;
   const heroStarOp3 = useRef(new Animated.Value(1)).current;
-  const bottomAdPlayer = useVideoPlayer(require("../assets/images/videobanner.mp4"), (player) => {
+  const bottomAdPlayer = useVideoPlayer(require("../assets/images/Accessories.mp4"), (player) => {
     player.loop = true;
     player.muted = true;
     player.play();
