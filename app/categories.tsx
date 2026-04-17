@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 type CategoryKey =
@@ -381,6 +382,17 @@ export default function Categories() {
       .filter((section) => section.items.length > 0);
   }, [sections, allSections, searchQuery]);
 
+  // When returning back to this screen from any category page,
+  // keep the Categories screen clean: do not show the previous subcategory list.
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsSearchVisible(false);
+      setSearchQuery("");
+      setIsSideBarOpen(false);
+      setActiveCategory("womenswear");
+    }, [])
+  );
+
   useEffect(() => {
     let isMounted = true;
 
@@ -538,6 +550,11 @@ export default function Categories() {
                       router.push("/kids" as Href);
                       return;
                     }
+                    if (cat.key === "homelyHub") {
+                      setIsSideBarOpen(false);
+                      router.push("/gifts" as Href);
+                      return;
+                    }
                     if (cat.key === "indoorPlayEquipments") {
                       setIsSideBarOpen(false);
                       router.push("/indoorplay" as Href);
@@ -583,7 +600,6 @@ export default function Categories() {
                       style={styles.itemCard}
                       activeOpacity={0.85}
                       onPress={() => {
-                        setActiveCategory(cat.key);
                         if (cat.key === "womenswear") {
                           router.push("/women" as Href);
                           return;
@@ -624,6 +640,7 @@ export default function Categories() {
                           router.push("/indoorplay" as Href);
                           return;
                         }
+                        setActiveCategory(cat.key);
                         router.push({
                           pathname: "/subcate",
                           params: { mainCat: cat.key },
