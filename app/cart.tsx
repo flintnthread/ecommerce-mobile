@@ -81,19 +81,15 @@ export default function CartScreen() {
 
   const animationRange = useMemo(() => {
     if (!logoLayout || !searchLayout || !headerLayout) return null;
-    // Leave a little gap so the track doesn't appear right near the logo.
-    const startX = Math.max(0, logoLayout.x + logoLayout.w + 22);
-    // Stop the runner just before the search icon (account for runner width).
-    const endX = Math.max(startX + 24, searchLayout.x - RUNNER_W - 2);
+    // Start at the logo itself (not from the middle of header).
+    const startX = Math.max(0, logoLayout.x + Math.max(0, logoLayout.w - 2));
+    // Stop with the cart trolley snug beside the search icon.
+    const endX = Math.max(startX + 24, searchLayout.x - RUNNER_W + 10);
     const y = Math.max(2, headerLayout.h / 2 - RUNNER_H / 2);
     return { startX, endX, y };
   }, [logoLayout, searchLayout, headerLayout]);
 
   useEffect(() => {
-    if (!animationRange) return;
-
-    animProgress.setValue(0);
-    animOpacity.setValue(1);
     walkBob.setValue(0);
 
     const bobLoop = Animated.loop(
@@ -113,18 +109,39 @@ export default function CartScreen() {
       ])
     );
 
+    bobLoop.start();
+    return () => {
+      bobLoop.stop();
+    };
+  }, [walkBob]);
+
+  useEffect(() => {
+    if (!animationRange) return;
+
     const loop = Animated.loop(
       Animated.sequence([
         Animated.parallel([
           Animated.timing(animProgress, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+          Animated.timing(animOpacity, {
             toValue: 1,
-            duration: 2200,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(animProgress, {
+            toValue: 1,
+            duration: 2400,
             easing: Easing.inOut(Easing.cubic),
             useNativeDriver: true,
           }),
           Animated.timing(animOpacity, {
             toValue: 1,
-            duration: 2200,
+            duration: 2400,
             easing: Easing.linear,
             useNativeDriver: true,
           }),
@@ -135,26 +152,15 @@ export default function CartScreen() {
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(animProgress, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animOpacity, {
-          toValue: 1,
-          duration: 0,
-          useNativeDriver: true,
-        }),
+        Animated.delay(250),
       ])
     );
 
-    bobLoop.start();
     loop.start();
     return () => {
-      bobLoop.stop();
       loop.stop();
     };
-  }, [animationRange, animOpacity, animProgress, walkBob]);
+  }, [animationRange, animOpacity, animProgress]);
 
   const onHeaderLayout = (e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
