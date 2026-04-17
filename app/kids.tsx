@@ -15,7 +15,6 @@ import {
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from "react-native";
-import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -27,6 +26,7 @@ import Svg, {
   Polygon,
 } from "react-native-svg";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api from "../services/api";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -668,12 +668,19 @@ export default function KidsScreen() {
   const shopAllScrollDirRef = useRef(1);
   const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
 
-  const SUBCATEGORIES_API_BASE =
-    "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
   const KIDS_PARENT_ID = 30;
   const [kidsApiCats, setKidsApiCats] = useState<KidsSubcategoryApiRow[]>([]);
   const [kidsApiLoading, setKidsApiLoading] = useState<boolean>(true);
   const [kidsApiError, setKidsApiError] = useState<string | null>(null);
+
+  const getUploadsImageUriFromFilename = useCallback((filename?: string | null): string => {
+    const raw = String(filename ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!base) return raw;
+    return `${base}/uploads/${raw.replace(/^\/+/, "")}`;
+  }, []);
 
   const KIDS_GIRLS_CLOTHING_TABLE_ID = 48;
   const [girlsClothingTable, setGirlsClothingTable] = useState<KidsSubcategoriesTableRow | null>(
@@ -704,11 +711,9 @@ export default function KidsScreen() {
       try {
         setKidsApiLoading(true);
         setKidsApiError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_PARENT_ID}/subcategories`,
-          { timeout: 15000 }
-        );
-        const rows: unknown = res.data;
+        const { data: rows } = await api.get(`/api/categories/${KIDS_PARENT_ID}/subcategories`, {
+          timeout: 15000,
+        });
         const list = Array.isArray(rows) ? (rows as KidsSubcategoryApiRow[]) : [];
         if (cancelled) return;
         setKidsApiCats(list);
@@ -737,11 +742,10 @@ export default function KidsScreen() {
       try {
         setGirlsClothingTableLoading(true);
         setGirlsClothingTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_GIRLS_CLOTHING_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${KIDS_GIRLS_CLOTHING_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as KidsSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -763,7 +767,7 @@ export default function KidsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -772,11 +776,10 @@ export default function KidsScreen() {
       try {
         setSchoolEssentialsTableLoading(true);
         setSchoolEssentialsTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_SCHOOL_ESSENTIALS_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${KIDS_SCHOOL_ESSENTIALS_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as KidsSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -798,7 +801,7 @@ export default function KidsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -807,11 +810,10 @@ export default function KidsScreen() {
       try {
         setBoysClothingTableLoading(true);
         setBoysClothingTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_BOYS_CLOTHING_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${KIDS_BOYS_CLOTHING_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as KidsSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -833,7 +835,7 @@ export default function KidsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   const normalize = useCallback((s: string) => String(s ?? "").trim().toLowerCase(), []);
   const normKey = useCallback(
@@ -875,11 +877,11 @@ export default function KidsScreen() {
       const shopImage = row.mobileImage
         ? ({ uri: row.mobileImage } as any)
         : row.image
-          ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+          ? ({ uri: getUploadsImageUriFromFilename(row.image) } as any)
           : block.shopImage;
       return { ...block, title, shopImage };
     });
-  }, [KIDS_CATEGORIES, SUBCATEGORIES_API_BASE, kidsApiCats, normKey]);
+  }, [KIDS_CATEGORIES, getUploadsImageUriFromFilename, kidsApiCats, normKey]);
 
   const kidsStripItems = useMemo(() => {
     const apiActive = kidsApiCats.filter((r) =>
@@ -904,7 +906,7 @@ export default function KidsScreen() {
         row.mobileImage
           ? ({ uri: row.mobileImage } as any)
           : row.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(row.image) } as any)
             : KIDS_IMAGE;
       return {
         key: `api-${row.id}`,
@@ -915,7 +917,7 @@ export default function KidsScreen() {
     });
   }, [
     KIDS_IMAGE,
-    SUBCATEGORIES_API_BASE,
+    getUploadsImageUriFromFilename,
     kidsApiCats,
     kidsCategoriesForUi,
     guessKidsMappedKey,
@@ -966,12 +968,12 @@ export default function KidsScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return girlsBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, girlsBlock.subs, girlsClothingTable]);
+  }, [getUploadsImageUriFromFilename, girlsBlock.subs, girlsClothingTable]);
 
   const boysBlock = useMemo(
     () =>
@@ -989,12 +991,12 @@ export default function KidsScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return boysBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, boysBlock.subs, boysClothingTable]);
+  }, [boysBlock.subs, boysClothingTable, getUploadsImageUriFromFilename]);
 
   const schoolBlock = useMemo(
     () =>
@@ -1012,12 +1014,12 @@ export default function KidsScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return schoolBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, schoolBlock.subs, schoolEssentialsTable]);
+  }, [getUploadsImageUriFromFilename, schoolBlock.subs, schoolEssentialsTable]);
 
   const kidsDeptRailAwaitingTable = useMemo(() => {
     if (activeBlock.key === "boys") return boysClothingTableLoading && !boysClothingTable;

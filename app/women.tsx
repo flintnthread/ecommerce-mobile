@@ -15,7 +15,6 @@ import {
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from "react-native";
-import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -27,6 +26,7 @@ import Svg, {
   Polygon,
 } from "react-native-svg";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api from "../services/api";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -697,12 +697,19 @@ export default function WomenScreen() {
   const shopAllScrollDirRef = useRef(1);
   const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
 
-  const SUBCATEGORIES_API_BASE =
-    "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
   const WOMEN_PARENT_ID = 61;
   const [womenApiCats, setWomenApiCats] = useState<WomenSubcategoryApiRow[]>([]);
   const [womenApiLoading, setWomenApiLoading] = useState<boolean>(true);
   const [womenApiError, setWomenApiError] = useState<string | null>(null);
+
+  const getUploadsImageUriFromFilename = useCallback((filename?: string | null): string => {
+    const raw = String(filename ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!base) return raw;
+    return `${base}/uploads/${raw.replace(/^\/+/, "")}`;
+  }, []);
 
   const WOMEN_ETHNIC_WEAR_TABLE_ID = 63;
   const [ethnicWearTable, setEthnicWearTable] = useState<WomenSubcategoriesTableRow | null>(
@@ -741,11 +748,9 @@ export default function WomenScreen() {
       try {
         setWomenApiLoading(true);
         setWomenApiError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_PARENT_ID}/subcategories`,
-          { timeout: 15000 }
-        );
-        const rows: unknown = res.data;
+        const { data: rows } = await api.get(`/api/categories/${WOMEN_PARENT_ID}/subcategories`, {
+          timeout: 15000,
+        });
         const list = Array.isArray(rows) ? (rows as WomenSubcategoryApiRow[]) : [];
         if (cancelled) return;
         setWomenApiCats(list);
@@ -774,11 +779,10 @@ export default function WomenScreen() {
       try {
         setEthnicWearTableLoading(true);
         setEthnicWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_ETHNIC_WEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${WOMEN_ETHNIC_WEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -800,7 +804,7 @@ export default function WomenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -809,11 +813,10 @@ export default function WomenScreen() {
       try {
         setLingerieWearTableLoading(true);
         setLingerieWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_LINGERIE_SLEEPWEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${WOMEN_LINGERIE_SLEEPWEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -835,7 +838,7 @@ export default function WomenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -844,11 +847,10 @@ export default function WomenScreen() {
       try {
         setWesternWearTableLoading(true);
         setWesternWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_WESTERN_WEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${WOMEN_WESTERN_WEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -870,7 +872,7 @@ export default function WomenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -879,11 +881,10 @@ export default function WomenScreen() {
       try {
         setWinterWearTableLoading(true);
         setWinterWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_WINTER_WEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${WOMEN_WINTER_WEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -905,7 +906,7 @@ export default function WomenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -914,11 +915,10 @@ export default function WomenScreen() {
       try {
         setActiveWearTableLoading(true);
         setActiveWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${WOMEN_ACTIVE_WEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${WOMEN_ACTIVE_WEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as WomenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -940,7 +940,7 @@ export default function WomenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   const normalize = useCallback((s: string) => String(s ?? "").trim().toLowerCase(), []);
   const normKey = useCallback(
@@ -980,11 +980,11 @@ export default function WomenScreen() {
       const shopImage = row.mobileImage
         ? ({ uri: row.mobileImage } as any)
         : row.image
-          ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+          ? ({ uri: getUploadsImageUriFromFilename(row.image) } as any)
           : block.shopImage;
       return { ...block, title, shopImage };
     });
-  }, [normKey, womenApiCats]);
+  }, [getUploadsImageUriFromFilename, normKey, womenApiCats]);
 
   const womenStripItems = useMemo(() => {
     const apiActive = womenApiCats.filter((r) =>
@@ -1016,7 +1016,7 @@ export default function WomenScreen() {
           row.mobileImage
             ? ({ uri: row.mobileImage } as any)
             : row.image
-              ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+              ? ({ uri: getUploadsImageUriFromFilename(row.image) } as any)
               : WOMEN_IMG;
         return {
           key: `api-${row.id}`,
@@ -1027,7 +1027,13 @@ export default function WomenScreen() {
             (isWomensClothingTitle(title) ? "active" : null),
         };
       });
-  }, [SUBCATEGORIES_API_BASE, isWomensClothingTitle, normKey, womenApiCats, womenCategoriesForUi]);
+  }, [
+    getUploadsImageUriFromFilename,
+    isWomensClothingTitle,
+    normKey,
+    womenApiCats,
+    womenCategoriesForUi,
+  ]);
 
   useEffect(() => {
     if (womenCategoriesForUi.some((c) => c.key === selectedKey)) return;
@@ -1074,12 +1080,12 @@ export default function WomenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return ethnicBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, ethnicBlock.subs, ethnicWearTable]);
+  }, [ethnicBlock.subs, ethnicWearTable, getUploadsImageUriFromFilename]);
 
   const lingerieBlock = useMemo(
     () =>
@@ -1097,12 +1103,12 @@ export default function WomenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return lingerieBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, lingerieBlock.subs, lingerieWearTable]);
+  }, [getUploadsImageUriFromFilename, lingerieBlock.subs, lingerieWearTable]);
 
   const westernBlock = useMemo(
     () =>
@@ -1120,12 +1126,12 @@ export default function WomenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return westernBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, westernBlock.subs, westernWearTable]);
+  }, [getUploadsImageUriFromFilename, westernBlock.subs, westernWearTable]);
 
   const winterBlock = useMemo(
     () =>
@@ -1143,12 +1149,12 @@ export default function WomenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return winterBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, winterBlock.subs, winterWearTable]);
+  }, [getUploadsImageUriFromFilename, winterBlock.subs, winterWearTable]);
 
   const activeBlockForTable = useMemo(
     () =>
@@ -1166,12 +1172,12 @@ export default function WomenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return activeBlockForTable.subs;
-  }, [SUBCATEGORIES_API_BASE, activeBlockForTable.subs, activeWearTable]);
+  }, [activeBlockForTable.subs, activeWearTable, getUploadsImageUriFromFilename]);
 
   const activeRailSubsForUi = useMemo((): SubLabel[] => {
     if (activeBlock.key === "ethnic") return ethnicRailSubs;

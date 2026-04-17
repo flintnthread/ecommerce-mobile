@@ -9,12 +9,12 @@ import { View,
   StatusBar,
   ActivityIndicator,
 } from "react-native";
-import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api from "../services/api";
 
 const HEADER_FT_LOGO = require("../assets/men/categories/fntfav.png");
 
@@ -560,14 +560,21 @@ export default function GiftsScreen() {
     null
   );
 
-  const SUBCATEGORIES_API_BASE =
-    "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
   const SUBCATEGORIES_PARENT_ID = 89;
   const [giftApiSubcategories, setGiftApiSubcategories] = React.useState<
     GiftSubcategoryApiRow[]
   >([]);
   const [giftApiLoading, setGiftApiLoading] = React.useState<boolean>(true);
   const [giftApiError, setGiftApiError] = React.useState<string | null>(null);
+
+  const getUploadsImageUriFromFilename = React.useCallback((filename?: string | null): string => {
+    const raw = String(filename ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!base) return raw;
+    return `${base}/uploads/${raw.replace(/^\/+/, "")}`;
+  }, []);
 
   const normalizeGiftName = React.useCallback((name: string) => {
     return String(name ?? "")
@@ -603,11 +610,10 @@ export default function GiftsScreen() {
       try {
         setGiftApiLoading(true);
         setGiftApiError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${SUBCATEGORIES_PARENT_ID}/subcategories`,
+        const { data: rows } = await api.get(
+          `/api/categories/${SUBCATEGORIES_PARENT_ID}/subcategories`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as GiftSubcategoryApiRow[]) : [];
         if (cancelled) return;
         setGiftApiSubcategories(list);
@@ -735,12 +741,10 @@ export default function GiftsScreen() {
         setArtTableLoading(true);
         setArtTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${ART_CREATIVE_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${ART_CREATIVE_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -763,7 +767,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, isArtCreativeView]);
+  }, [isArtCreativeView]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -774,12 +778,10 @@ export default function GiftsScreen() {
         setEventTableLoading(true);
         setEventTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${EVENT_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${EVENT_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -802,7 +804,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, isEventBasedView]);
+  }, [isEventBasedView]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -813,12 +815,10 @@ export default function GiftsScreen() {
         setCorporateTableLoading(true);
         setCorporateTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${CORPORATE_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${CORPORATE_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -841,7 +841,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, isCorporateView]);
+  }, [isCorporateView]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -852,12 +852,10 @@ export default function GiftsScreen() {
         setCouplesTableLoading(true);
         setCouplesTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${COUPLES_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${COUPLES_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -880,7 +878,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, isCoupleView]);
+  }, [isCoupleView]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -891,12 +889,10 @@ export default function GiftsScreen() {
         setUtilityTableLoading(true);
         setUtilityTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${EVERYDAY_UTILITY_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${EVERYDAY_UTILITY_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -919,7 +915,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, isUtilityView]);
+  }, [isUtilityView]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -930,12 +926,10 @@ export default function GiftsScreen() {
         setWearableTableLoading(true);
         setWearableTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${WEARABLE_PERSONAL_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${WEARABLE_PERSONAL_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -958,7 +952,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, selectedCategoryId]);
+  }, [selectedCategoryId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -969,12 +963,10 @@ export default function GiftsScreen() {
         setSpiritualTableLoading(true);
         setSpiritualTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${SPIRITUAL_FESTIVAL_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${SPIRITUAL_FESTIVAL_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -997,7 +989,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, selectedCategoryId]);
+  }, [selectedCategoryId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1008,12 +1000,10 @@ export default function GiftsScreen() {
         setKidsBabyTableLoading(true);
         setKidsBabyTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${KIDS_BABY_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${KIDS_BABY_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -1036,7 +1026,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, selectedCategoryId]);
+  }, [selectedCategoryId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1047,12 +1037,10 @@ export default function GiftsScreen() {
         setHomeDecorTableLoading(true);
         setHomeDecorTableError(null);
 
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${HOME_DECOR_CATEGORY_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${HOME_DECOR_CATEGORY_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as SubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
 
@@ -1075,7 +1063,7 @@ export default function GiftsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE, selectedCategoryId]);
+  }, [selectedCategoryId]);
 
   const activeHero = React.useMemo(() => {
     if (selectedCategoryId && GIFT_CATEGORY_HERO[selectedCategoryId]) {
@@ -1538,7 +1526,7 @@ export default function GiftsScreen() {
                     imageUri: s.mobileImage
                       ? s.mobileImage
                       : s.image
-                        ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                        ? getUploadsImageUriFromFilename(s.image)
                         : null,
                   }))
                 : ART_SUB_CATEGORIES.map((s: any) => ({
@@ -1645,7 +1633,7 @@ export default function GiftsScreen() {
                     image: s.mobileImage
                       ? ({ uri: s.mobileImage } as any)
                       : s.image
-                        ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+                        ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
                         : undefined,
                   }))
                 : CORPORATE_SUB_CATEGORIES
@@ -1762,7 +1750,7 @@ export default function GiftsScreen() {
                     image: s.mobileImage
                       ? ({ uri: s.mobileImage } as any)
                       : s.image
-                        ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+                        ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
                         : undefined,
                   }))
                 : EVENT_SUB_CATEGORIES
@@ -1861,7 +1849,7 @@ export default function GiftsScreen() {
                     imageUri: s.mobileImage
                       ? s.mobileImage
                       : s.image
-                        ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                        ? getUploadsImageUriFromFilename(s.image)
                         : null,
                     bg: "#ECFDF5",
                     icon: "🎁",
@@ -1967,7 +1955,7 @@ export default function GiftsScreen() {
                     imageUri: s.mobileImage
                       ? s.mobileImage
                       : s.image
-                        ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                        ? getUploadsImageUriFromFilename(s.image)
                         : null,
                   }))
                 : COUPLE_SUB_CATEGORIES.map((it) => ({
@@ -2143,7 +2131,7 @@ export default function GiftsScreen() {
                         imageUri: s.mobileImage
                           ? s.mobileImage
                           : s.image
-                            ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                            ? getUploadsImageUriFromFilename(s.image)
                             : null,
                       }))
                     : (HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []).map((it) => ({
@@ -2237,7 +2225,7 @@ export default function GiftsScreen() {
                         imageUri: s.mobileImage
                           ? s.mobileImage
                           : s.image
-                            ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                            ? getUploadsImageUriFromFilename(s.image)
                             : null,
                       }))
                     : (HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []).map((it) => ({
@@ -2331,7 +2319,7 @@ export default function GiftsScreen() {
                         imageUri: s.mobileImage
                           ? s.mobileImage
                           : s.image
-                            ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                            ? getUploadsImageUriFromFilename(s.image)
                             : null,
                       }))
                     : (HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []).map((it) => ({
@@ -2425,7 +2413,7 @@ export default function GiftsScreen() {
                         imageUri: s.mobileImage
                           ? s.mobileImage
                           : s.image
-                            ? `${SUBCATEGORIES_API_BASE}/uploads/${s.image}`
+                            ? getUploadsImageUriFromFilename(s.image)
                             : null,
                       }))
                     : (HOMELY_HUB_GIFT_SUBS[selectedCategoryId] ?? []).map((it) => ({
