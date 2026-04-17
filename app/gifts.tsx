@@ -559,7 +559,6 @@ export default function GiftsScreen() {
   const [selectedCategoryId, setSelectedCategoryId] = React.useState<string | null>(
     null
   );
-  const [selectedSubCategory, setSelectedSubCategory] = React.useState<string | null>(null);
 
   const SUBCATEGORIES_API_BASE =
     "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
@@ -726,10 +725,6 @@ export default function GiftsScreen() {
     selectedCategoryId === "gc7" ||
     selectedCategoryId === "gc8" ||
     selectedCategoryId === "gc9";
-
-  React.useEffect(() => {
-    if (selectedSubCategory) setSelectedSubCategory(null);
-  }, [selectedCategoryId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1112,7 +1107,17 @@ export default function GiftsScreen() {
           const rating = (4.2 + (item.id.length % 8) / 10).toFixed(1);
           const reviews = 320 + (item.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 9800);
           return (
-            <TouchableOpacity key={item.id} style={styles.trendingProductCard} activeOpacity={0.9}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.trendingProductCard}
+              activeOpacity={0.9}
+              onPress={() =>
+                router.push({
+                  pathname: "/subcatProducts",
+                  params: { subCategory: item.name },
+                } as any)
+              }
+            >
               <View style={styles.trendingProductImageWrap}>
                 <Image source={item.image} style={styles.trendingProductImage} resizeMode="cover" />
                 {item.badge ? (
@@ -1197,11 +1202,8 @@ export default function GiftsScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
+              style={styles.giftsLogoHit}
               onPress={() => {
-                if (selectedSubCategory) {
-                  setSelectedSubCategory(null);
-                  return;
-                }
                 if (
                   isArtCreativeView ||
                   isCorporateView ||
@@ -1215,12 +1217,17 @@ export default function GiftsScreen() {
                 }
                 router.back();
               }}
-              style={styles.giftsBackHit}
-              activeOpacity={0.7}
+              activeOpacity={0.88}
               accessibilityRole="button"
               accessibilityLabel="Back"
             >
-              <Ionicons name="arrow-back" size={22} color="#1d324e" />
+              <View style={styles.giftsLogoTile}>
+                <Image
+                  source={HEADER_FT_LOGO}
+                  style={styles.giftsLogoImage}
+                  resizeMode="contain"
+                />
+              </View>
             </TouchableOpacity>
           )}
 
@@ -1592,51 +1599,6 @@ export default function GiftsScreen() {
               })}
             </View>
 
-            {selectedSubCategory ? (
-              <>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trendingRow}
-                >
-                  {TRENDING_PRODUCTS.map((item) => (
-                    <TouchableOpacity
-                      key={`art-${selectedSubCategory}-${item.id}`}
-                      style={styles.trendingProductCard}
-                      activeOpacity={0.9}
-                    >
-                      <View style={styles.trendingProductImageWrap}>
-                        <Image
-                          source={item.image}
-                          style={styles.trendingProductImage}
-                          resizeMode="cover"
-                        />
-                        {item.badge ? (
-                          <View style={styles.trendingProductBadge}>
-                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={styles.trendingProductMeta}>
-                        <Text style={styles.trendingProductName} numberOfLines={2}>
-                          {item.name}
-                        </Text>
-                        <View style={styles.trendingProductPriceRow}>
-                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                          {item.mrp ? (
-                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : null}
           </View>
         ) : isCorporateView ? (
           <View style={[styles.subCategorySection, styles.subCategoryShelfCorporate]}>
@@ -1692,7 +1654,12 @@ export default function GiftsScreen() {
                   key={item.id}
                   style={[styles.corpCard, styles.corpCardShelf]}
                   activeOpacity={0.9}
-                  onPress={() => setSelectedSubCategory(item.title)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: { subCategory: item.title },
+                    } as any)
+                  }
                 >
                   <View style={styles.corpImageWrap}>
                     {item.image ? (
@@ -1711,51 +1678,6 @@ export default function GiftsScreen() {
               ))}
             </View>
 
-            {selectedSubCategory ? (
-              <>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trendingRow}
-                >
-                  {TRENDING_PRODUCTS.map((item) => (
-                    <TouchableOpacity
-                      key={`corp-${selectedSubCategory}-${item.id}`}
-                      style={styles.trendingProductCard}
-                      activeOpacity={0.9}
-                    >
-                      <View style={styles.trendingProductImageWrap}>
-                        <Image
-                          source={item.image}
-                          style={styles.trendingProductImage}
-                          resizeMode="cover"
-                        />
-                        {item.badge ? (
-                          <View style={styles.trendingProductBadge}>
-                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={styles.trendingProductMeta}>
-                        <Text style={styles.trendingProductName} numberOfLines={2}>
-                          {item.name}
-                        </Text>
-                        <View style={styles.trendingProductPriceRow}>
-                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                          {item.mrp ? (
-                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : null}
           </View>
         ) : isEventBasedView ? (
           <View style={[styles.subCategorySection, styles.subCategoryShelfEvent]}>
@@ -1854,7 +1776,12 @@ export default function GiftsScreen() {
                     item.image && styles.eventCircleWithImage,
                   ]}
                   activeOpacity={0.9}
-                  onPress={() => setSelectedSubCategory(item.title)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: { subCategory: item.title },
+                    } as any)
+                  }
                 >
                   {item.image ? (
                     <ImageBackground
@@ -1888,51 +1815,6 @@ export default function GiftsScreen() {
               ))}
             </View>
 
-            {selectedSubCategory ? (
-              <>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trendingRow}
-                >
-                  {TRENDING_PRODUCTS.map((item) => (
-                    <TouchableOpacity
-                      key={`event-${selectedSubCategory}-${item.id}`}
-                      style={styles.trendingProductCard}
-                      activeOpacity={0.9}
-                    >
-                      <View style={styles.trendingProductImageWrap}>
-                        <Image
-                          source={item.image}
-                          style={styles.trendingProductImage}
-                          resizeMode="cover"
-                        />
-                        {item.badge ? (
-                          <View style={styles.trendingProductBadge}>
-                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={styles.trendingProductMeta}>
-                        <Text style={styles.trendingProductName} numberOfLines={2}>
-                          {item.name}
-                        </Text>
-                        <View style={styles.trendingProductPriceRow}>
-                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                          {item.mrp ? (
-                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : null}
           </View>
         ) : isUtilityView ? (
           <View style={[styles.subCategorySection, styles.subCategoryShelfUtility]}>
@@ -1991,129 +1873,54 @@ export default function GiftsScreen() {
                   style={[
                     styles.utilityCard,
                     styles.utilityCardShelf,
+                    styles.utilityEverydayCard,
                     { backgroundColor: item.bg ?? "#FFFFFF" },
                   ]}
                   activeOpacity={0.9}
-                  onPress={() => setSelectedSubCategory(item.title)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: { subCategory: item.title },
+                    } as any)
+                  }
                 >
-                  <View style={styles.utilityIconWrap}>
-                    {item.imageUri ? (
-                      <Image
-                        source={{ uri: item.imageUri }}
-                        style={{ width: 46, height: 46, borderRadius: 12 }}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Text style={styles.utilityIcon}>{item.icon}</Text>
-                    )}
-                  </View>
-                  <Text style={styles.utilityCardTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {selectedSubCategory ? (
-              <>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trendingRow}
-                >
-                  {TRENDING_PRODUCTS.map((item) => (
-                    <TouchableOpacity
-                      key={`utility-${selectedSubCategory}-${item.id}`}
-                      style={styles.trendingProductCard}
-                      activeOpacity={0.9}
-                    >
-                      <View style={styles.trendingProductImageWrap}>
+                  <View style={styles.utilityEverydayCardInner}>
+                    <View style={styles.utilityEverydayImageBlock}>
+                      {item.imageUri ? (
                         <Image
-                          source={item.image}
-                          style={styles.trendingProductImage}
-                          resizeMode="cover"
+                          source={{ uri: item.imageUri }}
+                          style={styles.utilityEverydayImage}
+                          resizeMode="contain"
                         />
-                        {item.badge ? (
-                          <View style={styles.trendingProductBadge}>
-                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={styles.trendingProductMeta}>
-                        <Text style={styles.trendingProductName} numberOfLines={2}>
-                          {item.name}
-                        </Text>
-                        <View style={styles.trendingProductPriceRow}>
-                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                          {item.mrp ? (
-                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                          ) : null}
+                      ) : (
+                        <View style={styles.utilityEverydayImagePlaceholder}>
+                          <Text style={styles.utilityEverydayEmoji}>{item.icon}</Text>
                         </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : null}
-
-            <TouchableOpacity style={styles.offerBannerAlt} activeOpacity={0.9}>
-              <View style={styles.offerAltGlowOne} />
-              <View style={styles.offerAltGlowTwo} />
-              <Text style={styles.offerAltEyebrow}>UTILITY DEALS</Text>
-              <Text style={styles.offerAltTitle}>Daily Essentials Sale</Text>
-              <Text style={styles.offerAltSub}>Cushions, mugs, bottles & more</Text>
-              <View style={styles.offerAltCta}>
-                <Text style={styles.offerAltCtaText}>Explore</Text>
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Trending Products</Text>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.trendingRow}
-            >
-              {TRENDING_PRODUCTS.map((item) => (
-                <TouchableOpacity
-                  key={`utility-${item.id}`}
-                  style={styles.trendingProductCard}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.trendingProductImageWrap}>
-                    <Image
-                      source={item.image}
-                      style={styles.trendingProductImage}
-                      resizeMode="cover"
-                    />
-                    {item.badge ? (
-                      <View style={styles.trendingProductBadge}>
-                        <Text style={styles.trendingProductBadgeText}>
-                          {item.badge}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.trendingProductMeta}>
-                    <Text style={styles.trendingProductName} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    <View style={styles.trendingProductPriceRow}>
-                      <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                      {item.mrp ? (
-                        <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                      ) : null}
+                      )}
                     </View>
+                    <LinearGradient
+                      colors={["#064e3b", "#059669", "#34d399"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.utilityEverydayFooter}
+                    >
+                      <Text style={styles.utilityEverydayTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                      <View style={styles.utilityEverydayFooterRow}>
+                        <Text style={styles.utilityEverydaySub}>Browse picks</Text>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={15}
+                          color="rgba(255,255,255,0.92)"
+                        />
+                      </View>
+                    </LinearGradient>
                   </View>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
+
           </View>
         ) : isCoupleView ? (
           <View style={[styles.subCategorySection, styles.subCategoryShelfCouple]}>
@@ -2132,25 +1939,6 @@ export default function GiftsScreen() {
                 </Text>
               </View>
             </View>
-
-            <TouchableOpacity style={styles.coupleTopBanner} activeOpacity={0.92}>
-              <Image
-                source={require("../assets/images/homecate.png")}
-                style={styles.coupleTopBannerImage}
-                resizeMode="cover"
-              />
-              <View style={styles.coupleTopBannerOverlay} />
-              <View style={styles.coupleTopBannerContent}>
-                <Text style={styles.coupleTopBannerEyebrow}>COUPLE GIFTS</Text>
-                <Text style={styles.coupleTopBannerTitle}>Made for Two</Text>
-                <Text style={styles.coupleTopBannerSubTitle}>
-                  Explosion boxes • Novelties • Scrapbooks
-                </Text>
-                <View style={styles.coupleTopBannerCta}>
-                  <Text style={styles.coupleTopBannerCtaText}>Explore</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
 
             <View style={styles.coupleContainer}>
               {couplesTableLoading ? (
@@ -2195,171 +1983,53 @@ export default function GiftsScreen() {
                   style={[
                     styles.coupleCard,
                     styles.coupleCardShelf,
+                    styles.coupleRomanceCard,
                     { backgroundColor: item.bg ?? "#FCE7F3" },
                   ]}
                   activeOpacity={0.9}
-                  onPress={() => setSelectedSubCategory(item.title)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: { subCategory: item.title },
+                    } as any)
+                  }
                 >
-                  <View style={styles.coupleHeartContainer}>
-                    {item.imageUri ? (
-                      <Image
-                        source={{ uri: item.imageUri }}
-                        style={{ width: 34, height: 34, borderRadius: 999 }}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Text style={styles.coupleEmoji}>{item.emoji ?? "💞"}</Text>
-                    )}
-                  </View>
-                  <Text style={styles.coupleCardTitle}>{item.title}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {selectedSubCategory ? (
-              <>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trendingRow}
-                >
-                  {TRENDING_PRODUCTS.map((item) => (
-                    <TouchableOpacity
-                      key={`couple-${selectedSubCategory}-${item.id}`}
-                      style={styles.trendingProductCard}
-                      activeOpacity={0.9}
-                    >
-                      <View style={styles.trendingProductImageWrap}>
+                  <View style={styles.coupleRomanceCardInner}>
+                    <View style={styles.coupleRomanceImageBlock}>
+                      {item.imageUri ? (
                         <Image
-                          source={item.image}
-                          style={styles.trendingProductImage}
-                          resizeMode="cover"
+                          source={{ uri: item.imageUri }}
+                          style={styles.coupleRomanceImage}
+                          resizeMode="contain"
                         />
-                        {item.badge ? (
-                          <View style={styles.trendingProductBadge}>
-                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={styles.trendingProductMeta}>
-                        <Text style={styles.trendingProductName} numberOfLines={2}>
-                          {item.name}
-                        </Text>
-                        <View style={styles.trendingProductPriceRow}>
-                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                          {item.mrp ? (
-                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                          ) : null}
+                      ) : (
+                        <View style={styles.coupleRomanceImagePlaceholder}>
+                          <Text style={styles.coupleRomanceEmoji}>{item.emoji ?? "💞"}</Text>
                         </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : null}
-
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Trending Products</Text>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.trendingRow}
-            >
-              {TRENDING_PRODUCTS.map((item) => (
-                <TouchableOpacity
-                  key={`couple-${item.id}`}
-                  style={styles.trendingProductCard}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.trendingProductImageWrap}>
-                    <Image
-                      source={item.image}
-                      style={styles.trendingProductImage}
-                      resizeMode="cover"
-                    />
-                    {item.badge ? (
-                      <View style={styles.trendingProductBadge}>
-                        <Text style={styles.trendingProductBadgeText}>
-                          {item.badge}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.trendingProductMeta}>
-                    <Text style={styles.trendingProductName} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    <View style={styles.trendingProductPriceRow}>
-                      <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                      {item.mrp ? (
-                        <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                      ) : null}
+                      )}
                     </View>
+                    <LinearGradient
+                      colors={["#831843", "#be185d", "#ec4899"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.coupleRomanceFooter}
+                    >
+                      <Text style={styles.coupleRomanceTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                      <View style={styles.coupleRomanceFooterRow}>
+                        <Text style={styles.coupleRomanceSub}>For two</Text>
+                        <Ionicons
+                          name="heart"
+                          size={14}
+                          color="rgba(255,255,255,0.92)"
+                        />
+                      </View>
+                    </LinearGradient>
                   </View>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
-
-            <TouchableOpacity style={styles.offerBannerAlt} activeOpacity={0.9}>
-              <View style={styles.offerAltGlowOne} />
-              <View style={styles.offerAltGlowTwo} />
-              <Text style={styles.offerAltEyebrow}>LIMITED TIME</Text>
-              <Text style={styles.offerAltTitle}>Couple Specials</Text>
-              <Text style={styles.offerAltSub}>Extra savings on best picks</Text>
-              <View style={styles.offerAltCta}>
-                <Text style={styles.offerAltCtaText}>Grab Deal</Text>
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recommended For You</Text>
             </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.trendingRow}
-            >
-              {[...TRENDING_PRODUCTS].reverse().map((item) => (
-                <TouchableOpacity
-                  key={`couple-rec-${item.id}`}
-                  style={styles.trendingProductCard}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.trendingProductImageWrap}>
-                    <Image
-                      source={item.image}
-                      style={styles.trendingProductImage}
-                      resizeMode="cover"
-                    />
-                    {item.badge ? (
-                      <View style={styles.trendingProductBadge}>
-                        <Text style={styles.trendingProductBadgeText}>
-                          {item.badge}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.trendingProductMeta}>
-                    <Text style={styles.trendingProductName} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    <View style={styles.trendingProductPriceRow}>
-                      <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                      {item.mrp ? (
-                        <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Occasion Ideas</Text>
@@ -2376,7 +2046,12 @@ export default function GiftsScreen() {
                   key={item.id}
                   style={[styles.occasionCard, { backgroundColor: item.bg }]}
                   activeOpacity={0.9}
-                  onPress={() => setSelectedSubCategory(item.title)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: { subCategory: item.title },
+                    } as any)
+                  }
                 >
                   <View style={styles.occasionIconWrap}>
                     <Text style={styles.occasionIcon}>{item.icon}</Text>
@@ -2406,7 +2081,12 @@ export default function GiftsScreen() {
                   key={item.id}
                   style={styles.quickPickChip}
                   activeOpacity={0.9}
-                  onPress={() => setSelectedSubCategory(item.title)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: { subCategory: item.title },
+                    } as any)
+                  }
                 >
                   <Text style={styles.quickPickIcon}>{item.icon}</Text>
                   <Text style={styles.quickPickText}>{item.title}</Text>
@@ -2479,25 +2159,53 @@ export default function GiftsScreen() {
                       style={[
                         styles.utilityCard,
                         styles.utilityCardShelf,
+                        styles.homeDecorGiftCard,
+                        styles.homeDecorGiftCardShelf,
                         { backgroundColor: item.bg ?? "#FFFFFF" },
                       ]}
                       activeOpacity={0.9}
-                      onPress={() => setSelectedSubCategory(item.title)}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/subcatProducts",
+                          params: { subCategory: item.title },
+                        } as any)
+                      }
                     >
-                      <View style={styles.utilityIconWrap}>
-                        {item.imageUri ? (
-                          <Image
-                            source={{ uri: item.imageUri }}
-                            style={{ width: 46, height: 46, borderRadius: 12 }}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <Text style={styles.utilityIcon}>{item.icon ?? "🛋️"}</Text>
-                        )}
+                      <View style={styles.homeDecorGiftCardInner}>
+                        <View style={styles.homeDecorGiftImageBlock}>
+                          {item.imageUri ? (
+                            <Image
+                              source={{ uri: item.imageUri }}
+                              style={styles.homeDecorGiftImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={styles.homeDecorGiftImagePlaceholder}>
+                              <Text style={styles.homeDecorGiftEmoji}>
+                                {item.icon ?? "🛋️"}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <LinearGradient
+                          colors={["#713f12", "#b45309", "#f59e0b"]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.homeDecorGiftFooter}
+                        >
+                          <Text style={styles.homeDecorGiftTitle} numberOfLines={2}>
+                            {item.title}
+                          </Text>
+                          <View style={styles.homeDecorGiftFooterRow}>
+                            <Text style={styles.homeDecorGiftSub}>Décor picks</Text>
+                            <Ionicons
+                              name="home-outline"
+                              size={15}
+                              color="rgba(255,255,255,0.92)"
+                            />
+                          </View>
+                        </LinearGradient>
                       </View>
-                      <Text style={styles.utilityCardTitle} numberOfLines={2}>
-                        {item.title}
-                      </Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -2545,25 +2253,53 @@ export default function GiftsScreen() {
                       style={[
                         styles.utilityCard,
                         styles.utilityCardShelf,
+                        styles.kidsBabyGiftCard,
+                        styles.kidsBabyGiftCardShelf,
                         { backgroundColor: item.bg ?? "#FFFFFF" },
                       ]}
                       activeOpacity={0.9}
-                      onPress={() => setSelectedSubCategory(item.title)}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/subcatProducts",
+                          params: { subCategory: item.title },
+                        } as any)
+                      }
                     >
-                      <View style={styles.utilityIconWrap}>
-                        {item.imageUri ? (
-                          <Image
-                            source={{ uri: item.imageUri }}
-                            style={{ width: 46, height: 46, borderRadius: 12 }}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <Text style={styles.utilityIcon}>{item.icon ?? "👶"}</Text>
-                        )}
+                      <View style={styles.kidsBabyGiftCardInner}>
+                        <View style={styles.kidsBabyGiftImageBlock}>
+                          {item.imageUri ? (
+                            <Image
+                              source={{ uri: item.imageUri }}
+                              style={styles.kidsBabyGiftImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={styles.kidsBabyGiftImagePlaceholder}>
+                              <Text style={styles.kidsBabyGiftEmoji}>
+                                {item.icon ?? "👶"}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <LinearGradient
+                          colors={["#5b21b6", "#7c3aed", "#ec4899"]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.kidsBabyGiftFooter}
+                        >
+                          <Text style={styles.kidsBabyGiftTitle} numberOfLines={2}>
+                            {item.title}
+                          </Text>
+                          <View style={styles.kidsBabyGiftFooterRow}>
+                            <Text style={styles.kidsBabyGiftSub}>Little gifts</Text>
+                            <Ionicons
+                              name="balloon-outline"
+                              size={15}
+                              color="rgba(255,255,255,0.92)"
+                            />
+                          </View>
+                        </LinearGradient>
                       </View>
-                      <Text style={styles.utilityCardTitle} numberOfLines={2}>
-                        {item.title}
-                      </Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -2611,25 +2347,53 @@ export default function GiftsScreen() {
                       style={[
                         styles.utilityCard,
                         styles.utilityCardShelf,
+                        styles.spiritualFestivalGiftCard,
+                        styles.spiritualFestivalGiftCardShelf,
                         { backgroundColor: item.bg ?? "#FFFFFF" },
                       ]}
                       activeOpacity={0.9}
-                      onPress={() => setSelectedSubCategory(item.title)}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/subcatProducts",
+                          params: { subCategory: item.title },
+                        } as any)
+                      }
                     >
-                      <View style={styles.utilityIconWrap}>
-                        {item.imageUri ? (
-                          <Image
-                            source={{ uri: item.imageUri }}
-                            style={{ width: 46, height: 46, borderRadius: 12 }}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <Text style={styles.utilityIcon}>{item.icon ?? "🪔"}</Text>
-                        )}
+                      <View style={styles.spiritualFestivalGiftCardInner}>
+                        <View style={styles.spiritualFestivalGiftImageBlock}>
+                          {item.imageUri ? (
+                            <Image
+                              source={{ uri: item.imageUri }}
+                              style={styles.spiritualFestivalGiftImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={styles.spiritualFestivalGiftImagePlaceholder}>
+                              <Text style={styles.spiritualFestivalGiftEmoji}>
+                                {item.icon ?? "🪔"}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <LinearGradient
+                          colors={["#7c2d12", "#c2410c", "#f59e0b"]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.spiritualFestivalGiftFooter}
+                        >
+                          <Text style={styles.spiritualFestivalGiftTitle} numberOfLines={2}>
+                            {item.title}
+                          </Text>
+                          <View style={styles.spiritualFestivalGiftFooterRow}>
+                            <Text style={styles.spiritualFestivalGiftSub}>Blessed picks</Text>
+                            <Ionicons
+                              name="flame-outline"
+                              size={15}
+                              color="rgba(255,255,255,0.92)"
+                            />
+                          </View>
+                        </LinearGradient>
                       </View>
-                      <Text style={styles.utilityCardTitle} numberOfLines={2}>
-                        {item.title}
-                      </Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -2677,25 +2441,53 @@ export default function GiftsScreen() {
                       style={[
                         styles.utilityCard,
                         styles.utilityCardShelf,
+                        styles.wearablePersonalGiftCard,
+                        styles.wearablePersonalGiftCardShelf,
                         { backgroundColor: item.bg ?? "#FFFFFF" },
                       ]}
                       activeOpacity={0.9}
-                      onPress={() => setSelectedSubCategory(item.title)}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/subcatProducts",
+                          params: { subCategory: item.title },
+                        } as any)
+                      }
                     >
-                      <View style={styles.utilityIconWrap}>
-                        {item.imageUri ? (
-                          <Image
-                            source={{ uri: item.imageUri }}
-                            style={{ width: 46, height: 46, borderRadius: 12 }}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <Text style={styles.utilityIcon}>{item.icon ?? "🎀"}</Text>
-                        )}
+                      <View style={styles.wearablePersonalGiftCardInner}>
+                        <View style={styles.wearablePersonalGiftImageBlock}>
+                          {item.imageUri ? (
+                            <Image
+                              source={{ uri: item.imageUri }}
+                              style={styles.wearablePersonalGiftImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={styles.wearablePersonalGiftImagePlaceholder}>
+                              <Text style={styles.wearablePersonalGiftEmoji}>
+                                {item.icon ?? "🎀"}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <LinearGradient
+                          colors={["#312e81", "#4f46e5", "#db2777"]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.wearablePersonalGiftFooter}
+                        >
+                          <Text style={styles.wearablePersonalGiftTitle} numberOfLines={2}>
+                            {item.title}
+                          </Text>
+                          <View style={styles.wearablePersonalGiftFooterRow}>
+                            <Text style={styles.wearablePersonalGiftSub}>Style picks</Text>
+                            <Ionicons
+                              name="shirt-outline"
+                              size={15}
+                              color="rgba(255,255,255,0.92)"
+                            />
+                          </View>
+                        </LinearGradient>
                       </View>
-                      <Text style={styles.utilityCardTitle} numberOfLines={2}>
-                        {item.title}
-                      </Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -2712,7 +2504,12 @@ export default function GiftsScreen() {
                       { backgroundColor: item.bg },
                     ]}
                     activeOpacity={0.9}
-                    onPress={() => setSelectedSubCategory(item.title)}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/subcatProducts",
+                        params: { subCategory: item.title },
+                      } as any)
+                    }
                   >
                     <View style={styles.utilityIconWrap}>
                       <Text style={styles.utilityIcon}>{item.icon}</Text>
@@ -2725,93 +2522,6 @@ export default function GiftsScreen() {
               )}
             </View>
 
-            {selectedSubCategory ? (
-              <>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{selectedSubCategory}</Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trendingRow}
-                >
-                  {TRENDING_PRODUCTS.map((item) => (
-                    <TouchableOpacity
-                      key={`homely-${selectedSubCategory}-${item.id}`}
-                      style={styles.trendingProductCard}
-                      activeOpacity={0.9}
-                    >
-                      <View style={styles.trendingProductImageWrap}>
-                        <Image
-                          source={item.image}
-                          style={styles.trendingProductImage}
-                          resizeMode="cover"
-                        />
-                        {item.badge ? (
-                          <View style={styles.trendingProductBadge}>
-                            <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={styles.trendingProductMeta}>
-                        <Text style={styles.trendingProductName} numberOfLines={2}>
-                          {item.name}
-                        </Text>
-                        <View style={styles.trendingProductPriceRow}>
-                          <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                          {item.mrp ? (
-                            <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : null}
-
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Trending in this category</Text>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.trendingRow}
-            >
-              {TRENDING_PRODUCTS.map((item) => (
-                <TouchableOpacity
-                  key={`homely-trend-${selectedCategoryId}-${item.id}`}
-                  style={styles.trendingProductCard}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.trendingProductImageWrap}>
-                    <Image
-                      source={item.image}
-                      style={styles.trendingProductImage}
-                      resizeMode="cover"
-                    />
-                    {item.badge ? (
-                      <View style={styles.trendingProductBadge}>
-                        <Text style={styles.trendingProductBadgeText}>{item.badge}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.trendingProductMeta}>
-                    <Text style={styles.trendingProductName} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    <View style={styles.trendingProductPriceRow}>
-                      <Text style={styles.trendingProductPrice}>{item.price}</Text>
-                      {item.mrp ? (
-                        <Text style={styles.trendingProductMrp}>{item.mrp}</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
           </View>
         ) : null}
 
@@ -2893,13 +2603,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
   },
-  giftsBackHit: {
-    width: 44,
-    height: 46,
-    justifyContent: "center",
-    alignItems: "flex-start",
-    paddingRight: 4,
-  },
   giftsSearchPill: {
     flex: 1,
     flexDirection: "row",
@@ -2960,22 +2663,22 @@ const styles = StyleSheet.create({
   },
   giftDiscoverySection: {
     marginTop: 8,
-    paddingTop: 18,
-    paddingBottom: 8,
+    paddingTop: 22,
+    paddingBottom: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(194, 65, 12, 0.22)",
   },
   giftDiscoveryHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 16,
     gap: 8,
   },
   giftDiscoveryHeaderTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "900",
     color: "#1d324e",
-    letterSpacing: 0.2,
+    letterSpacing: 0.25,
   },
   middlePromoOuter: {
     position: "relative",
@@ -3060,13 +2763,13 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   homeProductRowBlock: {
-    marginBottom: 20,
+    marginBottom: 22,
   },
   homeRowHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 12,
     paddingRight: 2,
   },
   homeRowTitleWrap: {
@@ -3074,10 +2777,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   homeRowTitle: {
-    fontSize: 17,
-    fontWeight: "800",
+    fontSize: 18,
+    fontWeight: "900",
     color: "#1d324e",
-    letterSpacing: 0.15,
+    letterSpacing: 0.2,
   },
   homeRowAccentDot: {
     width: 6,
@@ -3089,7 +2792,7 @@ const styles = StyleSheet.create({
   homeRowSeeAllBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
+    gap: 4,
   },
   homeRowSeeAll: {
     fontSize: 13,
@@ -3928,6 +3631,7 @@ const styles = StyleSheet.create({
   },
   trendingProductCard: {
     width: 178,
+    height: 242,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     overflow: "hidden",
@@ -3942,7 +3646,7 @@ const styles = StyleSheet.create({
   },
   trendingProductImageWrap: {
     width: "100%",
-    height: 128,
+    flex: 18,
     backgroundColor: "#F1F5F9",
     position: "relative",
   },
@@ -3987,18 +3691,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   trendingProductMeta: {
+    flex: 7,
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    justifyContent: "space-between",
   },
   trendingProductName: {
     fontSize: 13,
     fontWeight: "800",
     color: "#111827",
     lineHeight: 17,
-    minHeight: 34,
+    minHeight: 32,
   },
   trendingProductPriceRow: {
-    marginTop: 8,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -4015,7 +3720,6 @@ const styles = StyleSheet.create({
     textDecorationLine: "line-through",
   },
   productRatingRow: {
-    marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -4391,6 +4095,331 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 6,
   },
+  /** Everyday Utility shelf: image ~80% height, gradient title band ~20% */
+  utilityEverydayCard: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minHeight: 176,
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    overflow: "hidden",
+  },
+  utilityEverydayCardInner: {
+    height: 174,
+    flexDirection: "column",
+    width: "100%",
+  },
+  utilityEverydayImageBlock: {
+    flex: 4,
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.55)",
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  utilityEverydayImage: {
+    width: "100%",
+    height: "100%",
+  },
+  utilityEverydayImagePlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(236, 253, 245, 0.95)",
+  },
+  utilityEverydayEmoji: {
+    fontSize: 40,
+  },
+  utilityEverydayFooter: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  utilityEverydayTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    lineHeight: 15,
+  },
+  utilityEverydaySub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.88)",
+  },
+  utilityEverydayFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 3,
+  },
+  /** Home Decor Gifts (gc6): image ~80%, warm amber gradient ~20% */
+  homeDecorGiftCard: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minHeight: 176,
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    overflow: "hidden",
+  },
+  homeDecorGiftCardShelf: {
+    shadowColor: "#b45309",
+    shadowOpacity: 0.12,
+    borderColor: "rgba(255, 251, 235, 0.98)",
+  },
+  homeDecorGiftCardInner: {
+    height: 174,
+    flexDirection: "column",
+    width: "100%",
+  },
+  homeDecorGiftImageBlock: {
+    flex: 4,
+    width: "100%",
+    backgroundColor: "rgba(255, 251, 235, 0.85)",
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  homeDecorGiftImage: {
+    width: "100%",
+    height: "100%",
+  },
+  homeDecorGiftImagePlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(254, 243, 199, 0.55)",
+  },
+  homeDecorGiftEmoji: {
+    fontSize: 40,
+  },
+  homeDecorGiftFooter: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  homeDecorGiftTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    lineHeight: 15,
+  },
+  homeDecorGiftSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.9)",
+  },
+  homeDecorGiftFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 3,
+  },
+  /** Kids & Baby Gifts (gc7): image ~80%, playful violet–pink gradient ~20% */
+  kidsBabyGiftCard: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minHeight: 176,
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    overflow: "hidden",
+  },
+  kidsBabyGiftCardShelf: {
+    shadowColor: "#7c3aed",
+    shadowOpacity: 0.12,
+    borderColor: "rgba(255, 255, 255, 0.96)",
+  },
+  kidsBabyGiftCardInner: {
+    height: 174,
+    flexDirection: "column",
+    width: "100%",
+  },
+  kidsBabyGiftImageBlock: {
+    flex: 4,
+    width: "100%",
+    backgroundColor: "rgba(237, 233, 254, 0.75)",
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  kidsBabyGiftImage: {
+    width: "100%",
+    height: "100%",
+  },
+  kidsBabyGiftImagePlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(252, 231, 243, 0.65)",
+  },
+  kidsBabyGiftEmoji: {
+    fontSize: 40,
+  },
+  kidsBabyGiftFooter: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  kidsBabyGiftTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    lineHeight: 15,
+  },
+  kidsBabyGiftSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.9)",
+  },
+  kidsBabyGiftFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 3,
+  },
+  /** Spiritual & Festival Gifts (gc8): image ~80%, saffron–amber gradient ~20% */
+  spiritualFestivalGiftCard: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minHeight: 176,
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    overflow: "hidden",
+  },
+  spiritualFestivalGiftCardShelf: {
+    shadowColor: "#c2410c",
+    shadowOpacity: 0.12,
+    borderColor: "rgba(255, 251, 235, 0.96)",
+  },
+  spiritualFestivalGiftCardInner: {
+    height: 174,
+    flexDirection: "column",
+    width: "100%",
+  },
+  spiritualFestivalGiftImageBlock: {
+    flex: 4,
+    width: "100%",
+    backgroundColor: "rgba(255, 247, 237, 0.85)",
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  spiritualFestivalGiftImage: {
+    width: "100%",
+    height: "100%",
+  },
+  spiritualFestivalGiftImagePlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(254, 243, 199, 0.55)",
+  },
+  spiritualFestivalGiftEmoji: {
+    fontSize: 40,
+  },
+  spiritualFestivalGiftFooter: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  spiritualFestivalGiftTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    lineHeight: 15,
+  },
+  spiritualFestivalGiftSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.9)",
+  },
+  spiritualFestivalGiftFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 3,
+  },
+  /** Wearable & Personal Gifts (gc9): image ~80%, indigo–rose gradient ~20% */
+  wearablePersonalGiftCard: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minHeight: 176,
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    overflow: "hidden",
+  },
+  wearablePersonalGiftCardShelf: {
+    shadowColor: "#4f46e5",
+    shadowOpacity: 0.12,
+    borderColor: "rgba(255, 255, 255, 0.96)",
+  },
+  wearablePersonalGiftCardInner: {
+    height: 174,
+    flexDirection: "column",
+    width: "100%",
+  },
+  wearablePersonalGiftImageBlock: {
+    flex: 4,
+    width: "100%",
+    backgroundColor: "rgba(238, 242, 255, 0.9)",
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  wearablePersonalGiftImage: {
+    width: "100%",
+    height: "100%",
+  },
+  wearablePersonalGiftImagePlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(224, 231, 255, 0.65)",
+  },
+  wearablePersonalGiftEmoji: {
+    fontSize: 40,
+  },
+  wearablePersonalGiftFooter: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  wearablePersonalGiftTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    lineHeight: 15,
+  },
+  wearablePersonalGiftSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.9)",
+  },
+  wearablePersonalGiftFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 3,
+  },
   coupleTitleWrap: {
     marginBottom: 20,
     paddingHorizontal: 4,
@@ -4524,6 +4553,9 @@ const styles = StyleSheet.create({
   },
   coupleContainer: {
     paddingHorizontal: 4,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   coupleCard: {
     minHeight: 108,
@@ -4564,6 +4596,69 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#374151",
+  },
+  /** Couples shelf: large image ~80%, rose gradient band ~20% */
+  coupleRomanceCard: {
+    width: "48.5%",
+    flexDirection: "column",
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    minHeight: 176,
+    overflow: "hidden",
+  },
+  coupleRomanceCardInner: {
+    height: 174,
+    flexDirection: "column",
+    width: "100%",
+  },
+  coupleRomanceImageBlock: {
+    flex: 4,
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.5)",
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  coupleRomanceImage: {
+    width: "100%",
+    height: "100%",
+  },
+  coupleRomanceImagePlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(252, 231, 243, 0.98)",
+  },
+  coupleRomanceEmoji: {
+    fontSize: 40,
+  },
+  coupleRomanceFooter: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  coupleRomanceTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    lineHeight: 15,
+  },
+  coupleRomanceSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.9)",
+  },
+  coupleRomanceFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 3,
   },
   eventBanner: {
     height: 140,
