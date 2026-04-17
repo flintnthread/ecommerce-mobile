@@ -16,7 +16,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
-} from "react-native";
+} from "@/lib/i18n-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
@@ -25,6 +25,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { VideoView, useVideoPlayer } from "expo-video";
 import api from "../services/api";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import { useLanguage } from "@/lib/language";
 import {
   GestureHandlerRootView,
   TouchableOpacity as GestureTouchableOpacity,
@@ -1123,6 +1124,7 @@ const finalUniquePicks: CollectionItem[] = [
 ];
 
 export default function Accessories() {
+  const { tr } = useLanguage();
   const router = useRouter();
   const params = useLocalSearchParams<{ focus?: string | string[] }>();
   const { width: windowWidth } = useWindowDimensions();
@@ -2015,7 +2017,7 @@ export default function Accessories() {
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={18} color="#9aa0a6" />
             <TextInput
-              placeholder="Search.."
+              placeholder={tr("Search..")}
               placeholderTextColor="#b0b5ba"
               style={styles.searchInput}
             />
@@ -2226,7 +2228,7 @@ export default function Accessories() {
           >
             <View style={styles.heroBadge}>
               <Ionicons name="sparkles-outline" size={12} color="#1d324e" />
-              <Text style={styles.heroBadgeText}>Festive Picks</Text>
+              <Text style={styles.heroBadgeText}>{tr("Festive Picks")}</Text>
             </View>
            
 
@@ -2234,12 +2236,12 @@ export default function Accessories() {
 
           </Animated.View>
           <View style={styles.heroOverlay}>
-            <Text style={styles.heroTopNote}>ACCESSORIES GIFTING GUIDE</Text>
+            <Text style={styles.heroTopNote}>{tr("ACCESSORIES GIFTING GUIDE")}</Text>
             {/* <Text style={styles.heroTitle}>UNWRAP JOY</Text>
             <Text style={styles.heroTitle}>WITH EVERY GIFT</Text> */}
             <Animated.View style={{ transform: [{ scale: ctaPulse }] }}>
               <TouchableOpacity style={styles.heroButton}>
-                <Text style={styles.heroButtonText}>Shop Festive</Text>
+                <Text style={styles.heroButtonText}>{tr("Shop Festive")}</Text>
               </TouchableOpacity>
             </Animated.View>
           </View>
@@ -2248,11 +2250,11 @@ export default function Accessories() {
         <View style={styles.glamSection}>
           <View style={styles.glamHeadingRow}>
             <Ionicons name="sparkles" size={14} color="#ef7b1a" />
-            <Text style={styles.glamHeadingLabel}>FESTIVE EDIT</Text>
+            <Text style={styles.glamHeadingLabel}>{tr("FESTIVE EDIT")}</Text>
             <Ionicons name="sparkles" size={14} color="#ef7b1a" />
           </View>
           <Text style={styles.glamSubtitle}>
-            Festivities, but make it <Text style={styles.glamSubtitleHighlight}>stylish</Text>
+            {tr("Festivities, but make it")} <Text style={styles.glamSubtitleHighlight}>{tr("stylish")}</Text>
           </Text>
         </View>
 
@@ -2261,9 +2263,9 @@ export default function Accessories() {
             <TouchableOpacity style={[styles.tileCard, styles.leftTile]} activeOpacity={0.9}>
               <View style={styles.tileTextContent}>
                 <View style={styles.tileBadge}>
-                  <Text style={styles.tileBadgeText}>HOME GLOW</Text>
+                  <Text style={styles.tileBadgeText}>{tr("HOME GLOW")}</Text>
                 </View>
-                <Text style={styles.tileHeading}>Light up Home</Text>
+                <Text style={styles.tileHeading}>{tr("Light up Home")}</Text>
                 <Text style={styles.tileSubHeading}>
                   Warm lamps and festive decor picks
                 </Text>
@@ -2279,9 +2281,9 @@ export default function Accessories() {
             <TouchableOpacity style={[styles.tileCard, styles.rightTile]} activeOpacity={0.9}>
               <View style={styles.tileTextContent}>
                 <View style={styles.tileBadge}>
-                  <Text style={styles.tileBadgeText}>STYLE DROP</Text>
+                  <Text style={styles.tileBadgeText}>{tr("STYLE DROP")}</Text>
                 </View>
-                <Text style={styles.tileHeading}>Festive Glam</Text>
+                <Text style={styles.tileHeading}>{tr("Festive Glam")}</Text>
                 <Text style={styles.tileSubHeading}>
                   Statement accessories for celebrations
                 </Text>
@@ -2313,10 +2315,10 @@ export default function Accessories() {
                 
                 <View style={styles.collectionTitleRow}>
                   <View style={styles.collectionTitleBar} />
-                  <Text style={styles.collectionTitle}>Top Collection</Text>
+                  <Text style={styles.collectionTitle}>{tr("Top Collection")}</Text>
                 </View>
               </View>
-              <Text style={styles.collectionSubtitle}>Accessories you will love</Text>
+              <Text style={styles.collectionSubtitle}>{tr("Accessories you will love")}</Text>
             </View>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -2331,7 +2333,7 @@ export default function Accessories() {
                 })
               }
             >
-              <Text style={styles.collectionViewAllText}>View all</Text>
+              <Text style={styles.collectionViewAllText}>{tr("View all")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -2411,7 +2413,7 @@ export default function Accessories() {
           <View style={styles.spotlightHeaderCard}>
             <View style={styles.spotlightHeaderTitleRow}>
               <Ionicons name="star" size={16} color="#ef7b1a" />
-              <Text style={styles.spotlightHeaderTitle}>Accessories Spotlight</Text>
+              <Text style={styles.spotlightHeaderTitle}>{tr("Accessories Spotlight")}</Text>
               <Ionicons name="star" size={16} color="#ef7b1a" />
               {/* <Text style={styles.spotlightHeaderSubtitle}>Exclusive festive ad</Text> */}
             </View>
@@ -2455,7 +2457,7 @@ export default function Accessories() {
                       Style the Season with Accessories
                     </Text>
                     <View style={styles.videoAdButton} accessibilityRole="button">
-                      <Text style={styles.videoAdButtonText}>Shop the look</Text>
+                      <Text style={styles.videoAdButtonText}>{tr("Shop the look")}</Text>
                     </View>
                   </View>
                 </>
@@ -2477,16 +2479,16 @@ export default function Accessories() {
             <View style={styles.womenTitleWrap}>
               <View style={styles.womenTitleRow}>
                 <Ionicons name="sparkles" size={14} color="#ef7b1a" />
-                <Text style={styles.womenTitleWord}>Bags</Text>
+                <Text style={styles.womenTitleWord}>{tr("Bags")}</Text>
               </View>
               <View style={styles.womenTitleUnderline} />
-              <Text style={styles.womenSubtitle}>Handbags, totes & everyday style</Text>
+              <Text style={styles.womenSubtitle}>{tr("Handbags, totes & everyday style")}</Text>
             </View>
             <TouchableOpacity
               style={styles.womenViewAll}
               onPress={() => router.push("/productdetail")}
             >
-              <Text style={styles.womenViewAllText}>Explore</Text>
+              <Text style={styles.womenViewAllText}>{tr("Explore")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -2612,14 +2614,14 @@ export default function Accessories() {
         <View style={styles.styleLabSection}>
           <View style={styles.styleLabHeader}>
             <View>
-              <Text style={styles.styleLabTitle}>Accessory Style Lab</Text>
-              <Text style={styles.styleLabSubtitle}>Create your signature look</Text>
+              <Text style={styles.styleLabTitle}>{tr("Accessory Style Lab")}</Text>
+              <Text style={styles.styleLabSubtitle}>{tr("Create your signature look")}</Text>
             </View>
             <TouchableOpacity
               style={styles.styleLabBtn}
               onPress={() => router.push("/productdetail")}
             >
-              <Text style={styles.styleLabBtnText}>Try now</Text>
+              <Text style={styles.styleLabBtnText}>{tr("Try now")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -2664,14 +2666,14 @@ export default function Accessories() {
               <View style={styles.styleLabAdHeadingTextCol}>
                 <View style={styles.styleLabAdHeadingTitleRow}>
                   <Text style={styles.styleLabAdHeadingTitle}>
-                    <Text style={styles.styleLabAdHeadingTitleLead}>Style </Text>
-                    <Text style={styles.styleLabAdHeadingTitleAccent}>Lab</Text>
+                    <Text style={styles.styleLabAdHeadingTitleLead}>{tr("Style")}</Text>
+                    <Text style={styles.styleLabAdHeadingTitleAccent}>{tr("Lab")}</Text>
                   </Text>
                   <View style={styles.styleLabAdHeadingAdMark}>
-                    <Text style={styles.styleLabAdHeadingAdMarkText}>Ad</Text>
+                    <Text style={styles.styleLabAdHeadingAdMarkText}>{tr("Ad")}</Text>
                   </View>
                 </View>
-                <Text style={styles.styleLabAdHeadingSub}>Watch and shop accessories</Text>
+                <Text style={styles.styleLabAdHeadingSub}>{tr("Watch and shop accessories")}</Text>
               </View>
             </View>
           </View>
@@ -2683,12 +2685,12 @@ export default function Accessories() {
               contentFit="cover"
             />
             <View style={styles.videoAdOverlay}>
-              <Text style={styles.videoAdOverlayTitle}>Discover your next signature style</Text>
+              <Text style={styles.videoAdOverlayTitle}>{tr("Discover your next signature style")}</Text>
               <TouchableOpacity
                 style={styles.videoAdButton}
                 onPress={() => router.push("/productdetail")}
               >
-                <Text style={styles.videoAdButtonText}>Shop now</Text>
+                <Text style={styles.videoAdButtonText}>{tr("Shop now")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2707,16 +2709,16 @@ export default function Accessories() {
             <View style={styles.menTitleWrap}>
               <View style={styles.menTitleRow}>
                 <Ionicons name="sparkles" size={14} color="#ef7b1a" />
-                <Text style={styles.menTitle}>Belts & Caps</Text>
+                <Text style={styles.menTitle}>{tr("Belts & Caps")}</Text>
               </View>
               <View style={styles.menTitleUnderline} />
-              <Text style={styles.menSubtitle}>Leather belts, buckles & headwear</Text>
+              <Text style={styles.menSubtitle}>{tr("Leather belts, buckles & headwear")}</Text>
             </View>
             <TouchableOpacity
               style={styles.menViewAll}
               onPress={() => router.push("/productdetail")}
             >
-              <Text style={styles.menViewAllText}>Explore</Text>
+              <Text style={styles.menViewAllText}>{tr("Explore")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -2779,9 +2781,9 @@ export default function Accessories() {
         >
           <View style={styles.splitShowcaseTint} />
           <View style={styles.splitShowcaseHeaderRow}>
-            <Text style={styles.splitShowcaseTitle}>Accessories Spotlight</Text>
+            <Text style={styles.splitShowcaseTitle}>{tr("Accessories Spotlight")}</Text>
             <View style={styles.splitShowcaseBadge}>
-              <Text style={styles.splitShowcaseBadgeText}>HOT PICKS</Text>
+              <Text style={styles.splitShowcaseBadgeText}>{tr("HOT PICKS")}</Text>
             </View>
           </View>
           <View style={styles.splitShowcaseRow}>
@@ -2854,7 +2856,7 @@ export default function Accessories() {
                         </View>
 
                         <View style={styles.splitProductPriceBlock}>
-                          <Text style={styles.splitProductPriceLabel}>Offer price</Text>
+                          <Text style={styles.splitProductPriceLabel}>{tr("Offer price")}</Text>
                           <View style={styles.splitProductPriceRow}>
                             <Text style={styles.splitProductSalePrice}>
                               ₹{product.price.toLocaleString("en-IN")}
@@ -2872,7 +2874,7 @@ export default function Accessories() {
                         onPress={() => router.push("/productdetail")}
                       >
                         <Ionicons name="bag-add-outline" size={17} color="#f7fbf9" />
-                        <Text style={styles.splitAddButtonText}>Add to Cart</Text>
+                        <Text style={styles.splitAddButtonText}>{tr("Add to Cart")}</Text>
                       </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
@@ -2903,15 +2905,15 @@ export default function Accessories() {
                 <Ionicons name="hardware-chip-outline" size={22} color="#C2410C" />
               </View>
               <View style={styles.gadgetsAccessoriesHeaderTitles}>
-                <Text style={styles.gadgetsAccessoriesKicker}>GADGETS & ADD-ONS</Text>
-                <Text style={styles.gadgetsAccessoriesHeading}>Gadgets Accessories</Text>
+                <Text style={styles.gadgetsAccessoriesKicker}>{tr("GADGETS & ADD-ONS")}</Text>
+                <Text style={styles.gadgetsAccessoriesHeading}>{tr("Gadgets Accessories")}</Text>
                 <Text style={styles.gadgetsAccessoriesTagline}>
                   Audio, wearables, charging & protection for your devices
                 </Text>
               </View>
             </View>
             <View style={styles.gadgetsAccessoriesHeaderBadge}>
-              <Text style={styles.gadgetsAccessoriesHeaderBadgeText}>HOT PICKS</Text>
+              <Text style={styles.gadgetsAccessoriesHeaderBadgeText}>{tr("HOT PICKS")}</Text>
             </View>
           </View>
 
@@ -2973,7 +2975,7 @@ export default function Accessories() {
                       <Ionicons name="layers-outline" size={18} color="#C2410C" />
                     </LinearGradient>
                     <View style={styles.gadgetsSubcategoriesTitleTextCol}>
-                      <Text style={styles.gadgetsSubcategoriesEyebrow}>GADGET SUBCATEGORIES</Text>
+                      <Text style={styles.gadgetsSubcategoriesEyebrow}>{tr("GADGET SUBCATEGORIES")}</Text>
                       <Text style={styles.gadgetsSubcategoriesTitle} numberOfLines={2}>
                         {selectedGadgetsQuickLinkLabel}
                       </Text>
@@ -3034,7 +3036,7 @@ export default function Accessories() {
             </LinearGradient>
           </View>
 
-          <Text style={styles.gadgetsHighlightStripTitle}>Gadget highlights</Text>
+          <Text style={styles.gadgetsHighlightStripTitle}>{tr("Gadget highlights")}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -3099,11 +3101,11 @@ export default function Accessories() {
                     <Text style={styles.spotlightFooterAdSubtitle}>{banner.subtitle}</Text>
                     <View style={styles.spotlightFooterAdCtaRow}>
                       <Ionicons name="arrow-forward-circle" size={18} color="#ef7b1a" />
-                      <Text style={styles.spotlightFooterAdCtaText}>Shop now</Text>
+                      <Text style={styles.spotlightFooterAdCtaText}>{tr("Shop now")}</Text>
                     </View>
                   </View>
                   <View style={styles.spotlightFooterAdBadge} pointerEvents="none">
-                    <Text style={styles.spotlightFooterAdBadgeText}>Ad</Text>
+                    <Text style={styles.spotlightFooterAdBadgeText}>{tr("Ad")}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -3141,8 +3143,8 @@ export default function Accessories() {
           <Animated.View style={womanYouAreHeaderAnim}>
             <View style={styles.womanYouAreHeaderRow}>
               <View style={styles.womanYouAreTitleCol}>
-                <Text style={styles.womanYouAreForThe}>For the</Text>
-                <Text style={styles.womanYouAreMainJewellery}>Jewellery</Text>
+                <Text style={styles.womanYouAreForThe}>{tr("For the")}</Text>
+                <Text style={styles.womanYouAreMainJewellery}>{tr("Jewellery")}</Text>
               </View>
               <View style={styles.womanYouAreQuoteCol}>
                 <View style={styles.womanYouAreQuoteAccent} pointerEvents="none" />
@@ -3333,7 +3335,7 @@ export default function Accessories() {
           >
             <View style={styles.kidsInterstitialAdOverlay}>
               {/* <Text style={styles.kidsInterstitialAdTag}>Ad</Text> */}
-              <Text style={styles.kidsInterstitialAdTitle}>Accessories Spotlight</Text>
+              <Text style={styles.kidsInterstitialAdTitle}>{tr("Accessories Spotlight")}</Text>
             </View>
           </ImageBackground>
         </TouchableOpacity>
@@ -3365,7 +3367,7 @@ export default function Accessories() {
                       />
                     ))}
                   </View>
-                  <Text style={styles.accessoriesReplicaHeroTitle}>ACCESSORIES</Text>
+                  <Text style={styles.accessoriesReplicaHeroTitle}>{tr("ACCESSORIES")}</Text>
                   <TouchableOpacity
                     activeOpacity={0.9}
                     onPress={() => handleAccessoriesDealPress("ad1")}
@@ -3434,7 +3436,7 @@ export default function Accessories() {
                     }
                     style={styles.accessoriesReplicaHeroCtaWrap}
                   >
-                    <Text style={styles.accessoriesReplicaHeroCta}>Shop All</Text>
+                    <Text style={styles.accessoriesReplicaHeroCta}>{tr("Shop All")}</Text>
                   </TouchableOpacity>
                 </View>
           </View>
@@ -3594,7 +3596,7 @@ export default function Accessories() {
               ))}
             </View>
 
-            <Text style={styles.watchesHeroTitle}>WATCHES</Text>
+            <Text style={styles.watchesHeroTitle}>{tr("WATCHES")}</Text>
 
             <View style={styles.watchesHeroStage}>
               <View style={[styles.watchesHeroFloat, styles.watchesHeroFloatTL]}>
@@ -3647,7 +3649,7 @@ export default function Accessories() {
               }
               style={styles.watchesShopAllBtn}
             >
-              <Text style={styles.watchesShopAllText}>Shop All</Text>
+              <Text style={styles.watchesShopAllText}>{tr("Shop All")}</Text>
               <View style={styles.watchesShopAllUnderline} />
             </TouchableOpacity>
           </LinearGradient>
@@ -3728,12 +3730,12 @@ export default function Accessories() {
               <View style={styles.finalUniqueTitleRow}>
                 <Ionicons name="sparkles" size={15} color="#ef7b1a" />
                 <Text style={styles.finalUniqueTitle}>
-                  <Text style={styles.finalUniqueTitleLead}>Unique </Text>
-                  <Text style={styles.finalUniqueTitleAccent}>Picks</Text>
+                  <Text style={styles.finalUniqueTitleLead}>{tr("Unique")}</Text>
+                  <Text style={styles.finalUniqueTitleAccent}>{tr("Picks")}</Text>
                 </Text>
               </View>
               <View style={styles.finalUniqueTitleUnderline} />
-              <Text style={styles.finalUniqueSubtitle}>Fresh accessories to finish your look</Text>
+              <Text style={styles.finalUniqueSubtitle}>{tr("Fresh accessories to finish your look")}</Text>
             </View>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -3748,7 +3750,7 @@ export default function Accessories() {
                 })
               }
             >
-              <Text style={styles.finalUniqueViewAllText}>View All</Text>
+              <Text style={styles.finalUniqueViewAllText}>{tr("View All")}</Text>
               <Ionicons name="chevron-forward" size={16} color="#9a3412" />
             </TouchableOpacity>
           </View>
