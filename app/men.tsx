@@ -15,7 +15,6 @@ import {
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from "react-native";
-import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -27,6 +26,7 @@ import Svg, {
   Polygon,
 } from "react-native-svg";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api from "../services/api";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -815,12 +815,19 @@ export default function MenScreen() {
   const shopAllScrollDirRef = useRef(1);
   const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
 
-  const SUBCATEGORIES_API_BASE =
-    "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
   const MEN_PARENT_ID = 51;
   const [menApiCats, setMenApiCats] = useState<MenSubcategoryApiRow[]>([]);
   const [menApiLoading, setMenApiLoading] = useState<boolean>(true);
   const [menApiError, setMenApiError] = useState<string | null>(null);
+
+  const getUploadsImageUriFromFilename = useCallback((filename?: string | null): string => {
+    const raw = String(filename ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!base) return raw;
+    return `${base}/uploads/${raw.replace(/^\/+/, "")}`;
+  }, []);
 
   const MEN_BOTTOM_WEAR_TABLE_ID = 54;
   const [bottomWearTable, setBottomWearTable] = useState<MenSubcategoriesTableRow | null>(
@@ -861,11 +868,10 @@ export default function MenScreen() {
       try {
         setMenApiLoading(true);
         setMenApiError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_PARENT_ID}/subcategories`,
+        const { data: rows } = await api.get(
+          `/api/categories/${MEN_PARENT_ID}/subcategories`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as MenSubcategoryApiRow[]) : [];
         if (cancelled) return;
         setMenApiCats(list);
@@ -894,11 +900,10 @@ export default function MenScreen() {
       try {
         setBottomWearTableLoading(true);
         setBottomWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_BOTTOM_WEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${MEN_BOTTOM_WEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -920,7 +925,7 @@ export default function MenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -929,11 +934,10 @@ export default function MenScreen() {
       try {
         setEthnicWearTableLoading(true);
         setEthnicWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_ETHNIC_WEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${MEN_ETHNIC_WEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -955,7 +959,7 @@ export default function MenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -964,11 +968,10 @@ export default function MenScreen() {
       try {
         setFormalWearTableLoading(true);
         setFormalWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_FORMAL_WEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${MEN_FORMAL_WEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -990,7 +993,7 @@ export default function MenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -999,11 +1002,10 @@ export default function MenScreen() {
       try {
         setInnerWearTableLoading(true);
         setInnerWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_INNERWEAR_NIGHTWEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${MEN_INNERWEAR_NIGHTWEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -1025,7 +1027,7 @@ export default function MenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1034,11 +1036,10 @@ export default function MenScreen() {
       try {
         setTopWearTableLoading(true);
         setTopWearTableError(null);
-        const res = await axios.get(
-          `${SUBCATEGORIES_API_BASE}/api/categories/${MEN_TOP_WEAR_TABLE_ID}/subcategories-table`,
+        const { data: rows } = await api.get(
+          `/api/categories/${MEN_TOP_WEAR_TABLE_ID}/subcategories-table`,
           { timeout: 15000 }
         );
-        const rows: unknown = res.data;
         const list = Array.isArray(rows) ? (rows as MenSubcategoriesTableRow[]) : [];
         const first = list[0] ?? null;
         if (cancelled) return;
@@ -1060,7 +1061,7 @@ export default function MenScreen() {
     return () => {
       cancelled = true;
     };
-  }, [SUBCATEGORIES_API_BASE]);
+  }, []);
 
   const menCategoriesForUi = useMemo(() => {
     const apiActive = menApiCats.filter((r) =>
@@ -1080,11 +1081,11 @@ export default function MenScreen() {
       const shopImage = row.mobileImage
         ? ({ uri: row.mobileImage } as any)
         : row.image
-          ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${row.image}` } as any)
+          ? ({ uri: getUploadsImageUriFromFilename(row.image) } as any)
           : block.shopImage;
       return { ...block, title, shopImage };
     });
-  }, [SUBCATEGORIES_API_BASE, menApiCats]);
+  }, [getUploadsImageUriFromFilename, menApiCats]);
 
   // If a category key becomes invalid (future changes), keep selection safe.
   useEffect(() => {
@@ -1129,12 +1130,12 @@ export default function MenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return bottomBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, bottomBlock.subs, bottomWearTable]);
+  }, [bottomBlock.subs, bottomWearTable, getUploadsImageUriFromFilename]);
 
   const ethnicBlock = useMemo(
     () =>
@@ -1152,12 +1153,12 @@ export default function MenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return ethnicBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, ethnicBlock.subs, ethnicWearTable]);
+  }, [ethnicBlock.subs, ethnicWearTable, getUploadsImageUriFromFilename]);
 
   const formalBlock = useMemo(
     () =>
@@ -1175,12 +1176,12 @@ export default function MenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return formalBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, formalBlock.subs, formalWearTable]);
+  }, [formalBlock.subs, formalWearTable, getUploadsImageUriFromFilename]);
 
   const innerBlock = useMemo(
     () =>
@@ -1198,12 +1199,12 @@ export default function MenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return innerBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, innerBlock.subs, innerWearTable]);
+  }, [getUploadsImageUriFromFilename, innerBlock.subs, innerWearTable]);
 
   const topBlock = useMemo(
     () =>
@@ -1221,12 +1222,12 @@ export default function MenScreen() {
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
-            ? ({ uri: `${SUBCATEGORIES_API_BASE}/uploads/${s.image}` } as any)
+            ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
     return topBlock.subs;
-  }, [SUBCATEGORIES_API_BASE, topBlock.subs, topWearTable]);
+  }, [getUploadsImageUriFromFilename, topBlock.subs, topWearTable]);
 
   const activeRailSubs = useMemo((): SubLabel[] => {
     if (activeBlock.key === "bottom") return bottomRailSubs;

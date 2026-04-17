@@ -123,19 +123,19 @@ type FootwearApiSubcategory = {
 };
 
 const FOOTWEAR_CATEGORIES_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/29/subcategories";
+  "/api/categories/29/subcategories";
 
 const FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/44/subcategories-table";
+  "/api/categories/44/subcategories-table";
 
 const FOOTWEAR_WOMENS_SUBCATEGORIES_TABLE_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/45/subcategories-table";
+  "/api/categories/45/subcategories-table";
 
 const FOOTWEAR_KIDS_SUBCATEGORIES_TABLE_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/46/subcategories-table";
+  "/api/categories/46/subcategories-table";
 
 const FOOTWEAR_PRODUCTS_BY_SUBCATEGORY_URL = (subcategoryId: number) =>
-  `https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/products/subcategory/${subcategoryId}`;
+  `/api/products/subcategory/${subcategoryId}`;
 
 const RELATED_MENS_SUBCATEGORY_IDS = [94, 95] as const;
 
@@ -253,13 +253,7 @@ export default function FootwearScreen() {
     // Prefer configured API baseURL when available; otherwise fall back to the endpoint origin.
     const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
     let base = apiBase;
-    if (!base) {
-      try {
-        base = new URL(FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL).origin;
-      } catch {
-        base = "";
-      }
-    }
+    if (!base) base = "";
     if (!filename?.trim()) return base ? `${base}/uploads/` : "";
     if (/^https?:\/\//i.test(filename)) return filename;
     return base ? `${base}/uploads/${filename}` : filename;
@@ -269,8 +263,9 @@ export default function FootwearScreen() {
     const raw = String(pathOrUrl ?? "").trim();
     if (!raw) return "";
     if (/^https?:\/\//i.test(raw)) return raw;
-    const origin = new URL(FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL).origin;
-    return `${origin}/${raw.replace(/^\/+/, "")}`;
+    const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!apiBase) return raw;
+    return `${apiBase}/${raw.replace(/^\/+/, "")}`;
   }
 
   const appendRelatedMensProductsForSubcategory = async (
@@ -282,9 +277,7 @@ export default function FootwearScreen() {
 
     relatedMensInFlightIdsRef.current.add(subcategoryId);
     try {
-      const res = await fetch(FOOTWEAR_PRODUCTS_BY_SUBCATEGORY_URL(subcategoryId));
-      if (!res.ok) return;
-      const data = (await res.json()) as unknown;
+      const { data } = await api.get(FOOTWEAR_PRODUCTS_BY_SUBCATEGORY_URL(subcategoryId));
       if (!Array.isArray(data)) return;
       const mapped = (data as any[])
         .filter(
@@ -321,9 +314,7 @@ export default function FootwearScreen() {
 
     (async () => {
       try {
-        const res = await fetch(FOOTWEAR_CATEGORIES_URL, { signal: controller.signal });
-        if (!res.ok) return;
-        const data = (await res.json()) as unknown;
+        const { data } = await api.get(FOOTWEAR_CATEGORIES_URL, { signal: controller.signal });
         if (!Array.isArray(data)) return;
 
         const next: Partial<Record<GenderCategoryId, FootwearApiSubcategory>> = {};
@@ -350,11 +341,9 @@ export default function FootwearScreen() {
 
     (async () => {
       try {
-        const res = await fetch(FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL, {
+        const { data } = await api.get(FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL, {
           signal: controller.signal,
         });
-        if (!res.ok) return;
-        const data = (await res.json()) as unknown;
         if (!Array.isArray(data) || data.length === 0) return;
 
         const first = data[0] as FootwearSubcategoryTableRow;
@@ -382,11 +371,9 @@ export default function FootwearScreen() {
 
     (async () => {
       try {
-        const res = await fetch(FOOTWEAR_WOMENS_SUBCATEGORIES_TABLE_URL, {
+        const { data } = await api.get(FOOTWEAR_WOMENS_SUBCATEGORIES_TABLE_URL, {
           signal: controller.signal,
         });
-        if (!res.ok) return;
-        const data = (await res.json()) as unknown;
         if (!Array.isArray(data) || data.length === 0) return;
 
         const first = data[0] as FootwearSubcategoryTableRow;
@@ -413,11 +400,9 @@ export default function FootwearScreen() {
 
     (async () => {
       try {
-        const res = await fetch(FOOTWEAR_KIDS_SUBCATEGORIES_TABLE_URL, {
+        const { data } = await api.get(FOOTWEAR_KIDS_SUBCATEGORIES_TABLE_URL, {
           signal: controller.signal,
         });
-        if (!res.ok) return;
-        const data = (await res.json()) as unknown;
         if (!Array.isArray(data) || data.length === 0) return;
 
         const first = data[0] as FootwearSubcategoryTableRow;

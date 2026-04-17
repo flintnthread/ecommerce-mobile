@@ -207,7 +207,7 @@ export default function Sweets() {
       try {
         // Your endpoint returns: [{ categoryName: "Dry Sweets"|"Milk Sweets", mobileImage: "https://..." }, ...]
         const res = await api.get(
-          "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/53/subcategories"
+          "/api/categories/53/subcategories"
         );
         const data = res.data as Array<{
           categoryName?: string;
@@ -238,7 +238,7 @@ export default function Sweets() {
     (async () => {
       try {
         const res = await api.get(
-          "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/55/subcategories-table"
+          "/api/categories/55/subcategories-table"
         );
         const data = res.data as Array<{
           categoryName?: string;
@@ -279,7 +279,7 @@ export default function Sweets() {
     (async () => {
       try {
         const res = await api.get(
-          "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/56/subcategories-table"
+          "/api/categories/56/subcategories-table"
         );
         const data = res.data as Array<{
           categoryName?: string;
