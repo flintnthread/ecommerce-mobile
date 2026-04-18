@@ -12,8 +12,93 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import api from "../services/api";
+import {
+  pickPrimaryProductImage,
+  resolveProductPrimaryImageUri,
+} from "../lib/productImage";
 
 const API_ORIGIN = "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
+/** Top discount products — base URL from `services/api.tsx` */
+const DISCOUNT_TOP_PRODUCTS_PATH = "/api/products/discount/top";
+/** Top selling by price — base URL from `services/api.tsx` */
+const TOP_SELLING_PRICE_PRODUCTS_PATH = "/api/products/top-selling-price";
+/** Popular / “Top picks for you” — base URL from `services/api.tsx` */
+const TOP_PICKS_POPULAR_PATH = "/api/products/popular";
+const TOP_PICKS_POPULAR_FETCH_SIZE = 80;
+
+type DiscountTopImage = {
+  imagePath?: string | null;
+  imageUrl?: string | null;
+  isPrimary?: boolean | null;
+  sortOrder?: number | null;
+};
+type DiscountTopVariant = {
+  sellingPrice?: number | null;
+  mrpPrice?: number | null;
+  discountPercentage?: number | null;
+  inStock?: boolean | null;
+};
+type DiscountTopProduct = {
+  id: number;
+  name?: string | null;
+  productName?: string | null;
+  title?: string | null;
+  status?: string | number | null;
+  images?: DiscountTopImage[] | null;
+  variants?: DiscountTopVariant[] | null;
+  salePrice?: number | null;
+  sellingPrice?: number | null;
+  price?: number | null;
+  mrp?: number | null;
+  maxRetailPrice?: number | null;
+  discountPercentage?: number | null;
+};
+
+function normalizeDiscountTopPayload(data: unknown): DiscountTopProduct[] {
+  if (Array.isArray(data)) return data as DiscountTopProduct[];
+  if (data && typeof data === "object") {
+    const o = data as Record<string, unknown>;
+    if (Array.isArray(o.content)) return o.content as DiscountTopProduct[];
+    if (Array.isArray(o.data)) return o.data as DiscountTopProduct[];
+    if (Array.isArray(o.products)) return o.products as DiscountTopProduct[];
+  }
+  return [];
+}
+
+/** Same shapes as home `normalizeProductListPayload` for Spring `Page` / wrapped lists. */
+function normalizePagedProductList(data: unknown, depth = 0): DiscountTopProduct[] {
+  if (depth > 6) return [];
+  if (Array.isArray(data)) return data as DiscountTopProduct[];
+  if (!data || typeof data !== "object") return [];
+  const o = data as Record<string, unknown>;
+  const keys = [
+    "content",
+    "data",
+    "products",
+    "items",
+    "records",
+    "results",
+    "rows",
+  ] as const;
+  for (const key of keys) {
+    const v = o[key];
+    if (Array.isArray(v)) return v as DiscountTopProduct[];
+  }
+  const inner = o.data;
+  if (inner != null && typeof inner === "object") {
+    if (Array.isArray(inner)) return inner as DiscountTopProduct[];
+    return normalizePagedProductList(inner, depth + 1);
+  }
+  return [];
+}
+
+function pickDiscountVariant(p: DiscountTopProduct): DiscountTopVariant | undefined {
+  const vs = Array.isArray(p.variants) ? p.variants : [];
+  if (!vs.length) return undefined;
+  return vs.find((v) => v?.inStock === true) ?? vs[0];
+}
+
 const PRODUCTS_BY_SUBCATEGORY_URL = (subcategoryId: number) =>
   `${API_ORIGIN}/api/products/subcategory/${subcategoryId}`;
 
@@ -81,6 +166,68 @@ type ProductItem = {
   fabric?: string;
   size?: string;
 };
+
+function mapDiscountTopToProductItems(
+  rows: DiscountTopProduct[],
+  apiBase: string,
+  catalogLabel = "Mega Discounts",
+  emptyImage: ProductItem["image"] = require("../assets/images/megadis1.png")
+): ProductItem[] {
+  const root = apiBase.replace(/\/+$/, "");
+  const resolvePath = (p: string) => {
+    const s = String(p ?? "").trim();
+    if (!s) return "";
+    if (/^https?:\/\//i.test(s)) return s;
+    if (!root) return "";
+    return s.startsWith("/") ? `${root}${s}` : `${root}/${s}`;
+  };
+
+  const out: ProductItem[] = [];
+  for (const p of rows) {
+    const primary = pickPrimaryProductImage(p.images);
+    const uri = resolveProductPrimaryImageUri(primary, resolvePath);
+
+    const title =
+      String(p.name ?? p.productName ?? p.title ?? "").trim() || `Product ${p.id}`;
+
+    const v = pickDiscountVariant(p);
+    const sale = Number(
+      v?.sellingPrice ?? p.salePrice ?? p.sellingPrice ?? p.price ?? 0
+    );
+    const mrp = Number(v?.mrpPrice ?? p.mrp ?? p.maxRetailPrice ?? 0) || sale;
+
+    let discountStr = "Deal";
+    if (mrp > 0 && sale > 0 && mrp > sale) {
+      discountStr = `${Math.round(((mrp - sale) / mrp) * 100)}% off`;
+    } else if (
+      typeof v?.discountPercentage === "number" &&
+      v.discountPercentage > 0
+    ) {
+      discountStr = `${Math.round(v.discountPercentage)}% off`;
+    } else if (
+      typeof p.discountPercentage === "number" &&
+      p.discountPercentage > 0
+    ) {
+      discountStr = `${Math.round(p.discountPercentage)}% off`;
+    }
+
+    out.push({
+      id: String(p.id),
+      title,
+      price: Math.round(sale) || 0,
+      mrp: Math.round(mrp) || 0,
+      discount: discountStr,
+      payLaterText: "",
+      benefitText: "Free Delivery",
+      rating: "4.3",
+      ratingCount: "•",
+      image: uri ? { uri } : emptyImage,
+      catalogCategory: catalogLabel,
+      gender: "All",
+    });
+  }
+  return out;
+}
 
 const PRODUCTS: ProductItem[] = [
   {
@@ -482,6 +629,24 @@ export default function SubcategoriesScreen() {
     : NaN;
   const pageTitle = (selectedSubCategory || "Products").toUpperCase();
 
+  const isMegaDiscountsRoute =
+    String(selectedSubCategory ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\u2019/g, "'") === "mega discounts";
+
+  const isPremiumFindsRoute =
+    String(selectedSubCategory ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\u2019/g, "'") === "premium finds";
+
+  const isTopPicksForYouRoute =
+    String(selectedSubCategory ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\u2019/g, "'") === "top picks for you";
+
   useEffect(() => {
     const norm = String(selectedSubCategory ?? "")
       .trim()
@@ -524,6 +689,13 @@ export default function SubcategoriesScreen() {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   const [apiRoutedProducts, setApiRoutedProducts] = useState<ProductItem[]>([]);
+  const [discountTopProducts, setDiscountTopProducts] = useState<ProductItem[]>([]);
+  const [topSellingPriceProducts, setTopSellingPriceProducts] = useState<ProductItem[]>(
+    []
+  );
+  const [topPicksPopularProducts, setTopPicksPopularProducts] = useState<ProductItem[]>(
+    []
+  );
 
   const handleFilterPress = (label: string) => {
     if (label === "Sort") setSortModalVisible(true);
@@ -727,6 +899,88 @@ export default function SubcategoriesScreen() {
     return () => controller.abort();
   }, [routedSubcategoryId, selectedSubCategory]);
 
+  useEffect(() => {
+    if (!isMegaDiscountsRoute) {
+      setDiscountTopProducts([]);
+      return;
+    }
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const { data } = await api.get<unknown>(DISCOUNT_TOP_PRODUCTS_PATH, {
+          signal: controller.signal,
+        });
+        const rows = normalizeDiscountTopPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        setDiscountTopProducts(mapDiscountTopToProductItems(rows, base));
+      } catch {
+        setDiscountTopProducts([]);
+      }
+    })();
+    return () => controller.abort();
+  }, [isMegaDiscountsRoute]);
+
+  useEffect(() => {
+    if (!isPremiumFindsRoute) {
+      setTopSellingPriceProducts([]);
+      return;
+    }
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const { data } = await api.get<unknown>(TOP_SELLING_PRICE_PRODUCTS_PATH, {
+          signal: controller.signal,
+        });
+        const rows = normalizeDiscountTopPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        setTopSellingPriceProducts(
+          mapDiscountTopToProductItems(
+            rows,
+            base,
+            "Premium finds",
+            require("../assets/images/premium1.png")
+          )
+        );
+      } catch {
+        setTopSellingPriceProducts([]);
+      }
+    })();
+    return () => controller.abort();
+  }, [isPremiumFindsRoute]);
+
+  useEffect(() => {
+    if (!isTopPicksForYouRoute) {
+      setTopPicksPopularProducts([]);
+      return;
+    }
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const { data } = await api.get<unknown>(TOP_PICKS_POPULAR_PATH, {
+          params: {
+            page: 0,
+            size: TOP_PICKS_POPULAR_FETCH_SIZE,
+            sort: "createdAt,desc",
+          },
+          signal: controller.signal,
+        });
+        const rows = normalizePagedProductList(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        setTopPicksPopularProducts(
+          mapDiscountTopToProductItems(
+            rows,
+            base,
+            "Top picks for you",
+            require("../assets/images/look1.png")
+          )
+        );
+      } catch {
+        setTopPicksPopularProducts([]);
+      }
+    })();
+    return () => controller.abort();
+  }, [isTopPicksForYouRoute]);
+
   /** Products for the subcategory opened from subcate (tile tap). */
   const routedSubcategoryProducts = React.useMemo(() => {
     if (!selectedSubCategory?.trim()) return [];
@@ -762,8 +1016,28 @@ export default function SubcategoriesScreen() {
     return categoryProducts;
   }, [selectedSubCategory, categoryProducts, mainCat, selectedGender]);
 
-  const effectiveRoutedSubcategoryProducts =
-    apiRoutedProducts.length > 0 ? apiRoutedProducts : routedSubcategoryProducts;
+  const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
+    if (isTopPicksForYouRoute) {
+      return topPicksPopularProducts;
+    }
+    if (isPremiumFindsRoute) {
+      return topSellingPriceProducts;
+    }
+    if (isMegaDiscountsRoute) {
+      return discountTopProducts;
+    }
+    if (apiRoutedProducts.length > 0) return apiRoutedProducts;
+    return routedSubcategoryProducts;
+  }, [
+    isTopPicksForYouRoute,
+    topPicksPopularProducts,
+    isPremiumFindsRoute,
+    topSellingPriceProducts,
+    isMegaDiscountsRoute,
+    discountTopProducts,
+    apiRoutedProducts,
+    routedSubcategoryProducts,
+  ]);
 
   const filteredRoutedProducts = React.useMemo(() => {
     if (!selectedSubCategory?.trim()) return [];

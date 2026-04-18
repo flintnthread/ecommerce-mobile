@@ -83,11 +83,15 @@ export default function WishlistScreen() {
     setCartCount(count);
   }, []);
 
+  const loadWishlistScreen = useCallback(async () => {
+    await reloadCartCount();
+    await reloadWishlistFromStorage();
+  }, [reloadWishlistFromStorage, reloadCartCount]);
+
   useFocusEffect(
     useCallback(() => {
-      void reloadWishlistFromStorage();
-      void reloadCartCount();
-    }, [reloadWishlistFromStorage, reloadCartCount])
+      void loadWishlistScreen();
+    }, [loadWishlistScreen])
   );
 
   useEffect(() => {
@@ -116,7 +120,12 @@ export default function WishlistScreen() {
     };
   }, [fallingHearts]);
 
-  // Move item to cart
+  const displayedWishlistItems = useMemo(() => {
+    const q = headerSearchQuery.trim().toLowerCase();
+    if (!q) return wishlistItems;
+    return wishlistItems.filter((x) => x.name.toLowerCase().includes(q));
+  }, [wishlistItems, headerSearchQuery]);
+
   const handleMoveToCart = (item: WishlistItem) => {
     void (async () => {
       const cart = await addProductToCart({
@@ -126,32 +135,27 @@ export default function WishlistScreen() {
         mrp: item.originalPrice ?? item.price,
       });
       await removeWishlistLine(item.id);
-      await reloadWishlistFromStorage();
+      setWishlistItems((prev) => prev.filter((x) => x.id !== item.id));
       const count = cart.reduce((sum, l) => sum + (l.quantity || 0), 0);
       setCartCount(count);
     })();
   };
 
-  // Remove item from wishlist
   const handleRemoveItem = (id: string, name: string) => {
-    Alert.alert(
-      "Remove Item",
-      `Remove "${name}" from your wishlist?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              await removeWishlistLine(id);
-              await reloadWishlistFromStorage();
-              Alert.alert("Removed", "Item has been removed from your wishlist.");
-            })();
-          },
+    Alert.alert("Remove Item", `Remove "${name}" from your wishlist?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            await removeWishlistLine(id);
+            setWishlistItems((prev) => prev.filter((x) => x.id !== id));
+            Alert.alert("Removed", "Item has been removed from your wishlist.");
+          })();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
@@ -262,7 +266,7 @@ export default function WishlistScreen() {
       >
         {/* Wishlist Product List */}
         <View style={styles.section}>
-          {wishlistItems.length === 0 ? (
+          {displayedWishlistItems.length === 0 ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIcon}>
                 <Ionicons name="heart-outline" size={80} color="#E0E0E0" />
@@ -273,7 +277,7 @@ export default function WishlistScreen() {
               </Text>
             </View>
           ) : (
-            wishlistItems.map((item, index) => {
+            displayedWishlistItems.map((item, index) => {
               const discountPercent =
                 item.originalPrice && item.originalPrice > item.price
                   ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)
@@ -283,7 +287,7 @@ export default function WishlistScreen() {
                   key={item.id}
                   style={[
                     styles.wishlistCard,
-                    index === wishlistItems.length - 1 && styles.wishlistCardLast,
+                    index === displayedWishlistItems.length - 1 && styles.wishlistCardLast,
                   ]}
                 >
                   <View style={styles.wishlistImageArea}>
@@ -669,4 +673,3 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
   },
 });
-

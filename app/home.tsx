@@ -19,6 +19,7 @@ import {
   Platform,
   FlatList,
   Animated,
+  ActivityIndicator,
   type ImageSourcePropType,
 } from "react-native";
 import * as IntentLauncher from "expo-intent-launcher";
@@ -30,6 +31,7 @@ import {
   addProductToCart,
   getWishlistIds,
   loadWishlist,
+  resolveProductImage,
   toggleWishlistProduct,
   type PersistedWishlistLine,
 } from "../lib/shopStorage";
@@ -39,6 +41,10 @@ import {
   type RatePurchaseCard,
 } from "../lib/ratePurchaseCatalog";
 import { requestForegroundLocation } from "../lib/requestForegroundLocation";
+import {
+  pickPrimaryProductImage,
+  resolveProductPrimaryImageUri,
+} from "../lib/productImage";
 import * as ImagePicker from "expo-image-picker";
 
 const { width, height } = Dimensions.get("window");
@@ -46,16 +52,18 @@ const HIDE_TOP_BAR_H = 66;
 const CARD_WIDTH = width * 0.6;
 const USER_PICK_CARD_WIDTH = Math.min(Math.round(width * 0.38), 148);
 const USER_PICK_ITEM_GAP = 12;
+/** Min height for Top Picks horizontal `ScrollView` (avoids 0-height nested scroll). */
+const USER_PICK_TOP_SCROLL_MIN_H = 200;
 
 /** Suggested for you — gap between the two columns in each row */
 const SUGGESTED_CARD_GAP = 12;
 
 /** Category strip: fixed chip width for horizontal scroll. */
-const CATEGORY_CHIP_WIDTH = 86;
+const CATEGORY_CHIP_WIDTH = 72;
 /** Rounded image box behind each category icon */
-const CATEGORY_IMAGE_CARD_SIZE = 78;
+const CATEGORY_IMAGE_CARD_SIZE = 64;
 /** Inset inside the box so the full image fits with `contain` (not clipped). */
-const CATEGORY_IMAGE_INNER_INSET = 6;
+const CATEGORY_IMAGE_INNER_INSET = 5;
 const CATEGORY_ICON_INNER =
   CATEGORY_IMAGE_CARD_SIZE - CATEGORY_IMAGE_INNER_INSET * 2;
 
@@ -94,32 +102,700 @@ type HomeWishlistCandidate = {
   oldPrice?: string;
 };
 
+/** “More picks” grid row — API-mapped or fallback */
+type MorePicksGridItem = {
+  id: string;
+  name: string;
+  image: ImageSourcePropType;
+  rating: string;
+  price: string;
+  oldPrice?: string;
+  discount?: string;
+};
+
+type MorePicksApiImage = {
+  imagePath?: string | null;
+  imageUrl?: string | null;
+  isPrimary?: boolean | null;
+  sortOrder?: number | null;
+};
+
+type MorePicksApiVariant = {
+  sellingPrice?: number | null;
+  mrpPrice?: number | null;
+  finalPrice?: number | null;
+  discountPercentage?: number | null;
+  inStock?: boolean | null;
+};
+
+type MorePicksApiProduct = {
+  id?: number | string | null;
+  productId?: number | string | null;
+  name?: string | null;
+  productName?: string | null;
+  title?: string | null;
+  displayName?: string | null;
+  /** String (`active`) or numeric (`1` = active) depending on backend. */
+  status?: string | number | null;
+  salePrice?: number | null;
+  sellingPrice?: number | null;
+  price?: number | null;
+  mrp?: number | null;
+  maxRetailPrice?: number | null;
+  discountPercentage?: number | null;
+  images?: MorePicksApiImage[] | null;
+  variants?: MorePicksApiVariant[] | null;
+};
+
+type MorePicksPageResponse = {
+  content?: MorePicksApiProduct[] | null;
+  last?: boolean;
+  number?: number;
+  totalPages?: number;
+  size?: number;
+  totalElements?: number;
+};
+
+/** Paginated products for “More picks” — base URL comes from `services/api.tsx` */
+const MORE_PICKS_PRODUCTS_PATH = "/api/products";
+/** Spring `page` size for `/api/products` (tune if backend caps `size`). */
+const MORE_PICKS_PAGE_SIZE = 30;
+
+/** Two-column grid without `FlatList` (nested virtualized lists often do not extend parent scroll). */
+function chunkMorePicksRows<T>(items: T[]): [T, T | undefined][] {
+  const out: [T, T | undefined][] = [];
+  for (let i = 0; i < items.length; i += 2) {
+    out.push([items[i]!, items[i + 1]]);
+  }
+  return out;
+}
+
+/** “Fresh finds” — `GET` returns a JSON array of products (base URL in `services/api.tsx`) */
+const FRESH_FINDS_RECENT_PATH = "/api/products/recent";
+
+/** “Top picks for you” — popular products (base URL in `services/api.tsx`) */
+const TOP_PICKS_POPULAR_PATH = "/api/products/popular";
+/** Preview strip vs expanded list (Spring `page` / `size` when supported). */
+const TOP_PICKS_PREVIEW_SIZE = 5;
+
+/**
+ * Suggested for you — wishlist by user.
+ * Use a path-only URL with the shared axios client (`services/api.tsx` `baseURL`); never concatenate a full `http://…` here.
+ * Spring expects a numeric `Long` path segment — not a Swagger placeholder like `{id}`.
+ */
+const ASYNC_USER_ID_KEYS = ["userId", "id"] as const;
+
+/** Only digits; rejects `{id}`, `{userId}`, empty, decimals, etc. */
+function extractSpringLongUserIdSegment(raw: string | null | undefined): string | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  if (/^\{[^}]+\}$/.test(s)) return null;
+  if (!/^\d+$/.test(s)) return null;
+  return s;
+}
+
+/** Path relative to `api.defaults.baseURL`, e.g. `/api/wishlist/user/42` */
+function wishlistUserPath(numericUserId: string): string {
+  return `/api/wishlist/user/${encodeURIComponent(numericUserId)}`;
+}
+
+async function readNumericUserIdFromStorage(): Promise<string | null> {
+  for (const key of ASYNC_USER_ID_KEYS) {
+    const seg = extractSpringLongUserIdSegment(
+      (await AsyncStorage.getItem(key)) ?? undefined
+    );
+    if (seg) return seg;
+  }
+  return null;
+}
+
+type ApiWishlistImage = {
+  imagePath?: string | null;
+  url?: string | null;
+  imageUrl?: string | null;
+};
+
+type ApiWishlistProduct = {
+  id?: number | string | null;
+  productId?: number | string | null;
+  name?: string | null;
+  productName?: string | null;
+  title?: string | null;
+  displayName?: string | null;
+  sellingPrice?: number | string | null;
+  salePrice?: number | string | null;
+  price?: number | string | null;
+  mrp?: number | string | null;
+  maxRetailPrice?: number | string | null;
+  finalPrice?: number | string | null;
+  image?: string | null;
+  imageUrl?: string | null;
+  thumbnail?: string | null;
+  thumbnailUrl?: string | null;
+  images?: ApiWishlistImage[] | null;
+};
+
+type ApiWishlistRow = {
+  id?: number | string | null;
+  wishlistId?: number | string | null;
+  productId?: number | string | null;
+  product?: ApiWishlistProduct | null;
+  createdAt?: string | null;
+} & ApiWishlistProduct;
+
+/** Keys that often hold the wishlist line array (Spring / custom wrappers). */
+const WISHLIST_ROW_ARRAY_KEYS = [
+  "data",
+  "items",
+  "content",
+  "rows",
+  "records",
+  "list",
+  "results",
+  "products",
+  "wishlistItems",
+  "wishList",
+  "wishlist",
+  "userWishlist",
+] as const;
+
+function wishlistResponseIsExplicitFailure(payload: unknown): boolean {
+  if (payload == null || typeof payload !== "object") return false;
+  const s = (payload as { success?: unknown }).success;
+  return s === false || s === "false" || s === 0 || s === "0";
+}
+
+function extractWishlistRowArray(payload: unknown, depth = 0): unknown[] {
+  if (depth > 8 || payload == null) return [];
+  if (Array.isArray(payload)) return payload;
+  if (typeof payload !== "object") return [];
+  const o = payload as Record<string, unknown>;
+
+  for (const key of WISHLIST_ROW_ARRAY_KEYS) {
+    const v = o[key];
+    if (Array.isArray(v)) return v;
+  }
+
+  const dataVal = o.data;
+  if (dataVal != null && typeof dataVal === "object" && !Array.isArray(dataVal)) {
+    return extractWishlistRowArray(dataVal, depth + 1);
+  }
+
+  return [];
+}
+
+function normalizeWishlistRows(payload: unknown): ApiWishlistRow[] {
+  return extractWishlistRowArray(payload) as ApiWishlistRow[];
+}
+
+type SuggestedForYouGridItem = {
+  cartId: string;
+  name: string;
+  image: ImageSourcePropType;
+  oldPrice: string;
+  price: string;
+  rating: string;
+  priceNum: number;
+  mrpNum: number;
+};
+
+const SUGGESTED_FOR_YOU_FALLBACK: SuggestedForYouGridItem[] = [
+  {
+    cartId: "sg1",
+    name: "Women floral cotton dress",
+    image: require("../assets/images/look1.png"),
+    oldPrice: "₹499",
+    price: "₹299",
+    rating: "4.5",
+    priceNum: 299,
+    mrpNum: 499,
+  },
+  {
+    cartId: "sg2",
+    name: "Casual summer A-line look",
+    image: require("../assets/images/look2.png"),
+    oldPrice: "₹899",
+    price: "₹449",
+    rating: "4.2",
+    priceNum: 449,
+    mrpNum: 899,
+  },
+  {
+    cartId: "sg3",
+    name: "Printed kurta & dupatta set",
+    image: require("../assets/images/look3.png"),
+    oldPrice: "₹1,299",
+    price: "₹599",
+    rating: "4.8",
+    priceNum: 599,
+    mrpNum: 1299,
+  },
+  {
+    cartId: "sg4",
+    name: "Gym quick-dry training tee",
+    image: require("../assets/images/sports2.png"),
+    oldPrice: "₹699",
+    price: "₹399",
+    rating: "4.3",
+    priceNum: 399,
+    mrpNum: 699,
+  },
+];
+
+function resolveMediaUri(pathOrUrl: string, apiBase: string): string {
+  const s = String(pathOrUrl ?? "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  const root = apiBase.replace(/\/+$/, "");
+  if (!root) return "";
+  return s.startsWith("/") ? `${root}${s}` : `${root}/${s}`;
+}
+
+function pickProductFromRow(row: ApiWishlistRow): ApiWishlistProduct {
+  const p = row.product;
+  if (p && typeof p === "object") return p;
+  return row;
+}
+
+function numLike(v: unknown): number {
+  const n = typeof v === "string" ? Number.parseFloat(v) : Number(v);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function formatSuggestedInr(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+function firstWishlistImagePath(p: ApiWishlistProduct, apiBase: string): string {
+  const imgs = Array.isArray(p.images) ? p.images : [];
+  for (const im of imgs) {
+    if (!im || typeof im !== "object") continue;
+    const cand =
+      String((im as ApiWishlistImage).imageUrl ?? "").trim() ||
+      String((im as ApiWishlistImage).imagePath ?? "").trim() ||
+      String((im as ApiWishlistImage).url ?? "").trim();
+    if (cand) return resolveMediaUri(cand, apiBase);
+  }
+  const direct = [
+    p.image,
+    p.imageUrl,
+    p.thumbnail,
+    p.thumbnailUrl,
+  ]
+    .map((x) => String(x ?? "").trim())
+    .find((s) => s.length > 0);
+  return direct ? resolveMediaUri(direct, apiBase) : "";
+}
+
+function apiRowToSuggestedForYouItem(
+  row: ApiWishlistRow,
+  apiBase: string
+): SuggestedForYouGridItem | null {
+  const nested = row.product;
+  const p = pickProductFromRow(row);
+  /** Prefer product identifiers; bare `row.id` is often the wishlist line id, not the product. */
+  const productIdRaw =
+    nested?.id ??
+    nested?.productId ??
+    row.productId ??
+    p.productId ??
+    p.id ??
+    row.wishlistId ??
+    row.id;
+  const productId = Math.round(numLike(productIdRaw));
+  if (!Number.isFinite(productId) || productId <= 0) return null;
+
+  const uri = firstWishlistImagePath(p, apiBase);
+
+  const name =
+    String(
+      p.name ?? p.productName ?? p.title ?? p.displayName ?? ""
+    ).trim() || `Product ${productId}`;
+
+  const sale = numLike(
+    p.finalPrice ?? p.sellingPrice ?? p.salePrice ?? p.price
+  );
+  const mrpRaw = numLike(p.mrp ?? p.maxRetailPrice);
+  const mrp = Number.isFinite(mrpRaw) && mrpRaw > 0 ? mrpRaw : sale;
+  const priceNum =
+    Number.isFinite(sale) && sale > 0 ? Math.round(sale) : Math.round(mrp);
+  const mrpNum = mrp > priceNum ? Math.round(mrp) : priceNum;
+
+  return {
+    cartId: String(productId),
+    name,
+    image: uri ? ({ uri } as ImageSourcePropType) : resolveProductImage(String(productId)),
+    oldPrice: formatSuggestedInr(mrpNum),
+    price: formatSuggestedInr(priceNum || mrpNum),
+    rating: "4.5",
+    priceNum: priceNum || mrpNum,
+    mrpNum,
+  };
+}
+
+/** Mega Discounts strip + “see all” list — base URL in `services/api.tsx` */
+const DISCOUNT_TOP_PRODUCTS_PATH = "/api/products/discount/top";
+
+/** Premium finds — top selling by price (base URL in `services/api.tsx`) */
+const TOP_SELLING_PRICE_PRODUCTS_PATH = "/api/products/top-selling-price";
+
+type MegaDiscountHomeCard = {
+  id: string;
+  name: string;
+  subtitle: string;
+  image: ImageSourcePropType;
+};
+
+const MEGA_DISCOUNT_HOME_FALLBACK: MegaDiscountHomeCard[] = [
+  {
+    id: "1",
+    name: "Women wear",
+    subtitle: "Up to 60% off",
+    image: require("../assets/images/megadis1.png"),
+  },
+  {
+    id: "2",
+    name: "New brand",
+    subtitle: "Best deals",
+    image: require("../assets/images/megadis2.png"),
+  },
+  {
+    id: "3",
+    name: "Performance",
+    subtitle: "Flat 50% off",
+    image: require("../assets/images/megadis3.png"),
+  },
+  {
+    id: "4",
+    name: "Stylish",
+    subtitle: "Trending deals",
+    image: require("../assets/images/megadis4.png"),
+  },
+];
+
+type PremiumFindsHomeCard = {
+  id: string;
+  name: string;
+  subtitle: string;
+  image: ImageSourcePropType;
+};
+
+const PREMIUM_FINDS_HOME_FALLBACK: PremiumFindsHomeCard[] = [
+  {
+    id: "1",
+    name: "Induction Cooktops",
+    subtitle: "Selling from ₹399",
+    image: require("../assets/images/premium1.png"),
+  },
+  {
+    id: "2",
+    name: "New",
+    subtitle: "New collection",
+    image: require("../assets/images/premium2.png"),
+  },
+  {
+    id: "3",
+    name: "Shirt",
+    subtitle: "Trending now",
+    image: require("../assets/images/premium3.png"),
+  },
+  {
+    id: "4",
+    name: "Mens wear",
+    subtitle: "Best seller",
+    image: require("../assets/images/premium4.png"),
+  },
+];
+
+type FreshFindCard = {
+  id: string;
+  image: ImageSourcePropType;
+};
+
+const FRESH_FINDS_FALLBACK: FreshFindCard[] = [
+  { id: "1", image: require("../assets/images/product1.png") },
+  { id: "2", image: require("../assets/images/product2.png") },
+  { id: "3", image: require("../assets/images/premium1.png") },
+  { id: "4", image: require("../assets/images/premium2.png") },
+];
+
+function chunkFreshFindPairs(cards: FreshFindCard[]): FreshFindCard[][] {
+  const pairs: FreshFindCard[][] = [];
+  for (let i = 0; i < cards.length; i += 2) {
+    pairs.push(cards.slice(i, i + 2));
+  }
+  return pairs;
+}
+
+type TopPickCard = {
+  id: string;
+  name: string;
+  image: ImageSourcePropType;
+};
+
+const TOP_PICKS_FALLBACK: TopPickCard[] = [
+  { id: "1", name: "Bangles ", image: require("../assets/images/look1.png") },
+  { id: "2", name: "Clock", image: require("../assets/images/look2.png") },
+  { id: "3", name: "accessories", image: require("../assets/images/look3.png") },
+  { id: "4", name: "Women's wear  ", image: require("../assets/images/look4.png") },
+];
+
+const TOP_PICKS_FALLBACK_IDS = new Set(TOP_PICKS_FALLBACK.map((c) => c.id));
+
+function looksLikeApiTopPicks(items: TopPickCard[]): boolean {
+  return items.some((x) => !TOP_PICKS_FALLBACK_IDS.has(x.id));
+}
+
+function isAbortLikeError(e: unknown): boolean {
+  const o = e as { code?: string; name?: string; message?: string };
+  const msg = String(o?.message ?? "").toLowerCase();
+  return (
+    o?.code === "ERR_CANCELED" ||
+    o?.name === "CanceledError" ||
+    o?.name === "AbortError" ||
+    msg.includes("canceled") ||
+    msg.includes("cancelled") ||
+    msg.includes("aborted")
+  );
+}
+
+function formatInrAmount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+function pickMorePicksVariant(p: MorePicksApiProduct): MorePicksApiVariant | undefined {
+  const vs = Array.isArray(p.variants) ? p.variants : [];
+  if (vs.length === 0) return undefined;
+  const inStock = vs.find((v) => v && v.inStock === true);
+  return inStock ?? vs[0];
+}
+
+/** Backend may send `status: 1` / `"active"` / `"ACTIVE"`; treat unknown or empty as visible. */
+function apiProductRowCountsAsActive(status: unknown): boolean {
+  if (status === null || status === undefined) return true;
+  if (typeof status === "number") return status === 1;
+  const s = String(status).trim().toLowerCase();
+  if (!s) return true;
+  return (
+    s === "active" ||
+    s === "1" ||
+    s === "true" ||
+    s === "published" ||
+    s === "enabled"
+  );
+}
+
+/** Keys that often hold a product array (Spring Page, envelopes, storefront DTOs). */
+const PRODUCT_LIST_ARRAY_KEYS = [
+  "content",
+  "data",
+  "products",
+  "items",
+  "records",
+  "results",
+  "rows",
+] as const;
+
+/** Normalize list endpoints: raw array, Spring `content`, or `{ data: [...] | { content } }`. */
+function normalizeProductListPayload(data: unknown, depth = 0): MorePicksApiProduct[] {
+  if (depth > 6) return [];
+  if (Array.isArray(data)) return data as MorePicksApiProduct[];
+  if (!data || typeof data !== "object") return [];
+  const o = data as Record<string, unknown>;
+
+  for (const key of PRODUCT_LIST_ARRAY_KEYS) {
+    const v = o[key];
+    if (Array.isArray(v)) return v as MorePicksApiProduct[];
+  }
+
+  const inner = o.data;
+  if (inner != null && typeof inner === "object") {
+    if (Array.isArray(inner)) return inner as MorePicksApiProduct[];
+    return normalizeProductListPayload(inner, depth + 1);
+  }
+
+  return [];
+}
+
+/** Spring Data `Page` metadata when the popular endpoint returns a page object. */
+function readSpringPageMeta(data: unknown): {
+  last?: boolean;
+  totalElements?: number;
+} {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+  const o = data as Record<string, unknown>;
+  const last = typeof o.last === "boolean" ? o.last : undefined;
+  const totalElements =
+    typeof o.totalElements === "number" ? o.totalElements : undefined;
+  return { last, totalElements };
+}
+
+function mapMorePicksApiToGrid(
+  rows: MorePicksApiProduct[],
+  apiBase: string,
+  placeholderImage: ImageSourcePropType,
+  options?: { requireProductActive?: boolean }
+): MorePicksGridItem[] {
+  const root = apiBase.replace(/\/$/, "");
+  const resolvePath = (p: string) => {
+    const s = String(p ?? "").trim();
+    if (!s) return "";
+    if (/^https?:\/\//i.test(s)) return s;
+    // Only join relative paths when `services/api.tsx` defines `baseURL` — never hardcode a host here.
+    if (!root) return "";
+    return s.startsWith("/") ? `${root}${s}` : `${root}/${s}`;
+  };
+
+  const out: MorePicksGridItem[] = [];
+
+  for (const p of rows) {
+    if (options?.requireProductActive !== false) {
+      if (!apiProductRowCountsAsActive(p.status)) continue;
+    }
+
+    const rawPid = p.id ?? p.productId;
+    const idNum =
+      typeof rawPid === "string"
+        ? Number.parseInt(rawPid, 10)
+        : Number(rawPid);
+    if (!Number.isFinite(idNum) || idNum <= 0) continue;
+
+    const primary = pickPrimaryProductImage(p.images);
+    const uri = resolveProductPrimaryImageUri(primary, resolvePath);
+
+    const name =
+      String(
+        p.name ?? p.productName ?? p.title ?? p.displayName ?? ""
+      ).trim() || `Product ${idNum}`;
+
+    const v = pickMorePicksVariant(p);
+    const sale = Number(
+      v?.sellingPrice ?? p.salePrice ?? p.sellingPrice ?? p.price ?? 0
+    );
+    const mrp = Number(
+      v?.mrpPrice ?? p.mrp ?? p.maxRetailPrice ?? 0
+    );
+
+    let oldPrice: string | undefined;
+    let discount: string | undefined;
+
+    if (mrp > 0 && sale > 0 && mrp > sale) {
+      oldPrice = formatInrAmount(mrp);
+      discount = `${Math.round(((mrp - sale) / mrp) * 100)}%`;
+    } else if (
+      typeof v?.discountPercentage === "number" &&
+      v.discountPercentage > 0
+    ) {
+      discount = `${Math.round(v.discountPercentage)}%`;
+    } else if (
+      typeof p.discountPercentage === "number" &&
+      p.discountPercentage > 0
+    ) {
+      discount = `${Math.round(p.discountPercentage)}%`;
+    }
+
+    out.push({
+      id: String(idNum),
+      name,
+      image: uri ? ({ uri } as const) : placeholderImage,
+      rating: "0.0 (0)",
+      price: sale > 0 ? formatInrAmount(sale) : "—",
+      oldPrice,
+      discount,
+    });
+  }
+
+  return out;
+}
+
+const LATEST_PRODUCTS_FALLBACK: MorePicksGridItem[] = [
+  {
+    id: "1",
+    name: "Golden Bangles Set",
+    image: require("../assets/images/latest1.png"),
+    rating: "0.0 (0)",
+    price: "₹1,446",
+  },
+  {
+    id: "2",
+    name: "Traditional Meenakari P...",
+    image: require("../assets/images/latest2.png"),
+    rating: "0.0 (0)",
+    price: "₹2,394",
+    oldPrice: "₹3,999",
+    discount: "50%",
+  },
+  {
+    id: "3",
+    name: "Bridal Bangles Set",
+    image: require("../assets/images/latest3.png"),
+    rating: "0.0 (0)",
+    price: "₹1,899",
+  },
+  {
+    id: "4",
+    name: "Red Designer Bangles",
+    image: require("../assets/images/latest4.png"),
+    rating: "0.0 (0)",
+    price: "₹1,599",
+  },
+];
+
 type MainCategoryApi = {
   id: number;
   categoryName: string;
   image: string | null;
   mobileImage?: string | null;
+  bannerImage?: string | null;
   status?: number;
 };
 
-const MAIN_CATEGORIES_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/main";
-const MAIN_UPLOADS_BASE =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
-const MAIN_CATEGORIES_CACHE_KEY = "@main_categories_cache_v1";
+/** Main category strip + Shop by Store — base URL from `services/api.tsx` */
+const MAIN_CATEGORIES_PATH = "/api/categories/main";
+const MAIN_CATEGORIES_CACHE_KEY = "@main_categories_cache_v2";
 
-function getMainCategoryImageUri(filename: string | null | undefined): string {
-  const f = String(filename ?? "").trim();
-  if (!f) return `${MAIN_UPLOADS_BASE}/uploads/`;
-  if (/^https?:\/\//i.test(f)) return f;
-  return `${MAIN_UPLOADS_BASE}/uploads/${f}`;
+const MAIN_CATEGORY_PLACEHOLDER = require("../assets/MainCatImages/images/Kids.png") as ImageSourcePropType;
+
+function normalizeMainCategoriesPayload(data: unknown): MainCategoryApi[] {
+  if (Array.isArray(data)) return data as MainCategoryApi[];
+  if (data && typeof data === "object") {
+    const o = data as Record<string, unknown>;
+    if (Array.isArray(o.data)) return o.data as MainCategoryApi[];
+    if (Array.isArray(o.content)) return o.content as MainCategoryApi[];
+    if (Array.isArray(o.products)) return o.products as MainCategoryApi[];
+  }
+  return [];
 }
 
-/** Hero carousel — swap keys on each slide’s `image` to use other `banner*.png` files */
+/** Resolve category image URL: absolute URLs unchanged; relative paths use current API origin. */
+function resolveCategoryMediaUri(pathOrUrl: string, apiOrigin: string): string {
+  const s = String(pathOrUrl ?? "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  const root = apiOrigin.replace(/\/+$/, "");
+  if (!root) return s;
+  if (s.startsWith("/")) return `${root}${s}`;
+  if (/^(uploads\/)/i.test(s)) return `${root}/${s}`;
+  return `${root}/uploads/${s}`;
+}
+
+function mainCategoryDisplayUri(row: MainCategoryApi, apiOrigin: string): string {
+  const mobile = String(row.mobileImage ?? "").trim();
+  if (mobile) return resolveCategoryMediaUri(mobile, apiOrigin);
+  const banner = String(row.bannerImage ?? "").trim();
+  if (banner) return resolveCategoryMediaUri(banner, apiOrigin);
+  return resolveCategoryMediaUri(String(row.image ?? "").trim(), apiOrigin);
+}
+
+/**
+ * Hero carousel assets — swap `image` per slide (image fills the card; `chromeGradient` tints browse strip).
+ */
 const HERO_BANNER_ASSETS = {
-  banner1: require("../assets/images/banner1.png"),
-  banner2: require("../assets/images/banner2.png"),
-  banner3: require("../assets/images/banner3.png"),
+  banner1: require("../assets/images/homebanner1section.png"),
+  banner2: require("../assets/images/homebanner1section2.png"),
+  banner3: require("../assets/images/homebanner1section3.png"),
   banner5: require("../assets/images/banner5.png"),
   banner6: require("../assets/images/banner6.png"),
   banner7: require("../assets/images/banner7.png"),
@@ -130,10 +806,11 @@ const HERO_BANNER_ASSETS = {
 const HERO_PROMO_CARDS: HeroPromoCard[] = [
   {
     id: "h1",
-    chromeGradient: ["#F9A8D4", "#EC4899", "#BE185D"],
-    cardGradient: ["#F472B6", "#DB2777"],
+    /** Stadium / floodlight blues — matches `homebanner1section.png` */
+    chromeGradient: ["#1E3A8A", "#2563EB", "#0F172A"],
+    cardGradient: ["#3B82F6", "#172554"],
     titleColor: "#FFFFFF",
-    subtitleColor: "rgba(255,255,255,0.95)",
+    subtitleColor: "rgba(255,255,255,0.92)",
     title: "Up to 75% off",
     subtitle: "Limited-time deals storewide*",
     tag: "MEGA TECH DAYS",
@@ -142,10 +819,11 @@ const HERO_PROMO_CARDS: HeroPromoCard[] = [
   },
   {
     id: "h2",
-    chromeGradient: ["#A5B4FC", "#6366F1", "#4338CA"],
-    cardGradient: ["#818CF8", "#4F46E5"],
+    /** Teal / cyan pitch lights — pairs with `homebanner1section2.png` */
+    chromeGradient: ["#0E7490", "#0891B2", "#134E4A"],
+    cardGradient: ["#22D3EE", "#0F766E"],
     titleColor: "#FFFFFF",
-    subtitleColor: "rgba(255,255,255,0.94)",
+    subtitleColor: "rgba(255,255,255,0.92)",
     title: "Up to ₹50 back*",
     subtitle: "Pay safe, shop fast",
     tag: "PAY OFFERS",
@@ -154,10 +832,11 @@ const HERO_PROMO_CARDS: HeroPromoCard[] = [
   },
   {
     id: "h3",
-    chromeGradient: ["#5EEAD4", "#14B8A6", "#0F766E"],
-    cardGradient: ["#2DD4BF", "#0F766E"],
+    /** Style / fashion — jewel greens */
+    chromeGradient: ["#34D399", "#059669", "#064E3B"],
+    cardGradient: ["#10B981", "#14532D"],
     titleColor: "#FFFFFF",
-    subtitleColor: "rgba(255,255,255,0.94)",
+    subtitleColor: "rgba(255,255,255,0.92)",
     title: "Style fest",
     subtitle: "Fashion & footwear",
     tag: "STYLE EDIT",
@@ -166,10 +845,11 @@ const HERO_PROMO_CARDS: HeroPromoCard[] = [
   },
   {
     id: "h4",
-    chromeGradient: ["#FDBA74", "#F97316", "#C2410C"],
-    cardGradient: ["#FB923C", "#C2410C"],
+    /** Warm market / essentials — matches typical grocery & deals art */
+    chromeGradient: ["#FDBA74", "#EA580C", "#7C2D12"],
+    cardGradient: ["#FB923C", "#9A3412"],
     titleColor: "#FFFFFF",
-    subtitleColor: "rgba(255,255,255,0.95)",
+    subtitleColor: "rgba(255,255,255,0.94)",
     title: "Fresh deals",
     subtitle: "Daily essentials",
     tag: "FRESH PICKS",
@@ -379,18 +1059,7 @@ export default function Home() {
     " Sportswear",
   ];
   
-  const [searchQuery, setSearchQuery] = useState("");
-  type SearchSuggestionsResponse = {
-    success?: boolean;
-    message?: string;
-    data?: string[];
-  };
-
-  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
-  const [isSearchLoading, setIsSearchLoading] = useState(false);
-  const [isSearchDropdownVisible, setIsSearchDropdownVisible] = useState(false);
   const [userDisplayName, setUserDisplayName] = useState("Ramya");
-  const lastSearchReqId = useRef(0);
 
   const [deliveryAddressModalVisible, setDeliveryAddressModalVisible] =
     useState(false);
@@ -429,42 +1098,6 @@ export default function Home() {
       void loadUserDisplayName();
     }, [loadUserDisplayName])
   );
-
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q) {
-      setSearchSuggestions([]);
-      setIsSearchLoading(false);
-      return;
-    }
-
-    const reqId = ++lastSearchReqId.current;
-    setIsSearchLoading(true);
-    const t = setTimeout(() => {
-      void (async () => {
-        try {
-          const { data } = await api.get<SearchSuggestionsResponse>(
-            "/api/search/suggestions",
-            { params: { keyword: q } }
-          );
-          if (lastSearchReqId.current !== reqId) return;
-          const rows = Array.isArray(data?.data) ? data.data : [];
-          setSearchSuggestions(
-            rows.filter((s) => typeof s === "string" && s.trim().length > 0)
-          );
-        } catch {
-          if (lastSearchReqId.current !== reqId) return;
-          setSearchSuggestions([]);
-        } finally {
-          if (lastSearchReqId.current === reqId) setIsSearchLoading(false);
-        }
-      })();
-    }, 250);
-
-    return () => {
-      clearTimeout(t);
-    };
-  }, [searchQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -623,7 +1256,10 @@ export default function Home() {
         const raw =
           e["android.speech.extra.RESULTS"] ?? e.results;
         if (Array.isArray(raw) && raw.length > 0) {
-          setSearchQuery(String(raw[0]));
+          const spoken = String(raw[0]).trim();
+          if (spoken) {
+            router.push({ pathname: "/searchresults", params: { q: spoken } });
+          }
           return;
         }
       }
@@ -696,9 +1332,47 @@ export default function Home() {
   const [mainCategories, setMainCategories] = useState<
     { id: string; title: string; image: ImageSourcePropType; href: Href }[]
   >([]);
-  const [mainCategoriesSource, setMainCategoriesSource] = useState<
-    "live" | "cached" | "fallback"
-  >("fallback");
+
+  const [morePicksItems, setMorePicksItems] =
+    useState<MorePicksGridItem[]>(LATEST_PRODUCTS_FALLBACK);
+  const [morePicksPage, setMorePicksPage] = useState(0);
+  const [morePicksHasMore, setMorePicksHasMore] = useState(false);
+  const [morePicksLoadingMore, setMorePicksLoadingMore] = useState(false);
+
+  const [megaDiscountCards, setMegaDiscountCards] = useState<MegaDiscountHomeCard[]>(
+    MEGA_DISCOUNT_HOME_FALLBACK
+  );
+
+  const [premiumFindsCards, setPremiumFindsCards] = useState<PremiumFindsHomeCard[]>(
+    PREMIUM_FINDS_HOME_FALLBACK
+  );
+
+  const [freshFindsCards, setFreshFindsCards] =
+    useState<FreshFindCard[]>(FRESH_FINDS_FALLBACK);
+
+  const freshPairs = useMemo(
+    () => chunkFreshFindPairs(freshFindsCards),
+    [freshFindsCards]
+  );
+
+  const [topPicksItems, setTopPicksItems] = useState<TopPickCard[]>(TOP_PICKS_FALLBACK);
+  /** After preview fetch: more pages / larger total on server (arrow opens full list on subcat). */
+  const [topPicksHasMoreOnServer, setTopPicksHasMoreOnServer] = useState(false);
+  const topPicksRequestIdRef = useRef(0);
+
+  const topPicksVisible = useMemo(
+    () => topPicksItems.slice(0, TOP_PICKS_PREVIEW_SIZE),
+    [topPicksItems]
+  );
+
+  const topPicksShowArrow = useMemo(
+    () => topPicksItems.length > 0 || topPicksHasMoreOnServer,
+    [topPicksItems.length, topPicksHasMoreOnServer]
+  );
+
+  const [suggestedProducts, setSuggestedProducts] = useState<SuggestedForYouGridItem[]>(
+    SUGGESTED_FOR_YOU_FALLBACK
+  );
 
   const categoryNameToHref = useCallback((name: string): Href => {
     const normalized = String(name ?? "").trim().toLowerCase();
@@ -710,6 +1384,7 @@ export default function Home() {
     if (normalized === "accessories") return "/accessories";
     if (normalized === "sweets") return "/sweets";
     if (normalized === "homely hub") return "/gifts";
+    if (normalized === "indoor play") return "/indoorplay" as Href;
     if (normalized === "beauty & personal care")
       return "/beauty-personal-care" as Href;
     // Default: open the full categories screen
@@ -738,68 +1413,38 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const { data } = await api.get<MainCategoryApi[]>("/api/categories/main", {
-          baseURL: MAIN_UPLOADS_BASE,
-        });
-        const json = data;
-        if (cancelled) return;
-        const rows = Array.isArray(json) ? json : [];
-        const mappedFromApi = rows
+      const mapRows = (rows: MainCategoryApi[]) => {
+        const apiOrigin = String(
+          (api.defaults.baseURL as string | undefined) ?? ""
+        ).trim();
+        return rows
           .filter((x) => (typeof x.status === "number" ? x.status === 1 : true))
-          .map((x) => ({
-            id: String(x.id),
-            title: x.categoryName,
-            image: ({ uri: x.mobileImage ? x.mobileImage : getMainCategoryImageUri(x.image) } as const),
-            href: categoryNameToHref(x.categoryName),
-          }));
+          .map((x) => {
+            const uri = mainCategoryDisplayUri(x, apiOrigin);
+            return {
+              id: String(x.id),
+              title: x.categoryName,
+              image: uri ? ({ uri } as ImageSourcePropType) : MAIN_CATEGORY_PLACEHOLDER,
+              href: categoryNameToHref(x.categoryName),
+            };
+          });
+      };
 
-        // Keep API order first, then append any manual categories missing from backend.
-        const apiHrefs = new Set(mappedFromApi.map((c) => String(c.href)));
-        const manualFallback = categories.map((cat) => ({
-          id: `manual-${cat.name}`,
-          title: cat.name,
-          image: cat.image as unknown as ImageSourcePropType,
-          href: cat.href,
-        }));
-        const missingManual = manualFallback.filter(
-          (m) => !apiHrefs.has(String(m.href))
-        );
-
-        setMainCategories([...mappedFromApi, ...missingManual]);
-        setMainCategoriesSource("live");
+      try {
+        const { data } = await api.get<unknown>(MAIN_CATEGORIES_PATH);
+        if (cancelled) return;
+        const rows = normalizeMainCategoriesPayload(data);
+        setMainCategories(mapRows(rows));
         await AsyncStorage.setItem(MAIN_CATEGORIES_CACHE_KEY, JSON.stringify(rows));
       } catch {
         if (cancelled) return;
         try {
           const cached = await AsyncStorage.getItem(MAIN_CATEGORIES_CACHE_KEY);
-          const parsed = cached ? (JSON.parse(cached) as MainCategoryApi[]) : [];
-          const rows = Array.isArray(parsed) ? parsed : [];
-          const mappedFromCache = rows
-            .filter((x) => (typeof x.status === "number" ? x.status === 1 : true))
-            .map((x) => ({
-              id: String(x.id),
-              title: x.categoryName,
-              image: ({ uri: x.mobileImage ? x.mobileImage : getMainCategoryImageUri(x.image) } as const),
-              href: categoryNameToHref(x.categoryName),
-            }));
-
-          const cacheHrefs = new Set(mappedFromCache.map((c) => String(c.href)));
-          const manualFallback = categories.map((cat) => ({
-            id: `manual-${cat.name}`,
-            title: cat.name,
-            image: cat.image as unknown as ImageSourcePropType,
-            href: cat.href,
-          }));
-          const missingManual = manualFallback.filter(
-            (m) => !cacheHrefs.has(String(m.href))
-          );
-
-          setMainCategories([...mappedFromCache, ...missingManual]);
-          setMainCategoriesSource(rows.length ? "cached" : "fallback");
+          const parsed = cached ? (JSON.parse(cached) as unknown) : [];
+          const rows = normalizeMainCategoriesPayload(parsed);
+          setMainCategories(mapRows(rows));
         } catch {
           setMainCategories([]);
-          setMainCategoriesSource("fallback");
         }
       }
     })();
@@ -807,6 +1452,274 @@ export default function Home() {
       cancelled = true;
     };
   }, [categoryNameToHref]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await api.get<MorePicksPageResponse>(MORE_PICKS_PRODUCTS_PATH, {
+          params: { page: 0, size: MORE_PICKS_PAGE_SIZE, sort: "createdAt,desc" },
+        });
+        if (cancelled) return;
+        const rows = Array.isArray(data?.content) ? data.content! : [];
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          LATEST_PRODUCTS_FALLBACK[0].image
+        );
+        if (mapped.length > 0) {
+          setMorePicksItems(mapped);
+          setMorePicksPage(0);
+          const last =
+            data?.last === true ||
+            rows.length === 0 ||
+            rows.length < MORE_PICKS_PAGE_SIZE;
+          setMorePicksHasMore(!last);
+        }
+      } catch {
+        /* keep LATEST_PRODUCTS_FALLBACK */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadMoreMorePicks = useCallback(async () => {
+    if (!morePicksHasMore || morePicksLoadingMore) return;
+    setMorePicksLoadingMore(true);
+    const nextPage = morePicksPage + 1;
+    try {
+      const { data } = await api.get<MorePicksPageResponse>(MORE_PICKS_PRODUCTS_PATH, {
+        params: { page: nextPage, size: MORE_PICKS_PAGE_SIZE, sort: "createdAt,desc" },
+      });
+      const rows = Array.isArray(data?.content) ? data.content! : [];
+      const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+      const mapped = mapMorePicksApiToGrid(
+        rows,
+        base,
+        LATEST_PRODUCTS_FALLBACK[0].image
+      );
+      if (mapped.length > 0) {
+        setMorePicksItems((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          const extra = mapped.filter((m) => !seen.has(m.id));
+          return [...prev, ...extra];
+        });
+      }
+      setMorePicksPage(nextPage);
+      const last =
+        data?.last === true ||
+        rows.length === 0 ||
+        rows.length < MORE_PICKS_PAGE_SIZE;
+      setMorePicksHasMore(!last);
+    } catch {
+      setMorePicksHasMore(false);
+    } finally {
+      setMorePicksLoadingMore(false);
+    }
+  }, [morePicksHasMore, morePicksLoadingMore, morePicksPage]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await api.get<unknown>(DISCOUNT_TOP_PRODUCTS_PATH);
+        if (cancelled) return;
+        const rows = normalizeProductListPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          MEGA_DISCOUNT_HOME_FALLBACK[0].image,
+          { requireProductActive: false }
+        );
+        const cards: MegaDiscountHomeCard[] = mapped.slice(0, 8).map((m) => ({
+          id: m.id,
+          name: m.name,
+          subtitle:
+            m.discount && String(m.discount).trim() && m.discount !== "—"
+              ? `${m.discount} off`
+              : m.oldPrice
+                ? `From ${m.price}`
+                : "Limited deal",
+          image: m.image,
+        }));
+        if (cards.length > 0) setMegaDiscountCards(cards);
+      } catch {
+        /* keep MEGA_DISCOUNT_HOME_FALLBACK */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await api.get<unknown>(TOP_SELLING_PRICE_PRODUCTS_PATH);
+        if (cancelled) return;
+        const rows = normalizeProductListPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          PREMIUM_FINDS_HOME_FALLBACK[0].image,
+          { requireProductActive: false }
+        );
+        const cards: PremiumFindsHomeCard[] = mapped.slice(0, 8).map((m) => ({
+          id: m.id,
+          name: m.name,
+          subtitle:
+            m.price && String(m.price).trim() && m.price !== "—"
+              ? `Selling ${m.price}`
+              : "Top value",
+          image: m.image,
+        }));
+        if (cards.length > 0) setPremiumFindsCards(cards);
+      } catch {
+        /* keep PREMIUM_FINDS_HOME_FALLBACK */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await api.get<unknown>(FRESH_FINDS_RECENT_PATH);
+        if (cancelled) return;
+        const rows = normalizeProductListPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          LATEST_PRODUCTS_FALLBACK[0].image,
+          { requireProductActive: false }
+        );
+        const cards: FreshFindCard[] = mapped.map((m) => ({
+          id: m.id,
+          image: m.image,
+        }));
+        if (cards.length > 0) setFreshFindsCards(cards);
+      } catch {
+        /* keep FRESH_FINDS_FALLBACK */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const max = Math.max(0, freshPairs.length - 1);
+    setActiveIndex((i) => Math.min(Math.max(0, i), max));
+  }, [freshPairs.length]);
+
+  const onTopPicksArrowPress = useCallback(() => {
+    openSubcatProducts("Top picks for you");
+  }, [openSubcatProducts]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const myRequestId = ++topPicksRequestIdRef.current;
+      const ac = new AbortController();
+      setTopPicksHasMoreOnServer(false);
+      void (async () => {
+        try {
+          const { data } = await api.get<unknown>(TOP_PICKS_POPULAR_PATH, {
+            params: {
+              page: 0,
+              size: TOP_PICKS_PREVIEW_SIZE,
+              sort: "createdAt,desc",
+            },
+            signal: ac.signal,
+          });
+          if (myRequestId !== topPicksRequestIdRef.current) return;
+          const rows = normalizeProductListPayload(data);
+          const meta = readSpringPageMeta(data);
+          const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+          const mapped = mapMorePicksApiToGrid(
+            rows,
+            base,
+            TOP_PICKS_FALLBACK[0].image,
+            { requireProductActive: false }
+          );
+          const cards: TopPickCard[] = mapped.map((m) => ({
+            id: m.id,
+            name: m.name,
+            image: m.image,
+          }));
+          if (myRequestId !== topPicksRequestIdRef.current) return;
+
+          const hasMoreOnServer =
+            meta.last === false ||
+            (typeof meta.totalElements === "number" &&
+              meta.totalElements > cards.length);
+
+          if (cards.length > 0) {
+            setTopPicksItems(cards);
+            setTopPicksHasMoreOnServer(hasMoreOnServer);
+            return;
+          }
+          setTopPicksHasMoreOnServer(false);
+          setTopPicksItems((prev) =>
+            looksLikeApiTopPicks(prev) ? prev : TOP_PICKS_FALLBACK
+          );
+        } catch (e) {
+          if (myRequestId !== topPicksRequestIdRef.current) return;
+          if (isAbortLikeError(e)) return;
+          setTopPicksHasMoreOnServer(false);
+          setTopPicksItems((prev) =>
+            looksLikeApiTopPicks(prev) ? prev : TOP_PICKS_FALLBACK
+          );
+        }
+      })();
+      return () => {
+        ac.abort();
+      };
+    }, [])
+  );
+
+  const loadSuggestedForYouFromWishlistApi = useCallback(async () => {
+    const userId = await readNumericUserIdFromStorage();
+    if (!userId) {
+      setSuggestedProducts(SUGGESTED_FOR_YOU_FALLBACK);
+      return;
+    }
+
+    try {
+      const { data: body } = await api.get<unknown>(wishlistUserPath(userId));
+      if (wishlistResponseIsExplicitFailure(body)) {
+        setSuggestedProducts(SUGGESTED_FOR_YOU_FALLBACK);
+        return;
+      }
+      const apiBase = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+      const rows = normalizeWishlistRows(body);
+      const mapped = rows
+        .map((r) => apiRowToSuggestedForYouItem(r, apiBase))
+        .filter((x): x is SuggestedForYouGridItem => x != null);
+      if (mapped.length > 0) {
+        setSuggestedProducts(mapped);
+      } else {
+        setSuggestedProducts(SUGGESTED_FOR_YOU_FALLBACK);
+      }
+    } catch {
+      setSuggestedProducts(SUGGESTED_FOR_YOU_FALLBACK);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadSuggestedForYouFromWishlistApi();
+    }, [loadSuggestedForYouFromWishlistApi])
+  );
 
   /** Sync play/pause with screen focus. Do not use useFocusEffect cleanup to pause — it can run after expo-video's shared player is released (native crash / rejection). */
   useEffect(() => {
@@ -822,6 +1735,179 @@ export default function Home() {
     setSaveToWishlistChecked(true);
     setSaveToWishlistVisible(true);
   }, []);
+
+  const renderMorePickCell = useCallback(
+    (item: MorePicksGridItem, index: number) => {
+      const ratingValue = Number.parseFloat(String(item.rating).split(" ")[0]) || 0;
+      const col = index % 2;
+      return (
+        <View style={styles.latestGridCell} key={`mp-${item.id}-${index}`}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={[
+              styles.latestGridCard,
+              col === 0 ? styles.latestGridCardDividerRight : null,
+              styles.latestGridCardDividerBottom,
+            ]}
+            onPress={() =>
+              router.push({ pathname: "/productdetail", params: { id: item.id } })
+            }
+            accessibilityRole="button"
+            accessibilityLabel={`${item.name}, open product`}
+          >
+            <View style={styles.latestGridImageWrap}>
+              <Image source={item.image} style={styles.latestGridImage} resizeMode="cover" />
+
+              <TouchableOpacity
+                style={styles.latestGridWishBtn}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${item.name} to wishlist`}
+                onPress={() =>
+                  openSaveToWishlistSheet({
+                    id: item.id,
+                    name: item.name,
+                    image: item.image,
+                    price: item.price,
+                    oldPrice: item.oldPrice,
+                  })
+                }
+              >
+                <Ionicons
+                  name={wishlistIds.has(item.id) ? "heart" : "heart-outline"}
+                  size={18}
+                  color={wishlistIds.has(item.id) ? "#E11D48" : "#111827"}
+                />
+              </TouchableOpacity>
+
+              {item.discount ? (
+                <View style={styles.latestGridDiscountPill}>
+                  <Text style={styles.latestGridDiscountPillText}>{item.discount} off</Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.latestGridBody}>
+              <Text style={styles.latestGridTitle} numberOfLines={2}>
+                {item.name}
+              </Text>
+
+              <View style={styles.latestGridPriceRow}>
+                <View style={styles.latestGridPriceCol}>
+                  <Text style={styles.latestGridPriceCaption}>Selling</Text>
+                  <Text style={styles.latestGridPrice}>{item.price}</Text>
+                </View>
+                {item.oldPrice ? (
+                  <View style={styles.latestGridPriceCol}>
+                    <Text style={styles.latestGridPriceCaption}>MRP</Text>
+                    <Text style={styles.latestGridOldPrice}>{item.oldPrice}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.latestGridMetaRow}>
+                <View style={styles.latestGridRatingPill}>
+                  <Ionicons name="star" size={14} color="#FFFFFF" />
+                  <Text style={styles.latestGridRatingText}>{ratingValue.toFixed(1)}</Text>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      );
+    },
+    [openSaveToWishlistSheet, router, wishlistIds]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+  );
 
   const handleConfirmSaveToWishlist = useCallback(async () => {
     if (!pendingWishlist) {
@@ -889,33 +1975,6 @@ const banners2 = [
     { id: 2, label: "upi payment", icon: "payments" },
     { id: 3, label: "coupons", icon: "local-offer" },
   ];
-
-  const lookingProducts = [
-    {
-      id: 1,
-      name: "Bangles ",
-      image: require("../assets/images/look1.png"),
-    },
-    {
-      id: 2,
-      name: "Clock",
-      image: require("../assets/images/look2.png"),
-    },
-    {
-      id: 3,
-      name: "accessories",
-      image: require("../assets/images/look3.png"),
-    },
-    {
-      id: 4,
-      name: "Women's wear  ",
-      image: require("../assets/images/look4.png"),
-    },
-  ];
-
-  
-
-  
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1255,33 +2314,6 @@ useEffect(() => {
     },
   ];
 
-  // mega discounts
-  const megaProducts = [
-  {
-    id: '1',
-    name: 'women wear',
-    subtitle: 'Up to 60% Off',
-    image: require('../assets/images/megadis1.png'),
-  },
-  {
-    id: '2',
-    name: 'new brand',
-    subtitle: 'Best Deals',
-    image: require('../assets/images/megadis2.png'),
-  },
-  {
-    id: '3',
-    name: 'performance',
-    subtitle: 'Flat 50% Off',
-    image: require('../assets/images/megadis3.png'),
-  },
-  {
-    id: '4',
-    name: 'Stylish ',
-    subtitle: 'Trending Deals',
-    image: require('../assets/images/megadis4.png'),
-  },
-];
 // megabanners
 const megaBanners = [
   { id: '1', image: require('../assets/images/mega1.png') },
@@ -1310,7 +2342,7 @@ const focusBanners = [
       return;
     }
     await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       quality: 1,
     });
   }, []);
@@ -1330,113 +2362,7 @@ const focusBanners = [
   };
 
 
-    // suggested — cart ids sg1–sg4 match shopStorage PRODUCT_IMAGES
-    const suggestedProducts = [
-  {
-    cartId: "sg1",
-    name: "Women floral cotton dress",
-    image: require("../assets/images/look1.png"),
-    oldPrice: "₹499",
-    price: "₹299",
-    rating: "4.5",
-    priceNum: 299,
-    mrpNum: 499,
-  },
-  {
-    cartId: "sg2",
-    name: "Casual summer A-line look",
-    image: require("../assets/images/look2.png"),
-    oldPrice: "₹899",
-    price: "₹449",
-    rating: "4.2",
-    priceNum: 449,
-    mrpNum: 899,
-  },
-  {
-    cartId: "sg3",
-    name: "Printed kurta & dupatta set",
-    image: require("../assets/images/look3.png"),
-    oldPrice: "₹1,299",
-    price: "₹599",
-    rating: "4.8",
-    priceNum: 599,
-    mrpNum: 1299,
-  },
-  {
-    cartId: "sg4",
-    name: "Gym quick-dry training tee",
-    image: require("../assets/images/sports2.png"),
-    oldPrice: "₹699",
-    price: "₹399",
-    rating: "4.3",
-    priceNum: 399,
-    mrpNum: 699,
-  },
-];
-
-
-
-const premiumProducts = [
-  {
-    id: '1',
-    name: 'Induction Cooktops',
-    subtitle: "Don't Miss",
-    image: require('../assets/images/premium1.png'),
-  },
-  {
-    id: '2',
-    name: 'new ',
-    subtitle: 'New Collection',
-    image: require('../assets/images/premium2.png'),
-  },
-  {
-    id: '3',
-    name: 'Shirt',
-    subtitle: 'Trending Now',
-    image: require('../assets/images/premium3.png'),
-  },
-  {
-    id: '4',
-    name: 'mens wear',
-    subtitle: 'Best Seller',
-    image: require('../assets/images/premium4.png'),
-  },
-];
-// latest products
-
-
-const latestProducts = [
-  {
-    id: "1",
-    name: "Golden Bangles Set",
-    image: require("../assets/images/latest1.png"),
-    rating: "0.0 (0)",
-    price: "₹1,446",
-  },
-  {
-    id: "2",
-    name: "Traditional Meenakari P...",
-    image: require("../assets/images/latest2.png"),
-    rating: "0.0 (0)",
-    price: "₹2,394",
-    oldPrice: "₹3,999",
-    discount: "50%",
-  },
-  {
-    id: "3",
-    name: "Bridal Bangles Set",
-    image: require("../assets/images/latest3.png"),
-    rating: "0.0 (0)",
-    price: "₹1,899",
-  },
-  {
-    id: "4",
-    name: "Red Designer Bangles",
-    image: require("../assets/images/latest4.png"),
-    rating: "0.0 (0)",
-    price: "₹1,599",
-  },
-];
+// latest products (see LATEST_PRODUCTS_FALLBACK at module scope — loaded from API in Home)
 
 // scrolling brand
 const brands = [
@@ -1491,47 +2417,46 @@ const sellerGallery = [
     image: require("../assets/images/image4.png"),
   },
 ];
-// cards
-const freshData = [
-  { id: "1", image: require("../assets/images/product1.png") },
-  { id: "2", image: require("../assets/images/product2.png") },
-  { id: "3", image: require("../assets/images/premium1.png") },
-  { id: "4", image: require("../assets/images/premium2.png") },
-];
 const FRESH_ROW_PADDING = 16;
 const FRESH_INNER = width - FRESH_ROW_PADDING * 2;
 const FRESH_IMG_60 = FRESH_INNER * 0.6;
 const FRESH_IMG_30 = FRESH_INNER * 0.3;
 const FRESH_IMG_GAP = FRESH_INNER * 0.1;
 
-const freshPairs: (typeof freshData)[] = [];
-for (let i = 0; i < freshData.length; i += 2) {
-  freshPairs.push(freshData.slice(i, i + 2));
-}
-
-
 // categariy data
 
+/** Fallback when main categories API is empty — image-only tiles (wide banner art). */
 const categoryData = [
   {
-    id: "1",
-    title: "Print Store",
-    image: require("../assets/images/megadis1.png"),
+    id: "sb1",
+    title: "Featured",
+    image: require("../assets/images/accessarieshomebanner.png"),
   },
   {
-    id: "2",
-    title: "Giftables Store",
-    image: require("../assets/images/megadis2.png"),
+    id: "sb2",
+    title: "Featured",
+    image: require("../assets/images/Footwearhomebanner.png"),
   },
   {
-    id: "3",
-    title: "Summer Store",
-    image: require("../assets/images/megadis3.png"),
+    id: "sb3",
+    title: "Featured",
+    image: require("../assets/images/Homlyhubhomebanner.png"),
   },
   {
-    id: "4",
-    title: "Combo Store",
-    image: require("../assets/images/megadis4.png"),
+    id: "sb4",
+    title: "Featured",
+    image: require("../assets/images/Clothinghomebanner.png"),
+
+  },
+  {
+    id: "sb5",
+    title: "Featured",
+    image: require("../assets/images/Sweetsbannerhome.png"),
+  },
+  {
+    id: "sb6",
+    title: "Featured",
+    image: require("../assets/images/Sportswearhomebanner.png"),
   },
 ];
 
@@ -1547,8 +2472,9 @@ const categoryData = [
     <View style={styles.container}>
       <View style={styles.headerSticky}>
         <LinearGradient
-          colors={[...activeHeroHeader.chromeGradient]}
-          locations={[0, 0.45, 1]}
+          // Header (logo + search + camera/mic + location) should stay white.
+          colors={["#FFFFFF", "#FFFFFF"]}
+          locations={[0, 1]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.headerMeshGradient, { paddingTop: insets.top }]}
@@ -1602,7 +2528,7 @@ const categoryData = [
                 style={styles.headerIconHit}
                 accessibilityLabel="Wishlist"
               >
-                <Ionicons name="heart-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="heart-outline" size={24} color="#0F172A" />
                 {wishlistCount > 0 ? (
                   <View style={styles.headerWishlistBadge}>
                     <Text style={styles.headerWishlistBadgeText}>
@@ -1616,7 +2542,7 @@ const categoryData = [
                 style={styles.headerIconHit}
                 accessibilityLabel="Notifications"
               >
-                <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="notifications-outline" size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>
           </View>
@@ -1627,105 +2553,57 @@ const categoryData = [
         <View style={styles.header}>
           <View style={styles.searchRow}>
             <View style={styles.logoCol}>
-              <LinearGradient
-                colors={[...LOGO_RING_COLORS]}
-                locations={[...LOGO_RING_LOCATIONS]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logoRingGradient}
-              >
-                <View style={styles.logoInnerDisc}>
-                  <Image
-                    source={require("../assets/images/logo.png")}
-                    style={styles.logo}
-                    resizeMode="contain"
-                  />
-                </View>
-              </LinearGradient>
+              <View style={styles.logoRingPlain}>
+                <Image
+                  source={require("../assets/images/logo.png")}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+              </View>
             </View>
 
-            <LinearGradient
-              colors={[...SEARCH_BAR_MESH_COLORS]}
-              locations={[...SEARCH_BAR_MESH_LOCS]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.searchContainer}
-            >
-              <Ionicons name="search-outline" size={18} color="#64748B" />
-              <TextInput
-                placeholder={placeholderTexts[placeholderIndex]}
-                placeholderTextColor="#64748B"
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={(t) => {
-                  setSearchQuery(t);
-                  if (!isSearchDropdownVisible) setIsSearchDropdownVisible(true);
-                }}
-                onFocus={() => setIsSearchDropdownVisible(true)}
-                onBlur={() => {
-                  // Small delay so a tap on a dropdown item still registers.
-                  setTimeout(() => setIsSearchDropdownVisible(false), 120);
-                }}
-                returnKeyType="search"
-                onSubmitEditing={() => {
-                  const q = searchQuery.trim();
-                  if (!q) return;
-                  setIsSearchDropdownVisible(false);
-                  router.push({ pathname: "/searchresults", params: { q } });
-                }}
-              />
-              <TouchableOpacity onPress={openCamera} style={styles.searchBarIconBtn}>
-                <Ionicons
-                  name="camera-outline"
-                  size={24}
-                  color="#64748B"
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={startVoiceSearch}
-                style={styles.searchBarIconBtn}
+            <View style={styles.searchFieldColumn}>
+              <LinearGradient
+                colors={[...SEARCH_BAR_MESH_COLORS]}
+                locations={[...SEARCH_BAR_MESH_LOCS]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.searchContainer}
               >
-                <Ionicons name="mic-outline" size={24} color="#64748B" />
-              </TouchableOpacity>
-            </LinearGradient>
-            {isSearchDropdownVisible && (isSearchLoading || searchQuery.trim().length > 0) ? (
-              <View style={styles.searchDropdown}>
-                {isSearchLoading ? (
-                  <View style={styles.searchDropdownItem}>
-                    <Text style={styles.searchDropdownText}>Searching…</Text>
-                  </View>
-                ) : (
-                  searchSuggestions.length > 0 ? (
-                    searchSuggestions.slice(0, 8).map((s) => (
-                      <TouchableOpacity
-                        key={s}
-                        style={[styles.searchDropdownItem, { flexDirection: "row", alignItems: "center" }]}
-                        activeOpacity={0.85}
-                        onPress={() => {
-                          setIsSearchDropdownVisible(false);
-                          setSearchQuery(s);
-                          router.push({ pathname: "/searchresults", params: { q: s } });
-                        }}
-                      >
-                        <Ionicons
-                          name="search-outline"
-                          size={16}
-                          color="#94a3b8"
-                          style={{ marginRight: 10 }}
-                        />
-                        <Text style={styles.searchDropdownText} numberOfLines={1}>
-                          {s}
-                        </Text>
-                      </TouchableOpacity>
-                    ))
-                  ) : (
-                    <View style={styles.searchDropdownItem}>
-                      <Text style={styles.searchDropdownText}>No results</Text>
-                    </View>
-                  )
-                )}
-              </View>
-            ) : null}
+                <Ionicons name="search-outline" size={18} color="#64748B" />
+                <Pressable
+                  style={{ flex: 1, minWidth: 0 }}
+                  onPress={() => router.push({ pathname: "/searchresults" })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Search products"
+                >
+                  <TextInput
+                    placeholder={placeholderTexts[placeholderIndex]}
+                    placeholderTextColor="#64748B"
+                    style={styles.searchInput}
+                    value=""
+                    editable={false}
+                    pointerEvents="none"
+                    returnKeyType="search"
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                  />
+                </Pressable>
+                <TouchableOpacity onPress={openCamera} style={styles.searchBarIconBtn}>
+                  <Ionicons
+                    name="camera-outline"
+                    size={24}
+                    color="#64748B"
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={startVoiceSearch}
+                  style={styles.searchBarIconBtn}
+                >
+                  <Ionicons name="mic-outline" size={24} color="#64748B" />
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -1841,7 +2719,7 @@ const categoryData = [
                     <Image
                       source={cat.image as any}
                       style={styles.categoryImageInner}
-                      resizeMode="contain"
+                      resizeMode="cover"
                     />
                   </View>
                   <Text style={styles.categoryChipLabelChrome} numberOfLines={2}>
@@ -1940,52 +2818,12 @@ const categoryData = [
                   accessibilityRole="button"
                   accessibilityLabel={`${item.title}, ${item.subtitle}`}
                 >
-                  <LinearGradient
-                    colors={[...item.cardGradient]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
+                  <Image
+                    source={item.image}
+                    style={styles.heroPromoImageFill}
+                    resizeMode="cover"
+                    accessibilityIgnoresInvertColors
                   />
-                  <View style={styles.heroPromoCardInner}>
-                    <View style={styles.heroPromoTextBlock}>
-                      <Text
-                        style={[
-                          styles.heroPromoTitle,
-                          { color: item.titleColor },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {item.title}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.heroPromoSubtitle,
-                          { color: item.subtitleColor },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {item.subtitle}
-                      </Text>
-                      <Text
-                        style={[styles.heroPromoTag, { color: item.titleColor }]}
-                        numberOfLines={1}
-                      >
-                        {item.tag}
-                      </Text>
-                    </View>
-                    <View style={styles.heroPromoImageMount}>
-                      <Image
-                        source={item.image}
-                        style={styles.heroPromoImage}
-                        resizeMode="cover"
-                      />
-                    </View>
-                    <View style={styles.heroPromoFooter}>
-                      <Text style={styles.heroPromoFooterText} numberOfLines={1}>
-                        {item.footer}
-                      </Text>
-                    </View>
-                  </View>
                 </TouchableOpacity>
               </View>
             )}
@@ -2005,7 +2843,7 @@ const categoryData = [
           </View>
         </View>
 
-        {/* Top Picks for You — horizontal ScrollView (FlatList inside ScrollView often collapses to 0 height) */}
+        {/* Top Picks for You — preview 5 from API; arrow opens full list on subcatProducts */}
         <LinearGradient
           colors={["#DBEAFE", "#E0E7FF", "#EDE9FE"]}
           locations={[0, 0.55, 1]}
@@ -2013,7 +2851,20 @@ const categoryData = [
           end={{ x: 1, y: 1 }}
           style={styles.userSuggestionCard}
         >
-          <Text style={styles.userSuggestionTitle}>Top Picks for You</Text>
+          <View style={styles.userSuggestionHeaderRow}>
+            <Text style={styles.userSuggestionTitle}>Top Picks for You</Text>
+            {topPicksShowArrow ? (
+              <TouchableOpacity
+                style={styles.userSuggestionArrow}
+                onPress={() => onTopPicksArrowPress()}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="View all top picks"
+              >
+                <Ionicons name="arrow-forward" size={20} color="#1E40AF" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
           <ScrollView
             horizontal
             nestedScrollEnabled
@@ -2021,20 +2872,25 @@ const categoryData = [
             style={styles.userSuggestionScroll}
             contentContainerStyle={styles.userSuggestionListContent}
           >
-            {lookingProducts.map((item, index) => (
+            {topPicksVisible.map((item, index) => (
               <TouchableOpacity
-                key={item.id}
+                key={`top-pick-${item.id}-${index}`}
                 style={[
                   styles.userSuggestionItem,
                   { width: USER_PICK_CARD_WIDTH },
-                  index < lookingProducts.length - 1
+                  index < topPicksVisible.length - 1
                     ? { marginRight: USER_PICK_ITEM_GAP }
                     : undefined,
                 ]}
                 activeOpacity={0.88}
-                onPress={() => openSubcatProducts(item.name)}
+                onPress={() =>
+                  router.push({
+                    pathname: "/productdetail",
+                    params: { id: item.id },
+                  })
+                }
                 accessibilityRole="button"
-                accessibilityLabel={`Top pick: ${item.name}, open products`}
+                accessibilityLabel={`Top pick: ${item.name}, open product`}
               >
                 <Image
                   source={item.image}
@@ -2127,9 +2983,14 @@ const categoryData = [
                   <TouchableOpacity
                     activeOpacity={0.9}
                     style={{ width: FRESH_IMG_60 }}
-                    onPress={() => openSubcatProducts("Fresh finds")}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: left.id },
+                      })
+                    }
                     accessibilityRole="button"
-                    accessibilityLabel="Fresh find, open products"
+                    accessibilityLabel="Fresh find, open product"
                   >
                     <Image
                       source={left.image}
@@ -2141,9 +3002,14 @@ const categoryData = [
                     <TouchableOpacity
                       activeOpacity={0.9}
                       style={{ width: FRESH_IMG_30 }}
-                      onPress={() => openSubcatProducts("Fresh finds")}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/productdetail",
+                          params: { id: right.id },
+                        })
+                      }
                       accessibilityRole="button"
-                      accessibilityLabel="Fresh find, open products"
+                      accessibilityLabel="Fresh find, open product"
                     >
                       <Image
                         source={right.image}
@@ -2352,14 +3218,16 @@ const categoryData = [
     </View>
 
     <View style={styles.premiumGrid}>
-      {premiumProducts.map((item) => (
+      {premiumFindsCards.map((item) => (
         <TouchableOpacity
           key={item.id}
           style={styles.premiumCard}
           activeOpacity={0.88}
-          onPress={() => openSubcatProducts(item.name)}
+          onPress={() =>
+            router.push({ pathname: "/productdetail", params: { id: item.id } })
+          }
           accessibilityRole="button"
-          accessibilityLabel={`Premium: ${item.name}, open products`}
+          accessibilityLabel={`Premium: ${item.name}, open product`}
         >
           <View style={styles.premiumImageWrap}>
             <Image
@@ -2481,14 +3349,20 @@ const categoryData = [
       <TouchableOpacity
         style={styles.storeItem}
         activeOpacity={0.88}
-        onPress={() => openSubcatProducts(item.title)}
+        onPress={() => {
+          if (mainCategories.length > 0) {
+            const m = item as (typeof mainCategories)[number];
+            router.push(m.href);
+            return;
+          }
+          openSubcatProducts(item.title);
+        }}
         accessibilityRole="button"
         accessibilityLabel={`Shop by store: ${item.title}, open products`}
       >
-        <View style={styles.arcContainer}>
-          <Image source={item.image} style={styles.arcImage} />
+        <View style={styles.shopStoreImageShell}>
+          <Image source={item.image} style={styles.shopStoreImage} />
         </View>
-        <Text style={styles.storeText}>{item.title}</Text>
       </TouchableOpacity>
     )}
   />
@@ -2589,14 +3463,16 @@ const categoryData = [
     </View>
 
     <View style={styles.megaGrid}>
-      {megaProducts.map((item) => (
+      {megaDiscountCards.map((item) => (
         <TouchableOpacity
           key={item.id}
           style={styles.megaCard}
           activeOpacity={0.88}
-          onPress={() => openSubcatProducts(item.name)}
+          onPress={() =>
+            router.push({ pathname: "/productdetail", params: { id: item.id } })
+          }
           accessibilityRole="button"
-          accessibilityLabel={`Mega discount: ${item.name}, open products`}
+          accessibilityLabel={`Mega discount: ${item.name}, open product`}
         >
           <View style={styles.megaImageWrap}>
             <Image
@@ -2684,85 +3560,34 @@ const categoryData = [
     </TouchableOpacity>
   </View>
 
-  <FlatList
-    data={latestProducts}
-    keyExtractor={(item) => item.id}
-    numColumns={2}
-    scrollEnabled={false}
-    contentContainerStyle={styles.latestGrid}
-    columnWrapperStyle={styles.latestGridRow}
-    renderItem={({ item, index }) => {
-      const ratingValue = Number.parseFloat(String(item.rating).split(" ")[0]) || 0;
-      const col = index % 2;
-      return (
-        <View style={styles.latestGridCell}>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={[
-              styles.latestGridCard,
-              col === 0 ? styles.latestGridCardDividerRight : null,
-              styles.latestGridCardDividerBottom,
-            ]}
-            onPress={() => openSubcatProducts(item.name)}
-            accessibilityRole="button"
-            accessibilityLabel={`${item.name}, open product`}
-          >
-            <View style={styles.latestGridImageWrap}>
-              <Image source={item.image} style={styles.latestGridImage} resizeMode="cover" />
-
-              <TouchableOpacity
-                style={styles.latestGridWishBtn}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={`Add ${item.name} to wishlist`}
-                onPress={() =>
-                  openSaveToWishlistSheet({
-                    id: item.id,
-                    name: item.name,
-                    image: item.image,
-                    price: item.price,
-                    oldPrice: item.oldPrice,
-                  })
-                }
-              >
-                <Ionicons
-                  name={wishlistIds.has(item.id) ? "heart" : "heart-outline"}
-                  size={18}
-                  color={wishlistIds.has(item.id) ? "#E11D48" : "#111827"}
-                />
-              </TouchableOpacity>
-
-              {item.discount ? (
-                <View style={styles.latestGridDiscountPill}>
-                  <Text style={styles.latestGridDiscountPillText}>{item.discount} off</Text>
-                </View>
-              ) : null}
-            </View>
-
-            <View style={styles.latestGridBody}>
-              <Text style={styles.latestGridTitle} numberOfLines={2}>
-                {item.name}
-              </Text>
-
-              <View style={styles.latestGridPriceRow}>
-                <Text style={styles.latestGridPrice}>{item.price}</Text>
-                {item.oldPrice ? (
-                  <Text style={styles.latestGridOldPrice}>{item.oldPrice}</Text>
-                ) : null}
-              </View>
-
-              <View style={styles.latestGridMetaRow}>
-                <View style={styles.latestGridRatingPill}>
-                  <Ionicons name="star" size={14} color="#FFFFFF" />
-                  <Text style={styles.latestGridRatingText}>{ratingValue.toFixed(1)}</Text>
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-      );
-    }}
-  />
+  <View style={styles.latestGrid}>
+    {chunkMorePicksRows(morePicksItems).map(([left, right], rowIdx) => (
+      <View key={`mp-row-${rowIdx}-${left.id}`} style={styles.latestGridRow}>
+        {renderMorePickCell(left, rowIdx * 2)}
+        {right ? (
+          renderMorePickCell(right, rowIdx * 2 + 1)
+        ) : (
+          <View style={styles.latestGridCell} />
+        )}
+      </View>
+    ))}
+    {morePicksHasMore ? (
+      <TouchableOpacity
+        style={styles.latestLoadMoreBtn}
+        activeOpacity={0.88}
+        disabled={morePicksLoadingMore}
+        onPress={() => void loadMoreMorePicks()}
+        accessibilityRole="button"
+        accessibilityLabel="Load more recommended products"
+      >
+        {morePicksLoadingMore ? (
+          <ActivityIndicator color="#C2410C" />
+        ) : (
+          <Text style={styles.latestLoadMoreBtnText}>Load more</Text>
+        )}
+      </TouchableOpacity>
+    ) : null}
+  </View>
 </View>
 
         </LinearGradient>
@@ -3625,7 +4450,7 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
         { backgroundColor: tint.bubble, borderColor: tint.border },
       ]}
     >
-      <MaterialIcons name={icon} size={17} color={tint.icon} />
+      <MaterialIcons name={icon} size={15} color={tint.icon} />
     </View>
     <Text style={styles.filterChipLabel}>{label}</Text>
   </TouchableOpacity>
@@ -3869,11 +4694,11 @@ const styles = StyleSheet.create({
   homeBrowsePanel: {
     marginHorizontal: 10,
     marginTop: 4,
-    marginBottom: 12,
-    paddingTop: 8,
-    paddingBottom: 10,
+    marginBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 6,
     backgroundColor: PANEL_BROWSE,
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: BORDER_BROWSE,
     shadowColor: "#153B59",
@@ -3886,10 +4711,10 @@ const styles = StyleSheet.create({
   homeBrowsePanelChrome: {
     marginHorizontal: 10,
     marginTop: 4,
-    marginBottom: 12,
-    paddingTop: 8,
-    paddingBottom: 10,
-    borderRadius: 18,
+    marginBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 6,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.42)",
     shadowColor: "#0F172A",
@@ -3901,8 +4726,8 @@ const styles = StyleSheet.create({
   },
 
   homeFilterRowInset: {
-    marginHorizontal: 8,
-    marginTop: 6,
+    marginHorizontal: 6,
+    marginTop: 3,
     marginBottom: 0,
   },
 
@@ -4070,9 +4895,16 @@ const styles = StyleSheet.create({
 
   searchRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginTop: 0,
     gap: 8,
+  },
+
+  /** Search bar + suggestions list stack below the bar (not squeezed in the row). */
+  searchFieldColumn: {
+    flex: 1,
+    minWidth: 0,
+    zIndex: 50,
   },
 
   logoCol: {
@@ -4100,7 +4932,8 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    overflow: "hidden",
+    // Avoid clipping/edge cutting on the logo artwork.
+    overflow: "visible",
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     justifyContent: "center",
     alignItems: "center",
@@ -4110,6 +4943,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
+  },
+
+  logoRingPlain: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   locationPillOuter: {
@@ -4350,7 +5192,7 @@ const styles = StyleSheet.create({
   },
 
   searchContainer: {
-    flex: 1,
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 22,
@@ -4374,17 +5216,21 @@ const styles = StyleSheet.create({
   },
 
   searchDropdown: {
+    alignSelf: "stretch",
+    width: "100%",
     marginTop: 4,
     backgroundColor: "#fff",
     borderRadius: 10,
     paddingVertical: 4,
-    maxHeight: 180,
+    maxHeight: 220,
     overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E5E7EB",
     shadowColor: "#000",
     shadowOpacity: 0.12,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    elevation: 6,
   },
 
   searchDropdownItem: {
@@ -4401,16 +5247,16 @@ const styles = StyleSheet.create({
   },
 
   categorySection: {
-    paddingTop: 4,
+    paddingTop: 2,
     paddingBottom: 0,
   },
 
   categoryScrollContent: {
     flexDirection: "row",
     alignItems: "flex-start",
-    paddingHorizontal: 10,
-    paddingTop: 4,
-    paddingBottom: 2,
+    paddingHorizontal: 8,
+    paddingTop: 2,
+    paddingBottom: 0,
   },
 
   categoryChip: {
@@ -4419,52 +5265,50 @@ const styles = StyleSheet.create({
   },
 
   categoryChipSpacing: {
-    marginRight: 10,
+    marginRight: 7,
   },
 
   categoryImageCard: {
     width: CATEGORY_IMAGE_CARD_SIZE,
     height: CATEGORY_IMAGE_CARD_SIZE,
-    borderRadius: 16,
-    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
-    padding: CATEGORY_IMAGE_INNER_INSET,
+    padding: 0,
     borderWidth: 0,
     borderColor: "transparent",
-    marginBottom: 5,
+    marginBottom: 3,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowColor: "transparent",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
 
   categoryImageInner: {
     width: "100%",
     height: "100%",
-    maxWidth: CATEGORY_ICON_INNER,
-    maxHeight: CATEGORY_ICON_INNER,
   },
 
   categoryChipLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     textAlign: "center",
     color: "#292524",
     width: "100%",
-    lineHeight: 12,
+    lineHeight: 11,
     paddingHorizontal: 1,
   },
 
   categoryChipLabelChrome: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     textAlign: "center",
     color: "#FFFFFF",
     width: "100%",
-    lineHeight: 12,
+    lineHeight: 11,
     paddingHorizontal: 1,
     textShadowColor: "rgba(0,0,0,0.35)",
     textShadowOffset: { width: 0, height: 1 },
@@ -4475,21 +5319,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "stretch",
-    marginHorizontal: 12,
+    marginHorizontal: 8,
     marginTop: 0,
-    marginBottom: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 6,
-    backgroundColor: "#FAFAF9",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E7E5E4",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-    gap: 2,
+    marginBottom: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    backgroundColor: "transparent",
+    borderRadius: 12,
+    borderWidth: 0,
+    borderColor: "transparent",
+    shadowColor: "transparent",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    gap: 1,
   },
 
   filterChip: {
@@ -4502,17 +5346,17 @@ const styles = StyleSheet.create({
   },
 
   filterIconBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1.5,
-    marginBottom: 4,
+    marginBottom: 2,
   },
 
   filterChipLabel: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "800",
     color: "#292524",
     textAlign: "center",
@@ -4567,7 +5411,7 @@ const styles = StyleSheet.create({
 
   heroPromoListContent: {
     paddingHorizontal: HERO_PROMO_SIDE_PADDING,
-    paddingVertical: 10,
+    paddingVertical: 0,
   },
   heroPromoItemWrap: {
     justifyContent: "flex-start",
@@ -4583,74 +5427,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 14,
   },
-  heroPromoCardInner: {
-    flex: 1,
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 0,
-  },
-  heroPromoTextBlock: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 4,
-  },
-  heroPromoTitle: {
-    fontSize: 24,
-    fontWeight: "900",
-    letterSpacing: -0.4,
-    lineHeight: 30,
-    textShadowColor: "rgba(0,0,0,0.25)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
-  },
-  heroPromoSubtitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 6,
-    lineHeight: 19,
-    textShadowColor: "rgba(0,0,0,0.2)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  heroPromoTag: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    marginTop: 8,
-    textTransform: "uppercase",
-    opacity: 0.95,
-    textShadowColor: "rgba(0,0,0,0.2)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  heroPromoImageMount: {
-    flex: 1,
-    minHeight: 0,
-    width: "100%",
-    marginTop: 4,
-    overflow: "hidden",
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  heroPromoImage: {
+  /** Full-bleed inside rounded card (`overflow: hidden` on parent clips corners). */
+  heroPromoImageFill: {
+    ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
-    minHeight: 140,
-  },
-  heroPromoFooter: {
-    backgroundColor: "rgba(255,255,255,0.94)",
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    marginHorizontal: 0,
-    marginBottom: 0,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  heroPromoFooterText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#0F172A",
-    textAlign: "center",
   },
 
 // looking card
@@ -4766,8 +5547,30 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
+  userSuggestionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    gap: 10,
+  },
+
+  userSuggestionArrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(30, 64, 175, 0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   userSuggestionScroll: {
     flexGrow: 0,
+    // Nested horizontal ScrollView: fixed height avoids 0-height layout on some Android builds.
+    height: USER_PICK_TOP_SCROLL_MIN_H,
+    minHeight: USER_PICK_TOP_SCROLL_MIN_H,
   },
 
   userSuggestionListContent: {
@@ -4778,10 +5581,11 @@ const styles = StyleSheet.create({
   },
 
   userSuggestionTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 22,
     fontWeight: "800",
     color: "#1E40AF",
-    marginBottom: 14,
     letterSpacing: 0.3,
   },
 
@@ -4790,7 +5594,7 @@ const styles = StyleSheet.create({
   },
 
   userSuggestionImageBox: {
-    width: "100%",
+    width: USER_PICK_CARD_WIDTH,
     height: 152,
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -5955,7 +6759,27 @@ latestSection: {
   },
 
   latestGridRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
     gap: 0,
+  },
+
+  latestLoadMoreBtn: {
+    marginTop: 10,
+    marginBottom: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FDBA74",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  latestLoadMoreBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#9A3412",
   },
 
   latestGridCell: {
@@ -6044,9 +6868,21 @@ latestSection: {
 
   latestGridPriceRow: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "flex-end",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 12,
+  },
+
+  latestGridPriceCol: {
+    minWidth: 0,
+  },
+
+  latestGridPriceCaption: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748B",
+    marginBottom: 2,
+    letterSpacing: 0.2,
   },
 
   latestGridPrice: {
@@ -6548,32 +7384,21 @@ storeItem: {
   marginRight: 20,
 },
 
-arcContainer: {
-  width: 164,
-  height: 152,
-  borderTopLeftRadius: 100,
-  borderTopRightRadius: 100,
-  borderBottomLeftRadius: 24,
-  borderBottomRightRadius: 24,
+/** Rounded frame sized for wide banner PNGs (`homebanner1section*.png`). */
+shopStoreImageShell: {
+  width: 172,
+  height: 124,
+  borderRadius: 20,
   overflow: "hidden",
   backgroundColor: "#E2E8F0",
   borderWidth: StyleSheet.hairlineWidth,
   borderColor: "rgba(13, 148, 136, 0.25)",
 },
 
-arcImage: {
+shopStoreImage: {
   width: "100%",
   height: "100%",
   resizeMode: "cover",
-},
-
-storeText: {
-  marginTop: 12,
-  fontSize: 16,
-  fontWeight: "600",
-  textAlign: "center",
-  color: "#1E293B",
-  paddingHorizontal: 4,
 },
 
   promoModalRoot: {

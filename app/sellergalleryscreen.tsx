@@ -112,7 +112,7 @@ export default function SellerGalleryScreen() {
       return;
     }
     await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       quality: 1,
     });
   }, []);

@@ -93,9 +93,10 @@ type ApiSubCategory = {
   status?: number;
 };
 
-/** Local backend for category 66 browse cards — set `EXPO_PUBLIC_LOCAL_API_URL` if not localhost. */
-const LOCAL_SPORTSWEAR_API_BASE =
+/** Single API base (keeps screens endpoint-only; see `services/api.tsx`). */
+const API_BASE =
   (typeof process !== "undefined" && process.env.EXPO_PUBLIC_LOCAL_API_URL?.trim()) ||
+  ((api.defaults.baseURL as string | undefined) ?? "").trim() ||
   (Platform.OS === "android" ? "http://10.0.2.2:8080" : "http://localhost:8080");
 
 const SPORTSWEAR_SUBCATEGORIES_PATH = "/api/categories/66/subcategories";
@@ -397,17 +398,15 @@ type ApiAccessoryGroup = {
   }[];
 };
 
-const FLINT_API_BASE =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
 /** Accessories worth the hype — table payload with per-subcategory `mobileImage` */
-const ACCESSORIES_WORTH_HYPE_URL = `${FLINT_API_BASE}/api/categories/70/subcategories-table`;
+const ACCESSORIES_WORTH_HYPE_PATH = "/api/categories/70/subcategories-table";
 /** Men’s sportswear half-cards rail — same table shape as accessories */
-const MENS_SPORTSWEAR_SUBCATEGORIES_TABLE_URL = `${FLINT_API_BASE}/api/categories/67/subcategories-table`;
+const MENS_SPORTSWEAR_SUBCATEGORIES_TABLE_PATH = "/api/categories/67/subcategories-table";
 /** Sports footwear promo rail + hero — [subcategories-table](https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/47/subcategories-table) */
-const SPORTS_FOOTWEAR_SUBCATEGORIES_TABLE_URL = `${FLINT_API_BASE}/api/categories/47/subcategories-table`;
+const SPORTS_FOOTWEAR_SUBCATEGORIES_TABLE_PATH = "/api/categories/47/subcategories-table";
 /** Women’s sportswear store cards — [subcategories-table](https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/68/subcategories-table) */
-const WOMENS_SPORTSWEAR_SUBCATEGORIES_TABLE_URL = `${FLINT_API_BASE}/api/categories/68/subcategories-table`;
-const UPLOADS_BASE = `${FLINT_API_BASE}/uploads`;
+const WOMENS_SPORTSWEAR_SUBCATEGORIES_TABLE_PATH = "/api/categories/68/subcategories-table";
+const UPLOADS_BASE = `${API_BASE.replace(/\/$/, "")}/uploads`;
 
 function buildUploadsUri(filename: string | null | undefined): string | null {
   const f = String(filename ?? "").trim();
@@ -1216,7 +1215,6 @@ export default function SportsWearSection() {
         const { data } = await api.get<ApiSubCategory[] | { data?: ApiSubCategory[] }>(
           SPORTSWEAR_SUBCATEGORIES_PATH,
           {
-            baseURL: LOCAL_SPORTSWEAR_API_BASE,
             ...(LOCAL_SPORTSWEAR_API_KEY
               ? { headers: { "X-API-Key": LOCAL_SPORTSWEAR_API_KEY } }
               : {}),
@@ -1239,8 +1237,8 @@ export default function SportsWearSection() {
               SPORTSWEAR_DEAL_CARDS_FALLBACK.find((x) => x.actionKey === key)?.image ??
               SPORTSWEAR_DEAL_CARDS_FALLBACK[0].image;
             const uri =
-              resolveSportswearMediaUrl(c.mobileImage, LOCAL_SPORTSWEAR_API_BASE) ??
-              resolveSportswearMediaUrl(c.image, LOCAL_SPORTSWEAR_API_BASE);
+              resolveSportswearMediaUrl(c.mobileImage, API_BASE) ??
+              resolveSportswearMediaUrl(c.image, API_BASE);
             return {
               id: String(c.id),
               title: c.categoryName,
@@ -1268,8 +1266,8 @@ export default function SportsWearSection() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(ACCESSORIES_WORTH_HYPE_URL);
-        const json = (await res.json()) as ApiAccessoryGroup[];
+        const { data } = await api.get<ApiAccessoryGroup[]>(ACCESSORIES_WORTH_HYPE_PATH);
+        const json = data;
         if (cancelled) return;
 
         const group = Array.isArray(json) && json.length > 0 ? json[0] : undefined;
@@ -1312,8 +1310,10 @@ export default function SportsWearSection() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(MENS_SPORTSWEAR_SUBCATEGORIES_TABLE_URL);
-        const json = (await res.json()) as ApiAccessoryGroup[];
+        const { data } = await api.get<ApiAccessoryGroup[]>(
+          MENS_SPORTSWEAR_SUBCATEGORIES_TABLE_PATH
+        );
+        const json = data;
         if (cancelled) return;
 
         const group = Array.isArray(json) && json.length > 0 ? json[0] : undefined;
@@ -1353,8 +1353,10 @@ export default function SportsWearSection() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(SPORTS_FOOTWEAR_SUBCATEGORIES_TABLE_URL);
-        const json = (await res.json()) as ApiAccessoryGroup[];
+        const { data } = await api.get<ApiAccessoryGroup[]>(
+          SPORTS_FOOTWEAR_SUBCATEGORIES_TABLE_PATH
+        );
+        const json = data;
         if (cancelled) return;
 
         const group = Array.isArray(json) && json.length > 0 ? json[0] : undefined;
@@ -1443,8 +1445,10 @@ export default function SportsWearSection() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(WOMENS_SPORTSWEAR_SUBCATEGORIES_TABLE_URL);
-        const json = (await res.json()) as ApiAccessoryGroup[];
+        const { data } = await api.get<ApiAccessoryGroup[]>(
+          WOMENS_SPORTSWEAR_SUBCATEGORIES_TABLE_PATH
+        );
+        const json = data;
         if (cancelled) return;
 
         const group = Array.isArray(json) && json.length > 0 ? json[0] : undefined;
