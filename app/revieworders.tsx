@@ -122,7 +122,7 @@ export default function ReviewOrdersScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Delivery location</Text>
           <View style={{ marginTop: 10 }}>
-            <DeliveryLocationSection />
+            <DeliveryLocationSection enableFullAddressApi />
           </View>
         </View>
 

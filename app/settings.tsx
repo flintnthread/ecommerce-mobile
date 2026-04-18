@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import {
   View,
   Text,
@@ -10,25 +11,23 @@ import {
   TextInput,
   Modal,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import {
+  deleteAddress,
+  fetchAddresses,
+  mapApiAddressToSettingsCard,
+  setDefaultAddress,
+  type SettingsAddressCard,
+} from "../services/addresses";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 type SettingsTab = "account" | "address" | "security" | "notifications";
 
-interface Address {
-  id: string;
-  type: "home" | "work" | "other";
-  name: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  pincode: string;
-  isDefault: boolean;
-}
+type Address = SettingsAddressCard;
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -53,31 +52,30 @@ export default function SettingsScreen() {
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
 
-  // Address Management State
-  const [addresses, setAddresses] = useState<Address[]>([
-    {
-      id: "1",
-      type: "home",
-      name: "Sankar P",
-      phone: "9876543210",
-      address: "123, Main Street, Apartment 4B",
-      city: "Bangalore",
-      state: "Karnataka",
-      pincode: "560001",
-      isDefault: true,
-    },
-    {
-      id: "2",
-      type: "work",
-      name: "Sankar P",
-      phone: "9876543210",
-      address: "456, Tech Park, Floor 5",
-      city: "Bangalore",
-      state: "Karnataka",
-      pincode: "560002",
-      isDefault: false,
-    },
-  ]);
+  // Address Management State (loaded from GET /api/addresses)
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
+
+  const loadAddressesFromApi = useCallback(async () => {
+    setAddressesLoading(true);
+    try {
+      const rows = await fetchAddresses();
+      setAddresses(rows.map(mapApiAddressToSettingsCard));
+    } catch {
+      Alert.alert(
+        "Addresses",
+        "Could not load saved addresses. Check your connection and try again."
+      );
+    } finally {
+      setAddressesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "address") {
+      void loadAddressesFromApi();
+    }
+  }, [activeTab, loadAddressesFromApi]);
 
   // New Address Form State
   const [newAddressType, setNewAddressType] = useState<"home" | "work" | "other">("home");
@@ -162,16 +160,70 @@ export default function SettingsScreen() {
         {
           text: "Remove",
           style: "destructive",
-          onPress: () => {
-            Alert.alert("Removed", "Address has been removed successfully.");
+          onPress: async () => {
+            try {
+              await deleteAddress(id);
+              await loadAddressesFromApi();
+              Alert.alert("Removed", "Address has been removed successfully.");
+            } catch (e) {
+              let msg = "Could not remove this address. Please try again.";
+              if (axios.isAxiosError(e)) {
+                const status = e.response?.status;
+                const d = e.response?.data as
+                  | { message?: string; error?: string }
+                  | undefined;
+                const serverMsg =
+                  (typeof d?.message === "string" && d.message) ||
+                  (typeof d?.error === "string" && d.error);
+                if (status === 401 || status === 403) {
+                  msg =
+                    serverMsg ||
+                    "Access denied. Log in again and retry.";
+                } else {
+                  msg = serverMsg || e.message || msg;
+                }
+              } else if (e instanceof Error) {
+                msg = e.message;
+              }
+              Alert.alert("Remove failed", String(msg));
+            }
           },
         },
       ]
     );
   };
 
-  const handleSetDefaultAddress = (id: string) => {
-    Alert.alert("Success", "Address set as default.");
+  const handleSetDefaultAddress = async (id: string) => {
+    try {
+      const res = await setDefaultAddress(id);
+      await loadAddressesFromApi();
+      const msg =
+        typeof res?.message === "string" && res.message.trim()
+          ? res.message.trim()
+          : "Default address updated.";
+      Alert.alert("Success", msg);
+    } catch (e) {
+      let msg = "Could not set default address. Please try again.";
+      if (axios.isAxiosError(e)) {
+        const status = e.response?.status;
+        const d = e.response?.data as
+          | { message?: string; error?: string }
+          | undefined;
+        const serverMsg =
+          (typeof d?.message === "string" && d.message) ||
+          (typeof d?.error === "string" && d.error);
+        if (status === 401 || status === 403) {
+          msg =
+            serverMsg ||
+            "Access denied. Log in again and retry.";
+        } else {
+          msg = serverMsg || e.message || msg;
+        }
+      } else if (e instanceof Error) {
+        msg = e.message;
+      }
+      Alert.alert("Set default failed", String(msg));
+    }
   };
 
   const getAddressTypeIcon = (type: string) => {
@@ -304,7 +356,12 @@ export default function SettingsScreen() {
         {/* Address Management Tab */}
         {activeTab === "address" && (
           <View style={styles.addressContainer}>
-            {addresses.length === 0 ? (
+            {addressesLoading ? (
+              <View style={styles.addressLoadingContainer}>
+                <ActivityIndicator size="large" color="#E97A1F" />
+                <Text style={styles.emptySubtext}>Loading addresses…</Text>
+              </View>
+            ) : addresses.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="location-outline" size={80} color="#E0E0E0" />
                 <Text style={styles.emptyText}>No addresses saved</Text>
@@ -1008,6 +1065,13 @@ const styles = StyleSheet.create({
   // Address Tab Styles
   addressContainer: {
     flex: 1,
+  },
+  addressLoadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 80,
+    gap: 16,
   },
   addressCard: {
     backgroundColor: "#FFFFFF",
