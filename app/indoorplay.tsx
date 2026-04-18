@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
-} from "@/lib/i18n-react-native";
+} from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";

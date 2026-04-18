@@ -1,4 +1,5 @@
 import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
@@ -47,7 +48,31 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  withCredentials: true, // ✅ crucial for session/cookies
+  withCredentials: true, // session/cookies when the server uses them
+});
+
+/** Same key as `app/otpsection.tsx` after successful OTP verify. */
+const AUTH_TOKEN_STORAGE_KEY = "token";
+
+api.interceptors.request.use(async (config) => {
+  try {
+    const token = await AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    if (!token?.trim()) return config;
+
+    const value = token.trim().startsWith("Bearer ")
+      ? token.trim()
+      : `Bearer ${token.trim()}`;
+
+    const headers = config.headers;
+    if (headers && typeof (headers as { set?: (k: string, v: string) => void }).set === "function") {
+      (headers as { set: (k: string, v: string) => void }).set("Authorization", value);
+    } else if (headers && typeof headers === "object") {
+      (headers as Record<string, string>)["Authorization"] = value;
+    }
+  } catch {
+    // ignore storage errors; request proceeds without auth header
+  }
+  return config;
 });
 
 export default api;

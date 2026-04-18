@@ -16,7 +16,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
-} from "@/lib/i18n-react-native";
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import {
   View,
   Text,
@@ -7,8 +8,11 @@ import {
   ScrollView,
   TextInput,
   Modal,
-  Pressable,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Switch,
+  ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
@@ -17,6 +21,16 @@ import {
   requestForegroundLocation,
   type RequestForegroundLocationResult,
 } from "../lib/requestForegroundLocation";
+import {
+  createAddress,
+  deleteAddress,
+  fetchAddresses,
+  parseServerAddressId,
+  setDefaultAddress,
+  type ApiAddress,
+  type AddressType,
+  type CreateAddressPayload,
+} from "../services/addresses";
 
 /** Must match `home.tsx` so the same saved list and selection apply app-wide. */
 export const DELIVERY_ADDRESSES_STORAGE_KEY = "home_savedDeliveryAddresses_v1";
@@ -26,6 +40,17 @@ export interface SavedDeliveryAddress {
   name: string;
   line: string;
   phone?: string;
+  email?: string;
+  username?: string;
+  /** Present when row came from `GET /api/addresses` (see `enableFullAddressApi`). */
+  isDefault?: boolean;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  addressType?: string;
 }
 
 const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
@@ -45,11 +70,49 @@ const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
 const INITIAL_DISPLAY_LINE =
   "Kphb colony ,road no 3 ,phase 1,near shi...";
 
+function mapApiToSavedDelivery(a: ApiAddress): SavedDeliveryAddress {
+  const street = [a.addressLine1, a.addressLine2].filter(Boolean).join(", ");
+  const tail = [a.city, a.state, a.pincode].filter(Boolean).join(", ");
+  const line = tail ? `${street} · ${tail}` : street || tail;
+  return {
+    id: String(a.id),
+    name: a.name.trim(),
+    line,
+    phone: String(a.phone).trim(),
+    email: a.email.trim(),
+    isDefault: Boolean(a.isDefault),
+    addressLine1: (a.addressLine1 || "").trim(),
+    addressLine2: (a.addressLine2 || "").trim(),
+    city: (a.city || "").trim(),
+    state: (a.state || "").trim(),
+    pincode: String(a.pincode || "").trim(),
+    country: (a.country || "").trim(),
+    addressType: (a.addressType || "home").trim(),
+  };
+}
+
+function addressTypeLabel(t: string | undefined): string {
+  const k = (t || "home").toLowerCase();
+  if (k === "work") return "Work";
+  if (k === "other") return "Other";
+  return "Home";
+}
+
+export type DeliveryLocationSectionProps = {
+  /**
+   * When true, list + save + delete use `/api/addresses` via `services/api.tsx`
+   * (same pattern as `app/account.tsx`); no host in this file.
+   */
+  enableFullAddressApi?: boolean;
+};
+
 /**
- * Delivery location row + bottom sheet — same behaviour as Home (search saved,
- * use current location, add new, persist to AsyncStorage).
+ * Delivery location row + full-screen sheet — search saved, use current location,
+ * add new. With `enableFullAddressApi`, addresses load/save through the shared API client.
  */
-export default function DeliveryLocationSection() {
+export default function DeliveryLocationSection({
+  enableFullAddressApi = false,
+}: DeliveryLocationSectionProps) {
   const insets = useSafeAreaInsets();
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [deliveryAddressModalVisible, setDeliveryAddressModalVisible] =
@@ -57,20 +120,34 @@ export default function DeliveryLocationSection() {
   const [deliveryAddressSearchQuery, setDeliveryAddressSearchQuery] =
     useState("");
   const [displayDeliveryLine, setDisplayDeliveryLine] = useState(
-    INITIAL_DISPLAY_LINE
+    enableFullAddressApi ? "Tap to choose delivery address" : INITIAL_DISPLAY_LINE
   );
   const [savedDeliveryAddresses, setSavedDeliveryAddresses] = useState<
     SavedDeliveryAddress[]
-  >(DEFAULT_SAVED_DELIVERY_ADDRESSES);
+  >(enableFullAddressApi ? [] : DEFAULT_SAVED_DELIVERY_ADDRESSES);
   const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] = useState<
     string | null
-  >("1");
+  >(enableFullAddressApi ? null : "1");
   const [deliveryAddMode, setDeliveryAddMode] = useState<"list" | "add">(
     "list"
   );
   const [newAddressName, setNewAddressName] = useState("");
+  const [newAddressEmail, setNewAddressEmail] = useState("");
   const [newAddressPhone, setNewAddressPhone] = useState("");
-  const [newAddressLine, setNewAddressLine] = useState("");
+  const [newAddressArea, setNewAddressArea] = useState("");
+  const [newAddressCity, setNewAddressCity] = useState("");
+  const [newAddressState, setNewAddressState] = useState("");
+  const [newAddressPincode, setNewAddressPincode] = useState("");
+  const [newAddressUsername, setNewAddressUsername] = useState("");
+  const [newAddressLandmark, setNewAddressLandmark] = useState("");
+  const [newAddressCountry, setNewAddressCountry] = useState("India");
+  const [newAddressType, setNewAddressType] = useState<AddressType>("home");
+  const [newAddressIsDefault, setNewAddressIsDefault] = useState(false);
+  const [addressesListLoading, setAddressesListLoading] = useState(false);
+  const selectedDeliveryAddressIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedDeliveryAddressIdRef.current = selectedDeliveryAddressId;
+  }, [selectedDeliveryAddressId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +172,7 @@ export default function DeliveryLocationSection() {
   }, []);
 
   useEffect(() => {
+    if (enableFullAddressApi) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -125,11 +203,51 @@ export default function DeliveryLocationSection() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enableFullAddressApi]);
+
+  useEffect(() => {
+    if (!enableFullAddressApi || !deliveryAddressModalVisible) return;
+    let cancelled = false;
+    void (async () => {
+      setAddressesListLoading(true);
+      try {
+        const rows = await fetchAddresses();
+        if (cancelled) return;
+        const mapped = rows.map(mapApiToSavedDelivery);
+        setSavedDeliveryAddresses(mapped);
+        const prevSel = selectedDeliveryAddressIdRef.current;
+        let nextSel = prevSel;
+        if (!nextSel || !mapped.some((m) => m.id === nextSel)) {
+          nextSel =
+            mapped.find((m) => m.isDefault)?.id ?? mapped[0]?.id ?? null;
+        }
+        setSelectedDeliveryAddressId(nextSel);
+        if (nextSel) {
+          const row = mapped.find((m) => m.id === nextSel);
+          if (row) setDisplayDeliveryLine(row.line);
+        } else {
+          setDisplayDeliveryLine("Tap to choose delivery address");
+        }
+      } catch {
+        if (!cancelled) {
+          Alert.alert(
+            "Addresses",
+            "Could not load saved addresses. Check your connection and login."
+          );
+        }
+      } finally {
+        if (!cancelled) setAddressesListLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deliveryAddressModalVisible, enableFullAddressApi]);
 
   const persistSavedDeliveryAddresses = useCallback(
     async (next: SavedDeliveryAddress[]) => {
       setSavedDeliveryAddresses(next);
+      if (enableFullAddressApi) return;
       try {
         await AsyncStorage.setItem(
           DELIVERY_ADDRESSES_STORAGE_KEY,
@@ -139,41 +257,63 @@ export default function DeliveryLocationSection() {
         /* ignore */
       }
     },
-    []
+    [enableFullAddressApi]
   );
+
+  const resetAddAddressFields = useCallback(() => {
+    setNewAddressName("");
+    setNewAddressEmail("");
+    setNewAddressPhone("");
+    setNewAddressArea("");
+    setNewAddressCity("");
+    setNewAddressState("");
+    setNewAddressPincode("");
+    setNewAddressUsername("");
+    setNewAddressLandmark("");
+    setNewAddressCountry("India");
+    setNewAddressType("home");
+    setNewAddressIsDefault(false);
+  }, []);
 
   const closeDeliveryModal = useCallback(() => {
     setDeliveryAddressModalVisible(false);
     setDeliveryAddressSearchQuery("");
     setDeliveryAddMode("list");
-    setNewAddressName("");
-    setNewAddressPhone("");
-    setNewAddressLine("");
-  }, []);
+    resetAddAddressFields();
+  }, [resetAddAddressFields]);
 
   const openAddNewAddressForm = useCallback(() => {
-    setNewAddressName("");
-    setNewAddressPhone("");
-    setNewAddressLine("");
+    resetAddAddressFields();
     setDeliveryAddMode("add");
-  }, []);
+  }, [resetAddAddressFields]);
 
   const goBackAddAddressForm = useCallback(() => {
     setDeliveryAddMode("list");
-    setNewAddressName("");
-    setNewAddressPhone("");
-    setNewAddressLine("");
-  }, []);
+    resetAddAddressFields();
+  }, [resetAddAddressFields]);
 
   const filteredDeliveryAddresses = useMemo(() => {
     const q = deliveryAddressSearchQuery.trim().toLowerCase();
     if (!q) return savedDeliveryAddresses;
-    return savedDeliveryAddresses.filter(
-      (a) =>
-        a.name.toLowerCase().includes(q) ||
-        a.line.toLowerCase().includes(q) ||
-        (a.phone?.toLowerCase().includes(q) ?? false)
-    );
+    return savedDeliveryAddresses.filter((a) => {
+      const hay = [
+        a.name,
+        a.line,
+        a.phone,
+        a.email,
+        a.addressLine1,
+        a.addressLine2,
+        a.city,
+        a.state,
+        a.pincode,
+        a.country,
+        a.addressType,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
   }, [savedDeliveryAddresses, deliveryAddressSearchQuery]);
 
   const selectDeliveryAddress = useCallback(
@@ -215,36 +355,138 @@ export default function DeliveryLocationSection() {
 
   const handleSaveNewAddress = useCallback(() => {
     const name = newAddressName.trim();
-    const line = newAddressLine.trim();
-    const phone = newAddressPhone.trim();
-    if (!name || !line) {
-      Alert.alert(
-        "Missing details",
-        "Please enter the recipient name and full address."
-      );
+    const email = newAddressEmail.trim();
+    const phone = newAddressPhone.trim().replace(/\D/g, "").slice(0, 10);
+    const area = newAddressArea.trim();
+    const landmark = newAddressLandmark.trim();
+    const city = newAddressCity.trim();
+    const state = newAddressState.trim();
+    const pincode = newAddressPincode.trim();
+    const username = newAddressUsername.trim();
+    const country = (newAddressCountry || "India").trim();
+
+    if (!name) {
+      Alert.alert("Missing details", "Please enter your full name.");
       return;
     }
+    if (!email) {
+      Alert.alert("Missing details", "Please enter your email address.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      Alert.alert("Invalid email", "Please enter a valid email address.");
+      return;
+    }
+    if (phone.length !== 10) {
+      Alert.alert("Invalid mobile", "Enter a valid 10-digit mobile number.");
+      return;
+    }
+    if (!area) {
+      Alert.alert("Missing details", "Please enter area / house details.");
+      return;
+    }
+    if (!city || !state) {
+      Alert.alert("Missing details", "Please enter city and state.");
+      return;
+    }
+    if (!/^[0-9]{6}$/.test(pincode)) {
+      Alert.alert("Invalid pincode", "Enter a valid 6-digit pincode.");
+      return;
+    }
+    if (enableFullAddressApi && !country) {
+      Alert.alert("Missing details", "Please enter country.");
+      return;
+    }
+
+    if (enableFullAddressApi) {
+      const payload: CreateAddressPayload = {
+        name,
+        email,
+        phone,
+        addressLine1: area,
+        addressLine2: landmark,
+        city,
+        state,
+        country,
+        pincode,
+        addressType: newAddressType,
+        isDefault: newAddressIsDefault,
+      };
+
+      void (async () => {
+        try {
+          const responseBody = await createAddress(payload);
+          const rows = await fetchAddresses();
+          setSavedDeliveryAddresses(rows.map(mapApiToSavedDelivery));
+          const idStr = parseServerAddressId(responseBody);
+          const createdApi =
+            (idStr && rows.find((r) => String(r.id) === idStr)) ||
+            rows[rows.length - 1];
+          if (createdApi) {
+            selectDeliveryAddress(mapApiToSavedDelivery(createdApi));
+          }
+          Alert.alert("Success", "Address saved successfully.");
+        } catch (e) {
+          let msg = "Could not save address. Please try again.";
+          if (axios.isAxiosError(e)) {
+            const status = e.response?.status;
+            const d = e.response?.data as
+              | { message?: string; error?: string }
+              | undefined;
+            const serverMsg =
+              (typeof d?.message === "string" && d.message) ||
+              (typeof d?.error === "string" && d.error);
+            if (status === 401 || status === 403) {
+              msg =
+                serverMsg ||
+                "Log in so your session token is sent with this request.";
+            } else {
+              msg = serverMsg || e.message || msg;
+            }
+          } else if (e instanceof Error) {
+            msg = e.message;
+          }
+          Alert.alert("Save failed", String(msg));
+        }
+      })();
+      return;
+    }
+
+    const areaForLine = landmark ? `${area}, ${landmark}` : area;
+    const line = `${areaForLine}, ${city}, ${state} - ${pincode}`;
+
     const newAddr: SavedDeliveryAddress = {
       id: `addr-${Date.now()}`,
       name,
       line,
-      ...(phone ? { phone } : {}),
+      phone,
+      email,
+      ...(username ? { username } : {}),
     };
     void (async () => {
       const next = [...savedDeliveryAddresses, newAddr];
       await persistSavedDeliveryAddresses(next);
       setDeliveryAddMode("list");
-      setNewAddressName("");
-      setNewAddressPhone("");
-      setNewAddressLine("");
+      resetAddAddressFields();
       selectDeliveryAddress(newAddr);
     })();
   }, [
+    enableFullAddressApi,
     newAddressName,
-    newAddressLine,
+    newAddressEmail,
     newAddressPhone,
+    newAddressArea,
+    newAddressLandmark,
+    newAddressCity,
+    newAddressState,
+    newAddressPincode,
+    newAddressCountry,
+    newAddressType,
+    newAddressIsDefault,
+    newAddressUsername,
     savedDeliveryAddresses,
     persistSavedDeliveryAddresses,
+    resetAddAddressFields,
     selectDeliveryAddress,
   ]);
 
@@ -257,9 +499,41 @@ export default function DeliveryLocationSection() {
           style: "destructive",
           onPress: () => {
             void (async () => {
+              if (enableFullAddressApi) {
+                try {
+                  await deleteAddress(addr.id);
+                  const rows = await fetchAddresses();
+                  const mapped = rows.map(mapApiToSavedDelivery);
+                  setSavedDeliveryAddresses(mapped);
+                  if (selectedDeliveryAddressId === addr.id) {
+                    if (mapped.length > 0) {
+                      setSelectedDeliveryAddressId(mapped[0].id);
+                      setDisplayDeliveryLine(mapped[0].line);
+                    } else {
+                      setSelectedDeliveryAddressId(null);
+                      setDisplayDeliveryLine("Tap to choose delivery address");
+                    }
+                  }
+                } catch (e) {
+                  let msg = "Could not delete address.";
+                  if (axios.isAxiosError(e)) {
+                    const d = e.response?.data as
+                      | { message?: string; error?: string }
+                      | undefined;
+                    msg =
+                      (typeof d?.message === "string" && d.message) ||
+                      (typeof d?.error === "string" && d.error) ||
+                      msg;
+                  } else if (e instanceof Error) {
+                    msg = e.message;
+                  }
+                  Alert.alert("Delete failed", String(msg));
+                }
+                return;
+              }
+
               const next = savedDeliveryAddresses.filter((x) => x.id !== addr.id);
               await persistSavedDeliveryAddresses(next);
-              // If the deleted address was selected, pick the next best value.
               if (selectedDeliveryAddressId === addr.id) {
                 if (next.length > 0) {
                   setSelectedDeliveryAddressId(next[0].id);
@@ -275,10 +549,52 @@ export default function DeliveryLocationSection() {
       ]);
     },
     [
+      enableFullAddressApi,
       persistSavedDeliveryAddresses,
       savedDeliveryAddresses,
       selectedDeliveryAddressId,
     ]
+  );
+
+  const handleSetDefaultSavedAddress = useCallback(
+    (addr: SavedDeliveryAddress) => {
+      if (!enableFullAddressApi || addr.isDefault) return;
+      void (async () => {
+        try {
+          const res = await setDefaultAddress(addr.id);
+          const rows = await fetchAddresses();
+          const mapped = rows.map(mapApiToSavedDelivery);
+          setSavedDeliveryAddresses(mapped);
+          const msg =
+            typeof res?.message === "string" && res.message.trim()
+              ? res.message.trim()
+              : "Default address updated.";
+          Alert.alert("Success", msg);
+        } catch (e) {
+          let msg = "Could not set default address. Please try again.";
+          if (axios.isAxiosError(e)) {
+            const status = e.response?.status;
+            const d = e.response?.data as
+              | { message?: string; error?: string }
+              | undefined;
+            const serverMsg =
+              (typeof d?.message === "string" && d.message) ||
+              (typeof d?.error === "string" && d.error);
+            if (status === 401 || status === 403) {
+              msg =
+                serverMsg ||
+                "Log in so your session token is sent with this request.";
+            } else {
+              msg = serverMsg || e.message || msg;
+            }
+          } else if (e instanceof Error) {
+            msg = e.message;
+          }
+          Alert.alert("Set default failed", String(msg));
+        }
+      })();
+    },
+    [enableFullAddressApi]
   );
 
   return (
@@ -311,39 +627,50 @@ export default function DeliveryLocationSection() {
 
       <Modal
         visible={deliveryAddressModalVisible}
-        transparent
+        transparent={false}
         animationType="slide"
+        presentationStyle={
+          Platform.OS === "ios" ? "fullScreen" : undefined
+        }
         onRequestClose={closeDeliveryModal}
       >
-        <View style={styles.deliveryModalRoot}>
-          <Pressable style={styles.deliveryModalBackdrop} onPress={closeDeliveryModal} />
-          <View
-            style={[
-              styles.deliveryAddressSheet,
-              { paddingBottom: Math.max(insets.bottom, 12) },
-            ]}
-          >
-            <View style={styles.deliverySheetHandle} />
-
-            {deliveryAddMode === "list" ? (
-              <>
-                <View style={styles.deliverySheetHeader}>
-                  <Text style={styles.deliverySheetTitle}>
-                    Select delivery address
-                  </Text>
-                  <TouchableOpacity
-                    onPress={closeDeliveryModal}
-                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  >
-                    <Ionicons name="close" size={26} color="#333" />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.deliverySheetScroll}
+        <View
+          style={[
+            styles.deliveryModalRootFull,
+            {
+              paddingTop: insets.top,
+              paddingBottom: Math.max(insets.bottom, 12),
+            },
+          ]}
+        >
+          {deliveryAddMode === "list" ? (
+            <View style={styles.deliverySheetPage}>
+              <View style={styles.deliverySheetHeader}>
+                <Text style={styles.deliverySheetTitle}>
+                  Select delivery address
+                </Text>
+                <TouchableOpacity
+                  onPress={closeDeliveryModal}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
+                  <Ionicons name="close" size={26} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.deliverySheetBodyScroll}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.deliverySheetScroll}
+              >
+                  {enableFullAddressApi && addressesListLoading ? (
+                    <View style={styles.deliveryListLoading}>
+                      <ActivityIndicator size="small" color="#F97316" />
+                      <Text style={styles.deliveryListLoadingText}>
+                        Loading addresses…
+                      </Text>
+                    </View>
+                  ) : null}
                   <View style={styles.deliverySearchBox}>
                     <Ionicons name="search-outline" size={20} color="#999" />
                     <TextInput
@@ -389,6 +716,141 @@ export default function DeliveryLocationSection() {
 
                   {filteredDeliveryAddresses.map((addr) => {
                     const selected = addr.id === selectedDeliveryAddressId;
+                    if (enableFullAddressApi) {
+                      return (
+                        <View
+                          key={addr.id}
+                          style={styles.deliveryAddressCard}
+                        >
+                          <TouchableOpacity
+                            style={styles.deliveryAddressCardSelectArea}
+                            activeOpacity={0.8}
+                            onPress={() => selectDeliveryAddress(addr)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Select delivery address ${addr.name}`}
+                          >
+                            <MaterialIcons name="place" size={22} color="#666" />
+                            <View style={styles.deliveryAddressCardBody}>
+                              <View style={styles.deliveryAddressNameRow}>
+                                <Text
+                                  style={styles.deliveryAddressTypePill}
+                                  numberOfLines={1}
+                                >
+                                  {addressTypeLabel(addr.addressType)}
+                                </Text>
+                                {addr.isDefault ? (
+                                  <View style={styles.deliveryDefaultBadge}>
+                                    <Text style={styles.deliveryDefaultBadgeText}>
+                                      Default
+                                    </Text>
+                                  </View>
+                                ) : null}
+                                {selected ? (
+                                  <View style={styles.deliverySelectedBadge}>
+                                    <Text style={styles.deliverySelectedBadgeText}>
+                                      For this order
+                                    </Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                              <Text
+                                style={styles.deliveryAddressName}
+                                numberOfLines={1}
+                              >
+                                {addr.name}
+                              </Text>
+                              {addr.addressLine1 ? (
+                                <Text
+                                  style={styles.deliveryAddressDetailLine}
+                                  numberOfLines={2}
+                                >
+                                  {addr.addressLine1}
+                                </Text>
+                              ) : null}
+                              {addr.addressLine2 ? (
+                                <Text
+                                  style={styles.deliveryAddressDetailLine}
+                                  numberOfLines={2}
+                                >
+                                  {addr.addressLine2}
+                                </Text>
+                              ) : null}
+                              {(() => {
+                                const cs = [addr.city, addr.state]
+                                  .filter(Boolean)
+                                  .join(", ");
+                                const loc =
+                                  cs && addr.pincode
+                                    ? `${cs} - ${addr.pincode}`
+                                    : cs || addr.pincode;
+                                return loc ? (
+                                  <Text
+                                    style={styles.deliveryAddressDetailMeta}
+                                    numberOfLines={2}
+                                  >
+                                    {loc}
+                                  </Text>
+                                ) : null;
+                              })()}
+                              {addr.country ? (
+                                <Text
+                                  style={styles.deliveryAddressDetailMeta}
+                                  numberOfLines={1}
+                                >
+                                  {addr.country}
+                                </Text>
+                              ) : null}
+                              {addr.phone ? (
+                                <Text
+                                  style={styles.deliveryAddressPhone}
+                                  numberOfLines={1}
+                                >
+                                  {addr.phone}
+                                </Text>
+                              ) : null}
+                              {addr.email ? (
+                                <Text
+                                  style={styles.deliveryAddressEmail}
+                                  numberOfLines={1}
+                                >
+                                  {addr.email}
+                                </Text>
+                              ) : null}
+                            </View>
+                          </TouchableOpacity>
+                          <View style={styles.deliveryAddressActionsCol}>
+                            {!addr.isDefault ? (
+                              <TouchableOpacity
+                                style={styles.deliverySetDefaultBtn}
+                                activeOpacity={0.75}
+                                onPress={() =>
+                                  handleSetDefaultSavedAddress(addr)
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel="Set as account default address"
+                              >
+                                <Text style={styles.deliverySetDefaultBtnText}>
+                                  Set default
+                                </Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            <TouchableOpacity
+                              style={styles.deliveryAddressMenuBtn}
+                              activeOpacity={0.7}
+                              onPress={() => handleDeleteSavedAddress(addr)}
+                              accessibilityRole="button"
+                              accessibilityLabel="Delete saved address"
+                            >
+                              <Ionicons
+                                name="trash-outline"
+                                size={20}
+                                color="#666"
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    }
                     return (
                       <TouchableOpacity
                         key={addr.id}
@@ -438,10 +900,15 @@ export default function DeliveryLocationSection() {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
-              </>
-            ) : (
-              <>
+              </ScrollView>
+            </View>
+          ) : (
+            <KeyboardAvoidingView
+              style={styles.deliveryAddKeyboardRoot}
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
+            >
+              <View style={styles.deliverySheetPage}>
                 <View style={styles.deliveryAddHeaderRow}>
                   <TouchableOpacity
                     onPress={goBackAddAddressForm}
@@ -461,51 +928,186 @@ export default function DeliveryLocationSection() {
                 </View>
 
                 <ScrollView
+                  style={styles.deliverySheetBodyScroll}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.deliverySheetScroll}
+                  keyboardDismissMode="on-drag"
+                  contentContainerStyle={styles.deliverySheetScrollAdd}
                 >
-                  <Text style={styles.deliveryFormLabel}>Full name</Text>
+                  <Text style={styles.deliveryFormLabelRef}>Full Name</Text>
                   <TextInput
-                    style={styles.deliveryFormInput}
-                    placeholder="Recipient name"
-                    placeholderTextColor="#999"
+                    style={styles.deliveryFormInputRef}
+                    placeholder="Enter full name"
+                    placeholderTextColor="#9CA3AF"
                     value={newAddressName}
                     onChangeText={setNewAddressName}
                   />
 
-                  <Text style={styles.deliveryFormLabel}>Mobile number</Text>
+                  <Text style={styles.deliveryFormLabelRef}>Email Address</Text>
                   <TextInput
-                    style={styles.deliveryFormInput}
+                    style={styles.deliveryFormInputRef}
+                    placeholder="Enter email address"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={newAddressEmail}
+                    onChangeText={setNewAddressEmail}
+                  />
+
+                  <Text style={styles.deliveryFormLabelRef}>Mobile Number</Text>
+                  <TextInput
+                    style={styles.deliveryFormInputRef}
                     placeholder="10-digit mobile number"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="#9CA3AF"
                     keyboardType="phone-pad"
+                    maxLength={10}
                     value={newAddressPhone}
                     onChangeText={setNewAddressPhone}
                   />
 
-                  <Text style={styles.deliveryFormLabel}>Address</Text>
+                  <Text style={styles.deliveryFormLabelRef}>Area</Text>
                   <TextInput
-                    style={[styles.deliveryFormInput, styles.deliveryFormInputMultiline]}
-                    placeholder="House / flat no., street, area, landmark, pin code"
-                    placeholderTextColor="#999"
-                    multiline
-                    textAlignVertical="top"
-                    value={newAddressLine}
-                    onChangeText={setNewAddressLine}
+                    style={styles.deliveryFormInputRef}
+                    placeholder="H.no/Area Name"
+                    placeholderTextColor="#9CA3AF"
+                    value={newAddressArea}
+                    onChangeText={setNewAddressArea}
                   />
 
-                  <TouchableOpacity
-                    style={styles.deliverySaveNewButton}
-                    activeOpacity={0.85}
-                    onPress={handleSaveNewAddress}
-                  >
-                    <Text style={styles.deliverySaveNewButtonText}>Save address</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.deliveryFormLabelRef}>
+                    Landmark / line 2{" "}
+                    <Text style={styles.deliveryFormOptionalRef}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.deliveryFormInputRef}
+                    placeholder="e.g. Near temple"
+                    placeholderTextColor="#9CA3AF"
+                    value={newAddressLandmark}
+                    onChangeText={setNewAddressLandmark}
+                  />
+
+                  <Text style={styles.deliveryFormLabelRef}>City</Text>
+                  <TextInput
+                    style={styles.deliveryFormInputRef}
+                    placeholder="Enter city"
+                    placeholderTextColor="#9CA3AF"
+                    value={newAddressCity}
+                    onChangeText={setNewAddressCity}
+                  />
+
+                  <Text style={styles.deliveryFormLabelRef}>State</Text>
+                  <TextInput
+                    style={styles.deliveryFormInputRef}
+                    placeholder="Enter state"
+                    placeholderTextColor="#9CA3AF"
+                    value={newAddressState}
+                    onChangeText={setNewAddressState}
+                  />
+
+                  <Text style={styles.deliveryFormLabelRef}>Pincode</Text>
+                  <TextInput
+                    style={styles.deliveryFormInputRef}
+                    placeholder="6-digit pincode"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    value={newAddressPincode}
+                    onChangeText={setNewAddressPincode}
+                  />
+
+                  {enableFullAddressApi ? (
+                    <>
+                      <Text style={styles.deliveryFormLabelRef}>Country</Text>
+                      <TextInput
+                        style={styles.deliveryFormInputRef}
+                        placeholder="e.g. India"
+                        placeholderTextColor="#9CA3AF"
+                        value={newAddressCountry}
+                        onChangeText={setNewAddressCountry}
+                      />
+
+                      <Text style={styles.deliveryFormLabelRef}>Address type</Text>
+                      <View style={styles.deliveryTypeRow}>
+                        {(
+                          [
+                            { key: "home" as const, label: "Home" },
+                            { key: "work" as const, label: "Work" },
+                            { key: "other" as const, label: "Other" },
+                          ] as const
+                        ).map(({ key, label }) => {
+                          const active = newAddressType === key;
+                          return (
+                            <TouchableOpacity
+                              key={key}
+                              style={[
+                                styles.deliveryTypeChip,
+                                active && styles.deliveryTypeChipActive,
+                              ]}
+                              onPress={() => setNewAddressType(key)}
+                              activeOpacity={0.85}
+                            >
+                              <Text
+                                style={[
+                                  styles.deliveryTypeChipText,
+                                  active && styles.deliveryTypeChipTextActive,
+                                ]}
+                              >
+                                {label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      <View style={styles.deliverySwitchRow}>
+                        <Text style={styles.deliverySwitchLabel}>
+                          Set as default address
+                        </Text>
+                        <Switch
+                          value={newAddressIsDefault}
+                          onValueChange={setNewAddressIsDefault}
+                          trackColor={{ false: "#E5E7EB", true: "#FDBA74" }}
+                          thumbColor={newAddressIsDefault ? "#F97316" : "#f4f3f4"}
+                        />
+                      </View>
+                    </>
+                  ) : null}
+
+                  <Text style={styles.deliveryFormLabelRef}>
+                    Username{" "}
+                    <Text style={styles.deliveryFormOptionalRef}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.deliveryFormInputRef}
+                    placeholder="Choose a username"
+                    placeholderTextColor="#9CA3AF"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={newAddressUsername}
+                    onChangeText={setNewAddressUsername}
+                  />
+
+                  <View style={styles.deliveryFormActionsRow}>
+                    <TouchableOpacity
+                      style={styles.deliveryCancelOutlineButton}
+                      activeOpacity={0.85}
+                      onPress={goBackAddAddressForm}
+                    >
+                      <Text style={styles.deliveryCancelOutlineButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deliverySaveOrangeButton}
+                      activeOpacity={0.85}
+                      onPress={handleSaveNewAddress}
+                    >
+                      <Text style={styles.deliverySaveOrangeButtonText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
                 </ScrollView>
-              </>
-            )}
-          </View>
+              </View>
+            </KeyboardAvoidingView>
+          )}
         </View>
       </Modal>
     </>
@@ -537,28 +1139,18 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     minWidth: 0,
   },
-  deliveryModalRoot: {
+  /** Full-screen delivery picker so list + add form use full height; bottom stays scrollable. */
+  deliveryModalRootFull: {
     flex: 1,
-    justifyContent: "flex-end",
+    backgroundColor: "#FFFFFF",
   },
-  deliveryModalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)",
+  deliverySheetPage: {
+    flex: 1,
+    minHeight: 0,
   },
-  deliveryAddressSheet: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: "88%",
-    paddingTop: 6,
-  },
-  deliverySheetHandle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#D0D0D0",
-    marginBottom: 12,
+  deliverySheetBodyScroll: {
+    flex: 1,
+    minHeight: 0,
   },
   deliverySheetHeader: {
     flexDirection: "row",
@@ -574,7 +1166,25 @@ const styles = StyleSheet.create({
   },
   deliverySheetScroll: {
     paddingHorizontal: 18,
-    paddingBottom: 24,
+    paddingBottom: 28,
+    flexGrow: 1,
+  },
+  deliverySheetScrollAdd: {
+    paddingHorizontal: 18,
+    paddingTop: 4,
+    paddingBottom: 32,
+    flexGrow: 1,
+  },
+  deliveryListLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  deliveryListLoadingText: {
+    fontSize: 14,
+    color: "#64748B",
   },
   deliverySearchBox: {
     flexDirection: "row",
@@ -657,40 +1267,70 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginHorizontal: 8,
   },
-  deliveryFormLabel: {
+  deliveryAddKeyboardRoot: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: "#FFFFFF",
+  },
+  /** Reference-style add form: dark labels, bordered inputs, orange Save. */
+  deliveryFormLabelRef: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#333",
+    color: "#374151",
     marginBottom: 8,
-    marginTop: 4,
+    marginTop: 2,
   },
-  deliveryFormInput: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 12,
+  deliveryFormOptionalRef: {
+    fontWeight: "500",
+    color: "#6B7280",
+    fontSize: 13,
+  },
+  deliveryFormInputRef: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: "#111",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E0E0E0",
+    color: "#111827",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 14,
+  },
+  deliveryFormActionsRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 8,
     marginBottom: 12,
   },
-  deliveryFormInputMultiline: {
-    minHeight: 100,
-    paddingTop: 12,
-  },
-  deliverySaveNewButton: {
-    backgroundColor: "#1976D2",
-    borderRadius: 12,
-    paddingVertical: 15,
+  deliverySaveOrangeButton: {
+    backgroundColor: "#F97316",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    minWidth: 96,
     alignItems: "center",
-    marginTop: 16,
-    marginBottom: 8,
   },
-  deliverySaveNewButtonText: {
-    color: "#fff",
-    fontSize: 16,
+  deliverySaveOrangeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
     fontWeight: "700",
+  },
+  deliveryCancelOutlineButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    minWidth: 96,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+  },
+  deliveryCancelOutlineButtonText: {
+    color: "#4B5563",
+    fontSize: 15,
+    fontWeight: "600",
   },
   deliveryAddressPhone: {
     fontSize: 13,
@@ -704,11 +1344,72 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#EEE",
+    gap: 8,
+  },
+  deliveryAddressCardSelectArea: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 10,
+    minWidth: 0,
   },
   deliveryAddressCardBody: {
     flex: 1,
     minWidth: 0,
+  },
+  deliveryAddressTypePill: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1565C0",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  deliveryDefaultBadge: {
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  deliveryDefaultBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#2E7D32",
+  },
+  deliveryAddressDetailLine: {
+    fontSize: 13,
+    color: "#444",
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  deliveryAddressDetailMeta: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  deliveryAddressEmail: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  deliveryAddressActionsCol: {
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    gap: 8,
+    paddingTop: 2,
+  },
+  deliverySetDefaultBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FDBA74",
+    backgroundColor: "#FFF7ED",
+  },
+  deliverySetDefaultBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#C2410C",
   },
   deliveryAddressNameRow: {
     flexDirection: "row",
@@ -742,5 +1443,45 @@ const styles = StyleSheet.create({
   deliveryAddressMenuBtn: {
     padding: 4,
     marginTop: -2,
+  },
+  deliveryTypeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+  deliveryTypeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  deliveryTypeChipActive: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#F97316",
+  },
+  deliveryTypeChipText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4B5563",
+  },
+  deliveryTypeChipTextActive: {
+    color: "#C2410C",
+  },
+  deliverySwitchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+    paddingVertical: 4,
+  },
+  deliverySwitchLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#374151",
+    flex: 1,
+    marginRight: 12,
   },
 });
