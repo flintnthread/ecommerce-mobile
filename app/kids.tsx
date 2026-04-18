@@ -148,6 +148,8 @@ type SubLabel = {
   label: string;
   /** Subcategory tile photo; falls back to department `shopImage` if omitted. */
   image?: ImageSourcePropType;
+  /** When set, opens `subcatProducts` with `GET /api/products/subcategory/:id` (uses `api` base URL). */
+  subcategoryId?: number;
 };
 
 type KidsCategoryBlock = {
@@ -970,6 +972,7 @@ export default function KidsScreen() {
           : s.image
             ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
+        subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
       }));
     }
     return girlsBlock.subs;
@@ -993,6 +996,7 @@ export default function KidsScreen() {
           : s.image
             ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
+        subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
       }));
     }
     return boysBlock.subs;
@@ -1016,6 +1020,7 @@ export default function KidsScreen() {
           : s.image
             ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
+        subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
       }));
     }
     return schoolBlock.subs;
@@ -1081,6 +1086,7 @@ export default function KidsScreen() {
           deptKey: cat.key,
           deptTitle: cat.title,
           deptColor: cat.railTo,
+          subcategoryId: s.subcategoryId,
         }));
       }),
     [boysRailSubs, girlsRailSubs, kidsCategoriesForUi, schoolRailSubs]
@@ -1115,12 +1121,19 @@ export default function KidsScreen() {
   );
 
   const openKidsSubcategoryProducts = useCallback(
-    (subCategoryLabel: string) => {
+    (subCategoryLabel: string, subcategoryId?: number | null) => {
+      const trimmed = String(subCategoryLabel ?? "").trim();
+      if (!trimmed) return;
+      const idOk =
+        typeof subcategoryId === "number" &&
+        Number.isFinite(subcategoryId) &&
+        subcategoryId > 0;
       router.push({
         pathname: "/subcatProducts",
         params: {
           mainCat: "kidswear",
-          subCategory: subCategoryLabel,
+          subCategory: trimmed,
+          ...(idOk ? { subcategoryId: String(subcategoryId) } : {}),
         },
       });
     },
@@ -1408,7 +1421,7 @@ export default function KidsScreen() {
                       key={s.id}
                       style={styles.railCard}
                       activeOpacity={0.88}
-                      onPress={() => openKidsSubcategoryProducts(s.label)}
+                      onPress={() => openKidsSubcategoryProducts(s.label, s.subcategoryId)}
                       accessibilityRole="button"
                       accessibilityLabel={`Shop ${s.label}`}
                     >
@@ -1752,7 +1765,9 @@ export default function KidsScreen() {
                     key={item.flatId}
                     style={styles.fcShopAllCardList}
                     activeOpacity={0.92}
-                    onPress={() => openKidsSubcategoryProducts(item.label)}
+                    onPress={() =>
+                      openKidsSubcategoryProducts(item.label, item.subcategoryId)
+                    }
                     accessibilityRole="button"
                     accessibilityLabel={`Shop ${item.label}`}
                   >
@@ -1833,7 +1848,9 @@ export default function KidsScreen() {
                         key={item.flatId}
                         style={styles.shopAllGridCardOuter}
                         activeOpacity={0.93}
-                        onPress={() => openKidsSubcategoryProducts(item.label)}
+                        onPress={() =>
+                          openKidsSubcategoryProducts(item.label, item.subcategoryId)
+                        }
                         accessibilityRole="button"
                         accessibilityLabel={`Shop ${item.label}`}
                       >

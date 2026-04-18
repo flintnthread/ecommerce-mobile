@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Share,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -20,6 +21,8 @@ import {
   loadWishlist,
   toggleWishlistProduct,
 } from "../lib/shopStorage";
+import { buildProductGalleryUris } from "../lib/pickProductImageUri";
+import api, { productByIdPath } from "../services/api";
 
 type CatalogProduct = {
   id: string;
@@ -30,6 +33,15 @@ type CatalogProduct = {
   discount: string;
   rating: string;
   ratingCount: string;
+  /** From API — unique variant `size` values for chips */
+  sizeOptions?: string[];
+  /** Plain text (HTML stripped) for description block */
+  descriptionPlain?: string;
+  /** Parsed from API `features` JSON array */
+  highlightBullets?: string[];
+  /** e.g. Delivery in 3–7 days */
+  deliveryNote?: string;
+  sellerId?: number;
 };
 
 const L1 = require("../assets/images/look1.png");
@@ -405,13 +417,189 @@ function getCatalogProduct(id?: string | string[] | null): CatalogProduct {
   return DEFAULT_PRODUCT;
 }
 
+function stripHtml(html: string): string {
+  return String(html ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseFeatureBullets(raw: unknown): string[] | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim();
+  if (!s) return undefined;
+  try {
+    const parsed = JSON.parse(s) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const lines = parsed.map((x) => String(x ?? "").trim()).filter(Boolean);
+    return lines.length ? lines : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function mapApiProductDetailToCatalog(
+  p: any,
+  resolveAsset: (pathOrUrl: string) => string
+): CatalogProduct {
+  const uris = buildProductGalleryUris(p, resolveAsset);
+  const images =
+    uris.length > 0 ? uris.map((u) => ({ uri: u })) : [...DEFAULT_PRODUCT_IMAGES];
+
+  const num = (x: unknown): number | null => {
+    if (typeof x === "number" && Number.isFinite(x)) return x;
+    if (typeof x === "string") {
+      const n = parseFloat(x);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  const variants = Array.isArray(p?.variants) ? p.variants : [];
+  const v =
+    variants.find(
+      (x: any) =>
+        x &&
+        (typeof x.sellingPrice === "number" ||
+          typeof x.mrpPrice === "number" ||
+          typeof x.sellingPrice === "string" ||
+          typeof x.mrpPrice === "string")
+    ) ?? variants[0];
+  const selling = Math.round(num(v?.sellingPrice) ?? 0);
+  const mrpRaw = num(v?.mrpPrice);
+  const mrp = mrpRaw != null && mrpRaw > 0 ? Math.round(mrpRaw) : Math.max(0, selling);
+  const discountPct = num(v?.discountPercentage);
+  const discount =
+    discountPct != null && Number.isFinite(discountPct) && discountPct > 0
+      ? `${Number(discountPct).toFixed(1).replace(/\.0$/, "")}% off`
+      : mrp > selling && mrp > 0
+        ? `${Math.round(((mrp - selling) / mrp) * 100)}% off`
+        : "Deal";
+
+  const sizeSet = new Set<string>();
+  for (const row of variants) {
+    const sz = String((row as any)?.size ?? "").trim();
+    if (sz) sizeSet.add(sz);
+  }
+  const sizeOptions = [...sizeSet].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true })
+  );
+
+  const rating =
+    typeof p?.rating === "number" && Number.isFinite(p.rating)
+      ? p.rating.toFixed(1)
+      : typeof p?.averageRating === "number" && Number.isFinite(p.averageRating)
+        ? p.averageRating.toFixed(1)
+        : "—";
+  const ratingCountRaw =
+    p?.ratingCount ?? p?.reviewCount ?? p?.reviewsCount ?? p?.rating_count;
+  const ratingCount =
+    typeof ratingCountRaw === "number" && Number.isFinite(ratingCountRaw)
+      ? String(ratingCountRaw)
+      : typeof ratingCountRaw === "string" && ratingCountRaw.trim()
+        ? ratingCountRaw.trim()
+        : "New";
+
+  const descShort = stripHtml(String(p?.shortDescription ?? ""));
+  const descLong = stripHtml(String(p?.description ?? ""));
+  const descriptionPlain =
+    (descLong.length >= descShort.length ? descLong : descShort) || descLong || descShort;
+
+  const deliveryNote =
+    typeof p?.deliveryTimeMin === "number" &&
+    typeof p?.deliveryTimeMax === "number" &&
+    Number.isFinite(p.deliveryTimeMin) &&
+    Number.isFinite(p.deliveryTimeMax)
+      ? `Delivery in ${p.deliveryTimeMin}–${p.deliveryTimeMax} days`
+      : undefined;
+
+  const bullets = parseFeatureBullets(p?.features);
+
+  return {
+    id: String(p.id),
+    name: String(p.name ?? "Product")
+      .replace(/\u0019/g, "'")
+      .replace(/\u0018/g, "'")
+      .trim(),
+    images,
+    price: Math.max(0, selling),
+    mrp: Math.max(Math.max(0, selling), mrp),
+    discount,
+    rating,
+    ratingCount,
+    sizeOptions: sizeOptions.length ? sizeOptions : undefined,
+    descriptionPlain: descriptionPlain || undefined,
+    highlightBullets: bullets,
+    deliveryNote,
+    sellerId: typeof p?.sellerId === "number" && Number.isFinite(p.sellerId) ? p.sellerId : undefined,
+  };
+}
+
 const AVAILABLE_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 
 export default function ProductDetail() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
-  const productId = params.id;
-  const product = useMemo(() => getCatalogProduct(productId), [productId]);
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const productIdRaw = params.id;
+  const productId = Array.isArray(productIdRaw) ? productIdRaw[0] : productIdRaw;
+
+  const numericProductId = useMemo(() => {
+    const s = String(productId ?? "").trim();
+    if (!/^\d+$/.test(s)) return null;
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [productId]);
+
+  const [apiDetail, setApiDetail] = useState<any | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const getDetailAssetUriFromApiPath = useCallback((pathOrUrl: string): string => {
+    const raw = String(pathOrUrl ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!apiBase) return raw;
+    return `${apiBase}/${raw.replace(/^\/+/, "")}`;
+  }, []);
+
+  useEffect(() => {
+    if (!numericProductId) {
+      setApiDetail(null);
+      setApiError(null);
+      setApiLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setApiLoading(true);
+    setApiError(null);
+    setApiDetail(null);
+    (async () => {
+      try {
+        const { data } = await api.get(productByIdPath(numericProductId));
+        if (cancelled) return;
+        if (data && typeof (data as any).id === "number") setApiDetail(data);
+        else setApiError("Invalid product response.");
+      } catch {
+        if (!cancelled) setApiError("Could not load this product.");
+      } finally {
+        if (!cancelled) setApiLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [numericProductId]);
+
+  const product = useMemo(() => {
+    if (apiDetail && typeof apiDetail.id === "number") {
+      return mapApiProductDetailToCatalog(apiDetail, getDetailAssetUriFromApiPath);
+    }
+    return getCatalogProduct(productId);
+  }, [apiDetail, productId, getDetailAssetUriFromApiPath]);
+
+  const isApiDetailLoading = Boolean(numericProductId && apiLoading);
+
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [isWishlisted, setIsWishlisted] = useState(false);
@@ -465,6 +653,7 @@ export default function ProductDetail() {
   ]);
 
   const mainImage = product.images[activeImageIndex] ?? product.images[0];
+  const sizeChoices = product.sizeOptions?.length ? product.sizeOptions : AVAILABLE_SIZES;
 
   const refreshCartAndWishlistState = useCallback(async () => {
     const [cart, wishlist] = await Promise.all([loadCart(), loadWishlist()]);
@@ -481,7 +670,12 @@ export default function ProductDetail() {
     setSelectedSize(null);
     setSearchQuery("");
     void refreshCartAndWishlistState();
-  }, [productId]);
+  }, [productId, apiDetail?.id]);
+
+  useEffect(() => {
+    const n = product.images?.length ?? 0;
+    if (n > 0 && activeImageIndex >= n) setActiveImageIndex(0);
+  }, [product.images, activeImageIndex]);
 
   useFocusEffect(
     useCallback(() => {
@@ -594,34 +788,48 @@ export default function ProductDetail() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
       >
+        {apiError && numericProductId ? (
+          <View style={styles.apiErrorBanner}>
+            <Text style={styles.apiErrorText}>{apiError}</Text>
+          </View>
+        ) : null}
+
         {/* MAIN IMAGE */}
         <View style={styles.mainImageWrapper}>
-          <Image source={mainImage} style={styles.mainImage} />
+          {isApiDetailLoading ? (
+            <View style={styles.mainImageLoading}>
+              <ActivityIndicator size="large" color="#ef7b1a" />
+            </View>
+          ) : (
+            <Image source={mainImage} style={styles.mainImage} />
+          )}
         </View>
 
         {/* THUMBNAILS ROW */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.thumbnailRow}
-        >
-          {product.images.map((img, index) => {
-            const isActive = index === activeImageIndex;
-            return (
-              <TouchableOpacity
-                key={`${product.id}-thumb-${index}`}
-                style={[
-                  styles.thumbnailWrapper,
-                  isActive && styles.thumbnailWrapperActive,
-                ]}
-                onPress={() => setActiveImageIndex(index)}
-                activeOpacity={0.8}
-              >
-                <Image source={img} style={styles.thumbnailImage} />
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {!isApiDetailLoading ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.thumbnailRow}
+          >
+            {product.images.map((img, index) => {
+              const isActive = index === activeImageIndex;
+              return (
+                <TouchableOpacity
+                  key={`${product.id}-thumb-${index}`}
+                  style={[
+                    styles.thumbnailWrapper,
+                    isActive && styles.thumbnailWrapperActive,
+                  ]}
+                  onPress={() => setActiveImageIndex(index)}
+                  activeOpacity={0.8}
+                >
+                  <Image source={img} style={styles.thumbnailImage} />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
 
         {/* TEXT BLOCK */}
         <View style={styles.detailBlock}>
@@ -673,6 +881,12 @@ export default function ProductDetail() {
           <Text style={styles.addressText} numberOfLines={2}>
             {currentAddress}
           </Text>
+          {product.deliveryNote ? (
+            <View style={styles.deliveryEtaRow}>
+              <Ionicons name="time-outline" size={14} color="#10893E" style={{ marginRight: 6 }} />
+              <Text style={styles.deliveryEtaText}>{product.deliveryNote}</Text>
+            </View>
+          ) : null}
           <View style={styles.deliveryPillRow}>
             <View style={styles.deliveryPill}>
               <Ionicons
@@ -710,7 +924,7 @@ export default function ProductDetail() {
           </View>
 
           <View style={styles.sizeRow}>
-            {AVAILABLE_SIZES.map((size) => {
+            {sizeChoices.map((size) => {
               const isActive = selectedSize === size;
               return (
                 <TouchableOpacity
@@ -818,7 +1032,9 @@ export default function ProductDetail() {
             <View style={styles.soldByLeft}>
               <Text style={styles.soldByLabel}>Sold by</Text>
               <Text style={styles.soldByName} numberOfLines={1}>
-                @ SHIV CREATION
+                {product.sellerId != null
+                  ? `Seller #${product.sellerId}`
+                  : "@ SHIV CREATION"}
               </Text>
             </View>
 
@@ -877,30 +1093,41 @@ export default function ProductDetail() {
           <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
             Product highlights
           </Text>
-          <View style={styles.highlightRow}>
-            <View style={styles.highlightBullet} />
-            <Text style={styles.highlightText}>
-              Pure cotton fabric for all‑day comfort
-            </Text>
-          </View>
-          <View style={styles.highlightRow}>
-            <View style={styles.highlightBullet} />
-            <Text style={styles.highlightText}>
-              A‑line silhouette ideal for casual and work wear
-            </Text>
-          </View>
-          <View style={styles.highlightRow}>
-            <View style={styles.highlightBullet} />
-            <Text style={styles.highlightText}>
-              Model is 5'6&quot; and wearing size M
-            </Text>
-          </View>
-          <View style={styles.highlightRow}>
-            <View style={styles.highlightBullet} />
-            <Text style={styles.highlightText}>
-              Machine wash, mild cycle, wash dark colours separately
-            </Text>
-          </View>
+          {product.highlightBullets?.length ? (
+            product.highlightBullets.map((line, idx) => (
+              <View key={`hl-${idx}`} style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>{line}</Text>
+              </View>
+            ))
+          ) : (
+            <>
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>
+                  Pure cotton fabric for all‑day comfort
+                </Text>
+              </View>
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>
+                  A‑line silhouette ideal for casual and work wear
+                </Text>
+              </View>
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>
+                  Model is 5'6&quot; and wearing size M
+                </Text>
+              </View>
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>
+                  Machine wash, mild cycle, wash dark colours separately
+                </Text>
+              </View>
+            </>
+          )}
         </View>
 
         {/* ARE YOU LOOKING FOR THIS? */}
@@ -1209,6 +1436,44 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: "#FFFFFF",
     fontWeight: "700",
+  },
+  apiErrorBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: "#FEF2F2",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#FECACA",
+  },
+  apiErrorText: {
+    color: "#b91c1c",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  mainImageLoading: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deliveryEtaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  deliveryEtaText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#1d324e",
+    fontWeight: "600",
+  },
+  descriptionPlainText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#334155",
+    lineHeight: 21,
   },
   mainImageWrapper: {
     marginHorizontal: 24,

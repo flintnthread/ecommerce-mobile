@@ -31,6 +31,19 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Route params for Homely Hub gift subcategory PLP; `subcategoryId` only when id is a real API numeric id. */
+function homelyHubSubcatNavigatorParams(subCategory: string, itemId?: string | number) {
+  const sub = String(subCategory ?? "").trim();
+  const raw = itemId === undefined || itemId === null ? "" : String(itemId);
+  const n = raw ? Number.parseInt(raw, 10) : NaN;
+  const idOk = Number.isFinite(n) && n > 0;
+  return {
+    mainCat: "homelyHub",
+    subCategory: sub,
+    ...(idOk ? { subcategoryId: String(n) } : {}),
+  };
+}
+
 type GiftCategory = {
   id: string;
   title: string;
@@ -1102,7 +1115,7 @@ export default function GiftsScreen() {
               onPress={() =>
                 router.push({
                   pathname: "/subcatProducts",
-                  params: { subCategory: item.name },
+                  params: homelyHubSubcatNavigatorParams(item.name, item.id),
                 } as any)
               }
             >
@@ -1544,7 +1557,7 @@ export default function GiftsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: { mainCat: "homelyHub", subCategory: item.title },
+                      params: homelyHubSubcatNavigatorParams(item.title, item.id),
                     })
                   }
                 >
@@ -1645,7 +1658,7 @@ export default function GiftsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: { subCategory: item.title },
+                      params: homelyHubSubcatNavigatorParams(item.title, item.id),
                     } as any)
                   }
                 >
@@ -1767,7 +1780,7 @@ export default function GiftsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: { subCategory: item.title },
+                      params: homelyHubSubcatNavigatorParams(item.title, item.id),
                     } as any)
                   }
                 >
@@ -1868,7 +1881,7 @@ export default function GiftsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: { subCategory: item.title },
+                      params: homelyHubSubcatNavigatorParams(item.title, item.id),
                     } as any)
                   }
                 >
@@ -1978,7 +1991,7 @@ export default function GiftsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: { subCategory: item.title },
+                      params: homelyHubSubcatNavigatorParams(item.title, item.id),
                     } as any)
                   }
                 >
@@ -2037,7 +2050,7 @@ export default function GiftsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: { subCategory: item.title },
+                      params: homelyHubSubcatNavigatorParams(item.title),
                     } as any)
                   }
                 >
@@ -2072,7 +2085,7 @@ export default function GiftsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: { subCategory: item.title },
+                      params: homelyHubSubcatNavigatorParams(item.title),
                     } as any)
                   }
                 >
@@ -2155,7 +2168,7 @@ export default function GiftsScreen() {
                       onPress={() =>
                         router.push({
                           pathname: "/subcatProducts",
-                          params: { subCategory: item.title },
+                          params: homelyHubSubcatNavigatorParams(item.title, item.id),
                         } as any)
                       }
                     >
@@ -2249,7 +2262,7 @@ export default function GiftsScreen() {
                       onPress={() =>
                         router.push({
                           pathname: "/subcatProducts",
-                          params: { subCategory: item.title },
+                          params: homelyHubSubcatNavigatorParams(item.title, item.id),
                         } as any)
                       }
                     >
@@ -2343,7 +2356,7 @@ export default function GiftsScreen() {
                       onPress={() =>
                         router.push({
                           pathname: "/subcatProducts",
-                          params: { subCategory: item.title },
+                          params: homelyHubSubcatNavigatorParams(item.title, item.id),
                         } as any)
                       }
                     >
@@ -2437,7 +2450,7 @@ export default function GiftsScreen() {
                       onPress={() =>
                         router.push({
                           pathname: "/subcatProducts",
-                          params: { subCategory: item.title },
+                          params: homelyHubSubcatNavigatorParams(item.title, item.id),
                         } as any)
                       }
                     >
@@ -2495,7 +2508,7 @@ export default function GiftsScreen() {
                     onPress={() =>
                       router.push({
                         pathname: "/subcatProducts",
-                        params: { subCategory: item.title },
+                        params: homelyHubSubcatNavigatorParams(item.title, item.id),
                       } as any)
                     }
                   >

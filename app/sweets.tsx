@@ -16,7 +16,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import api from "../services/api";
+import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+
+/** Dry sweets — Dry fruit laddu (and siblings under same API subcategory). */
+const DRY_DRYFRUIT_LADDU_SUBCATEGORY_ID = 142;
+const SWEETS_PRODUCTS_BY_SUBCATEGORY_ENDPOINT = (subcategoryId: number) =>
+  `/api/products/subcategory/${subcategoryId}`;
+
 type SweetsSubItem = {
   id: string;
   name: string;
@@ -178,6 +185,19 @@ export default function Sweets() {
     Partial<Record<CategoryKey, string>>
   >({});
 
+  type DrySpotlightProduct = {
+    id: string;
+    name: string;
+    imageUri: string;
+    sellingPrice: number;
+    mrpPrice: number;
+    discountLabel: string;
+    ratingLabel: string;
+  };
+
+  const [drySpotlightProducts, setDrySpotlightProducts] = useState<DrySpotlightProduct[]>([]);
+  const [drySpotlightLoading, setDrySpotlightLoading] = useState(true);
+
   const sectionY = useRef<Record<CategoryKey, number>>({
     dry: 0,
     milk: 0,
@@ -315,6 +335,116 @@ export default function Sweets() {
     };
   }, []);
 
+  const safeText = (v: string): string =>
+    String(v ?? "").replace(/\u0019/g, "'").trim();
+
+  const getAssetUriFromApiPath = (pathOrUrl: string): string => {
+    const raw = String(pathOrUrl ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!apiBase) return raw;
+    return `${apiBase}/${raw.replace(/^\/+/, "")}`;
+  };
+
+  const pickProductImageUri = (p: any): string | null =>
+    pickProductImageUriFromApi(p, getAssetUriFromApiPath);
+
+  const pickVariantNumbers = (p: any): {
+    selling: number;
+    mrp: number;
+    discountPct: number | null;
+  } => {
+    const num = (x: unknown): number | null => {
+      if (typeof x === "number" && Number.isFinite(x)) return x;
+      if (typeof x === "string") {
+        const n = parseFloat(x);
+        return Number.isFinite(n) ? n : null;
+      }
+      return null;
+    };
+    const variants = Array.isArray(p?.variants) ? p.variants : [];
+    const v =
+      variants.find(
+        (x) =>
+          x &&
+          (typeof x.sellingPrice === "number" ||
+            typeof x.mrpPrice === "number" ||
+            typeof x.sellingPrice === "string" ||
+            typeof x.mrpPrice === "string")
+      ) ?? variants[0];
+    const selling = num(v?.sellingPrice) ?? 0;
+    const mrpRaw = num(v?.mrpPrice);
+    const mrp = mrpRaw != null && mrpRaw > 0 ? mrpRaw : selling;
+    const discountPct = num(v?.discountPercentage);
+    return {
+      selling: Math.max(0, Math.round(selling)),
+      mrp: Math.max(Math.round(selling), Math.round(mrp)),
+      discountPct,
+    };
+  };
+
+  const pickRatingLabel = (p: any): string => {
+    const r =
+      p?.rating ?? p?.averageRating ?? p?.average_rating ?? p?.reviewRating ?? p?.review_rating;
+    if (typeof r === "number" && Number.isFinite(r)) return r.toFixed(1);
+    if (typeof r === "string") {
+      const n = parseFloat(r);
+      return Number.isFinite(n) ? n.toFixed(1) : "—";
+    }
+    return "—";
+  };
+
+  const mapApiRowToDrySpotlight = (p: any): DrySpotlightProduct | null => {
+    if (!p || typeof p.id !== "number" || typeof p.name !== "string") return null;
+    const st = String(p.status ?? "").trim().toLowerCase();
+    if (st && st !== "active") return null;
+    const imageUri = pickProductImageUri(p);
+    if (!imageUri) return null;
+    const { selling, mrp, discountPct } = pickVariantNumbers(p);
+    const discountLabel =
+      discountPct != null && Number.isFinite(discountPct)
+        ? `${Number(discountPct).toFixed(1).replace(/\.0$/, "")}% off`
+        : "Deal";
+    return {
+      id: String(p.id),
+      name: safeText(p.name),
+      imageUri,
+      sellingPrice: selling,
+      mrpPrice: mrp,
+      discountLabel,
+      ratingLabel: pickRatingLabel(p),
+    };
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setDrySpotlightLoading(true);
+        const { data } = await api.get(
+          SWEETS_PRODUCTS_BY_SUBCATEGORY_ENDPOINT(DRY_DRYFRUIT_LADDU_SUBCATEGORY_ID)
+        );
+        if (!alive) return;
+        if (!Array.isArray(data)) {
+          setDrySpotlightProducts([]);
+          return;
+        }
+        const mapped = (data as unknown[])
+          .map((row) => mapApiRowToDrySpotlight(row))
+          .filter(Boolean) as DrySpotlightProduct[];
+        setDrySpotlightProducts(mapped);
+      } catch {
+        if (alive) setDrySpotlightProducts([]);
+      } finally {
+        if (alive) setDrySpotlightLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const BANNERS = useMemo(
     () => [
       { id: "b1", image: require("../assets/sweetsimages/48.png") },
@@ -394,11 +524,16 @@ export default function Sweets() {
   };
 
   const handleSweetsSubcategoryPress = (section: CategoryKey, item: SweetsSubItem) => {
+    const numericSubcategoryId = Number.parseInt(String(item.id), 10);
     router.push({
       pathname: "/subcatProducts",
       params: {
         mainCat: section === "dry" ? "sweets-dry" : "sweets-milk",
         subCategory: item.name,
+        subcategoryId:
+          Number.isFinite(numericSubcategoryId) && numericSubcategoryId > 0
+            ? String(numericSubcategoryId)
+            : undefined,
       },
     });
   };
@@ -1017,10 +1152,42 @@ const styles = StyleSheet.create({
     color: "#6f7a8d",
     fontWeight: "600",
   },
+  drySpotlightLoadingHint: {
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#5a6578",
+  },
+  sweetsProductPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  sweetsProductDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  sweetsProductDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#b45309",
+  },
+  sweetsProductMrp: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
   sweetsProductBottomRow: {
     marginTop: 8,
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
   },
   sweetsProductPrice: {

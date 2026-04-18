@@ -146,6 +146,8 @@ type SubLabel = {
   label: string;
   /** Subcategory tile photo; falls back to department `shopImage` if omitted. */
   image?: ImageSourcePropType;
+  /** When set, opens `subcatProducts` with `GET /api/products/subcategory/:id` (via `api` base URL). */
+  subcategoryId?: number;
 };
 
 type WomenCategoryBlock = {
@@ -206,7 +208,7 @@ const WOMEN_CATEGORIES: WomenCategoryBlock[] = [
     railFrom: "#7c2d12",
     railTo: "#c2410c",
     subs: [
-      { id: "w1", label: "Sarees", image: WOMEN_ETHNIC_IMG },
+      { id: "w1", label: "Sarees", image: WOMEN_ETHNIC_IMG, subcategoryId: 164 },
       { id: "w2", label: "Kurtas & Kurtis", image: WOMEN_ETHNIC_IMG },
       { id: "w3", label: "Lehengas", image: WOMEN_ETHNIC_IMG },
       { id: "w13", label: "Gowns", image: WOMEN_ETHNIC_IMG },
@@ -1082,6 +1084,7 @@ export default function WomenScreen() {
           : s.image
             ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
+        subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
       }));
     }
     return ethnicBlock.subs;
@@ -1105,6 +1108,7 @@ export default function WomenScreen() {
           : s.image
             ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
+        subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
       }));
     }
     return lingerieBlock.subs;
@@ -1128,6 +1132,7 @@ export default function WomenScreen() {
           : s.image
             ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
+        subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
       }));
     }
     return westernBlock.subs;
@@ -1151,6 +1156,7 @@ export default function WomenScreen() {
           : s.image
             ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
+        subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
       }));
     }
     return winterBlock.subs;
@@ -1174,6 +1180,7 @@ export default function WomenScreen() {
           : s.image
             ? ({ uri: getUploadsImageUriFromFilename(s.image) } as any)
             : undefined) as ImageSourcePropType | undefined,
+        subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
       }));
     }
     return activeBlockForTable.subs;
@@ -1217,6 +1224,7 @@ export default function WomenScreen() {
           deptKey: cat.key,
           deptTitle: cat.title,
           deptColor: cat.railTo,
+          subcategoryId: s.subcategoryId,
         }))
       ),
     [
@@ -1306,12 +1314,19 @@ export default function WomenScreen() {
   );
 
   const openWomenSubcategoryProducts = useCallback(
-    (subCategoryLabel: string) => {
+    (subCategoryLabel: string, subcategoryId?: number | null) => {
+      const trimmed = String(subCategoryLabel ?? "").trim();
+      if (!trimmed) return;
+      const idOk =
+        typeof subcategoryId === "number" &&
+        Number.isFinite(subcategoryId) &&
+        subcategoryId > 0;
       router.push({
         pathname: "/subcatProducts",
         params: {
           mainCat: "womenswear",
-          subCategory: subCategoryLabel,
+          subCategory: trimmed,
+          ...(idOk ? { subcategoryId: String(subcategoryId) } : {}),
         },
       });
     },
@@ -1618,7 +1633,7 @@ export default function WomenScreen() {
                       key={s.id}
                       style={styles.railCard}
                       activeOpacity={0.88}
-                      onPress={() => openWomenSubcategoryProducts(s.label)}
+                      onPress={() => openWomenSubcategoryProducts(s.label, s.subcategoryId)}
                       accessibilityRole="button"
                       accessibilityLabel={`Shop ${s.label}`}
                     >
@@ -1962,7 +1977,9 @@ export default function WomenScreen() {
                     key={item.flatId}
                     style={styles.fcShopAllCardList}
                     activeOpacity={0.92}
-                    onPress={() => openWomenSubcategoryProducts(item.label)}
+                    onPress={() =>
+                      openWomenSubcategoryProducts(item.label, item.subcategoryId)
+                    }
                     accessibilityRole="button"
                     accessibilityLabel={`Shop ${item.label}`}
                   >
@@ -2043,7 +2060,9 @@ export default function WomenScreen() {
                         key={item.flatId}
                         style={styles.shopAllGridCardOuter}
                         activeOpacity={0.93}
-                        onPress={() => openWomenSubcategoryProducts(item.label)}
+                        onPress={() =>
+                          openWomenSubcategoryProducts(item.label, item.subcategoryId)
+                        }
                         accessibilityRole="button"
                         accessibilityLabel={`Shop ${item.label}`}
                       >
