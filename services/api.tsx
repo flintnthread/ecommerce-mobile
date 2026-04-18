@@ -50,4 +50,21 @@ const api = axios.create({
   withCredentials: true, // ✅ crucial for session/cookies
 });
 
+/**
+ * Product listing for one subcategory — path only (use with `api.get(...)`).
+ * Base URL comes from `api.defaults.baseURL` (env / Expo host / emulator), so this stays correct if the server host changes.
+ */
+export function productsBySubcategoryPath(subcategoryId: number): string {
+  const id = Math.floor(Number(subcategoryId));
+  if (!Number.isFinite(id) || id <= 0) return "/api/products/subcategory/0";
+  return `/api/products/subcategory/${id}`;
+}
+
+/** Single product for detail screen — path only (use with `api.get(...)`). */
+export function productByIdPath(productId: number): string {
+  const id = Math.floor(Number(productId));
+  if (!Number.isFinite(id) || id <= 0) return "/api/products/0";
+  return `/api/products/${id}`;
+}
+
 export default api;

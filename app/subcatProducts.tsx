@@ -12,20 +12,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-
-const API_ORIGIN = "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net";
-const PRODUCTS_BY_SUBCATEGORY_URL = (subcategoryId: number) =>
-  `${API_ORIGIN}/api/products/subcategory/${subcategoryId}`;
-
-type ApiProductBySubcategory = {
-  categoryId: number;
-  id: number;
-  image: string; // e.g. "uploads/products/xxxx.jpg"
-  name: string;
-  sku: string | null;
-  status: string;
-  subcategoryId: number;
-};
+import api from "../services/api";
+import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 type BestDressItem = {
   id: string;
@@ -524,6 +512,8 @@ export default function SubcategoriesScreen() {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   const [apiRoutedProducts, setApiRoutedProducts] = useState<ProductItem[]>([]);
+  /** When `subcategoryId` is in the route, we only show API rows (no fallback to synthetic catalog). */
+  const [apiRoutedFromIdReady, setApiRoutedFromIdReady] = useState(false);
 
   const handleFilterPress = (label: string) => {
     if (label === "Sort") setSortModalVisible(true);
@@ -672,60 +662,132 @@ export default function SubcategoriesScreen() {
     const raw = String(pathOrUrl ?? "").trim();
     if (!raw) return "";
     if (/^https?:\/\//i.test(raw)) return raw;
-    return `${API_ORIGIN}/${raw.replace(/^\/+/, "")}`;
+    const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!apiBase) return raw;
+    return `${apiBase}/${raw.replace(/^\/+/, "")}`;
   };
 
+  const pickProductImageUri = (p: any): string | null =>
+    pickProductImageUriFromApi(p, getAssetUriFromApiPath);
+
+  const pickVariantNumbers = (p: any): {
+    selling: number;
+    mrp: number;
+    discountPct: number | null;
+  } => {
+    const num = (x: unknown): number | null => {
+      if (typeof x === "number" && Number.isFinite(x)) return x;
+      if (typeof x === "string") {
+        const n = parseFloat(x);
+        return Number.isFinite(n) ? n : null;
+      }
+      return null;
+    };
+    const variants = Array.isArray(p?.variants) ? p.variants : [];
+    const v =
+      variants.find(
+        (x) =>
+          x &&
+          (typeof x.sellingPrice === "number" ||
+            typeof x.mrpPrice === "number" ||
+            typeof x.sellingPrice === "string" ||
+            typeof x.mrpPrice === "string")
+      ) ?? variants[0];
+    const selling = num(v?.sellingPrice) ?? 0;
+    const mrpRaw = num(v?.mrpPrice);
+    const mrp = mrpRaw != null && mrpRaw > 0 ? mrpRaw : selling;
+    const discountPct = num(v?.discountPercentage);
+    return {
+      selling: Math.max(0, Math.round(selling)),
+      mrp: Math.max(Math.round(selling), Math.round(mrp)),
+      discountPct,
+    };
+  };
+
+  const pickRatingLabel = (p: any): string => {
+    const r =
+      p?.rating ?? p?.averageRating ?? p?.average_rating ?? p?.reviewRating ?? p?.review_rating;
+    if (typeof r === "number" && Number.isFinite(r)) return r.toFixed(1);
+    if (typeof r === "string") {
+      const n = parseFloat(r);
+      return Number.isFinite(n) ? n.toFixed(1) : "—";
+    }
+    return "—";
+  };
+
+  const mapApiProductToProductItem = (p: any): ProductItem | null => {
+    if (!p || typeof p.id !== "number" || typeof p.name !== "string") return null;
+    const st = String(p.status ?? "").trim().toLowerCase();
+    /** Backend may return e.g. `under_review`; only hide clearly unpublishable rows. */
+    const hiddenStatuses = new Set([
+      "inactive",
+      "deleted",
+      "archived",
+      "draft",
+      "rejected",
+    ]);
+    if (st && hiddenStatuses.has(st)) return null;
+    const imageUri = pickProductImageUri(p);
+    if (!imageUri) return null;
+    const { selling, mrp, discountPct } = pickVariantNumbers(p);
+    const discountLabel =
+      discountPct != null && Number.isFinite(discountPct)
+        ? `${Number(discountPct).toFixed(1).replace(/\.0$/, "")}% off`
+        : "Deal";
+    const base: ProductItem = {
+      id: String(p.id),
+      title: safeText(p.name),
+      price: selling,
+      mrp,
+      discount: discountLabel,
+      payLaterText: "",
+      benefitText: "Free Delivery",
+      rating: pickRatingLabel(p),
+      ratingCount: "•",
+      image: { uri: imageUri },
+    };
+    return withFilterTraits(
+      base,
+      selectedSubCategory || "Products",
+      mainCat ?? undefined,
+      selectedGender || undefined
+    );
+  };
+
+  const routedFromSubcategoryId =
+    Number.isFinite(routedSubcategoryId) && routedSubcategoryId > 0;
+
   useEffect(() => {
-    if (!Number.isFinite(routedSubcategoryId) || routedSubcategoryId <= 0) {
+    if (!routedFromSubcategoryId) {
       setApiRoutedProducts([]);
+      setApiRoutedFromIdReady(false);
       return;
     }
 
+    setApiRoutedFromIdReady(false);
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch(PRODUCTS_BY_SUBCATEGORY_URL(routedSubcategoryId), {
+        const { data } = await api.get(`/api/products/subcategory/${routedSubcategoryId}`, {
           signal: controller.signal,
         });
-        if (!res.ok) return;
-        const data = (await res.json()) as unknown;
-        if (!Array.isArray(data)) return;
-
-        const mapped: ProductItem[] = (data as ApiProductBySubcategory[])
-          .filter(
-            (p) =>
-              p &&
-              typeof p.id === "number" &&
-              typeof p.name === "string" &&
-              typeof p.image === "string"
-          )
-          .map((p, idx) => {
-            const price = 999 + ((p.id + idx) % 9) * 50;
-            const mrp = price + 400;
-            return {
-              id: String(p.id),
-              title: safeText(p.name),
-              price,
-              mrp,
-              discount: "Best price",
-              payLaterText: "",
-              benefitText: "Free Delivery",
-              rating: "4.3",
-              ratingCount: "•",
-              image: { uri: getAssetUriFromApiPath(p.image) },
-              catalogCategory: selectedSubCategory || "Footwear",
-              gender: "Men",
-            };
-          });
-
+        if (!Array.isArray(data)) {
+          setApiRoutedProducts([]);
+          return;
+        }
+        const mapped = (data as unknown[])
+          .map((row) => mapApiProductToProductItem(row))
+          .filter(Boolean) as ProductItem[];
         setApiRoutedProducts(mapped);
       } catch {
-        // ignore network errors
+        setApiRoutedProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setApiRoutedFromIdReady(true);
       }
     })();
 
     return () => controller.abort();
-  }, [routedSubcategoryId, selectedSubCategory]);
+  }, [routedSubcategoryId, routedFromSubcategoryId, selectedSubCategory, mainCat]);
 
   /** Products for the subcategory opened from subcate (tile tap). */
   const routedSubcategoryProducts = React.useMemo(() => {
@@ -762,8 +824,18 @@ export default function SubcategoriesScreen() {
     return categoryProducts;
   }, [selectedSubCategory, categoryProducts, mainCat, selectedGender]);
 
-  const effectiveRoutedSubcategoryProducts =
-    apiRoutedProducts.length > 0 ? apiRoutedProducts : routedSubcategoryProducts;
+  const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
+    if (routedFromSubcategoryId) {
+      if (!apiRoutedFromIdReady) return [];
+      return apiRoutedProducts;
+    }
+    return routedSubcategoryProducts;
+  }, [
+    routedFromSubcategoryId,
+    apiRoutedFromIdReady,
+    apiRoutedProducts,
+    routedSubcategoryProducts,
+  ]);
 
   const filteredRoutedProducts = React.useMemo(() => {
     if (!selectedSubCategory?.trim()) return [];
@@ -941,15 +1013,20 @@ export default function SubcategoriesScreen() {
     setSimilarModalVisible(true);
   };
 
-  const openProductDetail = () => {
-    router.push("/productdetail");
+  const openProductDetail = (product?: ProductItem) => {
+    const raw = product ? String(product.id ?? "").trim() : "";
+    if (raw && /^\d+$/.test(raw)) {
+      router.push({ pathname: "/productdetail", params: { id: raw } } as any);
+    } else {
+      router.push("/productdetail");
+    }
   };
 
   const ProductCatalogCard = ({ product }: { product: ProductItem }) => (
     <TouchableOpacity
       style={styles.productCard}
       activeOpacity={0.9}
-      onPress={openProductDetail}
+      onPress={() => openProductDetail(product)}
     >
       <View style={styles.productImageWrapper}>
         <Image
@@ -1312,6 +1389,9 @@ export default function SubcategoriesScreen() {
                 {filteredRoutedProducts.length} items
               </Text>
             </View>
+            {routedFromSubcategoryId && !apiRoutedFromIdReady ? (
+              <Text style={styles.apiRoutedLoadingHint}>Loading products…</Text>
+            ) : null}
             <View style={styles.productGrid}>
               {filteredRoutedProducts.map((product) => (
                 <ProductCatalogCard key={product.id} product={product} />
@@ -1403,7 +1483,7 @@ export default function SubcategoriesScreen() {
               key={item.id}
               style={styles.bestCard}
               activeOpacity={0.9}
-              onPress={openProductDetail}
+              onPress={() => openProductDetail()}
             >
               <View style={styles.bestImageWrapper}>
                 <Image
@@ -1475,7 +1555,7 @@ export default function SubcategoriesScreen() {
               key={`latest-${product.id}`}
               style={styles.latestCard}
               activeOpacity={0.9}
-              onPress={openProductDetail}
+              onPress={() => openProductDetail()}
             >
               <Image
                 source={product.image}
@@ -1519,7 +1599,7 @@ export default function SubcategoriesScreen() {
                   activeOpacity={0.9}
                   onPress={() => {
                     setSimilarModalVisible(false);
-                    openProductDetail();
+                    openProductDetail(product);
                   }}
                 >
                   <Image
@@ -1598,7 +1678,7 @@ export default function SubcategoriesScreen() {
                       activeOpacity={0.85}
                       onPress={() => {
                         setWishlistModalVisible(false);
-                        openProductDetail();
+                        openProductDetail(product);
                       }}
                     >
                       <Image
@@ -2208,6 +2288,13 @@ const styles = StyleSheet.create({
   },
   categoryProductCount: {
     fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  apiRoutedLoadingHint: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    fontSize: 13,
     fontWeight: "600",
     color: "#6B7280",
   },

@@ -17,15 +17,20 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter, type Href } from "expo-router";
+import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../services/api";
+import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 
 const { height, width } = Dimensions.get("window");
+/** Must match `styles.storeBanner.height` — used so carousel children get real pixel height (not 0). */
+const WOMEN_STORE_BANNER_HEIGHT = 250;
+/** Must match `styles.westernBanner.height`. */
+const MENS_STORE_BANNER_HEIGHT = 230;
 const NOTEBOOK_MAX_W = width - 24;
 /** Width of one diary “spread” (page | spiral | page) for horizontal paging */
 const DIARY_SPREAD_W = NOTEBOOK_MAX_W - 20;
@@ -37,8 +42,8 @@ const SPECTRUM_SIDE_PADDING = 12;
 /** Swap these `require(...)` paths when you add your own banner images. */
 const IMG_HERO_WORKOUT = require("../assets/images/sportsfootwearbannernew.png");
 const IMG_HERO_SOCCER = require("../assets/images/accessariesbannernew.png");
-const IMG_HERO_TENNIS = require("../assets/images/menssportswearbannernew.png");
-const IMG_HERO = require("../assets/images/womensportswearbannernew.png");
+const IMG_HERO_TENNIS = require("../assets/images/SportsJearsys.png");
+const IMG_HERO = require("../assets/images/WomenGymwear.png");
 
 const TOP_BANNER_SLIDES = [
   IMG_HERO_WORKOUT,
@@ -95,18 +100,18 @@ type ApiSubCategory = {
 const SPORTSWEAR_SUBCATEGORIES_URL =
   "/api/categories/66/subcategories";
 
+/** Women’s sportswear store carousel — custom banners in `assets/images`. */
 const WOMEN_BANNER_SLIDES = [
-  require("../assets/images/redsport1.png"),
-  require("../assets/images/redsport2.png"),
-  require("../assets/images/greensport1.png"),
-  require("../assets/images/yellowsport3.png"),
+  require("../assets/images/WomenGymwear.png"),
+  require("../assets/images/WomenTracksuit.png"),
+  
 ] as const;
 
+/** Men’s sportswear carousel — custom banners in `assets/images`. */
 const MENS_BANNER_SLIDES = [
-  require("../assets/images/redsport2.png"),
-  require("../assets/images/greensport1.png"),
-  require("../assets/images/blacksport2.png"),
-  require("../assets/images/yellowsport2.png"),
+  require("../assets/images/SportsJearsys.png"),
+  
+  require("../assets/images/SportT-shirts.png"),
 ] as const;
 
 // moon shape
@@ -288,7 +293,16 @@ const interests: { name: string; img: ImageSourcePropType }[] = [
   { name: "Sports wear", img: require("../assets/images/sports8.png") },
 ];
 
-type InterestOrbitItem = { id?: string; name: string; img: ImageSourcePropType };
+type InterestOrbitItem = {
+  id?: string;
+  name: string;
+  img: ImageSourcePropType;
+  /** Opens `subcatProducts` + `/api/products/subcategory/:id` when set. */
+  subcategoryId?: number;
+  subcategoryName?: string;
+  /** Shop-all fallback when there is no `subcategoryId` (e.g. center hub, padded tiles). */
+  plpHub?: "men" | "women";
+};
 
 // banner section
 
@@ -402,6 +416,82 @@ function buildUploadsUri(filename: string | null | undefined): string | null {
   return `${base}/uploads/${f.replace(/^\/+/, "")}`;
 }
 
+/** Same path rules as `subcatProducts` / indoor PLP mappers — `uploads/products/...` vs full URL. */
+function sportswearAssetUriFromApiPath(pathOrUrl: string): string {
+  const raw = String(pathOrUrl ?? "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  if (!base) return raw;
+  return `${base}/${raw.replace(/^\/+/, "")}`;
+}
+
+function pickFirstProductImageUri(p: Record<string, unknown> | null | undefined): string | null {
+  if (!p) return null;
+  return pickProductImageUriFromApi(p, sportswearAssetUriFromApiPath);
+}
+
+function pickVariantSellingAndDiscount(p: Record<string, unknown>): {
+  selling: number;
+  discountPct: number | null;
+} {
+  const variants = Array.isArray(p.variants) ? p.variants : [];
+  const v =
+    (variants.find(
+      (x) =>
+        x &&
+        typeof x === "object" &&
+        (typeof (x as Record<string, unknown>).sellingPrice === "number" ||
+          typeof (x as Record<string, unknown>).mrpPrice === "number" ||
+          typeof (x as Record<string, unknown>).sellingPrice === "string" ||
+          typeof (x as Record<string, unknown>).mrpPrice === "string")
+    ) ?? variants[0]) as Record<string, unknown> | undefined;
+  const num = (x: unknown): number | null => {
+    if (typeof x === "number" && Number.isFinite(x)) return x;
+    if (typeof x === "string") {
+      const n = parseFloat(x);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  const selling = num(v?.sellingPrice) ?? 0;
+  const discountPct = num(v?.discountPercentage);
+  return {
+    selling: Math.max(0, Math.round(selling)),
+    discountPct,
+  };
+}
+
+function mapFirstApiProductToWhatsMovingTile(
+  product: Record<string, unknown>,
+  subcategoryId: number,
+  subcategoryName: string,
+  rowIdx: number,
+  fallbackImage: ImageSourcePropType
+): WhatsMovingDisplayItem | null {
+  if (typeof product.id !== "number") return null;
+  const st = String(product.status ?? "").trim().toLowerCase();
+  if (st && st !== "active") return null;
+  const uri = pickFirstProductImageUri(product);
+  const name = String(product.name ?? "").trim() || subcategoryName;
+  const { selling, discountPct } = pickVariantSellingAndDiscount(product);
+  const offer =
+    discountPct != null && Number.isFinite(discountPct) && discountPct > 0
+      ? `${Number(discountPct).toFixed(0).replace(/\.0$/, "")}% off`
+      : selling > 0
+        ? `From ₹${selling}`
+        : "Shop picks";
+  const image: ImageSourcePropType = uri ? { uri } : fallbackImage;
+  return {
+    id: `wm-prod-${subcategoryId}-${product.id}-${rowIdx}`,
+    title: name,
+    offer,
+    image,
+    subcategoryId,
+    subcategoryName: String(subcategoryName).trim() || name,
+  };
+}
+
 function normalizeCategoryName(name: string): string {
   return String(name ?? "")
     .replace(/\u0019/g, "'")
@@ -418,25 +508,33 @@ function subcategoryToImageSource(
   return uri ? { uri: String(uri) } : fallback;
 }
 
-function buildInterestOrbitFromWomenApi(
+/** Women’s (68) or men’s (67) `subcategories-table` → interest orbit + PLP ids (same pattern as store rails). */
+function buildInterestOrbitFromCategoryTable(
   group: ApiAccessoryGroup | undefined,
-  subs: ApiAccessoryGroup["subcategories"]
+  subs: ApiAccessoryGroup["subcategories"],
+  fallbackCategoryTitle: string,
+  plpHub: "men" | "women"
 ): InterestOrbitItem[] {
   const hero = String(group?.mobileImage ?? "").trim();
-  const catName = normalizeCategoryName(group?.categoryName ?? "Women's Sportswear");
+  const catName = normalizeCategoryName(group?.categoryName ?? fallbackCategoryTitle);
   const center: InterestOrbitItem = {
     id: "interest-center",
     name: catName,
     img: hero ? { uri: hero } : interests[0]!.img,
+    plpHub,
   };
   const orbit: InterestOrbitItem[] = [];
   for (let i = 0; i < 7; i++) {
     const s = subs[i];
     if (s) {
+      const sid = typeof s.id === "number" && s.id > 0 ? s.id : undefined;
       orbit.push({
         id: `sub-${s.id}`,
         name: s.name,
         img: subcategoryToImageSource(s, interests[(i + 1) % interests.length]!.img),
+        subcategoryId: sid,
+        subcategoryName: s.name,
+        plpHub,
       });
     } else {
       const j = (i + 1) % interests.length;
@@ -444,6 +542,7 @@ function buildInterestOrbitFromWomenApi(
         id: `pad-orbit-${i}`,
         name: interests[j]!.name,
         img: interests[j]!.img,
+        plpHub,
       });
     }
   }
@@ -601,6 +700,9 @@ type WhatsMovingDisplayItem = {
   title: string;
   offer: string;
   image: ImageSourcePropType;
+  /** Sports footwear subcategory — opens `subcatProducts` with this id. */
+  subcategoryId?: number;
+  subcategoryName?: string;
 };
 
 const SPOTLIGHT_CARDS: {
@@ -691,11 +793,19 @@ type FootwearPromoRow = (typeof FOOTWEAR_PROMO_STRIP)[number] & {
   };
 };
 
+/** Maps each sports footwear hero slide → PLP title + optional `/api/products/subcategory/:id`. */
+type FootwearHeroSlidePlpMeta = { label: string; subcategoryId?: number };
+
 const FOOTWEAR_HERO_SLIDES = [
   require("../assets/images/SportsFootwear.png"),
   require("../assets/images/sports6.png"),
   require("../assets/images/sports7.png"),
 ] as const;
+
+const FOOTWEAR_HERO_SLIDE_PLP_META_FALLBACK: FootwearHeroSlidePlpMeta[] = Array.from(
+  { length: FOOTWEAR_HERO_SLIDES.length },
+  () => ({ label: "Sports footwear" })
+);
 
 const FOOTWEAR_PROMO_RAIL_CARD_WIDTH = 132;
 const FOOTWEAR_PROMO_RAIL_GAP = 12;
@@ -1155,6 +1265,9 @@ export default function SportsWearSection() {
   const [footwearHeroSlides, setFootwearHeroSlides] = useState<ImageSourcePropType[]>(() =>
     [...FOOTWEAR_HERO_SLIDES].map((x) => x as unknown as ImageSourcePropType)
   );
+  const [footwearHeroSlidePlpMeta, setFootwearHeroSlidePlpMeta] = useState<FootwearHeroSlidePlpMeta[]>(
+    () => FOOTWEAR_HERO_SLIDE_PLP_META_FALLBACK.slice()
+  );
 
   const [footwearPromoHeadline, setFootwearPromoHeadline] = useState("Built for every stride");
 
@@ -1332,19 +1445,56 @@ export default function SportsWearSection() {
         }
 
         const heroOut: ImageSourcePropType[] = [];
+        const heroMeta: FootwearHeroSlidePlpMeta[] = [];
         const groupHero = String(group?.mobileImage ?? "").trim();
-        if (groupHero) heroOut.push({ uri: groupHero });
+        const firstSub = subs[0];
+        const firstSubLabel =
+          firstSub && typeof firstSub.name === "string" && String(firstSub.name).trim()
+            ? String(firstSub.name).trim()
+            : catTitle || "Sports footwear";
+        const firstSubId =
+          firstSub && typeof firstSub.id === "number" && firstSub.id > 0 ? firstSub.id : undefined;
+
+        if (groupHero) {
+          heroOut.push({ uri: groupHero });
+          heroMeta.push({
+            label: catTitle || firstSubLabel,
+            subcategoryId: firstSubId,
+          });
+        }
         for (const s of subs) {
           const mobile = String(s.mobileImage ?? "").trim();
           const uri = mobile || buildUploadsUri(s.image);
-          if (uri) heroOut.push({ uri: String(uri) });
+          if (!uri) continue;
+          heroOut.push({ uri: String(uri) });
+          heroMeta.push({
+            label: typeof s.name === "string" ? String(s.name).trim() : "Sports footwear",
+            subcategoryId: typeof s.id === "number" && s.id > 0 ? s.id : undefined,
+          });
         }
         let hi = 0;
         while (heroOut.length < 3 && hi < FOOTWEAR_HERO_SLIDES.length) {
           heroOut.push(FOOTWEAR_HERO_SLIDES[hi]! as unknown as ImageSourcePropType);
+          heroMeta.push({
+            label: firstSubLabel,
+            subcategoryId: firstSubId,
+          });
           hi += 1;
         }
-        if (heroOut.length > 0) setFootwearHeroSlides(heroOut);
+        if (heroOut.length > 0) {
+          setFootwearHeroSlides(heroOut);
+          const alignedMeta: FootwearHeroSlidePlpMeta[] =
+            heroMeta.length === heroOut.length
+              ? heroMeta
+              : heroOut.map(
+                  (_, i) =>
+                    heroMeta[i] ?? {
+                      label: catTitle || firstSubLabel,
+                      subcategoryId: firstSubId,
+                    }
+                );
+          setFootwearHeroSlidePlpMeta(alignedMeta);
+        }
 
         const rows: FootwearPromoRow[] = subs
           .filter((s) => s && typeof s.name === "string")
@@ -1371,30 +1521,87 @@ export default function SportsWearSection() {
         if (rows.length > 0) {
           setFootwearPromoRows(rows);
 
-          const wmSeed: WhatsMovingDisplayItem[] = subs.map((s, idx) => {
-            const mobile = String(s.mobileImage ?? "").trim();
-            const uri = mobile || buildUploadsUri(s.image);
-            const fb = WHATS_MOVING_ITEMS[idx % WHATS_MOVING_ITEMS.length]!.image as unknown as ImageSourcePropType;
-            return {
-              id: `wm-footwear-seed-${s.id}`,
-              title: s.name,
-              offer: "UP TO 45% OFF*",
-              image: uri ? ({ uri: String(uri) } as const) : fb,
-            };
-          });
-          const padded: WhatsMovingDisplayItem[] = [...wmSeed];
-          let pi = 0;
-          while (padded.length < 12) {
-            const src = WHATS_MOVING_ITEMS[pi % WHATS_MOVING_ITEMS.length]!;
-            padded.push({
-              id: `wm-footwear-pad-${pi}`,
-              title: src.title,
-              offer: src.offer,
-              image: src.image as unknown as ImageSourcePropType,
-            });
-            pi += 1;
-          }
-          setWhatsMovingDisplayItems(padded);
+          const offerPool = [
+            "UP TO 40% OFF*",
+            "NEW IN*",
+            "TOP RATED*",
+            "BESTSELLER*",
+            "LIMITED*",
+            "MEMBER DEAL*",
+          ] as const;
+
+          void (async () => {
+            const out: WhatsMovingDisplayItem[] = [];
+            for (let i = 0; i < subs.length && out.length < 12; i++) {
+              const s = subs[i];
+              if (!s || typeof s.id !== "number" || s.id <= 0 || typeof s.name !== "string") continue;
+              const fb = WHATS_MOVING_ITEMS[i % WHATS_MOVING_ITEMS.length]!.image as unknown as ImageSourcePropType;
+              const mobile = String(s.mobileImage ?? "").trim();
+              const uri = mobile || buildUploadsUri(s.image);
+              const fallbackImg: ImageSourcePropType = uri ? ({ uri: String(uri) } as const) : fb;
+
+              const pushSubTile = (title: string, offer: string, img: ImageSourcePropType) => {
+                out.push({
+                  id: `wm-footwear-sub-${s.id}-${out.length}`,
+                  title,
+                  offer,
+                  image: img,
+                  subcategoryId: s.id,
+                  subcategoryName: s.name,
+                });
+              };
+
+              try {
+                const { data } = await api.get(`/api/products/subcategory/${s.id}`, {
+                  timeout: 15000,
+                });
+                if (cancelled) return;
+                if (!Array.isArray(data) || data.length === 0) {
+                  pushSubTile(
+                    s.name,
+                    offerPool[out.length % offerPool.length]!,
+                    fallbackImg
+                  );
+                  continue;
+                }
+                const first = data[0] as Record<string, unknown>;
+                const mapped = mapFirstApiProductToWhatsMovingTile(
+                  first,
+                  s.id,
+                  s.name,
+                  out.length,
+                  fallbackImg
+                );
+                if (mapped) out.push(mapped);
+                else
+                  pushSubTile(
+                    s.name,
+                    offerPool[out.length % offerPool.length]!,
+                    fallbackImg
+                  );
+              } catch {
+                if (cancelled) return;
+                pushSubTile(
+                  s.name,
+                  offerPool[out.length % offerPool.length]!,
+                  fallbackImg
+                );
+              }
+            }
+
+            let pi = 0;
+            while (out.length < 12) {
+              const src = WHATS_MOVING_ITEMS[pi % WHATS_MOVING_ITEMS.length]!;
+              out.push({
+                id: `wm-footwear-pad-${pi}`,
+                title: src.title,
+                offer: src.offer,
+                image: src.image as unknown as ImageSourcePropType,
+              });
+              pi += 1;
+            }
+            if (!cancelled) setWhatsMovingDisplayItems(out);
+          })();
         }
       } catch {
         // keep static footwear + what's moving
@@ -1439,7 +1646,9 @@ export default function SportsWearSection() {
 
         if (mapped.length > 0) {
           setWomensSportswearCards(mapped);
-          setInterestOrbitItems(buildInterestOrbitFromWomenApi(group, subs));
+          setInterestOrbitItems(
+            buildInterestOrbitFromCategoryTable(group, subs, "Women's Sportswear", "women")
+          );
         }
       } catch {
         // keep SHOP_STORE_DATA + default orbit
@@ -1460,10 +1669,14 @@ export default function SportsWearSection() {
         for (let i = 0; i < 7; i++) {
           const s = others[i];
           if (s) {
+            const sid = typeof s.id === "number" && s.id > 0 ? s.id : undefined;
             orbit.push({
               id: `sub-${s.id}`,
               name: s.name,
               img: subcategoryToImageSource(s, interests[(i + 1) % interests.length]!.img),
+              subcategoryId: sid,
+              subcategoryName: s.name,
+              plpHub: "women",
             });
           } else {
             const j = (i + 1) % interests.length;
@@ -1471,17 +1684,41 @@ export default function SportsWearSection() {
               id: `pad-${i}`,
               name: interests[j]!.name,
               img: interests[j]!.img,
+              plpHub: "women",
             });
           }
         }
         setInterestOrbitItems([
-          { id: `center-${tapped.id}`, name: tapped.name, img: centerImg },
+          {
+            id: `center-${tapped.id}`,
+            name: tapped.name,
+            img: centerImg,
+            subcategoryId: tapped.id,
+            subcategoryName: tapped.name,
+            plpHub: "women",
+          },
           ...orbit,
         ]);
       } else {
         setInterestOrbitItems((prev) => {
           const next = [...prev];
-          next[0] = { id: "center-tap", name: card.title, img: card.image };
+          const sid = card.apiSub?.id;
+          const subName = card.apiSub?.name;
+          next[0] = {
+            id: "center-tap",
+            name: card.title,
+            img: card.image,
+            plpHub: "women",
+            ...(typeof sid === "number" &&
+            sid > 0 &&
+            typeof subName === "string" &&
+            String(subName).trim()
+              ? {
+                  subcategoryId: sid,
+                  subcategoryName: String(subName).trim(),
+                }
+              : {}),
+          };
           return next;
         });
       }
@@ -1511,13 +1748,87 @@ export default function SportsWearSection() {
     });
   }, []);
 
+  /** `subcatProducts` — uses `subcategoryId` for `GET /api/products/subcategory/:id` when present. */
+  const pushSubcatProducts = useCallback(
+    (mainCat: string, subCategory: string, subcategoryId?: number) => {
+      const m = String(mainCat ?? "").trim();
+      const trimmed = String(subCategory ?? "").trim();
+      if (!m || !trimmed) return;
+      const idOk =
+        typeof subcategoryId === "number" &&
+        Number.isFinite(subcategoryId) &&
+        subcategoryId > 0;
+      router.push({
+        pathname: "/subcatProducts",
+        params: {
+          mainCat: m,
+          subCategory: trimmed,
+          ...(idOk ? { subcategoryId: String(subcategoryId) } : {}),
+        },
+      });
+    },
+    [router]
+  );
+
+  const pushSportswearPlp = useCallback(
+    (subCategory: string, subcategoryId?: number) => {
+      pushSubcatProducts("sportswear", subCategory, subcategoryId);
+    },
+    [pushSubcatProducts]
+  );
+
+  const goMensSportswearShopAll = useCallback(() => {
+    const first = mensSportswearScrollCards[0];
+    if (!first) {
+      pushSportswearPlp("Men's Sportswear");
+      return;
+    }
+    const sid = first.apiSub?.id ?? Number.parseInt(String(first.id), 10);
+    const label = String(first.apiSub?.name ?? first.title).trim() || "Men's Sportswear";
+    pushSportswearPlp(label, Number.isFinite(sid) && sid > 0 ? sid : undefined);
+  }, [mensSportswearScrollCards, pushSportswearPlp]);
+
+  const goWomensSportswearShopAll = useCallback(() => {
+    const first = womensSportswearCards[0];
+    if (!first) {
+      pushSportswearPlp("Women's Sportswear");
+      return;
+    }
+    const sid = first.apiSub?.id ?? Number.parseInt(String(first.id), 10);
+    const label = String(first.apiSub?.name ?? first.title).trim() || "Women's Sportswear";
+    pushSportswearPlp(label, Number.isFinite(sid) && sid > 0 ? sid : undefined);
+  }, [pushSportswearPlp, womensSportswearCards]);
+
+  const openInterestOrbitItem = useCallback(
+    (item: InterestOrbitItem) => {
+      const sid = item.subcategoryId;
+      const label = String(item.subcategoryName ?? item.name ?? "").trim();
+      if (typeof sid === "number" && Number.isFinite(sid) && sid > 0 && label) {
+        pushSportswearPlp(label, sid);
+        return;
+      }
+      if (item.plpHub === "women") goWomensSportswearShopAll();
+      else goMensSportswearShopAll();
+    },
+    [goMensSportswearShopAll, goWomensSportswearShopAll, pushSportswearPlp]
+  );
+
   const goShop = useCallback(() => {
-    router.push("/products");
+    router.push("/subcatProducts");
   }, [router]);
 
-  const goSubcatProducts = useCallback(() => {
-    router.push("/subcatProducts" as Href);
-  }, [router]);
+  const openWhatsMovingCard = useCallback(
+    (item: WhatsMovingDisplayItem) => {
+      const sid = item.subcategoryId;
+      const name = String(item.subcategoryName ?? item.title ?? "").trim();
+      if (typeof sid === "number" && Number.isFinite(sid) && sid > 0 && name) {
+        pushSubcatProducts("sportswear", name, sid);
+        return;
+      }
+      goShop();
+    },
+    [goShop, pushSubcatProducts]
+  );
 
   const scrollToSpotlightFootwear = useCallback(() => {
     scrollRef.current?.scrollTo({ y: spotlightFootwearY.current, animated: true });
@@ -1575,16 +1886,77 @@ export default function SportsWearSection() {
     const img: ImageSourcePropType = uri ? { uri: String(uri) } : row.image;
     const baseTitle = row.apiSub?.name ?? row.label;
     const idBase = row.apiSub ? String(row.apiSub.id) : row.id;
+    const subId = row.apiSub && row.apiSub.id > 0 ? row.apiSub.id : undefined;
+    const subName = String(row.apiSub?.name ?? row.label ?? "").trim();
     const six: WhatsMovingDisplayItem[] = Array.from({ length: 6 }, (_, i) => ({
       id: `wm-footwear-focus-${idBase}-${i}`,
       title: i === 0 ? baseTitle : `${baseTitle} · pick ${i + 1}`,
       offer: offers[i % offers.length]!,
       image: img,
+      ...(typeof subId === "number" && subName
+        ? { subcategoryId: subId, subcategoryName: subName }
+        : {}),
     }));
     setWhatsMovingDisplayItems(six);
     setMovingGridPage(0);
     movingGridScrollRef.current?.scrollTo({ x: 0, animated: true });
   }, []);
+
+  const openSportsFootwearSubPlp = useCallback(
+    (row: FootwearPromoRow) => {
+      const sid = row.apiSub?.id ?? Number.parseInt(String(row.id), 10);
+      const label = String(row.apiSub?.name ?? row.label).trim();
+      if (Number.isFinite(sid) && sid > 0 && label) {
+        pushSubcatProducts("sportswear", label, sid);
+        return;
+      }
+      applyFootwearRowToWhatsMoving(row);
+    },
+    [applyFootwearRowToWhatsMoving, pushSubcatProducts]
+  );
+
+  const openFootwearHeroSlidePlp = useCallback(
+    (slideIndex: number) => {
+      const m = footwearHeroSlidePlpMeta[slideIndex];
+      if (m?.label?.trim()) {
+        pushSubcatProducts("sportswear", m.label.trim(), m.subcategoryId);
+        return;
+      }
+      const first = footwearPromoRows[0];
+      if (first) openSportsFootwearSubPlp(first);
+      else goShop();
+    },
+    [footwearHeroSlidePlpMeta, footwearPromoRows, goShop, openSportsFootwearSubPlp, pushSubcatProducts]
+  );
+
+  const openAccessoryWorthHypePlp = useCallback(
+    (index: number) => {
+      const item = accessoriesWorthHypeItems[index];
+      if (!item) return;
+      const sid = Number.parseInt(String(item.id), 10);
+      const label = String(item.name ?? "").trim();
+      if (Number.isFinite(sid) && sid > 0 && label) {
+        pushSubcatProducts("accessories", label, sid);
+        return;
+      }
+      showAccessoryInPlaybook(item);
+    },
+    [accessoriesWorthHypeItems, pushSubcatProducts, showAccessoryInPlaybook]
+  );
+
+  const goAccessoriesWorthHypeShopAll = useCallback(() => {
+    const first = accessoriesWorthHypeItems[0];
+    const title = String(accessoriesHeroTitle ?? "").trim() || "Accessories";
+    if (first) {
+      const sid = Number.parseInt(String(first.id), 10);
+      const label = String(first.name ?? "").trim() || title;
+      if (Number.isFinite(sid) && sid > 0) {
+        pushSubcatProducts("accessories", label, sid);
+        return;
+      }
+    }
+    pushSubcatProducts("accessories", title);
+  }, [accessoriesHeroTitle, accessoriesWorthHypeItems, pushSubcatProducts]);
 
   const footwearPromoScrollRef = useRef<ScrollView>(null);
   const footwearPromoBannerIndexRef = useRef(0);
@@ -2079,7 +2451,7 @@ const rotate = rotateAnim.interpolate({
             <TouchableOpacity
               style={styles.accessoriesAbovePlaybookHeroTile}
               activeOpacity={0.92}
-              onPress={goSubcatProducts}
+              onPress={goAccessoriesWorthHypeShopAll}
               accessibilityRole="button"
               accessibilityLabel="Shop sports accessories collection"
             >
@@ -2111,7 +2483,7 @@ const rotate = rotateAnim.interpolate({
               <TouchableOpacity
                 style={styles.accessoriesAbovePlaybookMiniA}
                 activeOpacity={0.9}
-                onPress={() => showAccessoryInPlaybook(accessoriesWorthHypeItems[0])}
+                onPress={() => openAccessoryWorthHypePlp(0)}
               >
                 <ImageBackground
                   source={accessoriesWorthHypeItems[0]?.image ?? (ACCESSORIES_MASONRY_ITEMS[0]!.image as any)}
@@ -2131,7 +2503,7 @@ const rotate = rotateAnim.interpolate({
               <TouchableOpacity
                 style={styles.accessoriesAbovePlaybookMiniB}
                 activeOpacity={0.9}
-                onPress={() => showAccessoryInPlaybook(accessoriesWorthHypeItems[1])}
+                onPress={() => openAccessoryWorthHypePlp(1)}
               >
                 <ImageBackground
                   source={accessoriesWorthHypeItems[1]?.image ?? (ACCESSORIES_MASONRY_ITEMS[1]!.image as any)}
@@ -2185,7 +2557,7 @@ const rotate = rotateAnim.interpolate({
                 onPress={() => {
                   const idx =
                     b.tag === "ESSENTIALS" ? 2 : b.tag === "NEW" ? 3 : b.tag === "GEAR UP" ? 4 : 2;
-                  showAccessoryInPlaybook(accessoriesWorthHypeItems[idx]);
+                  openAccessoryWorthHypePlp(idx);
                 }}
                 style={styles.accessoriesAbovePlaybookRailCard}
                 accessibilityRole="button"
@@ -2314,6 +2686,7 @@ const rotate = rotateAnim.interpolate({
       pagingEnabled
       showsHorizontalScrollIndicator={false}
       decelerationRate="fast"
+      style={{ height: WOMEN_STORE_BANNER_HEIGHT }}
       onMomentumScrollEnd={(e) => {
         const page = Math.round(e.nativeEvent.contentOffset.x / width);
         setWomenBannerIndex(Math.max(0, Math.min(page, WOMEN_BANNER_SLIDES.length - 1)));
@@ -2323,7 +2696,7 @@ const rotate = rotateAnim.interpolate({
         <ImageBackground
           key={`women-banner-${idx}`}
           source={img}
-          style={{ width: width - 20, height: "100%" }}
+          style={{ width, height: WOMEN_STORE_BANNER_HEIGHT }}
           imageStyle={{ borderRadius: 14 }}
           resizeMode="cover"
         >
@@ -2332,7 +2705,7 @@ const rotate = rotateAnim.interpolate({
               <Text style={styles.storeTitle}>WOMEN SPORTS WEAR</Text>
             </View>
 
-            <TouchableOpacity onPress={goSubcatProducts}>
+            <TouchableOpacity onPress={goWomensSportswearShopAll}>
               <Text style={styles.storeShopAll}>Shop All</Text>
             </TouchableOpacity>
           </View>
@@ -2365,7 +2738,15 @@ const rotate = rotateAnim.interpolate({
       <TouchableOpacity
         key={item.id}
         style={styles.storeCard}
-        onPress={() => applyWomensCardToInterests(item)}
+        onPress={() => {
+          const sid = item.apiSub?.id ?? Number.parseInt(String(item.id), 10);
+          const label = String(item.apiSub?.name ?? item.title).trim();
+          if (Number.isFinite(sid) && sid > 0 && label) {
+            pushSportswearPlp(label, sid);
+            return;
+          }
+          applyWomensCardToInterests(item);
+        }}
         activeOpacity={0.9}
       >
         <View style={styles.storeImageWrapper}>
@@ -2397,14 +2778,20 @@ const rotate = rotateAnim.interpolate({
 
     <View style={styles.centerWrapper}>
       {/* CENTER CIRCLE */}
-      <View style={[styles.circle, styles.centerCircle]}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => interestOrbitItems[0] && openInterestOrbitItem(interestOrbitItems[0])}
+        style={[styles.circle, styles.centerCircle]}
+        accessibilityRole="button"
+        accessibilityLabel={`${interestOrbitItems[0]?.name ?? "Interest"}, shop category`}
+      >
         <Image
           source={interestOrbitItems[0]!.img}
           style={styles.circleImage}
           resizeMode="cover"
         />
         <Text style={styles.circleText}>{interestOrbitItems[0]!.name}</Text>
-      </View>
+      </TouchableOpacity>
 
       {/* ORBITING CIRCLES */}
       <Animated.View
@@ -2423,8 +2810,12 @@ const rotate = rotateAnim.interpolate({
           const y = radius * Math.sin(angle);
 
           return (
-            <View
+            <TouchableOpacity
               key={item.id ?? `${item.name}-${index}`}
+              activeOpacity={0.9}
+              onPress={() => openInterestOrbitItem(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name}, open products`}
               style={[
                 styles.circle,
                 {
@@ -2441,7 +2832,7 @@ const rotate = rotateAnim.interpolate({
                 resizeMode="cover"
               />
               <Text style={styles.circleText}>{item.name}</Text>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </Animated.View>
@@ -2463,6 +2854,7 @@ const rotate = rotateAnim.interpolate({
       pagingEnabled
       showsHorizontalScrollIndicator={false}
       decelerationRate="fast"
+      style={{ height: MENS_STORE_BANNER_HEIGHT }}
       onMomentumScrollEnd={(e) => {
         const page = Math.round(e.nativeEvent.contentOffset.x / width);
         setMensBannerIndex(Math.max(0, Math.min(page, MENS_BANNER_SLIDES.length - 1)));
@@ -2472,7 +2864,7 @@ const rotate = rotateAnim.interpolate({
         <ImageBackground
           key={`mens-banner-${idx}`}
           source={img}
-          style={{ width: width - 20, height: "100%" }}
+          style={{ width, height: MENS_STORE_BANNER_HEIGHT }}
           imageStyle={{ borderRadius: 12 }}
           resizeMode="cover"
         >
@@ -2498,7 +2890,7 @@ const rotate = rotateAnim.interpolate({
     </View>
   </View>
 
-  <TouchableOpacity onPress={goSubcatProducts} style={styles.mensShopAllBtn} activeOpacity={0.9}>
+  <TouchableOpacity onPress={goMensSportswearShopAll} style={styles.mensShopAllBtn} activeOpacity={0.9}>
     <Text style={styles.mensShopAllText}>Shop All</Text>
   </TouchableOpacity>
 
@@ -2521,7 +2913,15 @@ const rotate = rotateAnim.interpolate({
             onPressIn={() => pressIn(scale)}
             onPressOut={() => pressOut(scale)}
             activeOpacity={0.95}
-            onPress={() => openMensSubcategoryInLookbook(item)}
+            onPress={() => {
+              const sid = item.apiSub?.id ?? Number.parseInt(String(item.id), 10);
+              const label = String(item.apiSub?.name ?? item.title).trim();
+              if (Number.isFinite(sid) && sid > 0 && label) {
+                pushSportswearPlp(label, sid);
+                return;
+              }
+              openMensSubcategoryInLookbook(item);
+            }}
           >
             <Image
               source={item.image}
@@ -2641,7 +3041,7 @@ const rotate = rotateAnim.interpolate({
               <TouchableOpacity
                 key={`footwear-hero-${idx}`}
                 activeOpacity={0.92}
-                onPress={goShop}
+                onPress={() => openFootwearHeroSlidePlp(idx)}
                 style={{ width }}
                 accessibilityRole="button"
                 accessibilityLabel="Shop sports footwear collection"
@@ -2690,7 +3090,7 @@ const rotate = rotateAnim.interpolate({
             <TouchableOpacity
               key={row.id}
               activeOpacity={0.9}
-              onPress={() => applyFootwearRowToWhatsMoving(row)}
+              onPress={() => openSportsFootwearSubPlp(row)}
               style={styles.footwearPromoRailCard}
               accessibilityRole="button"
               accessibilityLabel={row.label}
@@ -2751,7 +3151,7 @@ const rotate = rotateAnim.interpolate({
                     key={item.id}
                     style={styles.movingCard}
                     activeOpacity={0.92}
-                    onPress={goShop}
+                    onPress={() => openWhatsMovingCard(item)}
                     accessibilityRole="button"
                     accessibilityLabel={`Shop ${item.title}`}
                   >
@@ -2785,7 +3185,7 @@ const rotate = rotateAnim.interpolate({
                     key={item.id}
                     style={styles.movingCard}
                     activeOpacity={0.92}
-                    onPress={goShop}
+                    onPress={() => openWhatsMovingCard(item)}
                     accessibilityRole="button"
                     accessibilityLabel={`Shop ${item.title}`}
                   >
