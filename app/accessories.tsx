@@ -41,12 +41,35 @@ type BagsSubcategoryApi = {
   subcategoryImage?: string | null;
 };
 
+/** Label + image for a related-subcategory pill; `subcategoryId` when row comes from the API. */
+type AccessoriesRelatedChip = {
+  key: string;
+  label: string;
+  source: any;
+  subcategoryId?: number;
+};
+
 type BagsSubcategoryTableRow = {
   categoryName: string;
   mobileImage?: string | null;
   mobileimage?: string | null;
   subcategories: BagsSubcategoryApi[];
 };
+
+function accessoriesSubcatNavigatorParams(
+  subCategory: string,
+  subcategoryId?: string | number | null
+) {
+  const sub = String(subCategory ?? "").trim();
+  const raw = subcategoryId === undefined || subcategoryId === null ? "" : String(subcategoryId);
+  const n = raw ? Number.parseInt(raw, 10) : NaN;
+  const idOk = Number.isFinite(n) && n > 0;
+  return {
+    mainCat: "accessories",
+    subCategory: sub,
+    ...(idOk ? { subcategoryId: String(n) } : {}),
+  };
+}
 
 type AccessoriesCategoryApi = {
   id: number;
@@ -645,6 +668,22 @@ function getSubcategoriesForGadgetsQuickLink(
   if (!wanted?.length || !all.length) return [];
   const byId = new Map(all.map((s) => [s.id, s]));
   return wanted.map((id) => byId.get(id)).filter((s): s is BagsSubcategoryApi => Boolean(s));
+}
+
+function buildGadgetsQuickLinkSubcategoryUiRows(
+  quickLinkId: string,
+  all: BagsSubcategoryApi[]
+): { label: string; subcategoryId?: number }[] {
+  const fromApi = getSubcategoriesForGadgetsQuickLink(quickLinkId, all);
+  if (fromApi.length > 0) {
+    return fromApi
+      .map((s) => ({
+        label: getSubcategoryDisplayName(s),
+        subcategoryId: s.id,
+      }))
+      .filter((row) => row.label);
+  }
+  return (gadgetsQuickLinkSubcategories[quickLinkId] || []).map((label) => ({ label }));
 }
 
 const gadgetsSubcategoryImages: Record<string, any> = {
@@ -1259,23 +1298,17 @@ export default function Accessories() {
     []
   );
 
-  const gadgetsQuickLinkSubcategoriesResolved = useMemo<Record<string, string[]>>(() => {
-    if (gadgetsSubcategoriesFromApi.length === 0) return gadgetsQuickLinkSubcategories;
-    return {
-      gq1: getSubcategoriesForGadgetsQuickLink("gq1", gadgetsSubcategoriesFromApi)
-        .map((s) => getSubcategoryDisplayName(s))
-        .filter(Boolean),
-      gq2: getSubcategoriesForGadgetsQuickLink("gq2", gadgetsSubcategoriesFromApi)
-        .map((s) => getSubcategoryDisplayName(s))
-        .filter(Boolean),
-      gq3: getSubcategoriesForGadgetsQuickLink("gq3", gadgetsSubcategoriesFromApi)
-        .map((s) => getSubcategoryDisplayName(s))
-        .filter(Boolean),
-      gq4: getSubcategoriesForGadgetsQuickLink("gq4", gadgetsSubcategoriesFromApi)
-        .map((s) => getSubcategoryDisplayName(s))
-        .filter(Boolean),
-    };
-  }, [gadgetsSubcategoriesFromApi]);
+  const gadgetsQuickLinkSubcategoriesResolved = useMemo<
+    Record<string, { label: string; subcategoryId?: number }[]>
+  >(
+    () => ({
+      gq1: buildGadgetsQuickLinkSubcategoryUiRows("gq1", gadgetsSubcategoriesFromApi),
+      gq2: buildGadgetsQuickLinkSubcategoryUiRows("gq2", gadgetsSubcategoriesFromApi),
+      gq3: buildGadgetsQuickLinkSubcategoryUiRows("gq3", gadgetsSubcategoriesFromApi),
+      gq4: buildGadgetsQuickLinkSubcategoryUiRows("gq4", gadgetsSubcategoriesFromApi),
+    }),
+    [gadgetsSubcategoriesFromApi]
+  );
 
   const gadgetsSubcategoryImagesResolved = useMemo<Record<string, any>>(() => {
     const resolved = { ...gadgetsSubcategoryImages };
@@ -1690,7 +1723,7 @@ export default function Accessories() {
     };
   }, [categoryIdsByTopId.bags, fetchSubcategoriesTable]);
 
-  const bagsRelatedChips = useMemo(() => {
+  const bagsRelatedChips = useMemo((): AccessoriesRelatedChip[] => {
     const fromApi = getSubcategoriesForBagsCard(selectedWomenItemId, bagsSubcategoriesFromApi);
     if (fromApi.length > 0) {
       return fromApi.map((s) => {
@@ -1698,6 +1731,7 @@ export default function Accessories() {
         return {
           key: `bag-sub-${s.id}`,
           label,
+          subcategoryId: s.id,
           source: getSubcategoryImageSourceOrFallback(
             s,
             bagsRelatedCategoryImagesFallback[label] ??
@@ -1836,7 +1870,7 @@ export default function Accessories() {
     }
   }, [watchesSubcategoriesFromApi, selectedWatchesShowcaseCardId]);
 
-  const beltsCapsRelatedChips = useMemo(() => {
+  const beltsCapsRelatedChips = useMemo((): AccessoriesRelatedChip[] => {
     const fromApi = getSubcategoriesForBeltsCapsCard(selectedMenItemId, beltsCapsSubcategoriesFromApi);
     if (fromApi.length > 0) {
       return fromApi.map((s) => {
@@ -1844,6 +1878,7 @@ export default function Accessories() {
         return {
           key: `belts-caps-sub-${s.id}`,
           label,
+          subcategoryId: s.id,
           source: getSubcategoryImageSourceOrFallback(
             s,
             menRelatedCategoryImagesFallback[label] ??
@@ -1861,7 +1896,7 @@ export default function Accessories() {
     }));
   }, [selectedMenItemId, beltsCapsSubcategoriesFromApi]);
 
-  const jewelleryRelatedChips = useMemo(() => {
+  const jewelleryRelatedChips = useMemo((): AccessoriesRelatedChip[] => {
     const fromApi = getSubcategoriesForJewelleryCarouselIndex(
       selectedJewelleryCarouselIndex,
       jewellerySubcategoriesFromApi
@@ -1872,6 +1907,7 @@ export default function Accessories() {
         return {
           key: `jewellery-sub-${s.id}`,
           label,
+          subcategoryId: s.id,
           source: getSubcategoryImageSourceOrFallback(
             s,
             jewelleryCarouselFallbackImages[label] ?? require("../assets/images/latest3.png")
@@ -1889,7 +1925,7 @@ export default function Accessories() {
     }));
   }, [selectedJewelleryCarouselIndex, jewellerySubcategoriesFromApi]);
 
-  const otherAccessoriesRelatedChips = useMemo(() => {
+  const otherAccessoriesRelatedChips = useMemo((): AccessoriesRelatedChip[] => {
     const fromApi = getOtherAccessoriesSubcategoriesForSelectedDeal(
       selectedAccessoriesDealId,
       otherAccessoriesSubcategoriesFromApi
@@ -1900,6 +1936,7 @@ export default function Accessories() {
         return {
           key: `other-acc-sub-${s.id}`,
           label,
+          subcategoryId: s.id,
           source: getSubcategoryImageSourceOrFallback(
             s,
             accessoriesRelatedCategoryImagesFallback[label] ??
@@ -2326,10 +2363,7 @@ export default function Accessories() {
               onPress={() =>
                 router.push({
                   pathname: "/subcatProducts",
-                  params: {
-                    mainCat: "accessories",
-                    subCategory: "Top Collection",
-                  },
+                  params: accessoriesSubcatNavigatorParams("Top Collection"),
                 })
               }
             >
@@ -2596,7 +2630,12 @@ export default function Accessories() {
               <TouchableOpacity
                 key={chip.key}
                 style={styles.womenRelatedChip}
-                onPress={() => router.push("/productdetail")}
+                onPress={() =>
+                  router.push({
+                    pathname: "/subcatProducts",
+                    params: accessoriesSubcatNavigatorParams(chip.label, chip.subcategoryId),
+                  })
+                }
               >
                 <View style={styles.womenRelatedImageWrap}>
                   <Image
@@ -2763,7 +2802,12 @@ export default function Accessories() {
               <TouchableOpacity
                 key={chip.key}
                 style={styles.menRelatedChip}
-                onPress={() => router.push("/productdetail")}
+                onPress={() =>
+                  router.push({
+                    pathname: "/subcatProducts",
+                    params: accessoriesSubcatNavigatorParams(chip.label, chip.subcategoryId),
+                  })
+                }
               >
                 <View style={styles.menRelatedImageWrap}>
                   <Image source={chip.source} style={styles.menRelatedImage} resizeMode="cover" />
@@ -2988,18 +3032,16 @@ export default function Accessories() {
                     nestedScrollEnabled
                     contentContainerStyle={styles.gadgetsSubcategoriesScroll}
                   >
-                    {(gadgetsQuickLinkSubcategoriesResolved[selectedGadgetsQuickLinkId] || []).map((sub) => (
+                    {(gadgetsQuickLinkSubcategoriesResolved[selectedGadgetsQuickLinkId] || []).map(
+                      (sub) => (
                       <TouchableOpacity
-                        key={sub}
+                        key={`${selectedGadgetsQuickLinkId}-${sub.subcategoryId ?? sub.label}`}
                         style={styles.gadgetsSubcategoryCard}
                         activeOpacity={0.88}
                         onPress={() =>
                           router.push({
                             pathname: "/subcatProducts",
-                            params: {
-                              mainCat: "accessories",
-                              subCategory: sub,
-                            },
+                            params: accessoriesSubcatNavigatorParams(sub.label, sub.subcategoryId),
                           })
                         }
                       >
@@ -3012,7 +3054,7 @@ export default function Accessories() {
                           <View style={styles.gadgetsSubcategoryImageWrap}>
                             <Image
                               source={
-                                gadgetsSubcategoryImagesResolved[sub] ??
+                                gadgetsSubcategoryImagesResolved[sub.label] ??
                                 require("../assets/images/accessoriescate.png")
                               }
                               style={styles.gadgetsSubcategoryImage}
@@ -3025,7 +3067,7 @@ export default function Accessories() {
                             />
                           </View>
                           <Text style={styles.gadgetsSubcategoryLabel} numberOfLines={2}>
-                            {sub}
+                            {sub.label}
                           </Text>
                         </LinearGradient>
                       </TouchableOpacity>
@@ -3305,10 +3347,7 @@ export default function Accessories() {
                 onPress={() =>
                   router.push({
                     pathname: "/subcatProducts",
-                    params: {
-                      mainCat: "accessories",
-                      subCategory: chip.label,
-                    },
+                    params: accessoriesSubcatNavigatorParams(chip.label, chip.subcategoryId),
                   })
                 }
               >
@@ -3428,10 +3467,7 @@ export default function Accessories() {
                     onPress={() =>
                       router.push({
                         pathname: "/subcatProducts",
-                        params: {
-                          mainCat: "accessories",
-                          subCategory: "All Accessories",
-                        },
+                        params: accessoriesSubcatNavigatorParams("All Accessories"),
                       })
                     }
                     style={styles.accessoriesReplicaHeroCtaWrap}
@@ -3463,10 +3499,7 @@ export default function Accessories() {
                   onPress={() =>
                     router.push({
                       pathname: "/subcatProducts",
-                      params: {
-                        mainCat: "accessories",
-                        subCategory: chip.label,
-                      },
+                      params: accessoriesSubcatNavigatorParams(chip.label, chip.subcategoryId),
                     })
                   }
                 >
@@ -3641,10 +3674,7 @@ export default function Accessories() {
               onPress={() =>
                 router.push({
                   pathname: "/subcatProducts",
-                  params: {
-                    mainCat: "accessories",
-                    subCategory: "Watches",
-                  },
+                  params: accessoriesSubcatNavigatorParams("Watches"),
                 })
               }
               style={styles.watchesShopAllBtn}
@@ -3743,10 +3773,7 @@ export default function Accessories() {
               onPress={() =>
                 router.push({
                   pathname: "/subcatProducts",
-                  params: {
-                    mainCat: "accessories",
-                    subCategory: "Unique Picks",
-                  },
+                  params: accessoriesSubcatNavigatorParams("Unique Picks"),
                 })
               }
             >

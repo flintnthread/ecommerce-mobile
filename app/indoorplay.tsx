@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api from "../services/api";
 import { useLanguage } from "@/lib/language";
+import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 const HEADER_BRAND_LOGO = require("../assets/images/logo.png");
 const INDOOR_IMAGE = require("../assets/MainCatImages/images/IndoorPlayEquipments.png");
@@ -159,10 +160,121 @@ type EducationalMosaicItem = {
   name: string;
   image: ImageSourcePropType;
   aspectRatio: number;
+  /** API subcategory id when tile comes from `subcategories-table` (for product listing). */
+  subcategoryId?: number;
 };
 
 const EDUCATIONAL_SUBCATEGORIES_API_URL =
   "/api/categories/84/subcategories-table";
+
+/** Educational — Lacing & Threading Toys (`GET /api/products/subcategory/:id`). */
+const INDOOR_LACING_THREADING_SUBCATEGORY_ID = 276;
+/** Pre Indoor — Rocking Toys (`GET /api/products/subcategory/:id`). */
+const INDOOR_ROCKING_TOYS_SUBCATEGORY_ID = 270;
+/** Preschool Furniture — Dustbins / pencil bins (`GET /api/products/subcategory/:id`). */
+const INDOOR_PRESCHOOL_DUSTBINS_SUBCATEGORY_ID = 288;
+const INDOOR_PRODUCTS_BY_SUBCATEGORY_ENDPOINT = (subcategoryId: number) =>
+  `/api/products/subcategory/${subcategoryId}`;
+
+type IndoorLacingThreadingSpotlightRow = {
+  id: string;
+  name: string;
+  imageUri: string;
+  sellingPrice: number;
+  mrpPrice: number;
+  discountLabel: string;
+  ratingLabel: string;
+};
+
+function indoorProductAssetUriFromApiPath(pathOrUrl: string): string {
+  const raw = String(pathOrUrl ?? "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  if (!base) return raw;
+  const normalized = raw.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  if (normalized.startsWith("/")) return `${base}${normalized}`;
+  if (normalized.startsWith("uploads/")) return `${base}/${normalized}`;
+  return `${base}/uploads/${normalized}`;
+}
+
+function indoorSafeProductName(v: string): string {
+  return String(v ?? "")
+    .replace(/\u0019/g, "'")
+    .replace(/\u0018/g, "'")
+    .trim();
+}
+
+function indoorPickProductImageUri(p: any): string | null {
+  return pickProductImageUriFromApi(p, indoorProductAssetUriFromApiPath);
+}
+
+function indoorPickVariantNumbers(p: any): {
+  selling: number;
+  mrp: number;
+  discountPct: number | null;
+} {
+  const num = (x: unknown): number | null => {
+    if (typeof x === "number" && Number.isFinite(x)) return x;
+    if (typeof x === "string") {
+      const n = parseFloat(x);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  const variants = Array.isArray(p?.variants) ? p.variants : [];
+  const v =
+    variants.find(
+      (x) =>
+        x &&
+        (typeof x.sellingPrice === "number" ||
+          typeof x.mrpPrice === "number" ||
+          typeof x.sellingPrice === "string" ||
+          typeof x.mrpPrice === "string")
+    ) ?? variants[0];
+  const selling = num(v?.sellingPrice) ?? 0;
+  const mrpRaw = num(v?.mrpPrice);
+  const mrp = mrpRaw != null && mrpRaw > 0 ? mrpRaw : selling;
+  const discountPct = num(v?.discountPercentage);
+  return {
+    selling: Math.max(0, Math.round(selling)),
+    mrp: Math.max(Math.round(selling), Math.round(mrp)),
+    discountPct,
+  };
+}
+
+function indoorPickRatingLabel(p: any): string {
+  const r =
+    p?.rating ?? p?.averageRating ?? p?.average_rating ?? p?.reviewRating ?? p?.review_rating;
+  if (typeof r === "number" && Number.isFinite(r)) return r.toFixed(1);
+  if (typeof r === "string") {
+    const n = parseFloat(r);
+    return Number.isFinite(n) ? n.toFixed(1) : "—";
+  }
+  return "—";
+}
+
+function mapIndoorApiProductToLacingThreadingSpotlight(p: any): IndoorLacingThreadingSpotlightRow | null {
+  if (!p || typeof p.id !== "number" || typeof p.name !== "string") return null;
+  const st = String(p.status ?? "").trim().toLowerCase();
+  if (st && st !== "active") return null;
+  const imageUri = indoorPickProductImageUri(p);
+  if (!imageUri) return null;
+  const { selling, mrp, discountPct } = indoorPickVariantNumbers(p);
+  const discountLabel =
+    discountPct != null && Number.isFinite(discountPct)
+      ? `${Number(discountPct).toFixed(1).replace(/\.0$/, "")}% off`
+      : "Deal";
+  return {
+    id: String(p.id),
+    name: indoorSafeProductName(p.name),
+    imageUri,
+    sellingPrice: selling,
+    mrpPrice: mrp,
+    discountLabel,
+    ratingLabel: indoorPickRatingLabel(p),
+  };
+}
 
 const DEFAULT_EDU_IMAGE_ASPECT_RATIO = 1.45;
 
@@ -201,6 +313,8 @@ const PRE_INDOOR_SUBS = ["Rocking Toys", "Slides"] as const;
 type PreIndoorCardItem = {
   name: string;
   image: ImageSourcePropType;
+  /** API subcategory id when card comes from `subcategories-table`. */
+  subcategoryId?: number;
 };
 
 const PRE_INDOOR_SUBCATEGORIES_API_URL =
@@ -224,6 +338,8 @@ type PreschoolFurnitureCardItem = {
   name: string;
   image: ImageSourcePropType;
   aspectRatio: number;
+  /** API subcategory id when card comes from `subcategories-table`. */
+  subcategoryId?: number;
 };
 
 const PRESCHOOL_FURNITURE_SUBCATEGORIES_API_URL =
@@ -710,6 +826,18 @@ export default function IndoorPlayScreen() {
   const [mainCategoryCards, setMainCategoryCards] = useState<MainCategoryShowcaseItem[]>(MAIN_CATEGORY_SHOWCASE);
   const [educationalMosaicCards, setEducationalMosaicCards] =
     useState<EducationalMosaicItem[]>(EDUCATIONAL_MOSAIC_FALLBACK);
+  const [indoorLacingSpotlight, setIndoorLacingSpotlight] = useState<IndoorLacingThreadingSpotlightRow[]>(
+    []
+  );
+  const [indoorLacingSpotlightLoading, setIndoorLacingSpotlightLoading] = useState(true);
+  const [indoorRockingSpotlight, setIndoorRockingSpotlight] = useState<IndoorLacingThreadingSpotlightRow[]>(
+    []
+  );
+  const [indoorRockingSpotlightLoading, setIndoorRockingSpotlightLoading] = useState(true);
+  const [indoorDustbinsSpotlight, setIndoorDustbinsSpotlight] = useState<IndoorLacingThreadingSpotlightRow[]>(
+    []
+  );
+  const [indoorDustbinsSpotlightLoading, setIndoorDustbinsSpotlightLoading] = useState(true);
   const [preIndoorCards, setPreIndoorCards] =
     useState<PreIndoorCardItem[]>(PRE_INDOOR_FALLBACK_CARDS);
   const [preschoolFurnitureCards, setPreschoolFurnitureCards] = useState<
@@ -808,6 +936,8 @@ export default function IndoorPlayScreen() {
               name,
               image: remoteUri ? { uri: remoteUri } : fallbackImage,
               aspectRatio,
+              subcategoryId:
+                typeof item.id === "number" && Number.isFinite(item.id) ? item.id : undefined,
             };
           })
         );
@@ -823,6 +953,99 @@ export default function IndoorPlayScreen() {
     loadEducationalSubcategories();
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setIndoorLacingSpotlightLoading(true);
+        const { data } = await api.get(
+          INDOOR_PRODUCTS_BY_SUBCATEGORY_ENDPOINT(INDOOR_LACING_THREADING_SUBCATEGORY_ID),
+          { timeout: 15000 }
+        );
+        if (cancelled) return;
+        if (!Array.isArray(data)) {
+          setIndoorLacingSpotlight([]);
+          return;
+        }
+        const byId = new Map<string, IndoorLacingThreadingSpotlightRow>();
+        for (const row of data as unknown[]) {
+          const mapped = mapIndoorApiProductToLacingThreadingSpotlight(row);
+          if (mapped && !byId.has(mapped.id)) byId.set(mapped.id, mapped);
+        }
+        setIndoorLacingSpotlight([...byId.values()]);
+      } catch {
+        if (!cancelled) setIndoorLacingSpotlight([]);
+      } finally {
+        if (!cancelled) setIndoorLacingSpotlightLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setIndoorRockingSpotlightLoading(true);
+        const { data } = await api.get(
+          INDOOR_PRODUCTS_BY_SUBCATEGORY_ENDPOINT(INDOOR_ROCKING_TOYS_SUBCATEGORY_ID),
+          { timeout: 15000 }
+        );
+        if (cancelled) return;
+        if (!Array.isArray(data)) {
+          setIndoorRockingSpotlight([]);
+          return;
+        }
+        const byId = new Map<string, IndoorLacingThreadingSpotlightRow>();
+        for (const row of data as unknown[]) {
+          const mapped = mapIndoorApiProductToLacingThreadingSpotlight(row);
+          if (mapped && !byId.has(mapped.id)) byId.set(mapped.id, mapped);
+        }
+        setIndoorRockingSpotlight([...byId.values()]);
+      } catch {
+        if (!cancelled) setIndoorRockingSpotlight([]);
+      } finally {
+        if (!cancelled) setIndoorRockingSpotlightLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setIndoorDustbinsSpotlightLoading(true);
+        const { data } = await api.get(
+          INDOOR_PRODUCTS_BY_SUBCATEGORY_ENDPOINT(INDOOR_PRESCHOOL_DUSTBINS_SUBCATEGORY_ID),
+          { timeout: 15000 }
+        );
+        if (cancelled) return;
+        if (!Array.isArray(data)) {
+          setIndoorDustbinsSpotlight([]);
+          return;
+        }
+        const byId = new Map<string, IndoorLacingThreadingSpotlightRow>();
+        for (const row of data as unknown[]) {
+          const mapped = mapIndoorApiProductToLacingThreadingSpotlight(row);
+          if (mapped && !byId.has(mapped.id)) byId.set(mapped.id, mapped);
+        }
+        setIndoorDustbinsSpotlight([...byId.values()]);
+      } catch {
+        if (!cancelled) setIndoorDustbinsSpotlight([]);
+      } finally {
+        if (!cancelled) setIndoorDustbinsSpotlightLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -858,6 +1081,8 @@ export default function IndoorPlayScreen() {
             return {
               name,
               image: remoteImage ?? fallbackImage,
+              subcategoryId:
+                typeof item.id === "number" && Number.isFinite(item.id) ? item.id : undefined,
             };
           });
 
@@ -912,6 +1137,8 @@ export default function IndoorPlayScreen() {
               aspectRatio: remoteUri
                 ? DEFAULT_EDU_IMAGE_ASPECT_RATIO
                 : getLocalImageAspectRatio(fallbackImage),
+              subcategoryId:
+                typeof item.id === "number" && Number.isFinite(item.id) ? item.id : undefined,
             };
           });
 
@@ -1080,11 +1307,35 @@ export default function IndoorPlayScreen() {
     openProducts(title);
   };
 
-  const openProducts = (subCategory: string) => {
+  const lacingThreadingHit = educationalMosaicCards.find(
+    (c) => c.subcategoryId === INDOOR_LACING_THREADING_SUBCATEGORY_ID
+  );
+  const lacingThreadingListingLabel =
+    (lacingThreadingHit?.name ?? "").trim() || "Lacing & Threading Toys";
+
+  const rockingToysHit = preIndoorCards.find(
+    (c) => c.subcategoryId === INDOOR_ROCKING_TOYS_SUBCATEGORY_ID
+  );
+  const rockingToysListingLabel = (rockingToysHit?.name ?? "").trim() || "Rocking Toys";
+
+  const dustbinsSubHit = preschoolFurnitureCards.find(
+    (c) => c.subcategoryId === INDOOR_PRESCHOOL_DUSTBINS_SUBCATEGORY_ID
+  );
+  const dustbinsListingLabel = (dustbinsSubHit?.name ?? "").trim() || "Dustbins";
+
+  const openProducts = (subCategory: string, subcategoryId?: number | null) => {
+    const trimmed = String(subCategory ?? "").trim();
+    if (!trimmed) return;
     router.push({
       pathname: "/subcatProducts",
-      params: { mainCat: "indoorPlayEquipments", subCategory },
-    });
+      params: {
+        mainCat: "indoorPlayEquipments",
+        subCategory: trimmed,
+        ...(subcategoryId != null && Number.isFinite(subcategoryId) && subcategoryId > 0
+          ? { subcategoryId: String(subcategoryId) }
+          : {}),
+      },
+    } as any);
   };
 
   return (
@@ -1269,9 +1520,9 @@ export default function IndoorPlayScreen() {
           <View style={styles.eduMosaic}>
             {educationalMosaicCards.map((sub, i) => (
               <TouchableOpacity
-                key={sub.name}
+                key={`${sub.subcategoryId ?? "fb"}-${sub.name}-${i}`}
                 style={[styles.eduMosaicCell, i % 2 === 0 ? styles.eduMosaicCellA : styles.eduMosaicCellB]}
-                onPress={() => openProducts(sub.name)}
+                onPress={() => openProducts(sub.name, sub.subcategoryId)}
                 activeOpacity={0.92}
               >
                 <Image
@@ -1290,6 +1541,89 @@ export default function IndoorPlayScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          <View style={styles.indoorLacingSpotlightSection}>
+            <View style={styles.indoorLacingSpotlightHeaderRow}>
+              <Text style={styles.indoorLacingSpotlightTitle}>
+                {tr("Lacing & Threading Toys — shop picks")}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() =>
+                  openProducts(lacingThreadingListingLabel, INDOOR_LACING_THREADING_SUBCATEGORY_ID)
+                }
+              >
+                <Text style={styles.indoorLacingSpotlightViewAll}>{tr("View all")}</Text>
+              </TouchableOpacity>
+            </View>
+            {indoorLacingSpotlightLoading ? (
+              <Text style={styles.indoorLacingSpotlightLoadingHint}>{tr("Loading picks…")}</Text>
+            ) : null}
+            <View style={styles.indoorLacingSpotlightGrid}>
+              {indoorLacingSpotlight.map((product) => {
+                const showMrp = product.mrpPrice > product.sellingPrice + 0.009;
+                return (
+                  <TouchableOpacity
+                    key={product.id}
+                    style={styles.indoorLacingSpotlightCard}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: product.id },
+                      } as any)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`${product.name}, view details`}
+                  >
+                    <View style={styles.indoorLacingSpotlightInner}>
+                      <Image
+                        source={{ uri: product.imageUri }}
+                        style={styles.indoorLacingSpotlightImage}
+                      />
+                      <View style={styles.indoorLacingSpotlightMeta}>
+                        <Text style={styles.indoorLacingSpotlightName} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                        <View style={styles.indoorLacingSpotlightPriceRow}>
+                          <Text style={styles.indoorLacingSpotlightPrice}>
+                            Rs {product.sellingPrice}
+                          </Text>
+                          {product.discountLabel ? (
+                            <View style={styles.indoorLacingSpotlightDiscountPill}>
+                              <Text style={styles.indoorLacingSpotlightDiscountText}>
+                                {product.discountLabel}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        {showMrp ? (
+                          <Text style={styles.indoorLacingSpotlightMrp}>
+                            MRP Rs {product.mrpPrice}
+                          </Text>
+                        ) : null}
+                        <View style={styles.indoorLacingSpotlightBottomRow}>
+                          <View style={{ flex: 1 }} />
+                          <View style={styles.indoorLacingSpotlightRatingPill}>
+                            <Ionicons name="star" size={12} color="#0f766e" />
+                            <Text style={styles.indoorLacingSpotlightRatingText}>
+                              {product.ratingLabel}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {!indoorLacingSpotlightLoading && indoorLacingSpotlight.length === 0 ? (
+              <Text style={styles.indoorLacingSpotlightEmpty}>
+                {tr("No lacing & threading picks yet.")}
+              </Text>
+            ) : null}
+          </View>
+
           <TouchableOpacity style={styles.outlineBtn} onPress={() => openProducts("Educational Materials")}>
             <Text style={styles.outlineBtnText}>{tr("Browse all Educational Materials")}</Text>
             <Ionicons name="arrow-forward" size={15} color="#0f766e" />
@@ -1334,14 +1668,124 @@ export default function IndoorPlayScreen() {
         >
           <SectionTitle icon="barbell-outline" title="Pre Indoor Play Items" subtitle="Slides, rockers & active play" />
           <View style={styles.dualFeatured}>
-            {preIndoorCards.map((item) => (
-              <TouchableOpacity key={item.name} style={styles.dualCard} onPress={() => openProducts(item.name)} activeOpacity={0.92}>
+            {preIndoorCards.map((item, idx) => (
+              <TouchableOpacity
+                key={`${item.subcategoryId ?? "fb"}-${item.name}-${idx}`}
+                style={styles.dualCard}
+                onPress={() => openProducts(item.name, item.subcategoryId)}
+                activeOpacity={0.92}
+              >
                 <Image source={item.image} style={styles.dualCardImage} resizeMode="cover" />
                 <LinearGradient colors={["transparent", "rgba(15,23,42,0.5)"]} style={styles.dualCardFade} />
                 <Text style={styles.dualCardTitle}>{item.name}</Text>
               </TouchableOpacity>
             ))}
           </View>
+
+          <View style={[styles.indoorLacingSpotlightSection, styles.indoorRockingSpotlightSection]}>
+            <View style={styles.indoorLacingSpotlightHeaderRow}>
+              <Text style={[styles.indoorLacingSpotlightTitle, styles.indoorRockingSpotlightTitle]}>
+                {tr("Rocking Toys — shop picks")}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() =>
+                  openProducts(rockingToysListingLabel, INDOOR_ROCKING_TOYS_SUBCATEGORY_ID)
+                }
+              >
+                <Text style={[styles.indoorLacingSpotlightViewAll, styles.indoorRockingSpotlightViewAll]}>
+                  {tr("View all")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {indoorRockingSpotlightLoading ? (
+              <Text style={styles.indoorLacingSpotlightLoadingHint}>{tr("Loading picks…")}</Text>
+            ) : null}
+            <View style={styles.indoorLacingSpotlightGrid}>
+              {indoorRockingSpotlight.map((product) => {
+                const showMrp = product.mrpPrice > product.sellingPrice + 0.009;
+                return (
+                  <TouchableOpacity
+                    key={product.id}
+                    style={[styles.indoorLacingSpotlightCard, styles.indoorRockingSpotlightCard]}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: product.id },
+                      } as any)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`${product.name}, view details`}
+                  >
+                    <View style={styles.indoorLacingSpotlightInner}>
+                      <Image
+                        source={{ uri: product.imageUri }}
+                        style={styles.indoorLacingSpotlightImage}
+                      />
+                      <View style={styles.indoorLacingSpotlightMeta}>
+                        <Text style={styles.indoorLacingSpotlightName} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                        <View style={styles.indoorLacingSpotlightPriceRow}>
+                          <Text style={styles.indoorLacingSpotlightPrice}>
+                            Rs {product.sellingPrice}
+                          </Text>
+                          {product.discountLabel ? (
+                            <View
+                              style={[
+                                styles.indoorLacingSpotlightDiscountPill,
+                                styles.indoorRockingSpotlightDiscountPill,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.indoorLacingSpotlightDiscountText,
+                                  styles.indoorRockingSpotlightDiscountText,
+                                ]}
+                              >
+                                {product.discountLabel}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        {showMrp ? (
+                          <Text style={styles.indoorLacingSpotlightMrp}>
+                            MRP Rs {product.mrpPrice}
+                          </Text>
+                        ) : null}
+                        <View style={styles.indoorLacingSpotlightBottomRow}>
+                          <View style={{ flex: 1 }} />
+                          <View
+                            style={[
+                              styles.indoorLacingSpotlightRatingPill,
+                              styles.indoorRockingSpotlightRatingPill,
+                            ]}
+                          >
+                            <Ionicons name="star" size={12} color="#be185d" />
+                            <Text
+                              style={[
+                                styles.indoorLacingSpotlightRatingText,
+                                styles.indoorRockingSpotlightRatingText,
+                              ]}
+                            >
+                              {product.ratingLabel}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {!indoorRockingSpotlightLoading && indoorRockingSpotlight.length === 0 ? (
+              <Text style={styles.indoorLacingSpotlightEmpty}>
+                {tr("No rocking toys picks yet.")}
+              </Text>
+            ) : null}
+          </View>
+
           <TouchableOpacity style={styles.ghostLink} onPress={() => openProducts("Pre Indoor Play Items")}>
             <Text style={styles.ghostLinkText}>{tr("View entire Pre Indoor aisle")}</Text>
             <Ionicons name="chevron-forward" size={16} color="#be185d" />
@@ -1385,8 +1829,13 @@ export default function IndoorPlayScreen() {
         >
           <SectionTitle icon="construct-outline" title="Preschool Furniture" subtitle="Chairs, bins & room helpers" />
           <View style={styles.furnitureRow}>
-            {preschoolFurnitureCards.map((item) => (
-              <TouchableOpacity key={item.name} style={styles.furnitureCard} onPress={() => openProducts(item.name)} activeOpacity={0.9}>
+            {preschoolFurnitureCards.map((item, idx) => (
+              <TouchableOpacity
+                key={`${item.subcategoryId ?? "fb"}-${item.name}-${idx}`}
+                style={styles.furnitureCard}
+                onPress={() => openProducts(item.name, item.subcategoryId)}
+                activeOpacity={0.9}
+              >
                 <Image
                   source={item.image}
                   style={[
@@ -1419,6 +1868,110 @@ export default function IndoorPlayScreen() {
                 <Text style={styles.furnitureHint}>{tr("Tap to browse")}</Text>
               </TouchableOpacity>
             ))}
+          </View>
+
+          <View style={[styles.indoorLacingSpotlightSection, styles.indoorDustbinsSpotlightSection]}>
+            <View style={styles.indoorLacingSpotlightHeaderRow}>
+              <Text style={[styles.indoorLacingSpotlightTitle, styles.indoorDustbinsSpotlightTitle]}>
+                {tr("Dustbins — shop picks")}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() =>
+                  openProducts(dustbinsListingLabel, INDOOR_PRESCHOOL_DUSTBINS_SUBCATEGORY_ID)
+                }
+              >
+                <Text style={[styles.indoorLacingSpotlightViewAll, styles.indoorDustbinsSpotlightViewAll]}>
+                  {tr("View all")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {indoorDustbinsSpotlightLoading ? (
+              <Text style={styles.indoorLacingSpotlightLoadingHint}>{tr("Loading picks…")}</Text>
+            ) : null}
+            <View style={styles.indoorLacingSpotlightGrid}>
+              {indoorDustbinsSpotlight.map((product) => {
+                const showMrp = product.mrpPrice > product.sellingPrice + 0.009;
+                return (
+                  <TouchableOpacity
+                    key={product.id}
+                    style={[styles.indoorLacingSpotlightCard, styles.indoorDustbinsSpotlightCard]}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: product.id },
+                      } as any)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`${product.name}, view details`}
+                  >
+                    <View style={styles.indoorLacingSpotlightInner}>
+                      <Image
+                        source={{ uri: product.imageUri }}
+                        style={styles.indoorLacingSpotlightImage}
+                      />
+                      <View style={styles.indoorLacingSpotlightMeta}>
+                        <Text style={styles.indoorLacingSpotlightName} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                        <View style={styles.indoorLacingSpotlightPriceRow}>
+                          <Text style={styles.indoorLacingSpotlightPrice}>
+                            Rs {product.sellingPrice}
+                          </Text>
+                          {product.discountLabel ? (
+                            <View
+                              style={[
+                                styles.indoorLacingSpotlightDiscountPill,
+                                styles.indoorDustbinsSpotlightDiscountPill,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.indoorLacingSpotlightDiscountText,
+                                  styles.indoorDustbinsSpotlightDiscountText,
+                                ]}
+                              >
+                                {product.discountLabel}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        {showMrp ? (
+                          <Text style={styles.indoorLacingSpotlightMrp}>
+                            MRP Rs {product.mrpPrice}
+                          </Text>
+                        ) : null}
+                        <View style={styles.indoorLacingSpotlightBottomRow}>
+                          <View style={{ flex: 1 }} />
+                          <View
+                            style={[
+                              styles.indoorLacingSpotlightRatingPill,
+                              styles.indoorDustbinsSpotlightRatingPill,
+                            ]}
+                          >
+                            <Ionicons name="star" size={12} color="#0369a1" />
+                            <Text
+                              style={[
+                                styles.indoorLacingSpotlightRatingText,
+                                styles.indoorDustbinsSpotlightRatingText,
+                              ]}
+                            >
+                              {product.ratingLabel}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {!indoorDustbinsSpotlightLoading && indoorDustbinsSpotlight.length === 0 ? (
+              <Text style={styles.indoorLacingSpotlightEmpty}>
+                {tr("No dustbin picks yet.")}
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -2063,6 +2616,188 @@ const styles = StyleSheet.create({
   eduMosaicTitle: { fontSize: 12, fontWeight: "800", color: "#134e4a", lineHeight: 16, marginTop: 4 },
   eduMosaicFoot: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8 },
   eduMosaicCta: { fontSize: 11, fontWeight: "800", color: "#0f766e" },
+  indoorLacingSpotlightSection: {
+    marginTop: 14,
+    marginHorizontal: 4,
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(15, 118, 110, 0.2)",
+  },
+  indoorLacingSpotlightHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  indoorLacingSpotlightTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#134e4a",
+    flex: 1,
+    paddingRight: 8,
+  },
+  indoorLacingSpotlightViewAll: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f766e",
+  },
+  indoorLacingSpotlightLoadingHint: {
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#5a6578",
+  },
+  indoorLacingSpotlightEmpty: {
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#5a6578",
+  },
+  indoorLacingSpotlightGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+  },
+  indoorLacingSpotlightCard: {
+    width: "49%",
+    borderRadius: 12,
+    backgroundColor: "#14b8a6",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  indoorLacingSpotlightInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  indoorLacingSpotlightImage: {
+    width: "100%",
+    height: 118,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  indoorLacingSpotlightMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  indoorLacingSpotlightName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 28,
+  },
+  indoorLacingSpotlightPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  indoorLacingSpotlightDiscountPill: {
+    backgroundColor: "rgba(15,118,110,0.12)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  indoorLacingSpotlightDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#0f766e",
+  },
+  indoorLacingSpotlightMrp: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  indoorLacingSpotlightBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  indoorLacingSpotlightPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  indoorLacingSpotlightRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ecfeff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15,118,110,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  indoorLacingSpotlightRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#0f766e",
+  },
+  indoorRockingSpotlightSection: {
+    borderTopColor: "rgba(190, 24, 93, 0.22)",
+  },
+  indoorRockingSpotlightTitle: {
+    color: "#831843",
+  },
+  indoorRockingSpotlightViewAll: {
+    color: "#be185d",
+  },
+  indoorRockingSpotlightCard: {
+    backgroundColor: "#db2777",
+  },
+  indoorRockingSpotlightDiscountPill: {
+    backgroundColor: "rgba(190, 24, 93, 0.12)",
+  },
+  indoorRockingSpotlightDiscountText: {
+    color: "#9d174d",
+  },
+  indoorRockingSpotlightRatingPill: {
+    backgroundColor: "#fdf2f8",
+    borderColor: "rgba(190, 24, 93, 0.28)",
+  },
+  indoorRockingSpotlightRatingText: {
+    color: "#9d174d",
+  },
+  indoorDustbinsSpotlightSection: {
+    borderTopColor: "rgba(3, 105, 161, 0.25)",
+  },
+  indoorDustbinsSpotlightTitle: {
+    color: "#0c4a6e",
+  },
+  indoorDustbinsSpotlightViewAll: {
+    color: "#0369a1",
+  },
+  indoorDustbinsSpotlightCard: {
+    backgroundColor: "#0284c7",
+  },
+  indoorDustbinsSpotlightDiscountPill: {
+    backgroundColor: "rgba(3, 105, 161, 0.12)",
+  },
+  indoorDustbinsSpotlightDiscountText: {
+    color: "#075985",
+  },
+  indoorDustbinsSpotlightRatingPill: {
+    backgroundColor: "#f0f9ff",
+    borderColor: "rgba(3, 105, 161, 0.28)",
+  },
+  indoorDustbinsSpotlightRatingText: {
+    color: "#0369a1",
+  },
   outlineBtn: {
     marginTop: 12,
     marginHorizontal: 14,

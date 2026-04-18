@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api from "../services/api";
+import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 const { width } = Dimensions.get("window");
 const DESK_INNER_WIDTH = width - 20; // deskSection marginHorizontal: 10 × 2
@@ -152,11 +153,13 @@ type FootwearSubcategoryTableRow = {
 
 /** Banner above Womens-Footwear subcategories (`Image` at ~589) */
 const WOMEN_FOOTWEAR_SUBCATEGORIES_BANNER = require("../assets/footwearimages/women-footwear-subcategories-banner.png");
+const MEN_FOOTWEAR_SUBCATEGORIES_BANNER = require("../assets/footwearimages/MenFootwear.png");
+const KIDS_FOOTWEAR_SUBCATEGORIES_BANNER = require("../assets/footwearimages/KidFootwear.png");
 
 const GENDER_SECTION_BANNER: Record<GenderCategoryId, number> = {
   women: WOMEN_FOOTWEAR_SUBCATEGORIES_BANNER,
-  men: FW7,
-  kids: FW3,
+  men: MEN_FOOTWEAR_SUBCATEGORIES_BANNER,
+  kids: KIDS_FOOTWEAR_SUBCATEGORIES_BANNER,
 };
 
 /** “Footwear Categories” hub grid only — Womens / Mens / Kids hero tiles */
@@ -215,9 +218,18 @@ export default function FootwearScreen() {
   const kidsSubcategories =
     kidsSubcategoriesApi.length > 0 ? kidsSubcategoriesApi : KIDS_SUBCATEGORIES_FALLBACK;
 
-  const [relatedMensProducts, setRelatedMensProducts] = useState<
-    { id: number; name: string; image: string; subcategoryId: number }[]
-  >([]);
+  type RelatedMensProductRow = {
+    id: number;
+    name: string;
+    imageUri: string;
+    subcategoryId: number;
+    sellingPrice: number | null;
+    mrpPrice: number | null;
+    discountPercentage: number | null;
+    rating: number | null;
+  };
+
+  const [relatedMensProducts, setRelatedMensProducts] = useState<RelatedMensProductRow[]>([]);
 
   const relatedMensFetchedIdsRef = useRef(new Set<number>());
   const relatedMensInFlightIdsRef = useRef(new Set<number>());
@@ -268,6 +280,49 @@ export default function FootwearScreen() {
     return `${apiBase}/${raw.replace(/^\/+/, "")}`;
   }
 
+  const pickRelatedProductImageUri = (p: any): string | null =>
+    pickProductImageUriFromApi(p, getAssetUriFromApiPath);
+
+  const pickVariantPricing = (
+    p: any
+  ): { sellingPrice: number | null; mrpPrice: number | null; discountPercentage: number | null } => {
+    const variants = Array.isArray(p?.variants) ? p.variants : [];
+    const v =
+      variants.find(
+        (x) =>
+          x &&
+          (typeof x.sellingPrice === "number" ||
+            typeof x.mrpPrice === "number" ||
+            typeof x.sellingPrice === "string" ||
+            typeof x.mrpPrice === "string")
+      ) ?? null;
+    if (!v) return { sellingPrice: null, mrpPrice: null, discountPercentage: null };
+    const num = (x: unknown): number | null => {
+      if (typeof x === "number" && Number.isFinite(x)) return x;
+      if (typeof x === "string") {
+        const n = parseFloat(x);
+        return Number.isFinite(n) ? n : null;
+      }
+      return null;
+    };
+    return {
+      sellingPrice: num(v.sellingPrice),
+      mrpPrice: num(v.mrpPrice),
+      discountPercentage: num(v.discountPercentage),
+    };
+  };
+
+  const pickProductRating = (p: any): number | null => {
+    const r =
+      p?.rating ?? p?.averageRating ?? p?.average_rating ?? p?.reviewRating ?? p?.review_rating;
+    if (typeof r === "number" && Number.isFinite(r)) return r;
+    if (typeof r === "string") {
+      const n = parseFloat(r);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+
   const appendRelatedMensProductsForSubcategory = async (
     subcategoryId: number
   ): Promise<void> => {
@@ -280,19 +335,23 @@ export default function FootwearScreen() {
       const { data } = await api.get(FOOTWEAR_PRODUCTS_BY_SUBCATEGORY_URL(subcategoryId));
       if (!Array.isArray(data)) return;
       const mapped = (data as any[])
-        .filter(
-          (p) =>
-            p &&
-            typeof p.id === "number" &&
-            typeof p.name === "string" &&
-            typeof p.image === "string"
-        )
-        .map((p) => ({
-          id: p.id as number,
-          name: p.name as string,
-          image: p.image as string,
-          subcategoryId,
-        }));
+        .filter((p) => p && typeof p.id === "number" && typeof p.name === "string")
+        .map((p) => {
+          const imageUri = pickRelatedProductImageUri(p);
+          if (!imageUri) return null;
+          const { sellingPrice, mrpPrice, discountPercentage } = pickVariantPricing(p);
+          return {
+            id: p.id as number,
+            name: p.name as string,
+            imageUri,
+            subcategoryId,
+            sellingPrice,
+            mrpPrice,
+            discountPercentage,
+            rating: pickProductRating(p),
+          } satisfies RelatedMensProductRow;
+        })
+        .filter(Boolean) as RelatedMensProductRow[];
 
       setRelatedMensProducts((prev) => {
         const byId = new Map<string, (typeof prev)[number]>();
@@ -1232,14 +1291,30 @@ export default function FootwearScreen() {
             const uniqueProducts = Array.from(
               new Map(relatedMensProducts.map((p) => [String(p.id), p])).values()
             );
-            const related = uniqueProducts.map((p) => ({
-              id: String(p.id),
-              name: safeText(p.name),
-              category: p.subcategoryId === 94 ? "Men • Casual Shoes" : "Men • Formal Shoes",
-              price: "",
-              rating: "",
-              image: { uri: getAssetUriFromApiPath(p.image) } as ImageSourcePropType,
-            }));
+            const fmtRs = (n: number | null) =>
+              n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+            const related = uniqueProducts.map((p) => {
+              const showMrp =
+                p.mrpPrice != null &&
+                p.sellingPrice != null &&
+                p.mrpPrice > p.sellingPrice + 0.009;
+              return {
+                id: String(p.id),
+                name: safeText(p.name),
+                category: p.subcategoryId === 94 ? "Men • Casual Shoes" : "Men • Formal Shoes",
+                image: { uri: p.imageUri } as ImageSourcePropType,
+                sellingLabel: fmtRs(p.sellingPrice),
+                mrpLabel: showMrp ? fmtRs(p.mrpPrice) : "",
+                discountLabel:
+                  p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+                    ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+                    : "",
+                ratingLabel:
+                  p.rating != null && Number.isFinite(p.rating)
+                    ? Number(p.rating).toFixed(1)
+                    : "—",
+              };
+            });
 
             return (
               <>
@@ -1282,14 +1357,27 @@ export default function FootwearScreen() {
                     <Text style={styles.relatedProductCategory}>
                       {product.category}
                     </Text>
+                    <View style={styles.relatedProductPriceRow}>
+                      {product.sellingLabel ? (
+                        <Text style={styles.relatedProductPrice}>{product.sellingLabel}</Text>
+                      ) : null}
+                      {product.discountLabel ? (
+                        <View style={styles.relatedProductDiscountPill}>
+                          <Text style={styles.relatedProductDiscountText}>
+                            {product.discountLabel}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {product.mrpLabel ? (
+                      <Text style={styles.relatedProductMrp}>{product.mrpLabel}</Text>
+                    ) : null}
                     <View style={styles.relatedProductBottomRow}>
-                      <Text style={styles.relatedProductPrice}>
-                              {product.price ? `Rs ${product.price}` : " "}
-                      </Text>
+                      <View style={{ flex: 1 }} />
                       <View style={styles.relatedProductRatingPill}>
                         <Ionicons name="star" size={12} color="#ef7b1a" />
                         <Text style={styles.relatedProductRatingText}>
-                                {product.rating || " "}
+                          {product.ratingLabel}
                         </Text>
                       </View>
                     </View>
@@ -2072,10 +2160,35 @@ const styles = StyleSheet.create({
     color: "#6f7a8d",
     fontWeight: "600",
   },
+  relatedProductPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  relatedProductDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  relatedProductDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#b45309",
+  },
+  relatedProductMrp: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
   relatedProductBottomRow: {
     marginTop: 8,
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
   },
   relatedProductPrice: {

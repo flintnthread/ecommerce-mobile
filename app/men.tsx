@@ -26,7 +26,8 @@ import Svg, {
   Polygon,
 } from "react-native-svg";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api from "../services/api";
+import api, { productsBySubcategoryPath } from "../services/api";
+import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -149,6 +150,8 @@ type SubLabel = {
   label: string;
   /** Subcategory tile photo; falls back to department `shopImage` if omitted. */
   image?: ImageSourcePropType;
+  /** API subcategory id when tile comes from `subcategories-table` (for product listing). */
+  subcategoryId?: number;
 };
 
 type MenCategoryBlock = {
@@ -189,6 +192,118 @@ type MenSubcategoriesTableRow = {
   mobileImage: string | null;
   subcategories: MenSubcategoriesTableSubRow[];
 };
+
+/** Men's Ethnic — Kurta & Pajama (`GET` path from `productsBySubcategoryPath` in `services/api.tsx`). */
+const MEN_KURTA_PAJAMA_SUBCATEGORY_ID = 146;
+
+/** When ethnic `subcategories-table` is unavailable, still wire Kurta tiles to PLP id 146. */
+function menEthnicFallbackSubcategoryIdForLabel(label: string): number | undefined {
+  const t = String(label ?? "").trim().toLowerCase();
+  if (!t) return undefined;
+  if (t.includes("kurta") && t.includes("pajama")) return MEN_KURTA_PAJAMA_SUBCATEGORY_ID;
+  if (t === "kurtas" || t.startsWith("kurta")) return MEN_KURTA_PAJAMA_SUBCATEGORY_ID;
+  return undefined;
+}
+
+type MenKurtaPajamaSpotlightRow = {
+  id: string;
+  name: string;
+  imageUri: string;
+  sellingPrice: number;
+  mrpPrice: number;
+  discountLabel: string;
+  ratingLabel: string;
+};
+
+function menProductAssetUriFromApiPath(pathOrUrl: string): string {
+  const raw = String(pathOrUrl ?? "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  if (!base) return raw;
+  const normalized = raw.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  if (normalized.startsWith("/")) return `${base}${normalized}`;
+  if (normalized.startsWith("uploads/")) return `${base}/${normalized}`;
+  return `${base}/uploads/${normalized}`;
+}
+
+function menSafeProductName(v: string): string {
+  return String(v ?? "")
+    .replace(/\u0019/g, "'")
+    .replace(/\u0018/g, "'")
+    .trim();
+}
+
+function menPickProductImageUri(p: any): string | null {
+  return pickProductImageUriFromApi(p, menProductAssetUriFromApiPath);
+}
+
+function menPickVariantNumbers(p: any): {
+  selling: number;
+  mrp: number;
+  discountPct: number | null;
+} {
+  const num = (x: unknown): number | null => {
+    if (typeof x === "number" && Number.isFinite(x)) return x;
+    if (typeof x === "string") {
+      const n = parseFloat(x);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  const variants = Array.isArray(p?.variants) ? p.variants : [];
+  const v =
+    variants.find(
+      (x) =>
+        x &&
+        (typeof x.sellingPrice === "number" ||
+          typeof x.mrpPrice === "number" ||
+          typeof x.sellingPrice === "string" ||
+          typeof x.mrpPrice === "string")
+    ) ?? variants[0];
+  const selling = num(v?.sellingPrice) ?? 0;
+  const mrpRaw = num(v?.mrpPrice);
+  const mrp = mrpRaw != null && mrpRaw > 0 ? mrpRaw : selling;
+  const discountPct = num(v?.discountPercentage);
+  return {
+    selling: Math.max(0, Math.round(selling)),
+    mrp: Math.max(Math.round(selling), Math.round(mrp)),
+    discountPct,
+  };
+}
+
+function menPickRatingLabel(p: any): string {
+  const r =
+    p?.rating ?? p?.averageRating ?? p?.average_rating ?? p?.reviewRating ?? p?.review_rating;
+  if (typeof r === "number" && Number.isFinite(r)) return r.toFixed(1);
+  if (typeof r === "string") {
+    const n = parseFloat(r);
+    return Number.isFinite(n) ? n.toFixed(1) : "—";
+  }
+  return "—";
+}
+
+function mapMenApiProductToKurtaPajamaSpotlight(p: any): MenKurtaPajamaSpotlightRow | null {
+  if (!p || typeof p.id !== "number" || typeof p.name !== "string") return null;
+  const st = String(p.status ?? "").trim().toLowerCase();
+  if (st && st !== "active") return null;
+  const imageUri = menPickProductImageUri(p);
+  if (!imageUri) return null;
+  const { selling, mrp, discountPct } = menPickVariantNumbers(p);
+  const discountLabel =
+    discountPct != null && Number.isFinite(discountPct)
+      ? `${Number(discountPct).toFixed(1).replace(/\.0$/, "")}% off`
+      : "Deal";
+  return {
+    id: String(p.id),
+    name: menSafeProductName(p.name),
+    imageUri,
+    sellingPrice: selling,
+    mrpPrice: mrp,
+    discountLabel,
+    ratingLabel: menPickRatingLabel(p),
+  };
+}
 
 /** Model B: light storefront + horizontal rails (no navigation). */
 const MEN_CATEGORIES: MenCategoryBlock[] = [
@@ -842,6 +957,10 @@ export default function MenScreen() {
   );
   const [ethnicWearTableLoading, setEthnicWearTableLoading] = useState<boolean>(false);
   const [ethnicWearTableError, setEthnicWearTableError] = useState<string | null>(null);
+  const [menEthnicKurtaSpotlight, setMenEthnicKurtaSpotlight] = useState<MenKurtaPajamaSpotlightRow[]>(
+    []
+  );
+  const [menEthnicKurtaSpotlightLoading, setMenEthnicKurtaSpotlightLoading] = useState(false);
 
   const MEN_FORMAL_WEAR_TABLE_ID = 58;
   const [formalWearTable, setFormalWearTable] = useState<MenSubcategoriesTableRow | null>(
@@ -1127,6 +1246,7 @@ export default function MenScreen() {
       return bottomWearTable.subcategories.map((s) => ({
         id: `api-bottom-${s.id}`,
         label: s.name,
+        subcategoryId: s.id,
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
@@ -1150,6 +1270,7 @@ export default function MenScreen() {
       return ethnicWearTable.subcategories.map((s) => ({
         id: `api-ethnic-${s.id}`,
         label: s.name,
+        subcategoryId: s.id,
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
@@ -1157,7 +1278,10 @@ export default function MenScreen() {
             : undefined) as ImageSourcePropType | undefined,
       }));
     }
-    return ethnicBlock.subs;
+    return ethnicBlock.subs.map((s) => {
+      const sid = menEthnicFallbackSubcategoryIdForLabel(s.label);
+      return sid != null ? { ...s, subcategoryId: sid } : s;
+    });
   }, [ethnicBlock.subs, ethnicWearTable, getUploadsImageUriFromFilename]);
 
   const formalBlock = useMemo(
@@ -1173,6 +1297,7 @@ export default function MenScreen() {
       return formalWearTable.subcategories.map((s) => ({
         id: `api-formal-${s.id}`,
         label: s.name,
+        subcategoryId: s.id,
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
@@ -1196,6 +1321,7 @@ export default function MenScreen() {
       return innerWearTable.subcategories.map((s) => ({
         id: `api-inner-${s.id}`,
         label: s.name,
+        subcategoryId: s.id,
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
@@ -1219,6 +1345,7 @@ export default function MenScreen() {
       return topWearTable.subcategories.map((s) => ({
         id: `api-top-${s.id}`,
         label: s.name,
+        subcategoryId: s.id,
         image: (s.mobileImage
           ? ({ uri: s.mobileImage } as any)
           : s.image
@@ -1350,15 +1477,58 @@ export default function MenScreen() {
     [scrollToRails]
   );
 
+  const kurtaPajamaListingLabel = useMemo(() => {
+    const hit = ethnicWearTable?.subcategories?.find(
+      (s) => s.id === MEN_KURTA_PAJAMA_SUBCATEGORY_ID
+    );
+    return (hit?.name ?? "").trim() || "Kurta & Pajama";
+  }, [ethnicWearTable]);
+
+  useEffect(() => {
+    if (selectedKey !== "ethnic") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setMenEthnicKurtaSpotlightLoading(true);
+        const { data } = await api.get(productsBySubcategoryPath(MEN_KURTA_PAJAMA_SUBCATEGORY_ID), {
+          timeout: 15000,
+        });
+        if (cancelled) return;
+        if (!Array.isArray(data)) {
+          setMenEthnicKurtaSpotlight([]);
+          return;
+        }
+        const byId = new Map<string, MenKurtaPajamaSpotlightRow>();
+        for (const row of data as unknown[]) {
+          const mapped = mapMenApiProductToKurtaPajamaSpotlight(row);
+          if (mapped && !byId.has(mapped.id)) byId.set(mapped.id, mapped);
+        }
+        setMenEthnicKurtaSpotlight([...byId.values()]);
+      } catch {
+        if (!cancelled) setMenEthnicKurtaSpotlight([]);
+      } finally {
+        if (!cancelled) setMenEthnicKurtaSpotlightLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedKey]);
+
   const openMenSubcategoryProducts = useCallback(
-    (subCategoryLabel: string) => {
+    (subCategoryLabel: string, subcategoryId?: number | null) => {
+      const trimmed = String(subCategoryLabel ?? "").trim();
+      if (!trimmed) return;
       router.push({
         pathname: "/subcatProducts",
         params: {
           mainCat: "menswear",
-          subCategory: subCategoryLabel,
+          subCategory: trimmed,
+          ...(subcategoryId != null && Number.isFinite(subcategoryId) && subcategoryId > 0
+            ? { subcategoryId: String(subcategoryId) }
+            : {}),
         },
-      });
+      } as any);
     },
     [router]
   );
@@ -1630,7 +1800,7 @@ export default function MenScreen() {
                       key={s.id}
                       style={styles.railCard}
                       activeOpacity={0.88}
-                      onPress={() => openMenSubcategoryProducts(s.label)}
+                      onPress={() => openMenSubcategoryProducts(s.label, s.subcategoryId)}
                       accessibilityRole="button"
                       accessibilityLabel={`Shop ${s.label}`}
                     >
@@ -1663,6 +1833,89 @@ export default function MenScreen() {
                   );
                 })}
               </ScrollView>
+
+              {selectedKey === "ethnic" ? (
+                <View style={styles.menEthnicKurtaSpotlightSection}>
+                  <View style={styles.menEthnicKurtaSpotlightHeaderRow}>
+                    <Text style={styles.menEthnicKurtaSpotlightTitle}>Kurta & Pajama — shop picks</Text>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() =>
+                        openMenSubcategoryProducts(
+                          kurtaPajamaListingLabel,
+                          MEN_KURTA_PAJAMA_SUBCATEGORY_ID
+                        )
+                      }
+                    >
+                      <Text style={styles.menEthnicKurtaSpotlightViewAll}>View all</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {menEthnicKurtaSpotlightLoading ? (
+                    <Text style={styles.menEthnicKurtaSpotlightLoadingHint}>Loading picks…</Text>
+                  ) : null}
+                  <View style={styles.menEthnicKurtaSpotlightGrid}>
+                    {menEthnicKurtaSpotlight.map((product) => {
+                      const showMrp = product.mrpPrice > product.sellingPrice + 0.009;
+                      return (
+                        <TouchableOpacity
+                          key={product.id}
+                          style={styles.menEthnicKurtaSpotlightCard}
+                          activeOpacity={0.9}
+                          onPress={() =>
+                            router.push({
+                              pathname: "/productdetail",
+                              params: { id: product.id },
+                            } as any)
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`${product.name}, view details`}
+                        >
+                          <View style={styles.menEthnicKurtaSpotlightInner}>
+                            <Image
+                              source={{ uri: product.imageUri }}
+                              style={styles.menEthnicKurtaSpotlightImage}
+                            />
+                            <View style={styles.menEthnicKurtaSpotlightMeta}>
+                              <Text style={styles.menEthnicKurtaSpotlightName} numberOfLines={2}>
+                                {product.name}
+                              </Text>
+                              <View style={styles.menEthnicKurtaSpotlightPriceRow}>
+                                <Text style={styles.menEthnicKurtaSpotlightPrice}>
+                                  Rs {product.sellingPrice}
+                                </Text>
+                                {product.discountLabel ? (
+                                  <View style={styles.menEthnicKurtaSpotlightDiscountPill}>
+                                    <Text style={styles.menEthnicKurtaSpotlightDiscountText}>
+                                      {product.discountLabel}
+                                    </Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                              {showMrp ? (
+                                <Text style={styles.menEthnicKurtaSpotlightMrp}>
+                                  MRP Rs {product.mrpPrice}
+                                </Text>
+                              ) : null}
+                              <View style={styles.menEthnicKurtaSpotlightBottomRow}>
+                                <View style={{ flex: 1 }} />
+                                <View style={styles.menEthnicKurtaSpotlightRatingPill}>
+                                  <Ionicons name="star" size={12} color="#c2410c" />
+                                  <Text style={styles.menEthnicKurtaSpotlightRatingText}>
+                                    {product.ratingLabel}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {!menEthnicKurtaSpotlightLoading && menEthnicKurtaSpotlight.length === 0 ? (
+                    <Text style={styles.menEthnicKurtaSpotlightEmpty}>No kurta & pajama picks yet.</Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           </View>
         </LinearGradient>
@@ -2957,6 +3210,136 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     gap: 12,
     paddingBottom: 2,
+  },
+  menEthnicKurtaSpotlightSection: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(29, 50, 78, 0.1)",
+  },
+  menEthnicKurtaSpotlightHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  menEthnicKurtaSpotlightTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#1d324e",
+    flex: 1,
+    paddingRight: 8,
+  },
+  menEthnicKurtaSpotlightViewAll: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#ef7b1a",
+  },
+  menEthnicKurtaSpotlightLoadingHint: {
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#5a6578",
+  },
+  menEthnicKurtaSpotlightEmpty: {
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#5a6578",
+  },
+  menEthnicKurtaSpotlightGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+  },
+  menEthnicKurtaSpotlightCard: {
+    width: "49%",
+    borderRadius: 12,
+    backgroundColor: "#c2410c",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  menEthnicKurtaSpotlightInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  menEthnicKurtaSpotlightImage: {
+    width: "100%",
+    height: 118,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  menEthnicKurtaSpotlightMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  menEthnicKurtaSpotlightName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 28,
+  },
+  menEthnicKurtaSpotlightPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  menEthnicKurtaSpotlightDiscountPill: {
+    backgroundColor: "rgba(194,65,12,0.12)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  menEthnicKurtaSpotlightDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#9a3412",
+  },
+  menEthnicKurtaSpotlightMrp: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  menEthnicKurtaSpotlightBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  menEthnicKurtaSpotlightPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  menEthnicKurtaSpotlightRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  menEthnicKurtaSpotlightRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
   },
   railCard: {
     width: RAIL_CARD_W,
