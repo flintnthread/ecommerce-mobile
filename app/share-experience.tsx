@@ -61,7 +61,7 @@ export default function ShareExperienceScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ["images", "videos"],
       quality: 0.85,
     });
     if (!result.canceled && result.assets[0]?.uri) {
