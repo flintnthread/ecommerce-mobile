@@ -515,7 +515,7 @@ export default function Products() {
       return;
     }
     await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       quality: 1,
     });
   }, []);

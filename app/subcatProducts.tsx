@@ -15,6 +15,48 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import api from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
+/** Top Picks for You API endpoint - same as home.tsx */
+const TOP_PICKS_POPULAR_PATH = "/api/products/popular";
+
+/** Mega Discounts API endpoint - same as home.tsx */
+const DISCOUNT_TOP_PRODUCTS_PATH = "/api/products/discount/top";
+
+/** Premium finds API endpoint - same as home.tsx */
+const TOP_SELLING_PRICE_PRODUCTS_PATH = "/api/products/top-selling-price";
+
+/** Fresh Finds API endpoint - same as home.tsx */
+const FRESH_FINDS_RECENT_PATH = "/api/products/recent";
+
+/** Top Picks for You card type - same as home.tsx */
+type TopPicksHomeCard = {
+  id: string;
+  name: string;
+  subtitle: string;
+  image: any;
+};
+
+/** Mega Discounts card type - same as home.tsx */
+type MegaDiscountHomeCard = {
+  id: string;
+  name: string;
+  subtitle: string;
+  image: any;
+};
+
+/** Premium finds card type - same as home.tsx */
+type PremiumFindsHomeCard = {
+  id: string;
+  name: string;
+  subtitle: string;
+  image: any;
+};
+
+/** Fresh Finds card type - same as home.tsx */
+type FreshFindCard = {
+  id: string;
+  image: any;
+};
+
 type BestDressItem = {
   id: string;
   title: string;
@@ -515,6 +557,22 @@ export default function SubcategoriesScreen() {
   /** When `subcategoryId` is in the route, we only show API rows (no fallback to synthetic catalog). */
   const [apiRoutedFromIdReady, setApiRoutedFromIdReady] = useState(false);
 
+  /** Top Picks for You products state */
+  const [topPicksProducts, setTopPicksProducts] = useState<ProductItem[]>([]);
+  const [topPicksReady, setTopPicksReady] = useState(false);
+
+  /** Mega Discounts products state */
+  const [megaDiscountProducts, setMegaDiscountProducts] = useState<ProductItem[]>([]);
+  const [megaDiscountReady, setMegaDiscountReady] = useState(false);
+
+  /** Premium finds products state */
+  const [premiumFindsProducts, setPremiumFindsProducts] = useState<ProductItem[]>([]);
+  const [premiumFindsReady, setPremiumFindsReady] = useState(false);
+
+  /** Fresh Finds products state */
+  const [freshFindsProducts, setFreshFindsProducts] = useState<ProductItem[]>([]);
+  const [freshFindsReady, setFreshFindsReady] = useState(false);
+
   const handleFilterPress = (label: string) => {
     if (label === "Sort") setSortModalVisible(true);
     if (label === "Category") setCategoryModalVisible(true);
@@ -667,6 +725,112 @@ export default function SubcategoriesScreen() {
     return `${apiBase}/${raw.replace(/^\/+/, "")}`;
   };
 
+  /** Utility functions from home.tsx for API product mapping */
+  function formatInrAmount(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return "â";
+    return `â${Math.round(n).toLocaleString("en-IN")}`;
+  }
+
+  function pickPrimaryProductImage(images: any[]): any {
+    if (!Array.isArray(images) || images.length === 0) return undefined;
+    const primary = images.find((img) => img?.isPrimary === true);
+    return primary ?? images[0];
+  }
+
+  function resolveProductPrimaryImageUri(primary: any, resolvePath: (p: string) => string): string {
+    if (!primary) return "";
+    const path = primary.imagePath || primary.imageUrl || primary.url;
+    return path ? resolvePath(String(path)) : "";
+  }
+
+  function mapMorePicksApiToGrid(
+    rows: any[],
+    apiBase: string,
+    placeholderImage: any,
+    options?: { requireProductActive?: boolean }
+  ): ProductItem[] {
+    const root = apiBase.replace(/\/$/, "");
+    const resolvePath = (p: string) => {
+      const s = String(p ?? "").trim();
+      if (!s) return "";
+      if (/^https?:\/\//i.test(s)) return s;
+      if (!root) return "";
+      return s.startsWith("/") ? `${root}${s}` : `${root}/${s}`;
+    };
+
+    const out: ProductItem[] = [];
+
+    for (const p of rows) {
+      if (options?.requireProductActive !== false) {
+        const st = String(p.status ?? "").trim().toLowerCase();
+        const hiddenStatuses = new Set(["inactive", "deleted", "archived", "draft", "rejected"]);
+        if (st && hiddenStatuses.has(st)) continue;
+      }
+
+      const rawPid = p.id ?? p.productId;
+      const idNum = typeof rawPid === "string" ? Number.parseInt(rawPid, 10) : Number(rawPid);
+      if (!Number.isFinite(idNum) || idNum <= 0) continue;
+
+      const primary = pickPrimaryProductImage(p.images);
+      const uri = resolveProductPrimaryImageUri(primary, resolvePath);
+
+      const name = String(p.name ?? p.productName ?? p.title ?? p.displayName ?? "").trim() || `Product ${idNum}`;
+
+      const variants = Array.isArray(p.variants) ? p.variants : [];
+      const v = variants.find((x) => x && x.inStock === true) ?? variants[0];
+      const sale = Number(v?.sellingPrice ?? p.salePrice ?? p.sellingPrice ?? p.price ?? 0);
+      const mrp = Number(v?.mrpPrice ?? p.mrp ?? p.maxRetailPrice ?? 0);
+
+      let oldPrice: string | undefined;
+      let discount: string | undefined;
+
+      if (mrp > 0 && sale > 0 && mrp > sale) {
+        oldPrice = formatInrAmount(mrp);
+        discount = `${Math.round(((mrp - sale) / mrp) * 100)}%`;
+      } else if (typeof v?.discountPercentage === "number" && v.discountPercentage > 0) {
+        discount = `${Math.round(v.discountPercentage)}%`;
+      } else if (typeof p.discountPercentage === "number" && p.discountPercentage > 0) {
+        discount = `${Math.round(p.discountPercentage)}%`;
+      }
+
+      out.push({
+        id: String(idNum),
+        title: name,
+        price: sale > 0 ? sale : mrp,
+        mrp: mrp > sale ? mrp : sale,
+        discount: discount || "Deal",
+        payLaterText: "",
+        benefitText: "Free Delivery",
+        rating: "0.0",
+        ratingCount: "0",
+        image: uri ? { uri } : placeholderImage,
+      });
+    }
+
+    return out;
+  }
+
+  function normalizeProductListPayload(data: unknown, depth = 0): any[] {
+    if (depth > 6) return [];
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== "object") return [];
+    const o = data as Record<string, unknown>;
+
+    const PRODUCT_LIST_ARRAY_KEYS = ["content", "data", "products", "items", "records", "results", "rows"];
+    for (const key of PRODUCT_LIST_ARRAY_KEYS) {
+      const v = o[key];
+      if (Array.isArray(v)) return v;
+    }
+
+    const inner = o.data;
+    if (inner != null && typeof inner === "object") {
+      if (Array.isArray(inner)) return inner;
+      return normalizeProductListPayload(inner, depth + 1);
+    }
+
+    return [];
+  }
+
   const pickProductImageUri = (p: any): string | null =>
     pickProductImageUriFromApi(p, getAssetUriFromApiPath);
 
@@ -789,7 +953,209 @@ export default function SubcategoriesScreen() {
     return () => controller.abort();
   }, [routedSubcategoryId, routedFromSubcategoryId, selectedSubCategory, mainCat]);
 
-  /** Products for the subcategory opened from subcate (tile tap). */
+  useEffect(() => {
+    const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
+    if (subNorm !== "top picks for you") {
+      setTopPicksProducts([]);
+      setTopPicksReady(false);
+      return;
+    }
+
+    console.log("Top Picks: Starting API call for", TOP_PICKS_POPULAR_PATH);
+    setTopPicksReady(false);
+    const controller = new AbortController();
+    
+    // Add timeout to prevent hanging
+    const timeoutId = setTimeout(() => {
+      if (!controller.signal.aborted) {
+        console.log("Top Picks: API timeout - using fallback");
+        setTopPicksProducts([]);
+        setTopPicksReady(true);
+      }
+    }, 10000); // 10 second timeout
+
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(TOP_PICKS_POPULAR_PATH, {
+          signal: controller.signal,
+          timeout: 8000, // 8 second timeout for axios
+        });
+        if (controller.signal.aborted) return;
+        
+        clearTimeout(timeoutId);
+        console.log("Top Picks: Raw API response received");
+        const rows = normalizeProductListPayload(data);
+        console.log("Top Picks: Normalized rows count:", rows.length);
+
+        // If no rows, try to find data in nested structure
+        if (rows.length === 0 && data && typeof data === "object") {
+          console.log("Top Picks: No rows found, checking nested structure");
+          // Try to extract from common nested patterns
+          const nestedKeys = ["content", "data", "products", "items", "records", "results", "rows"];
+          for (const key of nestedKeys) {
+            if (data[key] && Array.isArray(data[key])) {
+              rows.push(...data[key]);
+              console.log(`Top Picks: Found ${data[key].length} items in "${key}"`);
+              break;
+            }
+          }
+        }
+
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          require("../assets/images/fntfav.png"),
+          { requireProductActive: false }
+        );
+        console.log("Top Picks: Mapped products count:", mapped.length);
+        
+        const products: ProductItem[] = mapped.map((m) => ({
+          ...m,
+          catalogCategory: "Top picks for you",
+        }));
+        console.log("Top Picks: Setting", products.length, "products");
+        setTopPicksProducts(products);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        console.error("Top Picks API Error:", error);
+        // Set empty array but mark as ready to prevent infinite loading
+        setTopPicksProducts([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          console.log("Top Picks: Setting ready to true");
+          setTopPicksReady(true);
+        }
+      }
+    })();
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [selectedSubCategory]);
+
+  useEffect(() => {
+    const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
+    if (subNorm !== "mega discounts") {
+      setMegaDiscountProducts([]);
+      setMegaDiscountReady(false);
+      return;
+    }
+
+    setMegaDiscountReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(DISCOUNT_TOP_PRODUCTS_PATH, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        const rows = normalizeProductListPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          require("../assets/images/megadis1.png"),
+          { requireProductActive: false }
+        );
+        const products: ProductItem[] = mapped.map((m) => ({
+          ...m,
+          catalogCategory: "Mega Discounts",
+        }));
+        setMegaDiscountProducts(products);
+      } catch {
+        setMegaDiscountProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setMegaDiscountReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [selectedSubCategory]);
+
+  useEffect(() => {
+    const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
+    if (subNorm !== "premium finds") {
+      setPremiumFindsProducts([]);
+      setPremiumFindsReady(false);
+      return;
+    }
+
+    setPremiumFindsReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(TOP_SELLING_PRICE_PRODUCTS_PATH, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        const rows = normalizeProductListPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          require("../assets/images/premium1.png"),
+          { requireProductActive: false }
+        );
+        const products: ProductItem[] = mapped.map((m) => ({
+          ...m,
+          catalogCategory: "Premium finds",
+        }));
+        setPremiumFindsProducts(products);
+      } catch {
+        setPremiumFindsProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setPremiumFindsReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [selectedSubCategory]);
+
+  useEffect(() => {
+    const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
+    if (subNorm !== "fresh finds") {
+      setFreshFindsProducts([]);
+      setFreshFindsReady(false);
+      return;
+    }
+
+    setFreshFindsReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(FRESH_FINDS_RECENT_PATH, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        
+        const rows = normalizeProductListPayload(data);
+        
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          require("../assets/images/product1.png"),
+          { requireProductActive: false }
+        );
+        
+        const products: ProductItem[] = mapped.map((m) => ({
+          ...m,
+          catalogCategory: "Fresh finds",
+        }));
+        setFreshFindsProducts(products);
+      } catch (error) {
+        console.error("Fresh Finds API Error:", error);
+        setFreshFindsProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setFreshFindsReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [selectedSubCategory]);
+
   const routedSubcategoryProducts = React.useMemo(() => {
     if (!selectedSubCategory?.trim()) return [];
     const subNorm = selectedSubCategory.trim().toLowerCase();
@@ -811,9 +1177,8 @@ export default function SubcategoriesScreen() {
         )
       );
     }
-    const needle = subNorm;
     const matchedCat = categoryOptions.find(
-      (c) => c.toLowerCase() === needle
+      (c) => c.toLowerCase() === subNorm
     );
     if (matchedCat)
       return buildProductsForCategory(
@@ -824,148 +1189,185 @@ export default function SubcategoriesScreen() {
     return categoryProducts;
   }, [selectedSubCategory, categoryProducts, mainCat, selectedGender]);
 
-  const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
-    if (routedFromSubcategoryId) {
-      if (!apiRoutedFromIdReady) return [];
-      return apiRoutedProducts;
-    }
-    return routedSubcategoryProducts;
-  }, [
-    routedFromSubcategoryId,
-    apiRoutedFromIdReady,
-    apiRoutedProducts,
-    routedSubcategoryProducts,
-  ]);
+const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
+  const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
 
-  const filteredRoutedProducts = React.useMemo(() => {
-    if (!selectedSubCategory?.trim()) return [];
-    return runProductPipeline(
-      effectiveRoutedSubcategoryProducts,
-      searchQuery,
-      selectedFilters,
-      selectedCategory,
-      selectedGender,
-      selectedSort
-    );
-  }, [
-    selectedSubCategory,
+  // Handle Top Picks for You category
+  if (subNorm === "top picks for you") {
+    if (!topPicksReady) return [];
+    return topPicksProducts;
+  }
+
+  // Handle Mega Discounts category
+  if (subNorm === "mega discounts") {
+    if (!megaDiscountReady) return [];
+    return megaDiscountProducts;
+  }
+
+  // Handle Premium finds category
+  if (subNorm === "premium finds") {
+    if (!premiumFindsReady) return [];
+    return premiumFindsProducts;
+  }
+
+  // Handle Fresh finds category
+  if (subNorm === "fresh finds") {
+    if (!freshFindsReady) return [];
+    return freshFindsProducts;
+  }
+
+  // Handle routed by subcategoryId
+  if (routedFromSubcategoryId) {
+    if (!apiRoutedFromIdReady) return [];
+    return apiRoutedProducts;
+  }
+
+  return routedSubcategoryProducts;
+}, [
+  selectedSubCategory,
+  routedFromSubcategoryId,
+  apiRoutedFromIdReady,
+  apiRoutedProducts,
+  routedSubcategoryProducts,
+  topPicksReady,
+  topPicksProducts,
+  megaDiscountReady,
+  megaDiscountProducts,
+  premiumFindsReady,
+  premiumFindsProducts,
+  freshFindsReady,
+  freshFindsProducts,
+]);
+
+const filteredRoutedProducts = React.useMemo(() => {
+  if (!selectedSubCategory?.trim()) return [];
+  return runProductPipeline(
     effectiveRoutedSubcategoryProducts,
     searchQuery,
     selectedFilters,
     selectedCategory,
     selectedGender,
-    selectedSort,
-  ]);
+    selectedSort
+  );
+}, [
+  selectedSubCategory,
+  effectiveRoutedSubcategoryProducts,
+  searchQuery,
+  selectedFilters,
+  selectedCategory,
+  selectedGender,
+  selectedSort,
+]);
 
-  const expandedCategoryProducts = React.useMemo(() => {
-    if (!expandedCategory) return [];
-    const list = buildProductsForCategory(
+const expandedCategoryProducts = React.useMemo(() => {
+  if (!expandedCategory) return [];
+  const list = buildProductsForCategory(
+    expandedCategory,
+    mainCat ?? undefined,
+    selectedGender || undefined
+  );
+  return runProductPipeline(
+    list,
+    searchQuery,
+    selectedFilters,
+    selectedCategory,
+    selectedGender,
+    selectedSort
+  );
+}, [
+  expandedCategory,
+  mainCat,
+  searchQuery,
+  selectedFilters,
+  selectedCategory,
+  selectedGender,
+  selectedSort,
+]);
+
+const similarProductsPool = hasSubCategoryFromRoute
+  ? filteredRoutedProducts
+  : expandedCategory
+    ? expandedCategoryProducts
+    : filteredCategoryProducts;
+
+/** Catalog used for "matching products" counts inside filter / category / gender modals */
+const filterPipelineBaseProducts = React.useMemo(() => {
+  if (hasSubCategoryFromRoute) return effectiveRoutedSubcategoryProducts;
+  if (expandedCategory)
+    return buildProductsForCategory(
       expandedCategory,
       mainCat ?? undefined,
       selectedGender || undefined
     );
-    return runProductPipeline(
-      list,
-      searchQuery,
-      selectedFilters,
-      selectedCategory,
-      selectedGender,
-      selectedSort
-    );
-  }, [
-    expandedCategory,
-    mainCat,
-    searchQuery,
-    selectedFilters,
-    selectedCategory,
-    selectedGender,
-    selectedSort,
-  ]);
+  return allBrowseCatalogFlat;
+}, [
+  hasSubCategoryFromRoute,
+  expandedCategory,
+  effectiveRoutedSubcategoryProducts,
+  allBrowseCatalogFlat,
+  mainCat,
+  selectedGender,
+]);
 
-  const similarProductsPool = hasSubCategoryFromRoute
-    ? filteredRoutedProducts
-    : expandedCategory
-      ? expandedCategoryProducts
-      : filteredCategoryProducts;
-
-  /** Catalog used for “matching products” counts inside filter / category / gender modals */
-  const filterPipelineBaseProducts = React.useMemo(() => {
-    if (hasSubCategoryFromRoute) return effectiveRoutedSubcategoryProducts;
-    if (expandedCategory)
-      return buildProductsForCategory(
-        expandedCategory,
-        mainCat ?? undefined,
-        selectedGender || undefined
-      );
-    return allBrowseCatalogFlat;
-  }, [
-    hasSubCategoryFromRoute,
-    expandedCategory,
-    effectiveRoutedSubcategoryProducts,
-    allBrowseCatalogFlat,
-    mainCat,
-    selectedGender,
-  ]);
-
-  const matchingProductsCount = React.useMemo(
-    () =>
-      runProductPipeline(
-        filterPipelineBaseProducts,
-        searchQuery,
-        selectedFilters,
-        selectedCategory,
-        selectedGender,
-        selectedSort
-      ).length,
-    [
+const matchingProductsCount = React.useMemo(
+  () =>
+    runProductPipeline(
       filterPipelineBaseProducts,
       searchQuery,
       selectedFilters,
       selectedCategory,
       selectedGender,
-      selectedSort,
-    ]
-  );
+      selectedSort
+    ).length,
+  [
+    filterPipelineBaseProducts,
+    searchQuery,
+    selectedFilters,
+    selectedCategory,
+    selectedGender,
+    selectedSort,
+  ]
+);
 
-  const filtersModalCheckboxCount = React.useMemo(
-    () =>
-      Object.values(selectedFilters).reduce((n, arr) => n + arr.length, 0),
-    [selectedFilters]
-  );
+const filtersModalCheckboxCount = React.useMemo(
+  () =>
+    Object.values(selectedFilters).reduce((n, arr) => n + arr.length, 0),
+  [selectedFilters]
+);
 
-  const totalFacetSelections =
-    filtersModalCheckboxCount +
-    selectedCategory.length +
-    (selectedGender ? 1 : 0);
+const totalFacetSelections =
+  filtersModalCheckboxCount +
+  selectedCategory.length +
+  (selectedGender ? 1 : 0);
 
-  const productCatalogById = React.useMemo(() => {
-    const m = new Map<string, ProductItem>();
-    for (const p of PRODUCTS) m.set(p.id, p);
-    for (const p of categoryProducts) m.set(p.id, p);
-    for (const cat of categoryOptions) {
-      for (const p of buildProductsForCategory(
-        cat,
-        mainCat ?? undefined,
-        selectedGender || undefined
-      )) {
-        m.set(p.id, p);
-      }
+const productCatalogById = React.useMemo(() => {
+  const m = new Map<string, ProductItem>();
+  for (const p of PRODUCTS) m.set(p.id, p);
+  for (const p of categoryProducts) m.set(p.id, p);
+  for (const cat of categoryOptions) {
+    for (const p of buildProductsForCategory(
+      cat,
+      mainCat ?? undefined,
+      selectedGender || undefined
+    )) {
+      m.set(p.id, p);
     }
-    return m;
-  }, [categoryProducts, mainCat, selectedGender]);
+  }
+  return m;
+}, [categoryProducts, mainCat, selectedGender]);
 
-  const wishlistedProducts = React.useMemo(() => {
-    return wishlistItems
-      .map((id) => productCatalogById.get(id))
-      .filter((p): p is ProductItem => p != null);
-  }, [wishlistItems, productCatalogById]);
+const wishlistedProducts = React.useMemo(() => {
+  return wishlistItems
+    .map((id) => productCatalogById.get(id))
+    .filter((p): p is ProductItem => p !== null);
+}, [wishlistItems, productCatalogById]);
 
-  const handleBannerScroll = (event: any) => {
-    const slideIndex = Math.round(
-      event.nativeEvent.contentOffset.x / bannerWidth
-    );
-    setBannerIndex(slideIndex);
-  };
+const handleBannerScroll = (event: any) => {
+  const slideIndex = Math.round(
+    event.nativeEvent.contentOffset.x / bannerWidth
+  );
+  setBannerIndex(slideIndex);
+};
 
   useEffect(() => {
     const interval = setInterval(() => {
