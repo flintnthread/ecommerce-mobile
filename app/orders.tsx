@@ -13,6 +13,7 @@ import {
   TextInput,
   RefreshControl,
   Animated,
+  BackHandler,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -34,6 +35,8 @@ interface Order {
   paymentMethod?: string;
   deliveryAddress?: string;
   estimatedDelivery?: string;
+  /** Optional UI stage for return orders (1–4). */
+  returnStage?: 1 | 2 | 3 | 4;
   products?: {
     id: string;
     name: string;
@@ -115,6 +118,7 @@ const sampleOrders: Order[] = [
     orderNumber: "#ORD-2024-005",
     date: "25 Jan 2024",
     status: "returns",
+    returnStage: 2,
     items: 2,
     total: "₹1,599",
     image: require("../assets/images/age5.png"),
@@ -154,6 +158,35 @@ export default function OrdersScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<TextInput>(null);
+
+  // Android hardware back should step back within this screen
+  // (Details -> list, close modals/search) before leaving the page.
+  useEffect(() => {
+    const onHardwareBackPress = () => {
+      if (showCancelModal) {
+        setShowCancelModal(false);
+        return true;
+      }
+      if (showReturnModal) {
+        setShowReturnModal(false);
+        return true;
+      }
+      if (showSearch) {
+        setShowSearch(false);
+        setSearchQuery("");
+        searchInputRef.current?.blur();
+        return true;
+      }
+      if (showDetails) {
+        setShowDetails(false);
+        return true;
+      }
+      return false; // allow default behaviour (router back)
+    };
+
+    const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBackPress);
+    return () => sub.remove();
+  }, [showCancelModal, showReturnModal, showSearch, showDetails]);
 
   useEffect(() => {
     if (showSearch && searchInputRef.current) {
@@ -250,19 +283,34 @@ export default function OrdersScreen() {
       <View style={styles.header}>
         {!showSearch ? (
           <>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity
+              onPress={() => {
+                if (showDetails) {
+                  setShowDetails(false);
+                  return;
+                }
+                router.back();
+              }}
+              style={styles.backBtn}
+            >
               <Ionicons name="arrow-back" size={24} color="#111827" />
             </TouchableOpacity>
             <View style={styles.headerContent}>
-              <Text style={styles.headerTitle}>My Orders</Text>
-              <Text style={styles.headerSubtitle}>{filteredOrders.length} orders</Text>
+              <Text style={styles.headerTitle}>{showDetails ? "Order Details" : "My Orders"}</Text>
+              {!showDetails && (
+                <Text style={styles.headerSubtitle}>{filteredOrders.length} orders</Text>
+              )}
             </View>
-            <TouchableOpacity 
-              style={styles.searchBtn}
-              onPress={() => setShowSearch(true)}
-            >
-              <Ionicons name="search-outline" size={24} color="#111827" />
-            </TouchableOpacity>
+            {!showDetails ? (
+              <TouchableOpacity
+                style={styles.searchBtn}
+                onPress={() => setShowSearch(true)}
+              >
+                <Ionicons name="search-outline" size={24} color="#111827" />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.placeholder} />
+            )}
           </>
         ) : (
           <View style={styles.searchContainer}>
@@ -305,40 +353,41 @@ export default function OrdersScreen() {
       </View>
 
       {/* Filter Tabs */}
-      <View style={styles.tabsWrapper}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsContainer}
-        >
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={[styles.tab, isActive && styles.tabActive]}
-                onPress={() => setActiveTab(tab.key)}
-              >
-                <Ionicons
-                  name={tab.icon as any}
-                  size={18}
-                  color={isActive ? "#FFFFFF" : "#6B7280"}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
+      {!showDetails && (
+        <View style={styles.tabsWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsContainer}
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.tab, isActive && styles.tabActive]}
+                  onPress={() => setActiveTab(tab.key)}
+                >
+                  <Ionicons
+                    name={tab.icon as any}
+                    size={18}
+                    color={isActive ? "#FFFFFF" : "#6B7280"}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Orders List */}
       {showDetails && selectedOrder ? (
         <OrderDetailsView
           order={selectedOrder}
-          onBack={() => setShowDetails(false)}
           onCancel={() => setShowCancelModal(true)}
           onReturn={() => setShowReturnModal(true)}
           getStatusConfig={getStatusConfig}
@@ -465,18 +514,15 @@ export default function OrdersScreen() {
 // Order Details Component
 function OrderDetailsView({
   order,
-  onBack,
   onCancel,
   onReturn,
   getStatusConfig,
 }: {
   order: Order;
-  onBack: () => void;
   onCancel: () => void;
   onReturn: () => void;
   getStatusConfig: (status: OrderStatus) => any;
 }) {
-  const router = useRouter();
   const statusConfig = getStatusConfig(order.status);
 
   return (
@@ -485,15 +531,6 @@ function OrderDetailsView({
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 90 }}
     >
-      {/* Details Header */}
-      <View style={styles.detailsHeader}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.detailsTitle}>Order Details</Text>
-        <View style={styles.placeholder} />
-      </View>
-
       {/* Order Status Card */}
       <View style={styles.statusCard}>
         <View style={styles.statusCardHeader}>
@@ -509,6 +546,35 @@ function OrderDetailsView({
           <View style={styles.deliveryInfo}>
             <Ionicons name="time-outline" size={16} color="#F59E0B" />
             <Text style={styles.deliveryText}>{order.estimatedDelivery}</Text>
+          </View>
+        )}
+
+        {/* Processing-only progress like reference */}
+        {order.status === "processing" && (
+          <View style={styles.processingTrackerWrap}>
+            {/* Visual state matches common e-commerce trackers while still "Processing" */}
+            <OrderProgressStepper currentStep={3} />
+            <View style={styles.processingMessageWrap}>
+              <Text style={styles.processingMessageTitle}>We’re preparing your order</Text>
+              <Text style={styles.processingMessageSub}>
+                Your items are being picked and packed. You’ll get an update when it ships.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {order.status === "returns" && (
+          <View style={styles.returnTrackerWrap}>
+            <OrderProgressStepper
+              variant="returns"
+              currentStep={order.returnStage ?? 2}
+            />
+            <View style={styles.returnMessageWrap}>
+              <Text style={styles.returnMessageTitle}>Return is in progress</Text>
+              <Text style={styles.returnMessageSub}>
+                We’ll keep you posted at every step — from pickup to refund completion.
+              </Text>
+            </View>
           </View>
         )}
       </View>
@@ -602,6 +668,137 @@ function OrderDetailsView({
         )}
       </View>
     </ScrollView>
+  );
+}
+
+function OrderProgressStepper({
+  currentStep,
+  variant = "fulfillment",
+}: {
+  currentStep: 1 | 2 | 3 | 4;
+  variant?: "fulfillment" | "returns";
+}) {
+  const steps =
+    variant === "returns"
+      ? ([
+          { key: 1 as const, label: "Return\nRequested", icon: "return-down-back-outline" as const },
+          { key: 2 as const, label: "Item\nReceived", icon: "cube-outline" as const },
+          { key: 3 as const, label: "Quality\nCheck", icon: "search-outline" as const },
+          { key: 4 as const, label: "Refund\nCompleted", icon: "cash-outline" as const },
+        ] as const)
+      : ([
+          { key: 1 as const, label: "Order\nPlaced", icon: "bag-outline" as const },
+          { key: 2 as const, label: "Shipped", icon: "cube-outline" as const },
+          { key: 3 as const, label: "In Transit", icon: "car-outline" as const },
+          { key: 4 as const, label: "Delivered", icon: "checkmark" as const },
+        ] as const);
+
+  const clampedStep = Math.min(4, Math.max(1, currentStep)) as 1 | 2 | 3 | 4;
+  const lineFillPct: Record<1 | 2 | 3 | 4, number> = {
+    1: 18,
+    2: 44,
+    // Line reaches the end visually (like reference), while last node stays "pending"
+    3: 100,
+    4: 100,
+  };
+  const lineFillColor =
+    clampedStep >= 3
+      ? "rgba(0, 0, 0, 0)"
+      : variant === "returns"
+        ? "rgba(124, 58, 237, 0.55)"
+        : "rgba(37, 99, 235, 0.55)";
+
+  const trackBg = variant === "returns" ? "#EDE9FE" : "#CFE3F5";
+  const completeFill = variant === "returns" ? "#DDD6FE" : "#CFE3F5";
+  const completeBorder = variant === "returns" ? "#DDD6FE" : "#CFE3F5";
+  const futureBg = variant === "returns" ? "#F5F3FF" : "#F4FAFF";
+  const futureBorder = variant === "returns" ? "#E9D5FF" : "#D7E8F7";
+  const currentBorder = variant === "returns" ? "#7C3AED" : "#3B82F6";
+  const currentBg = variant === "returns" ? "#F3E8FF" : "#EFF6FF";
+  const pendingBorder = variant === "returns" ? "#DDD6FE" : "#CFE3F5";
+  const shadow = variant === "returns" ? "#7C3AED" : "#2563EB";
+
+  const iconComplete = variant === "returns" ? "#5B21B6" : "#0B4F7A";
+  const iconCurrent = variant === "returns" ? "#6D28D9" : "#1D4ED8";
+  const iconMuted = variant === "returns" ? "#A78BFA" : "#7AA6C9";
+  const iconFuture = variant === "returns" ? "#9CA3AF" : "#94A3B8";
+
+  return (
+    <View style={styles.stepperWrap}>
+      <View style={[styles.stepperLineTrack, { backgroundColor: trackBg }]}>
+        <View
+          style={[
+            styles.stepperLineFill,
+            { width: `${lineFillPct[clampedStep]}%`, backgroundColor: lineFillColor },
+          ]}
+        />
+      </View>
+      <View style={styles.stepperRow}>
+        {steps.map((s) => {
+          const isComplete = s.key < clampedStep;
+          const isCurrent = s.key === clampedStep;
+          const isFuture = s.key > clampedStep;
+
+          const isDeliveredNode = s.key === 4;
+          const deliveredPending = isDeliveredNode && clampedStep < 4;
+          const deliveredDone = isDeliveredNode && clampedStep === 4;
+
+          let circleStyle = [
+            styles.stepCircleBase,
+            { shadowColor: shadow },
+            { borderColor: futureBorder, backgroundColor: futureBg },
+          ];
+          if (deliveredPending) {
+            circleStyle = [
+              styles.stepCircleBase,
+              { shadowColor: shadow },
+              { borderColor: pendingBorder, backgroundColor: "#FFFFFF" },
+            ];
+          } else if (isComplete || deliveredDone) {
+            circleStyle = [
+              styles.stepCircleBase,
+              { shadowColor: shadow },
+              { borderColor: completeBorder, backgroundColor: completeFill },
+            ];
+          } else if (isCurrent) {
+            circleStyle = [
+              styles.stepCircleBase,
+              { shadowColor: shadow, shadowOpacity: 0.22, shadowRadius: 14, elevation: 5 },
+              { borderColor: currentBorder, backgroundColor: currentBg },
+            ];
+          }
+
+          let iconColor = iconFuture;
+          if (deliveredPending) iconColor = iconMuted;
+          else if (isComplete || deliveredDone) iconColor = iconComplete;
+          else if (isCurrent) iconColor = iconCurrent;
+
+          const labelStyle = isFuture && !deliveredPending ? styles.stepLabelMuted : styles.stepLabelRef;
+
+          return (
+            <TouchableOpacity
+              key={s.key}
+              activeOpacity={0.85}
+              style={styles.stepNodeRef}
+              onPress={() => {}}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <View style={circleStyle}>
+                <Ionicons
+                  name={s.icon as any}
+                  size={22}
+                  color={iconColor}
+                  style={isDeliveredNode ? { marginLeft: 1 } : undefined}
+                />
+              </View>
+              <Text style={labelStyle} numberOfLines={2}>
+                {s.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -1044,6 +1241,115 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginLeft: 8,
     fontWeight: "500",
+  },
+  processingTrackerWrap: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  returnTrackerWrap: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  stepperWrap: {
+    position: "relative",
+    paddingTop: 6,
+    paddingBottom: 2,
+    overflow: "visible",
+  },
+  stepperLineTrack: {
+    position: "absolute",
+    left: 44,
+    right: 44,
+    top: 6 + 26, // centers line relative to 52px circle
+    height: 8,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  stepperLineFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  stepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  stepNodeRef: {
+    width: 78,
+    alignItems: "center",
+  },
+  stepCircleBase: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  stepLabelRef: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827",
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  stepLabelMuted: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#94A3B8",
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  processingMessageWrap: {
+    marginTop: 12,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+  },
+  processingMessageTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  processingMessageSub: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+    lineHeight: 16,
+  },
+  returnMessageWrap: {
+    marginTop: 12,
+    backgroundColor: "#F5F3FF",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  returnMessageTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  returnMessageSub: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+    lineHeight: 16,
   },
   infoCard: {
     backgroundColor: "#FFFFFF",

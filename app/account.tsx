@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import axios from "axios";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -11,12 +13,24 @@ import {
   Modal,
   Dimensions,
   Linking,
+  type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import NotificationPermission from "./notification";
 import * as ImagePicker from "expo-image-picker";
+import {
+  createAddress,
+  deleteAddress,
+  fetchAddresses,
+  mapApiAddressToSavedProfileShape,
+  parseServerAddressId,
+  splitAddressLines,
+  type CreateAddressPayload,
+} from "../services/addresses";
+import { uploadProfileImage } from "../services/userProfile";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -25,26 +39,22 @@ const PROMOTE_WITH_US_URL = "https://flintnthread.in/ads-panel/index";
 export default function AccountScreen() {
   const router = useRouter();
   const [showNotificationModal, setShowNotificationModal] = useState(false);
-  const [showFullImageModal, setShowFullImageModal] = useState(false);
   const [activeProfile, setActiveProfile] =
-    useState<"sankar" | "kusuma" | "new" | string>("sankar");
-  const [showSankar, setShowSankar] = useState(true);
-  const [showKusuma, setShowKusuma] = useState(true);
+    useState<"sankar" | "new" | string>("sankar");
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newMobile, setNewMobile] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newConfirmPassword, setNewConfirmPassword] = useState("");
   const [newAddress, setNewAddress] = useState("");
   const [newCity, setNewCity] = useState("");
   const [newState, setNewState] = useState("");
   const [newPincode, setNewPincode] = useState("");
   const [newUsername, setNewUsername] = useState("");
   const [newPhotoUri, setNewPhotoUri] = useState<string | null>(null);
-  const [sankarPhotoUri, setSankarPhotoUri] = useState<string | null>(null);
-  const [kusumaPhotoUri, setKusumaPhotoUri] = useState<string | null>(null);
-  const [hasNewProfile, setHasNewProfile] = useState(false);
+  const [accountPhotoUri, setAccountPhotoUri] = useState<string | null>(null);
+  const [showAvatarPreviewModal, setShowAvatarPreviewModal] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  /** When true, Save always appends a new shopper (opened via Add), even if a saved profile is selected. */
+  const [isAddingNewShopper, setIsAddingNewShopper] = useState(false);
 
   // Saved profiles array to support multiple accounts
   interface SavedProfile {
@@ -54,23 +64,39 @@ export default function AccountScreen() {
     email: string;
     mobile: string;
     photoUri: string | null;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
   }
 
   const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
+
+  const loadSavedProfilesFromApi = useCallback(async () => {
+    try {
+      const rows = await fetchAddresses();
+      setSavedProfiles(
+        rows.map((row) => mapApiAddressToSavedProfileShape(row) as SavedProfile)
+      );
+    } catch {
+      // Keep current list on failure (e.g. offline); avoid blocking the screen.
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadSavedProfilesFromApi();
+    }, [loadSavedProfilesFromApi])
+  );
+
   const [showOrdersModal, setShowOrdersModal] = useState(false);
   const [showOrderDetailsModal, setShowOrderDetailsModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [activeOrderTab, setActiveOrderTab] = useState<"all" | "in_progress" | "delivered" | "cancelled" | "returns">("all");
 
   const getCurrentProfileData = () => {
-    if (activeProfile === "kusuma") {
+    if (activeProfile === "new") {
       return {
-        name: "Kusuma",
-        email: "kusuma@example.com",
-      };
-    } else if (activeProfile === "new") {
-      return {
-        name: (newUsername || newName || "New user").trim(),
         email: newEmail || "newuser@example.com",
       };
     } else if (activeProfile.startsWith("saved_")) {
@@ -78,65 +104,82 @@ export default function AccountScreen() {
       const savedProfile = savedProfiles.find((p) => p.id === profileId);
       if (savedProfile) {
         return {
-          name: savedProfile.username || savedProfile.name,
           email: savedProfile.email,
         };
       }
     }
     return {
-      name: "Sankar",
-      email: "sankarp036@gmail.com",
+      email: "",
     };
   };
 
   const currentProfile = getCurrentProfileData();
 
-  const getCurrentImageSource = () => {
-    if (activeProfile === "kusuma") {
-      if (kusumaPhotoUri) {
-        return { uri: kusumaPhotoUri };
-      }
-      return require("../assets/images/age6.png");
-    } else if (activeProfile === "new" && newPhotoUri) {
-      return { uri: newPhotoUri };
-    } else if (activeProfile.startsWith("saved_")) {
+  const accountAvatarUri = useMemo((): string | null => {
+    if (activeProfile === "new" && newPhotoUri) {
+      return newPhotoUri;
+    }
+    if (activeProfile.startsWith("saved_")) {
       const profileId = activeProfile.replace("saved_", "");
       const savedProfile = savedProfiles.find((p) => p.id === profileId);
-      if (savedProfile && savedProfile.photoUri) {
-        return { uri: savedProfile.photoUri };
-      }
-      return require("../assets/images/age5.png");
-    } else {
-      // Sankar profile
-      if (sankarPhotoUri) {
-        return { uri: sankarPhotoUri };
-      }
-      return require("../assets/images/age5.png");
+      return savedProfile?.photoUri ?? null;
+    }
+    return accountPhotoUri;
+  }, [activeProfile, newPhotoUri, savedProfiles, accountPhotoUri]);
+
+  const applyAccountPhotoUri = (photoUri: string) => {
+    if (activeProfile === "sankar") {
+      setAccountPhotoUri(photoUri);
+    } else if (activeProfile === "new") {
+      setNewPhotoUri(photoUri);
+    } else if (activeProfile.startsWith("saved_")) {
+      const profileId = activeProfile.replace("saved_", "");
+      setSavedProfiles((prev) =>
+        prev.map((p) =>
+          p.id === profileId ? { ...p, photoUri } : p
+        )
+      );
     }
   };
 
-  const handleUpdateProfilePhoto = async () => {
-    Alert.alert(
-      "Update Profile Photo",
-      "Choose an option",
-      [
-        {
-          text: "Camera",
-          onPress: () => handleTakePhotoForCurrentProfile(),
-        },
-        {
-          text: "Photo Library",
-          onPress: () => handlePickFromLibraryForCurrentProfile(),
-        },
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-      ]
-    );
+  const uploadAccountPhotoFromLocalUri = async (localUri: string) => {
+    try {
+      const url = await uploadProfileImage(localUri);
+      applyAccountPhotoUri(url);
+      Alert.alert("Success", "Profile photo updated.");
+    } catch (e) {
+      let msg = "Could not upload profile photo. Please try again.";
+      if (axios.isAxiosError(e)) {
+        const status = e.response?.status;
+        const d = e.response?.data as
+          | { message?: string; error?: string }
+          | undefined;
+        const serverMsg =
+          (typeof d?.message === "string" && d.message) ||
+          (typeof d?.error === "string" && d.error);
+        if (status === 401 || status === 403) {
+          msg =
+            serverMsg ||
+            "Log in again so your session token is sent with this request.";
+        } else {
+          msg = serverMsg || e.message || msg;
+        }
+      } else if (e instanceof Error) {
+        msg = e.message;
+      }
+      Alert.alert("Upload failed", String(msg));
+    }
   };
 
-  const handleTakePhotoForCurrentProfile = async () => {
+  const handleUpdateAccountPhoto = () => {
+    Alert.alert("Update profile photo", "Choose an option", [
+      { text: "Camera", onPress: handleAccountPhotoFromCamera },
+      { text: "Photo Library", onPress: handleAccountPhotoFromLibrary },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const handleAccountPhotoFromCamera = async () => {
     const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
     if (cameraStatus.status !== "granted") {
       Alert.alert(
@@ -150,35 +193,21 @@ export default function AccountScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.85,
     });
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const photoUri = result.assets[0].uri;
-      if (activeProfile === "sankar") {
-        setSankarPhotoUri(photoUri);
-      } else if (activeProfile === "kusuma") {
-        setKusumaPhotoUri(photoUri);
-      } else if (activeProfile === "new") {
-        setNewPhotoUri(photoUri);
-      } else if (activeProfile.startsWith("saved_")) {
-        const profileId = activeProfile.replace("saved_", "");
-        setSavedProfiles((prev) =>
-          prev.map((p) =>
-            p.id === profileId ? { ...p, photoUri } : p
-          )
-        );
-      }
-      Alert.alert("Success", "Profile photo updated successfully!");
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      await uploadAccountPhotoFromLocalUri(result.assets[0].uri);
     }
   };
 
-  const handlePickFromLibraryForCurrentProfile = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const handleAccountPhotoFromLibrary = async () => {
+    const { status } =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
         "Permission required",
-        "We need access to your photos to upload a profile picture."
+        "We need access to your photos to choose a profile picture."
       );
       return;
     }
@@ -187,26 +216,11 @@ export default function AccountScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.85,
     });
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const photoUri = result.assets[0].uri;
-      if (activeProfile === "sankar") {
-        setSankarPhotoUri(photoUri);
-      } else if (activeProfile === "kusuma") {
-        setKusumaPhotoUri(photoUri);
-      } else if (activeProfile === "new") {
-        setNewPhotoUri(photoUri);
-      } else if (activeProfile.startsWith("saved_")) {
-        const profileId = activeProfile.replace("saved_", "");
-        setSavedProfiles((prev) =>
-          prev.map((p) =>
-            p.id === profileId ? { ...p, photoUri } : p
-          )
-        );
-      }
-      Alert.alert("Success", "Profile photo updated successfully!");
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      await uploadAccountPhotoFromLocalUri(result.assets[0].uri);
     }
   };
 
@@ -273,7 +287,8 @@ export default function AccountScreen() {
     status: OrderStatus;
     items: number;
     total: string;
-    image: any;
+    /** Set when API provides a product thumbnail; otherwise list shows a neutral placeholder. */
+    image: ImageSourcePropType | null;
   }
 
   const sampleOrders: Order[] = [
@@ -284,7 +299,7 @@ export default function AccountScreen() {
       status: "delivered",
       items: 2,
       total: "₹2,499",
-      image: require("../assets/images/age5.png"),
+      image: null,
     },
     {
       id: "2",
@@ -293,7 +308,7 @@ export default function AccountScreen() {
       status: "in_progress",
       items: 1,
       total: "₹1,299",
-      image: require("../assets/images/age6.png"),
+      image: null,
     },
     {
       id: "3",
@@ -302,7 +317,7 @@ export default function AccountScreen() {
       status: "cancelled",
       items: 3,
       total: "₹3,999",
-      image: require("../assets/images/age5.png"),
+      image: null,
     },
     {
       id: "4",
@@ -311,7 +326,7 @@ export default function AccountScreen() {
       status: "delivered",
       items: 1,
       total: "₹899",
-      image: require("../assets/images/age6.png"),
+      image: null,
     },
     {
       id: "5",
@@ -320,7 +335,7 @@ export default function AccountScreen() {
       status: "returns",
       items: 2,
       total: "₹1,599",
-      image: require("../assets/images/age5.png"),
+      image: null,
     },
   ];
 
@@ -367,13 +382,11 @@ export default function AccountScreen() {
     { key: "returns", label: "Returns & Refunds" },
   ];
 
-  const handleSaveNewProfile = () => {
+  const handleSaveNewProfile = async () => {
     if (
       !newName ||
       !newEmail ||
       !newMobile ||
-      !newPassword ||
-      !newConfirmPassword ||
       !newAddress ||
       !newCity ||
       !newState ||
@@ -392,24 +405,16 @@ export default function AccountScreen() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      Alert.alert("Weak password", "Password should be at least 6 characters.");
-      return;
-    }
-
-    if (newPassword !== newConfirmPassword) {
-      Alert.alert("Password mismatch", "Passwords do not match.");
-      return;
-    }
-
     const pincodeRegex = /^[0-9]{6}$/;
     if (!pincodeRegex.test(newPincode)) {
       Alert.alert("Invalid pincode", "Please enter a valid 6-digit pincode.");
       return;
     }
 
-    // Check if editing existing profile
-    if (activeProfile.startsWith("saved_")) {
+    const editingExisting =
+      activeProfile.startsWith("saved_") && !isAddingNewShopper;
+
+    if (editingExisting) {
       const profileId = activeProfile.replace("saved_", "");
       // Update existing profile
       setSavedProfiles((prev) =>
@@ -422,173 +427,149 @@ export default function AccountScreen() {
                 email: newEmail.trim(),
                 mobile: newMobile.trim(),
                 photoUri: newPhotoUri,
+                address: newAddress.trim(),
+                city: newCity.trim(),
+                state: newState.trim(),
+                pincode: newPincode.trim(),
               }
             : p
         )
       );
       setShowAddForm(false);
+      setIsAddingNewShopper(false);
       setTimeout(() => {
         Alert.alert("Success", "Profile updated successfully!");
       }, 100);
     } else {
-      // Create new profile object
-      const newProfile: SavedProfile = {
-        id: `profile_${Date.now()}`,
+      const { line1, line2 } = splitAddressLines(newAddress);
+      const payload: CreateAddressPayload = {
         name: newName.trim(),
-        username: newUsername.trim() || newName.trim(),
         email: newEmail.trim(),
-        mobile: newMobile.trim(),
-        photoUri: newPhotoUri,
+        phone: newMobile.trim().replace(/\D/g, "").slice(0, 10),
+        addressLine1: line1,
+        addressLine2: line2,
+        city: newCity.trim(),
+        state: newState.trim(),
+        country: "India",
+        pincode: newPincode.trim(),
+        addressType: "home",
+        isDefault: savedProfiles.length === 0,
       };
 
-      // Add to saved profiles array
-      setSavedProfiles((prev) => [...prev, newProfile]);
-      setHasNewProfile(true);
+      let responseBody: unknown;
+      try {
+        responseBody = await createAddress(payload);
+      } catch (e) {
+        let msg = "Could not save address. Please try again.";
+        if (axios.isAxiosError(e)) {
+          const status = e.response?.status;
+          const d = e.response?.data as
+            | { message?: string; error?: string }
+            | undefined;
+          const serverMsg =
+            (typeof d?.message === "string" && d.message) ||
+            (typeof d?.error === "string" && d.error);
+          if (status === 401 || status === 403) {
+            msg =
+              serverMsg ||
+              "Access denied. Log in again from the login screen so your session token is sent with this request.";
+          } else {
+            msg = serverMsg || e.message || msg;
+          }
+        } else if (e instanceof Error) {
+          msg = e.message;
+        }
+        Alert.alert("Save failed", String(msg));
+        return;
+      }
+
+      const newId = parseServerAddressId(responseBody);
+      await loadSavedProfilesFromApi();
       setShowAddForm(false);
-      
-      // Switch to the newly created profile
-      setActiveProfile(`saved_${newProfile.id}` as any);
-      
+      setIsAddingNewShopper(false);
+      if (newId) {
+        setActiveProfile(`saved_${newId}` as any);
+      }
+
       setTimeout(() => {
-        Alert.alert("Profile saved", "New shopper account has been saved successfully!");
+        Alert.alert(
+          "Profile saved",
+          "New shopper account has been saved successfully!"
+        );
       }, 100);
     }
-    
+
     // Reset form
     setNewName("");
     setNewEmail("");
     setNewMobile("");
-    setNewPassword("");
-    setNewConfirmPassword("");
     setNewAddress("");
     setNewCity("");
     setNewState("");
     setNewPincode("");
     setNewUsername("");
     setNewPhotoUri(null);
+    setIsAddingNewShopper(false);
   };
 
   const handleRemoveNewProfile = () => {
-    Alert.alert("Remove shopper", "Do you want to remove this shopper?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: () => {
-          setHasNewProfile(false);
-          setShowAddForm(false);
-          setActiveProfile("sankar");
-          setNewName("");
-          setNewEmail("");
-          setNewMobile("");
-          setNewPassword("");
-          setNewConfirmPassword("");
-          setNewAddress("");
-          setNewCity("");
-          setNewState("");
-          setNewPincode("");
-          setNewUsername("");
-          setNewPhotoUri(null);
-        },
-      },
-    ]);
-  };
-
-  const handleRemoveBaseProfile = (target: "sankar" | "kusuma") => {
-    const label = target === "sankar" ? "Sankar" : "Kusuma";
+    const isSavedAccount = activeProfile.startsWith("saved_");
     Alert.alert(
-      "Remove shopper",
-      `Do you want to remove ${label} from this list?`,
+      "Remove account",
+      isSavedAccount
+        ? "This shopper will be removed permanently and will no longer appear in your list."
+        : "Do you want to remove this shopper?",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Remove",
           style: "destructive",
-          onPress: () => {
-            if (target === "sankar") {
-              setShowSankar(false);
-              if (activeProfile === "sankar") {
-                if (showKusuma) setActiveProfile("kusuma");
-                else if (hasNewProfile) setActiveProfile("new");
-              }
-            } else {
-              setShowKusuma(false);
-              if (activeProfile === "kusuma") {
-                if (showSankar) setActiveProfile("sankar");
-                else if (hasNewProfile) setActiveProfile("new");
+          onPress: async () => {
+            if (isSavedAccount) {
+              const profileId = activeProfile.replace("saved_", "");
+              try {
+                await deleteAddress(profileId);
+                await loadSavedProfilesFromApi();
+              } catch (e) {
+                let msg = "Could not remove this address. Please try again.";
+                if (axios.isAxiosError(e)) {
+                  const status = e.response?.status;
+                  const d = e.response?.data as
+                    | { message?: string; error?: string }
+                    | undefined;
+                  const serverMsg =
+                    (typeof d?.message === "string" && d.message) ||
+                    (typeof d?.error === "string" && d.error);
+                  if (status === 401 || status === 403) {
+                    msg =
+                      serverMsg ||
+                      "Access denied. Log in again and retry.";
+                  } else {
+                    msg = serverMsg || e.message || msg;
+                  }
+                } else if (e instanceof Error) {
+                  msg = e.message;
+                }
+                Alert.alert("Remove failed", String(msg));
+                return;
               }
             }
+            setShowAddForm(false);
+            setIsAddingNewShopper(false);
+            setActiveProfile("sankar");
+            setNewName("");
+            setNewEmail("");
+            setNewMobile("");
+            setNewAddress("");
+            setNewCity("");
+            setNewState("");
+            setNewPincode("");
+            setNewUsername("");
+            setNewPhotoUri(null);
           },
         },
       ]
     );
-  };
-
-  const handleUploadPhotoPress = async () => {
-    Alert.alert(
-      "Select Photo",
-      "Choose an option",
-      [
-        {
-          text: "Camera",
-          onPress: handleTakePhoto,
-        },
-        {
-          text: "Photo Library",
-          onPress: handlePickFromLibrary,
-        },
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-      ]
-    );
-  };
-
-  const handleTakePhoto = async () => {
-    // Request camera permissions
-    const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
-    if (cameraStatus.status !== "granted") {
-      Alert.alert(
-        "Permission required",
-        "We need access to your camera to take a photo."
-      );
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setNewPhotoUri(result.assets[0].uri);
-    }
-  };
-
-  const handlePickFromLibrary = async () => {
-    const { status } =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Permission required",
-        "We need access to your photos to upload a profile picture."
-      );
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setNewPhotoUri(result.assets[0].uri);
-    }
   };
 
   return (
@@ -601,160 +582,88 @@ export default function AccountScreen() {
         <View style={styles.profileCard}>
           {/* Header Section with Gradient Background */}
           <View style={styles.profileCardHeader}>
-            <View style={styles.profileHeaderContent}>
-              {/* Avatar with Border */}
-              <View style={styles.avatarContainer}>
+            <View style={styles.profileHeaderTop}>
+              <View style={styles.profileHeaderTitleBlock}>
+                <Text style={styles.profileLabel}>My Account</Text>
+                {!!currentProfile.email && (
+                  <Text style={styles.profileEmail}>{currentProfile.email}</Text>
+                )}
+              </View>
+              <View style={styles.profileIconsContainer}>
                 <TouchableOpacity
-                  onPress={() => setShowFullImageModal(true)}
-                  activeOpacity={0.8}
+                  style={styles.circleIcon}
+                  onPress={handleNotificationPress}
+                  activeOpacity={0.7}
                 >
-                  <View style={styles.avatarBorder}>
-                    <Image
-                      source={getCurrentImageSource()}
-                      style={styles.avatar}
-                    />
+                  <Ionicons name="notifications" size={20} color="#E97A1F" />
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>3</Text>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.avatarEditBadge}
-                  onPress={handleUpdateProfilePhoto}
-                  activeOpacity={0.8}
+                  style={styles.circleIcon}
+                  onPress={handleHelpPress}
+                  activeOpacity={0.7}
                 >
-                  <Ionicons name="camera" size={14} color="#FFFFFF" />
+                  <Ionicons name="help-circle" size={20} color="#2196F3" />
                 </TouchableOpacity>
-              </View>
-
-              {/* Profile Info */}
-              <View style={styles.profileInfoSection}>
-                <Text style={styles.profileLabel}>Profile</Text>
-                <Text style={styles.profileEmail}>{currentProfile.email}</Text>
-                <View style={styles.activeProfileBadge}>
-                  <View style={styles.activeProfileDot} />
-                  <Text style={styles.activeProfileText}>
-                    Shopping for {currentProfile.name}
-                  </Text>
-                </View>
+                <TouchableOpacity
+                  style={styles.circleIcon}
+                  onPress={handleLanguagePress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="globe" size={20} color="#4CAF50" />
+                </TouchableOpacity>
               </View>
             </View>
 
-            {/* Quick Action Icons */}
-            <View style={styles.profileIconsContainer}>
-              {/* Notifications with count */}
-              <TouchableOpacity
-                style={styles.circleIcon}
-                onPress={handleNotificationPress}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="notifications" size={20} color="#E97A1F" />
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>3</Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Help / support */}
-              <TouchableOpacity
-                style={styles.circleIcon}
-                onPress={handleHelpPress}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="help-circle" size={20} color="#2196F3" />
-              </TouchableOpacity>
-
-              {/* Language change */}
-              <TouchableOpacity
-                style={styles.circleIcon}
-                onPress={handleLanguagePress}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="globe" size={20} color="#4CAF50" />
-              </TouchableOpacity>
+            <View style={styles.accountAvatarSection}>
+              <View style={styles.accountAvatarWrap}>
+                <TouchableOpacity
+                  onPress={() => setShowAvatarPreviewModal(true)}
+                  activeOpacity={0.92}
+                  accessibilityRole="button"
+                  accessibilityLabel="View profile photo"
+                >
+                  <LinearGradient
+                    colors={["#FFB86C", "#E97A1F", "#C45A10"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.accountAvatarRing}
+                  >
+                    <View style={styles.accountAvatarInner}>
+                      {accountAvatarUri ? (
+                        <Image
+                          source={{ uri: accountAvatarUri }}
+                          style={styles.accountAvatarImage}
+                        />
+                      ) : (
+                        <Ionicons name="person" size={52} color="#CBD5E1" />
+                      )}
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.accountAvatarCamera}
+                  onPress={handleUpdateAccountPhoto}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Change profile photo"
+                >
+                  <Ionicons name="camera" size={17} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
           {/* Shoppers Section */}
           <View style={styles.shoppersSection}>
             <Text style={styles.shoppersSectionTitle}>Switch Shopper</Text>
-            <View style={styles.shopperRow}>
-              {showSankar && (
-                <TouchableOpacity
-                  style={[
-                    styles.shopperItem,
-                    activeProfile === "sankar" && styles.shopperItemActive,
-                  ]}
-                  onPress={() => setActiveProfile("sankar")}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.shopperCircle,
-                      activeProfile === "sankar" && styles.shopperCircleActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.shopperInitial,
-                        activeProfile === "sankar" && styles.shopperInitialActive,
-                      ]}
-                    >
-                      S
-                    </Text>
-                    {activeProfile === "sankar" && (
-                      <View style={styles.shopperCheckmark}>
-                        <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                      </View>
-                    )}
-                  </View>
-                  <Text
-                    style={[
-                      styles.shopperName,
-                      activeProfile === "sankar" && styles.shopperNameActive,
-                    ]}
-                  >
-                    Sankar
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {showKusuma && (
-                <TouchableOpacity
-                  style={[
-                    styles.shopperItem,
-                    activeProfile === "kusuma" && styles.shopperItemActive,
-                  ]}
-                  onPress={() => setActiveProfile("kusuma")}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.shopperCircle,
-                      activeProfile === "kusuma" && styles.shopperCircleActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.shopperInitial,
-                        activeProfile === "kusuma" && styles.shopperInitialActive,
-                      ]}
-                    >
-                      K
-                    </Text>
-                    {activeProfile === "kusuma" && (
-                      <View style={styles.shopperCheckmark}>
-                        <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                      </View>
-                    )}
-                  </View>
-                  <Text
-                    style={[
-                      styles.shopperName,
-                      activeProfile === "kusuma" && styles.shopperNameActive,
-                    ]}
-                  >
-                    Kusuma
-                  </Text>
-                </TouchableOpacity>
-              )}
-
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.shopperRowScroll}
+            >
               {/* Display all saved profiles */}
               {savedProfiles.length > 0 &&
                 savedProfiles.map((profile) => {
@@ -770,6 +679,7 @@ export default function AccountScreen() {
                     onPress={() => {
                       setActiveProfile(profileKey);
                       setShowAddForm(false);
+                      setIsAddingNewShopper(false);
                     }}
                     activeOpacity={0.7}
                   >
@@ -818,18 +728,17 @@ export default function AccountScreen() {
               <TouchableOpacity
                 style={styles.shopperItemAdd}
                 onPress={() => {
-                  // Reset form and open add form
+                  // Reset form and open add form (always create a new shopper on Save)
                   setNewName("");
                   setNewEmail("");
                   setNewMobile("");
-                  setNewPassword("");
-                  setNewConfirmPassword("");
                   setNewAddress("");
                   setNewCity("");
                   setNewState("");
                   setNewPincode("");
                   setNewUsername("");
                   setNewPhotoUri(null);
+                  setIsAddingNewShopper(true);
                   setShowAddForm(true);
                 }}
                 activeOpacity={0.7}
@@ -839,12 +748,12 @@ export default function AccountScreen() {
                 </View>
                 <Text style={styles.shopperNameAdd}>Add</Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
         </View>
 
-        {/* Edit / remove actions for active account */}
-        {activeProfile === "sankar" && showSankar && (
+        {/* Edit account for primary profile */}
+        {activeProfile === "sankar" && (
           <View style={styles.profileActionsCard}>
             <TouchableOpacity
               style={styles.profileActionButton}
@@ -855,50 +764,6 @@ export default function AccountScreen() {
                 <Ionicons name="create" size={18} color="#E97A1F" />
               </View>
               <Text style={styles.profileActionText}>Edit Account</Text>
-              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
-            </TouchableOpacity>
-
-            <View style={styles.profileActionDivider} />
-
-            <TouchableOpacity
-              style={styles.profileActionButton}
-              onPress={() => handleRemoveBaseProfile("sankar")}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.profileActionIconContainer, styles.profileActionIconContainerDanger]}>
-                <Ionicons name="trash" size={18} color="#F44336" />
-              </View>
-              <Text style={styles.profileActionRemoveText}>Remove Account</Text>
-              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {activeProfile === "kusuma" && showKusuma && (
-          <View style={styles.profileActionsCard}>
-            <TouchableOpacity
-              style={styles.profileActionButton}
-              onPress={() => router.push("/settings")}
-              activeOpacity={0.7}
-            >
-              <View style={styles.profileActionIconContainer}>
-                <Ionicons name="create" size={18} color="#E97A1F" />
-              </View>
-              <Text style={styles.profileActionText}>Edit Account</Text>
-              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
-            </TouchableOpacity>
-
-            <View style={styles.profileActionDivider} />
-
-            <TouchableOpacity
-              style={styles.profileActionButton}
-              onPress={() => handleRemoveBaseProfile("kusuma")}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.profileActionIconContainer, styles.profileActionIconContainerDanger]}>
-                <Ionicons name="trash" size={18} color="#F44336" />
-              </View>
-              <Text style={styles.profileActionRemoveText}>Remove Account</Text>
               <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
             </TouchableOpacity>
           </View>
@@ -913,15 +778,17 @@ export default function AccountScreen() {
                 const profileId = activeProfile.replace("saved_", "");
                 const profile = savedProfiles.find((p) => p.id === profileId);
                 if (profile) {
-                  // Pre-fill form with existing data
+                  setIsAddingNewShopper(false);
                   setNewName(profile.name);
                   setNewEmail(profile.email);
                   setNewMobile(profile.mobile);
                   setNewUsername(profile.username);
                   setNewPhotoUri(profile.photoUri);
+                  setNewAddress(profile.address ?? "");
+                  setNewCity(profile.city ?? "");
+                  setNewState(profile.state ?? "");
+                  setNewPincode(profile.pincode ?? "");
                   setShowAddForm(true);
-                  // Update profile on save
-                  Alert.alert("Edit Mode", "Update the details and save to update the profile.");
                 }
               }}
               activeOpacity={0.7}
@@ -952,7 +819,9 @@ export default function AccountScreen() {
         {/* Add new shopper form */}
         {showAddForm && (
           <View style={styles.addForm}>
-            <Text style={styles.addFormTitle}>Add new shopper</Text>
+            <Text style={styles.addFormTitle}>
+              {isAddingNewShopper ? "Add new shopper" : "Edit shopper"}
+            </Text>
 
             <Text style={styles.addFieldLabel}>Full Name</Text>
             <TextInput
@@ -981,28 +850,10 @@ export default function AccountScreen() {
               maxLength={10}
             />
 
-            <Text style={styles.addFieldLabel}>Password</Text>
+            <Text style={styles.addFieldLabel}>Area</Text>
             <TextInput
               style={styles.addInput}
-              placeholder="Enter password"
-              secureTextEntry
-              value={newPassword}
-              onChangeText={setNewPassword}
-            />
-
-            <Text style={styles.addFieldLabel}>Confirm Password</Text>
-            <TextInput
-              style={styles.addInput}
-              placeholder="Re-enter password"
-              secureTextEntry
-              value={newConfirmPassword}
-              onChangeText={setNewConfirmPassword}
-            />
-
-            <Text style={styles.addFieldLabel}>Address</Text>
-            <TextInput
-              style={styles.addInput}
-              placeholder="House / Street, Area"
+              placeholder="H.no/Area Name"
               value={newAddress}
               onChangeText={setNewAddress}
               multiline
@@ -1042,32 +893,6 @@ export default function AccountScreen() {
               onChangeText={setNewUsername}
             />
 
-            <Text style={styles.addFieldLabel}>Profile Photo</Text>
-            <View style={styles.uploadRow}>
-              <View style={styles.uploadPreview}>
-                {newPhotoUri ? (
-                  <Image
-                    source={{ uri: newPhotoUri }}
-                    style={styles.uploadPreviewImage}
-                  />
-                ) : (
-                  <Ionicons name="person-outline" size={22} color="#999" />
-                )}
-              </View>
-              <TouchableOpacity
-                style={styles.uploadButton}
-                onPress={handleUploadPhotoPress}
-              >
-                <Ionicons
-                  name="cloud-upload-outline"
-                  size={18}
-                  color="#FFFFFF"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.uploadButtonText}>Upload photo</Text>
-              </TouchableOpacity>
-            </View>
-
             <View style={styles.addFormButtons}>
               <TouchableOpacity
                 style={styles.addPrimaryButton}
@@ -1078,6 +903,7 @@ export default function AccountScreen() {
               <TouchableOpacity
                 style={styles.addSecondaryButton}
                 onPress={() => {
+                  setIsAddingNewShopper(false);
                   setShowAddForm(false);
                 }}
               >
@@ -1112,25 +938,33 @@ export default function AccountScreen() {
           onDeny={handleNotificationDeny}
         />
 
-        {/* Full image modal */}
         <Modal
-          visible={showFullImageModal}
-          transparent={true}
+          visible={showAvatarPreviewModal}
+          transparent
           animationType="fade"
-          onRequestClose={() => setShowFullImageModal(false)}
+          onRequestClose={() => setShowAvatarPreviewModal(false)}
         >
           <View style={styles.fullImageModalContainer}>
             <TouchableOpacity
               style={styles.fullImageCloseButton}
-              onPress={() => setShowFullImageModal(false)}
+              onPress={() => setShowAvatarPreviewModal(false)}
             >
               <Ionicons name="close" size={28} color="#FFFFFF" />
             </TouchableOpacity>
-            <Image
-              source={getCurrentImageSource()}
-              style={styles.fullImage}
-              resizeMode="contain"
-            />
+            {accountAvatarUri ? (
+              <Image
+                source={{ uri: accountAvatarUri }}
+                style={styles.fullImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={styles.fullImagePlaceholder}>
+                <Ionicons name="person-outline" size={96} color="#94A3B8" />
+                <Text style={styles.fullImagePlaceholderText}>
+                  No profile photo yet
+                </Text>
+              </View>
+            )}
           </View>
         </Modal>
 
@@ -1227,10 +1061,25 @@ export default function AccountScreen() {
                       activeOpacity={0.7}
                     >
                       <View style={styles.newOrdersCardLeft}>
-                        <Image
-                          source={order.image}
-                          style={styles.newOrdersCardImage}
-                        />
+                        {order.image ? (
+                          <Image
+                            source={order.image}
+                            style={styles.newOrdersCardImage}
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.newOrdersCardImage,
+                              styles.orderImagePlaceholder,
+                            ]}
+                          >
+                            <Ionicons
+                              name="image-outline"
+                              size={28}
+                              color="#94A3B8"
+                            />
+                          </View>
+                        )}
                         <View style={styles.newOrdersCardInfo}>
                           <Text style={styles.newOrdersCardNumber}>
                             {order.orderNumber}
@@ -1358,10 +1207,25 @@ export default function AccountScreen() {
                 >
                   {/* Product Card */}
                   <View style={styles.newModalProductCard}>
-                    <Image
-                      source={selectedOrder.image}
-                      style={styles.newModalProductImage}
-                    />
+                    {selectedOrder.image ? (
+                      <Image
+                        source={selectedOrder.image}
+                        style={styles.newModalProductImage}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.newModalProductImage,
+                          styles.orderImagePlaceholder,
+                        ]}
+                      >
+                        <Ionicons
+                          name="image-outline"
+                          size={36}
+                          color="#94A3B8"
+                        />
+                      </View>
+                    )}
                     <View style={styles.newModalProductInfo}>
                       <Text style={styles.newModalProductName}>
                         Product Name {selectedOrder.id}
@@ -1641,64 +1505,80 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E5E5",
   },
-  profileHeaderContent: {
+  profileHeaderTop: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 16,
+    justifyContent: "space-between",
+    marginBottom: 20,
   },
-  avatarContainer: {
+  profileHeaderTitleBlock: {
+    flex: 1,
+    paddingRight: 10,
+    minWidth: 0,
+  },
+  profileIconsContainer: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 0,
+  },
+  accountAvatarSection: {
+    alignItems: "center",
+    paddingBottom: 4,
+  },
+  accountAvatarWrap: {
     position: "relative",
-    marginRight: 16,
+    width: 124,
+    height: 124,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  avatarBorder: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: "#FFFFFF",
-    padding: 3,
-    borderWidth: 3,
-    borderColor: "#E97A1F",
+  accountAvatarRing: {
+    width: 124,
+    height: 124,
+    borderRadius: 62,
+    padding: 4,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#E97A1F",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.38,
+    shadowRadius: 18,
+    elevation: 12,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#DDDDDD",
+  accountAvatarInner: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  avatarEditBadge: {
+  accountAvatarImage: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+  },
+  accountAvatarCamera: {
     position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    right: 2,
+    bottom: 2,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#E97A1F",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
     borderColor: "#FFFFFF",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
     zIndex: 10,
-  },
-  profileInfoSection: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  profileIconsContainer: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
   },
   circleIcon: {
     width: 44,
@@ -1736,37 +1616,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   profileLabel: {
-    fontSize: 13,
-    color: "#999999",
-    marginBottom: 4,
-    fontWeight: "500",
+    fontSize: 22,
+    color: "#1A1A1A",
+    marginBottom: 6,
+    fontWeight: "700",
+    letterSpacing: -0.3,
   },
   profileEmail: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#000000",
-    marginBottom: 8,
-  },
-  activeProfileBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E97A1F20",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    alignSelf: "flex-start",
-  },
-  activeProfileDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#E97A1F",
-    marginRight: 6,
-  },
-  activeProfileText: {
-    fontSize: 12,
-    color: "#E97A1F",
+    fontSize: 15,
     fontWeight: "600",
+    color: "#555555",
+    marginBottom: 0,
   },
   shoppersSection: {
     paddingHorizontal: 20,
@@ -1780,11 +1640,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     letterSpacing: 0.3,
   },
-  shopperRow: {
+  shopperRowScroll: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
+    flexGrow: 1,
     gap: 12,
+    paddingVertical: 4,
+    paddingRight: 4,
   },
   shopperItem: {
     alignItems: "center",
@@ -1901,40 +1763,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontSize: 14,
     backgroundColor: "#FAFAFA",
-  },
-  uploadRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  uploadPreview: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  uploadPreviewImage: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-  },
-  uploadButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1d324e",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  uploadButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
   },
   addFormButtons: {
     flexDirection: "row",
@@ -2069,6 +1897,17 @@ const styles = StyleSheet.create({
   fullImage: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
+  },
+  fullImagePlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  fullImagePlaceholderText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#CBD5E1",
+    fontWeight: "600",
   },
   ordersModalOverlay: {
     flex: 1,
@@ -2350,6 +2189,11 @@ const styles = StyleSheet.create({
     height: 70,
     borderRadius: 12,
     marginRight: 14,
+  },
+  orderImagePlaceholder: {
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
   },
   newOrdersCardInfo: {
     flex: 1,
