@@ -109,6 +109,14 @@ export function productByIdPath(productId: number): string {
   return `/api/products/${id}`;
 }
 
+
+/** Related products for a product — path only (use with `api.get(...)`). */
+export function relatedProductsPath(productId: number): string {
+  const id = Math.floor(Number(productId));
+  if (!Number.isFinite(id) || id <= 0) return "/api/products/related/0";
+  return `/api/products/related/${id}`;
+}
+
 // ===== ADDRESS API FUNCTIONS =====
 
 // Address interface for TypeScript

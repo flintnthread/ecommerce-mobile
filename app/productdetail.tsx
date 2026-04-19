@@ -22,7 +22,7 @@ import {
   toggleWishlistProduct,
 } from "../lib/shopStorage";
 import { buildProductGalleryUris } from "../lib/pickProductImageUri";
-import api, { productByIdPath } from "../services/api";
+import api, { productByIdPath, relatedProductsPath } from "../services/api";
 
 type CatalogProduct = {
   id: string;
@@ -35,6 +35,14 @@ type CatalogProduct = {
   ratingCount: string;
   /** From API — unique variant `size` values for chips */
   sizeOptions?: string[];
+  /** From API — unique variant `color` values for chips */
+  colorOptions?: string[];
+  /** From API - stock status (true if in stock, false if out of stock) */
+  inStock?: boolean;
+  /** From API - short description for quick product overview */
+  shortDescription?: string;
+  /** From API - product specifications (parsed from JSON or array) */
+  specifications?: { [key: string]: string }[];
   /** Plain text (HTML stripped) for description block */
   descriptionPlain?: string;
   /** Parsed from API `features` JSON array */
@@ -393,6 +401,57 @@ export const ALL_PRODUCTS = [
   },
 ];
 
+function mapApiRelatedProductToCatalog(p: any): CatalogProduct {
+  const uris = buildProductGalleryUris(p, (pathOrUrl: string) => {
+    const raw = String(pathOrUrl ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!apiBase) return raw;
+    return `${apiBase}/${raw.replace(/^\/+/, "")}`;
+  });
+
+  const images = Array.isArray(p?.images) 
+    ? p.images.map((img: any) => ({ uri: img.imageUrl || img.imagePath }))
+    : [...DEFAULT_PRODUCT_IMAGES];
+
+  // Extract price information
+  const selling = Math.round(Number(p.finalPrice) || 0);
+  const mrpRaw = Number(p.mrpPrice) || 0;
+  const mrp = mrpRaw > 0 ? Math.round(mrpRaw) : Math.max(0, selling);
+  const discountPct = Number(p.discountPercentage);
+  const discount = discountPct && discountPct > 0
+    ? `${discountPct.toFixed(1).replace(/\.0$/, "")}% off`
+    : mrp > selling && mrp > 0
+      ? `${Math.round(((mrp - selling) / mrp) * 100)}% off`
+      : "Deal";
+
+  // Debug logging to check values
+  console.log('Related Product Price Debug:', {
+    finalPrice: p.finalPrice,
+    selling,
+    mrpRaw,
+    mrp,
+    discountPct,
+    discount
+  });
+
+  return {
+    id: String(p.id),
+    name: String(p.name ?? "Product").replace(/\u0019/g, "'").replace(/\u0018/g, "'").trim(),
+    images,
+    price: Math.max(0, selling),
+    mrp: Math.max(Math.max(0, selling), mrp),
+    discount,
+    rating: typeof p.rating === "number" && Number.isFinite(p.rating)
+      ? p.rating.toFixed(1)
+      : "—",
+    ratingCount: typeof p.ratingCount === "number" && Number.isFinite(p.ratingCount)
+      ? String(p.ratingCount)
+      : "New",
+  };
+}
+
 function getCatalogProduct(id?: string | string[] | null): CatalogProduct {
   const raw = Array.isArray(id) ? id[0] : id;
   const pid = typeof raw === "string" ? raw.trim() : "";
@@ -477,13 +536,33 @@ function mapApiProductDetailToCatalog(
         : "Deal";
 
   const sizeSet = new Set<string>();
+  const colorSet = new Set<string>();
   for (const row of variants) {
     const sz = String((row as any)?.size ?? "").trim();
     if (sz) sizeSet.add(sz);
+    const cl = String((row as any)?.color ?? "").trim();
+    if (cl) colorSet.add(cl);
   }
   const sizeOptions = [...sizeSet].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true })
   );
+  const colorOptions = [...colorSet].sort();
+
+  // Check if any variant is in stock
+  const inStock = variants.some((variant: any) => {
+    const stock = variant?.stock;
+    const quantity = variant?.quantity;
+    const available = variant?.available;
+    
+    // Check various possible stock field names
+    if (typeof stock === "number") return stock > 0;
+    if (typeof quantity === "number") return quantity > 0;
+    if (typeof available === "boolean") return available;
+    if (typeof stock === "boolean") return stock;
+    
+    // Default to true if no stock info is available
+    return true;
+  });
 
   const rating =
     typeof p?.rating === "number" && Number.isFinite(p.rating)
@@ -504,6 +583,51 @@ function mapApiProductDetailToCatalog(
   const descLong = stripHtml(String(p?.description ?? ""));
   const descriptionPlain =
     (descLong.length >= descShort.length ? descLong : descShort) || descLong || descShort;
+
+  // Parse specifications from API response
+  const specifications = (() => {
+    const specs = p?.specifications;
+    
+    // If specifications is already an array of objects with name-value format
+    if (Array.isArray(specs)) {
+      return specs.filter(spec => 
+        spec && typeof spec === 'object' && spec.name && spec.value
+      );
+    }
+    
+    // If specifications is a JSON string
+    if (typeof specs === 'string' && specs.trim()) {
+      try {
+        const parsed = JSON.parse(specs);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(spec => 
+            spec && typeof spec === 'object' && spec.name && spec.value
+          );
+        }
+      } catch {
+        // Invalid JSON, ignore
+      }
+    }
+    
+    // Extract specifications from other possible fields
+    const extractedSpecs: { [key: string]: string }[] = [];
+    
+    // Check for common specification fields
+    const commonSpecs = [
+      'material', 'fabric', 'brand', 'model', 'weight', 'dimensions',
+      'care', 'washCare', 'origin', 'fit', 'style', 'pattern',
+      'sleeve', 'neck', 'length', 'occasion', 'season'
+    ];
+    
+    for (const spec of commonSpecs) {
+      const value = p?.[spec];
+      if (value && typeof value === 'string' && value.trim()) {
+        extractedSpecs.push({ [spec]: value.trim() });
+      }
+    }
+    
+    return extractedSpecs.length > 0 ? extractedSpecs : undefined;
+  })();
 
   const deliveryNote =
     typeof p?.deliveryTimeMin === "number" &&
@@ -528,6 +652,10 @@ function mapApiProductDetailToCatalog(
     rating,
     ratingCount,
     sizeOptions: sizeOptions.length ? sizeOptions : undefined,
+    colorOptions: colorOptions.length ? colorOptions : undefined,
+    inStock,
+    shortDescription: descShort || undefined,
+    specifications,
     descriptionPlain: descriptionPlain || undefined,
     highlightBullets: bullets,
     deliveryNote,
@@ -553,6 +681,8 @@ export default function ProductDetail() {
   const [apiDetail, setApiDetail] = useState<any | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
 
   const getDetailAssetUriFromApiPath = useCallback((pathOrUrl: string): string => {
     const raw = String(pathOrUrl ?? "").trim();
@@ -591,6 +721,36 @@ export default function ProductDetail() {
     };
   }, [numericProductId]);
 
+  // Fetch related products when current product is loaded
+  useEffect(() => {
+    if (!numericProductId) {
+      setRelatedProducts([]);
+      return;
+    }
+    
+    let cancelled = false;
+    setRelatedLoading(true);
+    (async () => {
+      try {
+        const { data } = await api.get(relatedProductsPath(numericProductId));
+        if (cancelled) return;
+        if (Array.isArray(data)) {
+          setRelatedProducts(data);
+        } else {
+          setRelatedProducts([]);
+        }
+      } catch {
+        setRelatedProducts([]);
+      } finally {
+        if (!cancelled) setRelatedLoading(false);
+      }
+    })();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [numericProductId]);
+
   const product = useMemo(() => {
     if (apiDetail && typeof apiDetail.id === "number") {
       return mapApiProductDetailToCatalog(apiDetail, getDetailAssetUriFromApiPath);
@@ -602,6 +762,7 @@ export default function ProductDetail() {
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
@@ -626,6 +787,7 @@ export default function ProductDetail() {
   const [selectedAddressType, setSelectedAddressType] =
     useState<"Home" | "Office">(savedAddressType);
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [reviews, setReviews] = useState<
     { id: string; user: string; rating: number; comment: string; date: string }[]
   >([
@@ -668,6 +830,7 @@ export default function ProductDetail() {
   useEffect(() => {
     setActiveImageIndex(0);
     setSelectedSize(null);
+    setSelectedColor(null);
     setSearchQuery("");
     void refreshCartAndWishlistState();
   }, [productId, apiDetail?.id]);
@@ -843,6 +1006,31 @@ export default function ProductDetail() {
             <Text style={styles.priceDiscount}>{product.discount}</Text>
           </View>
 
+          {/* STOCK STATUS */}
+          <View style={styles.stockRow}>
+            <Ionicons
+              name={product.inStock !== false ? "checkmark-circle" : "close-circle"}
+              size={14}
+              color={product.inStock !== false ? "#10893E" : "#DC2626"}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[
+              styles.stockText,
+              product.inStock !== false ? styles.stockTextInStock : styles.stockTextOutOfStock
+            ]}>
+              {product.inStock !== false ? "In stock" : "Out of stock"}
+            </Text>
+          </View>
+
+          {/* SHORT DESCRIPTION */}
+          {product.shortDescription && (
+            <View style={styles.shortDescriptionContainer}>
+              <Text style={styles.shortDescriptionText}>
+                {product.shortDescription}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.ratingRow}>
             <View style={styles.ratingBadge}>
               <Text style={styles.ratingText}>{product.rating}</Text>
@@ -1015,6 +1203,41 @@ export default function ProductDetail() {
           </View>
         </View>
 
+        {/* COLOR SELECTOR */}
+        {product.colorOptions && product.colorOptions.length > 0 && (
+          <View style={styles.sectionBlock}>
+            <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
+              Select color
+            </Text>
+
+            <View style={styles.colorRow}>
+              {product.colorOptions.map((color) => {
+                const isActive = selectedColor === color;
+                return (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      styles.colorChip,
+                      isActive && styles.colorChipActive,
+                    ]}
+                    onPress={() => setSelectedColor(color)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.colorChipText,
+                        isActive && styles.colorChipTextActive,
+                      ]}
+                    >
+                      {color}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
         {/* SOLD BY */}
         <View style={styles.sectionBlock}>
           <TouchableOpacity
@@ -1128,55 +1351,107 @@ export default function ProductDetail() {
               </View>
             </>
           )}
+          
+          {/* SEE MORE INFO BUTTON */}
+          {product.descriptionPlain && (
+            <TouchableOpacity
+              style={styles.seeMoreButton}
+              activeOpacity={0.75}
+              onPress={() => setDescriptionExpanded(!descriptionExpanded)}
+            >
+              <Text style={styles.seeMoreButtonText}>
+                {descriptionExpanded ? "Show less info" : "See more info about product"}
+              </Text>
+              <Ionicons 
+                name={descriptionExpanded ? "chevron-up" : "chevron-down"} 
+                size={16} 
+                color="#ef7b1a" 
+                style={{ marginLeft: 4 }}
+              />
+            </TouchableOpacity>
+          )}
         </View>
-
-        {/* ARE YOU LOOKING FOR THIS? */}
-        <View style={styles.sectionBlock}>
-          <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
-            Are you looking for this?
-          </Text>
-          <View style={styles.chipRow}>
-            <View style={styles.searchChip}>
-              <Text style={styles.searchChipText}>Floral dresses</Text>
-            </View>
-            <View style={styles.searchChip}>
-              <Text style={styles.searchChipText}>Office wear kurtis</Text>
-            </View>
-            <View style={styles.searchChip}>
-              <Text style={styles.searchChipText}>Party gowns</Text>
-            </View>
+ 
+        {/* PRODUCT DESCRIPTION (EXPANDABLE) */}
+        {descriptionExpanded && (
+          <View style={styles.sectionBlock}>
+            <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
+              Product Description
+            </Text>
+            {product.descriptionPlain && (
+              <Text style={styles.descriptionPlainText}>
+                {product.descriptionPlain}
+              </Text>
+            )}
+            
+            {/* SPECIFICATIONS */}
+            {product.specifications && product.specifications.length > 0 && (
+              <View style={styles.specificationsContainer}>
+                <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
+                  Specifications
+                </Text>
+                <View style={styles.specificationsList}>
+                  {product.specifications.map((spec, index) => {
+                    const name = spec.name;
+                    const value = spec.value;
+                    if (!name || !value) return null;
+                    
+                    return (
+                      <View key={`spec-${index}`} style={styles.specificationItem}>
+                        <Text style={styles.specificationKey}>
+                          {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
+                        </Text>
+                        <Text style={styles.specificationValue}>{value}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
-        </View>
-
+        )}
+         
         {/* YOU MAY ALSO LIKE */}
         <View style={styles.sectionBlock}>
           <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
-            You may also like
+            You'll Love These
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.suggestRow}
-          >
-            {SUGGEST_PRODUCTS.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.suggestCard}
-                activeOpacity={0.85}
-                onPress={() => openProductDetail(item.id)}
-              >
-                <View style={styles.suggestImageWrapper}>
-                  <Image source={item.images[0]} style={styles.suggestImage} />
-                </View>
-                <Text style={styles.suggestTitle} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={styles.suggestPrice}>
-                  ₹{item.price.toLocaleString()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {relatedLoading ? (
+            <View style={styles.relatedLoadingContainer}>
+              <ActivityIndicator size="small" color="#ef7b1a" />
+              <Text style={styles.relatedLoadingText}>Loading related products...</Text>
+            </View>
+          ) : relatedProducts.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestRow}
+            >
+              {relatedProducts.map((item) => {
+                const catalogItem = mapApiRelatedProductToCatalog(item);
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.suggestCard}
+                    activeOpacity={0.85}
+                    onPress={() => openProductDetail(item.id)}
+                  >
+                    <View style={styles.suggestImageWrapper}>
+                      <Image source={catalogItem.images[0]} style={styles.suggestImage} />
+                    </View>
+                    <Text style={styles.suggestTitle} numberOfLines={1}>
+                      {catalogItem.name}
+                    </Text>
+                    <Text style={styles.suggestPrice}>
+                      ₹{catalogItem.price.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noRelatedText}>No related products found</Text>
+          )}
         </View>
 
         {/* ALL PRODUCTS */}
@@ -1475,6 +1750,49 @@ const styles = StyleSheet.create({
     color: "#334155",
     lineHeight: 21,
   },
+  shortDescriptionContainer: {
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  shortDescriptionText: {
+    fontSize: 13,
+    color: "#666666",
+    lineHeight: 18,
+    fontStyle: "italic",
+  },
+  specificationsContainer: {
+    marginTop: 12,
+  },
+  specificationsList: {
+    marginTop: 8,
+  },
+  specificationItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginHorizontal: 8,
+    marginVertical: 4,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+  },
+  specificationKey: {
+    fontSize: 13,
+    color: "#1d324e",
+    fontWeight: "600",
+    flex: 0.4,
+    marginRight: 8,
+  },
+  specificationValue: {
+    fontSize: 13,
+    color: "#ef7b1a",
+    fontWeight: "500",
+    flex: 0.6,
+    textAlign: "right",
+  },
   mainImageWrapper: {
     marginHorizontal: 24,
     marginTop: 12,
@@ -1489,6 +1807,24 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "cover",
+  },
+  relatedLoadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+  },
+  relatedLoadingText: {
+    marginLeft: 8,
+    fontSize: 13,
+    color: "#666666",
+  },
+  noRelatedText: {
+    fontSize: 13,
+    color: "#666666",
+    fontStyle: "italic",
+    textAlign: "center",
+    paddingVertical: 20,
   },
   thumbnailRow: {
     flexDirection: "row",
@@ -1556,6 +1892,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#10893E",
     fontWeight: "600",
+  },
+  stockRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  stockText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  stockTextInStock: {
+    color: "#10893E",
+  },
+  stockTextOutOfStock: {
+    color: "#DC2626",
   },
   ratingRow: {
     flexDirection: "row",
@@ -1665,6 +2016,33 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   sizeChipTextActive: {
+    color: "#1d324e",
+  },
+  colorRow: {
+    flexDirection: "row",
+    marginBottom: 8,
+  },
+  colorChip: {
+    minWidth: 36,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#D0D0D0",
+    backgroundColor: "#FFFFFF",
+    marginRight: 10,
+    alignItems: "center",
+  },
+  colorChipActive: {
+    borderColor: "#ef7b1a",
+    backgroundColor: "#FFEBD3",
+  },
+  colorChipText: {
+    fontSize: 12,
+    color: "#333333",
+    fontWeight: "500",
+  },
+  colorChipTextActive: {
     color: "#1d324e",
   },
   sizeChartText: {
@@ -1825,6 +2203,23 @@ const styles = StyleSheet.create({
     color: "#ef7b1a",
     fontWeight: "600",
     textDecorationLine: "underline",
+  },
+  seeMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 12,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#ef7b1a",
+    backgroundColor: "#FFF7F0",
+  },
+  seeMoreButtonText: {
+    fontSize: 13,
+    color: "#ef7b1a",
+    fontWeight: "600",
   },
   bottomBar: {
     flexDirection: "row",
