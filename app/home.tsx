@@ -26,7 +26,12 @@ import * as IntentLauncher from "expo-intent-launcher";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
+import api, {
+  productsByMainCategoryPath,
+  productsBySubcategoryPath,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
 import {
   addProductToCart,
   getWishlistIds,
@@ -121,9 +126,9 @@ type MorePicksApiImage = {
 };
 
 type MorePicksApiVariant = {
-  sellingPrice?: number | null;
-  mrpPrice?: number | null;
-  finalPrice?: number | null;
+  sellingPrice?: number | string | null;
+  mrpPrice?: number | string | null;
+  finalPrice?: number | string | null;
   discountPercentage?: number | null;
   inStock?: boolean | null;
 };
@@ -434,8 +439,54 @@ function apiRowToSuggestedForYouItem(
   };
 }
 
+/** Suggested for you — subcategory id; listing path via `productsBySubcategoryPath` in `services/api.tsx`. */
+const SUGGESTED_FOR_YOU_SUBCATEGORY_ID = 164;
+
+function subcategoryApiProductToSuggestedForYouItem(
+  row: MorePicksApiProduct,
+  apiBase: string
+): SuggestedForYouGridItem | null {
+  if (!apiProductRowCountsAsActive(row.status)) return null;
+  const rawPid = row.id ?? row.productId;
+  const productId =
+    typeof rawPid === "string" ? Number.parseInt(rawPid, 10) : Number(rawPid);
+  if (!Number.isFinite(productId) || productId <= 0) return null;
+
+  const uri = firstWishlistImagePath(row as unknown as ApiWishlistProduct, apiBase);
+  const name =
+    String(row.name ?? row.productName ?? row.title ?? row.displayName ?? "").trim() ||
+    `Product ${productId}`;
+
+  const variants = Array.isArray(row.variants) ? row.variants : [];
+  const v = variants.find((x) => x && x.inStock === true) ?? variants[0];
+  const sale = numLike(
+    v?.sellingPrice ?? v?.finalPrice ?? row.salePrice ?? row.sellingPrice ?? row.price
+  );
+  const mrpRaw = numLike(v?.mrpPrice ?? row.mrp ?? row.maxRetailPrice);
+  const mrp = Number.isFinite(mrpRaw) && mrpRaw > 0 ? mrpRaw : sale;
+  const priceNum =
+    Number.isFinite(sale) && sale > 0 ? Math.round(sale) : Math.round(mrp);
+  const mrpNum = mrp > priceNum ? Math.round(mrp) : priceNum;
+
+  return {
+    cartId: String(productId),
+    name,
+    image: uri ? ({ uri } as ImageSourcePropType) : resolveProductImage(String(productId)),
+    oldPrice: formatSuggestedInr(mrpNum),
+    price: formatSuggestedInr(priceNum || mrpNum),
+    rating: "4.5",
+    priceNum: priceNum || mrpNum,
+    mrpNum,
+  };
+}
+
 /** Mega Discounts strip + “see all” list — base URL in `services/api.tsx` */
 const DISCOUNT_TOP_PRODUCTS_PATH = "/api/products/discount/top";
+
+/** Home featured-picks rail — main category id; path via `productsByMainCategoryPath`. */
+const STORE_SPOTLIGHT_MAIN_CATEGORY_ID = 28;
+/** Route `subCategory` label for the full listing on `subcatProducts`. */
+const STORE_SPOTLIGHT_LIST_TITLE = "Featured picks";
 
 /** Premium finds — top selling by price (base URL in `services/api.tsx`) */
 const TOP_SELLING_PRICE_PRODUCTS_PATH = "/api/products/top-selling-price";
@@ -446,6 +497,33 @@ type MegaDiscountHomeCard = {
   subtitle: string;
   image: ImageSourcePropType;
 };
+
+const STORE_SPOTLIGHT_HOME_FALLBACK: MegaDiscountHomeCard[] = [
+  {
+    id: "ss-fb-1",
+    name: "Fashion Hub",
+    subtitle: "Curated picks",
+    image: require("../assets/images/image1.png"),
+  },
+  {
+    id: "ss-fb-2",
+    name: "Style Store",
+    subtitle: "Curated picks",
+    image: require("../assets/images/image2.png"),
+  },
+  {
+    id: "ss-fb-3",
+    name: "Trend Zone",
+    subtitle: "Curated picks",
+    image: require("../assets/images/image3.png"),
+  },
+  {
+    id: "ss-fb-4",
+    name: "Premium Shop",
+    subtitle: "Curated picks",
+    image: require("../assets/images/image4.png"),
+  },
+];
 
 const MEGA_DISCOUNT_HOME_FALLBACK: MegaDiscountHomeCard[] = [
   {
@@ -1082,8 +1160,21 @@ export default function Home() {
     [router]
   );
   const openSubcatProducts = useCallback(
-    (subCategory: string) => {
-      router.push({ pathname: "/subcatProducts", params: { subCategory } } as any);
+    (
+      subCategory: string,
+      extra?: {
+        subcategoryId?: string;
+        mainCategoryId?: string;
+        productsSearchQ?: string;
+        productsSearchCategoryId?: string;
+        productsSearchSort?: string;
+        productsSearchGender?: string;
+      }
+    ) => {
+      router.push({
+        pathname: "/subcatProducts",
+        params: { subCategory, ...extra },
+      } as any);
     },
     [router]
   );
@@ -1345,6 +1436,67 @@ export default function Home() {
   const [selectedFilterSection, setSelectedFilterSection] = useState("Category");
   const [searchCategoryText, setSearchCategoryText] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
+  /** Main category id from the home category strip API — sent as `categoryId` to `/api/products/search`. */
+  const [selectedBrowseMainCategoryId, setSelectedBrowseMainCategoryId] = useState<
+    string | null
+  >(null);
+
+  const applyHomeBrowseFilters = useCallback(() => {
+    const genderLabel = selectedGender.trim();
+    const parts: string[] = [];
+    if (genderLabel) {
+      const g = genderLabel.toLowerCase();
+      if (g === "men") parts.push("men");
+      else if (g === "women") parts.push("women");
+      else if (g === "girls") parts.push("girls");
+      else if (g === "boys") parts.push("boys");
+      else parts.push(genderLabel);
+    }
+    for (const c of selectedCategory) {
+      const t = c.trim();
+      if (t) parts.push(t);
+    }
+    for (const vals of Object.values(selectedFilters)) {
+      for (const v of vals) {
+        const t = v.trim();
+        if (t) parts.push(t);
+      }
+    }
+    const q = parts.join(" ").replace(/\s+/g, " ").trim();
+
+    let categoryIdNum = NaN;
+    if (selectedBrowseMainCategoryId) {
+      const n = Number.parseInt(String(selectedBrowseMainCategoryId), 10);
+      if (Number.isFinite(n) && n > 0) categoryIdNum = n;
+    }
+
+    if (!q && !Number.isFinite(categoryIdNum)) {
+      Alert.alert(
+        "Choose filters",
+        "Pick a department and/or gender, category, or filter options, then try again."
+      );
+      return;
+    }
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        subCategory: "Browse",
+        ...(q ? { productsSearchQ: q } : {}),
+        ...(Number.isFinite(categoryIdNum)
+          ? { productsSearchCategoryId: String(categoryIdNum) }
+          : {}),
+        ...(selectedSort !== "Relevance" ? { productsSearchSort: selectedSort } : {}),
+      },
+    } as any);
+  }, [
+    router,
+    selectedGender,
+    selectedCategory,
+    selectedFilters,
+    selectedBrowseMainCategoryId,
+    selectedSort,
+  ]);
 
   const videoBannerPlayer = useVideoPlayer(
     require("../assets/images/videobanner.mp4"),
@@ -1379,6 +1531,10 @@ export default function Home() {
 
   const [megaDiscountCards, setMegaDiscountCards] = useState<MegaDiscountHomeCard[]>(
     MEGA_DISCOUNT_HOME_FALLBACK
+  );
+
+  const [storeSpotlightCards, setStoreSpotlightCards] = useState<MegaDiscountHomeCard[]>(
+    STORE_SPOTLIGHT_HOME_FALLBACK
   );
 
   const [premiumFindsCards, setPremiumFindsCards] = useState<PremiumFindsHomeCard[]>(
@@ -1598,6 +1754,43 @@ export default function Home() {
     let cancelled = false;
     void (async () => {
       try {
+        const { data } = await api.get<unknown>(
+          productsByMainCategoryPath(STORE_SPOTLIGHT_MAIN_CATEGORY_ID)
+        );
+        if (cancelled) return;
+        const rows = normalizeProductListPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          STORE_SPOTLIGHT_HOME_FALLBACK[0].image,
+          { requireProductActive: false }
+        );
+        const cards: MegaDiscountHomeCard[] = mapped.slice(0, 4).map((m) => ({
+          id: m.id,
+          name: m.name,
+          subtitle:
+            m.discount && String(m.discount).trim() && m.discount !== "—"
+              ? `${m.discount} off`
+              : m.price && String(m.price).trim() && m.price !== "—"
+                ? `From ${m.price}`
+                : "Featured pick",
+          image: m.image,
+        }));
+        if (cards.length > 0) setStoreSpotlightCards(cards);
+      } catch {
+        /* keep STORE_SPOTLIGHT_HOME_FALLBACK */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
         const { data } = await api.get<unknown>(TOP_SELLING_PRICE_PRODUCTS_PATH);
         if (cancelled) return;
         const rows = normalizeProductListPayload(data);
@@ -1725,26 +1918,18 @@ export default function Home() {
     }, [])
   );
 
-  const loadSuggestedForYouFromWishlistApi = useCallback(async () => {
-    const userId = await readNumericUserIdFromStorage();
-    if (!userId) {
-      setSuggestedProducts(SUGGESTED_FOR_YOU_FALLBACK);
-      return;
-    }
-
+  const loadSuggestedForYouFromSubcategoryApi = useCallback(async () => {
     try {
-      const { data: body } = await api.get<unknown>(wishlistUserPath(userId));
-      if (wishlistResponseIsExplicitFailure(body)) {
-        setSuggestedProducts(SUGGESTED_FOR_YOU_FALLBACK);
-        return;
-      }
+      const { data } = await api.get<unknown>(
+        productsBySubcategoryPath(SUGGESTED_FOR_YOU_SUBCATEGORY_ID)
+      );
       const apiBase = String((api.defaults.baseURL as string | undefined) ?? "").trim();
-      const rows = normalizeWishlistRows(body);
+      const rows = normalizeProductListPayload(data);
       const mapped = rows
-        .map((r) => apiRowToSuggestedForYouItem(r, apiBase))
+        .map((r) => subcategoryApiProductToSuggestedForYouItem(r, apiBase))
         .filter((x): x is SuggestedForYouGridItem => x != null);
       if (mapped.length > 0) {
-        setSuggestedProducts(mapped);
+        setSuggestedProducts(mapped.slice(0, 8));
       } else {
         setSuggestedProducts(SUGGESTED_FOR_YOU_FALLBACK);
       }
@@ -1755,8 +1940,8 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
-      void loadSuggestedForYouFromWishlistApi();
-    }, [loadSuggestedForYouFromWishlistApi])
+      void loadSuggestedForYouFromSubcategoryApi();
+    }, [loadSuggestedForYouFromSubcategoryApi])
   );
 
   /** Sync play/pause with screen focus. Do not use useFocusEffect cleanup to pause — it can run after expo-video's shared player is released (native crash / rejection). */
@@ -2267,6 +2452,7 @@ useEffect(() => {
 
   const clearCategoryModalSelections = () => {
     setSelectedCategory([]);
+    setSelectedBrowseMainCategoryId(null);
     setSelectedFilters((prev) => {
       const next = { ...prev };
       delete next.Category;
@@ -2287,6 +2473,7 @@ useEffect(() => {
     setSelectedFilters({});
     setSelectedCategory([]);
     setSelectedGender("");
+    setSelectedBrowseMainCategoryId(null);
   };
 
   const displayedCategories = categoryOptions.filter((item) =>
@@ -2431,29 +2618,6 @@ const brands = [
   },
 ];
 
-// seller gallary
-const sellerGallery = [
-  {
-    id: "1",
-    name: "Fashion Hub",
-    image: require("../assets/images/image1.png"),
-  },
-  {
-    id: "2",
-    name: "Style Store",
-    image: require("../assets/images/image2.png"),
-  },
-  {
-    id: "3",
-    name: "Trend Zone",
-    image: require("../assets/images/image3.png"),
-  },
-  {
-    id: "4",
-    name: "Premium Shop",
-    image: require("../assets/images/image4.png"),
-  },
-];
 const FRESH_ROW_PADDING = 16;
 const FRESH_INNER = width - FRESH_ROW_PADDING * 2;
 const FRESH_IMG_60 = FRESH_INNER * 0.6;
@@ -2810,6 +2974,16 @@ const categoryData = [
             }}
           />
           </View>
+
+          <TouchableOpacity
+            style={styles.homeBrowseApplyBtn}
+            onPress={() => void applyHomeBrowseFilters()}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="View product results for your filters"
+          >
+            <Text style={styles.homeBrowseApplyText}>View results</Text>
+          </TouchableOpacity>
         </LinearGradient>
 
         {/* Hero promo cards — snap carousel; header tint follows active card */}
@@ -3129,7 +3303,11 @@ const categoryData = [
     </View>
     <TouchableOpacity
       style={styles.productArrowButton}
-      onPress={() => openSubcatProducts("Suggested For You")}
+      onPress={() =>
+        openSubcatProducts("Suggested For You", {
+          subcategoryId: String(SUGGESTED_FOR_YOU_SUBCATEGORY_ID),
+        })
+      }
     >
       <Ionicons name="arrow-forward" size={22} color="#fff" />
     </TouchableOpacity>
@@ -3147,9 +3325,14 @@ const categoryData = [
                 key={item.cartId}
                 style={[styles.productCard, styles.suggestedCardHalf]}
                 activeOpacity={0.88}
-                onPress={() => openSubcatProducts(item.name)}
+                onPress={() =>
+                  router.push({
+                    pathname: "/productdetail",
+                    params: { id: item.cartId },
+                  })
+                }
                 accessibilityRole="button"
-                accessibilityLabel={`Suggested: ${item.name}, open products`}
+                accessibilityLabel={`Suggested: ${item.name}, open product`}
               >
                 <View style={styles.productImageWrap}>
                   <Image
@@ -3533,18 +3716,30 @@ const categoryData = [
   <View style={styles.sellerGalleryHeaderCard}>
     <View style={styles.sellerGalleryHeaderRow}>
       <View style={styles.sellerGalleryTitleArea}>
-        <View style={styles.sellerGalleryTitleBadge}>
-          <Feather name="users" size={14} color="#6D28D9" />
-          <Text style={styles.sellerGalleryBadgeLabel}>Vendors</Text>
+        <View
+          style={styles.sellerGalleryTitleBadge}
+          accessible
+          accessibilityRole="text"
+          accessibilityLabel="Featured picks"
+        >
+          <Feather name="package" size={14} color="#6D28D9" />
         </View>
         <Text style={styles.sellerGalleryTitleLine}>
-          <Text style={styles.sellerGalleryTitleItalic}>Store </Text>
-          <Text style={styles.sellerGalleryTitleBold}>Spotlight</Text>
+          <Text style={styles.sellerGalleryTitleItalic}>Featured </Text>
+          <Text style={styles.sellerGalleryTitleBold}>picks</Text>
         </Text>
       </View>
       <TouchableOpacity
         style={styles.sellerGallerySeeAllBtn}
-        onPress={() => router.push("/sellergalleryscreen")}
+        onPress={() =>
+          router.push({
+            pathname: "/subcatProducts",
+            params: {
+              subCategory: STORE_SPOTLIGHT_LIST_TITLE,
+              mainCategoryId: String(STORE_SPOTLIGHT_MAIN_CATEGORY_ID),
+            },
+          } as any)
+        }
         activeOpacity={0.88}
       >
         <Text style={styles.sellerGallerySeeAllText}>View all</Text>
@@ -3554,18 +3749,32 @@ const categoryData = [
   </View>
 
   <View style={styles.sellerGrid}>
-    {sellerGallery.map((item) => (
-      <View key={item.id} style={styles.sellerCard}>
+    {storeSpotlightCards.map((item) => (
+      <TouchableOpacity
+        key={item.id}
+        style={styles.sellerCard}
+        activeOpacity={0.88}
+        onPress={() =>
+          router.push({ pathname: "/productdetail", params: { id: item.id } })
+        }
+        accessibilityRole="button"
+        accessibilityLabel={`Featured picks: ${item.name}, open product`}
+      >
         <View style={styles.imageArea}>
-          <Image source={item.image} style={styles.sellerImage} />
+          <Image source={item.image} style={styles.sellerImage} resizeMode="cover" />
         </View>
 
         <View style={styles.nameBar}>
-          <Text style={styles.businessName} numberOfLines={1}>
+          <Text style={styles.businessName} numberOfLines={2}>
             {item.name}
           </Text>
+          {item.subtitle ? (
+            <Text style={styles.storeSpotlightCardSub} numberOfLines={1}>
+              {item.subtitle}
+            </Text>
+          ) : null}
         </View>
-      </View>
+      </TouchableOpacity>
     ))}
   </View>
 </View>
@@ -4216,6 +4425,44 @@ const categoryData = [
               </TouchableOpacity>
             </View>
 
+            {mainCategories.length > 0 ? (
+              <View style={styles.homeBrowseDeptSection}>
+                <Text style={styles.homeBrowseDeptTitle}>Department (search)</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.homeBrowseDeptChips}
+                >
+                  {mainCategories.map((cat) => {
+                    const selected = selectedBrowseMainCategoryId === cat.id;
+                    return (
+                      <TouchableOpacity
+                        key={`dept-${cat.id}`}
+                        style={[
+                          styles.homeBrowseDeptChip,
+                          selected && styles.homeBrowseDeptChipSelected,
+                        ]}
+                        onPress={() =>
+                          setSelectedBrowseMainCategoryId(selected ? null : cat.id)
+                        }
+                        activeOpacity={0.85}
+                      >
+                        <Text
+                          style={[
+                            styles.homeBrowseDeptChipText,
+                            selected && styles.homeBrowseDeptChipTextSelected,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {cat.title}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+
             <View style={styles.categorySearchBox}>
               <Ionicons
                 name="search-outline"
@@ -4766,6 +5013,73 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     marginTop: 3,
     marginBottom: 0,
+  },
+
+  homeBrowseApplyBtn: {
+    marginHorizontal: 10,
+    marginTop: 6,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  homeBrowseApplyText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    letterSpacing: 0.3,
+  },
+
+  homeBrowseDeptSection: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+
+  homeBrowseDeptTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#57534E",
+    marginBottom: 8,
+    letterSpacing: 0.2,
+  },
+
+  homeBrowseDeptChips: {
+    flexDirection: "row",
+    paddingBottom: 4,
+    paddingRight: 8,
+  },
+
+  homeBrowseDeptChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    borderRadius: 999,
+    backgroundColor: "#F5F5F4",
+    borderWidth: 1,
+    borderColor: "#E7E5E4",
+    maxWidth: 200,
+  },
+
+  homeBrowseDeptChipSelected: {
+    backgroundColor: "#EEF2FF",
+    borderColor: "#6366F1",
+  },
+
+  homeBrowseDeptChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#44403C",
+  },
+
+  homeBrowseDeptChipTextSelected: {
+    color: "#312E81",
   },
 
   homeMediaPanel: {
@@ -7124,23 +7438,15 @@ latestSection: {
   sellerGalleryTitleBadge: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     alignSelf: "flex-start",
-    gap: 6,
     backgroundColor: "#F5F3FF",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     borderRadius: 999,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: "#DDD6FE",
-  },
-
-  sellerGalleryBadgeLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#6D28D9",
-    letterSpacing: 1,
-    textTransform: "uppercase",
   },
 
   sellerGalleryTitleLine: {
@@ -7208,7 +7514,9 @@ latestSection: {
   },
 
   nameBar: {
-    height: 55,
+    minHeight: 55,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     backgroundColor: "#766DCC",
     justifyContent: "center",
     alignItems: "center",
@@ -7218,6 +7526,15 @@ latestSection: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
+    textAlign: "center",
+  },
+
+  storeSpotlightCardSub: {
+    marginTop: 2,
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
   },
 
 // cards
