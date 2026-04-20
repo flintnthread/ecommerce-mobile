@@ -22,7 +22,15 @@ import {
   toggleWishlistProduct,
 } from "../lib/shopStorage";
 import { buildProductGalleryUris } from "../lib/pickProductImageUri";
-import api, { productByIdPath, relatedProductsPath } from "../services/api";
+import api, { productByIdPath, relatedProductsPath, productsByCategoryPath } from "../services/api";
+import {
+  fetchAddresses,
+  setDefaultAddress,
+  deleteAddress,
+  createAddress,
+  type ApiAddress,
+  type CreateAddressPayload,
+} from "../services/addresses";
 
 type CatalogProduct = {
   id: string;
@@ -452,6 +460,49 @@ function mapApiRelatedProductToCatalog(p: any): CatalogProduct {
   };
 }
 
+function mapApiCategoryProductToCatalog(p: any): CatalogProduct {
+  const uris = buildProductGalleryUris(p, (pathOrUrl: string) => {
+    const raw = String(pathOrUrl ?? "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!apiBase) return raw;
+    return `${apiBase}/${raw.replace(/^\/+/, "")}`;
+  });
+
+  const images = Array.isArray(p?.images) 
+    ? p.images.map((img: any) => ({ uri: img.imageUrl || img.imagePath }))
+    : [...DEFAULT_PRODUCT_IMAGES];
+
+  // Extract price information from variants
+  const variants = Array.isArray(p?.variants) ? p.variants : [];
+  const v = variants[0];
+  const selling = Math.round(Number(v?.sellingPrice) || 0);
+  const mrpRaw = Number(v?.mrpPrice) || 0;
+  const mrp = mrpRaw > 0 ? Math.round(mrpRaw) : Math.max(0, selling);
+  const discountPct = Number(v?.discountPercentage);
+  const discount = discountPct && discountPct > 0
+    ? `${discountPct.toFixed(1).replace(/\.0$/, "")}% off`
+    : mrp > selling && mrp > 0
+      ? `${Math.round(((mrp - selling) / mrp) * 100)}% off`
+      : "Deal";
+
+  return {
+    id: String(p.id),
+    name: String(p.name ?? "Product").replace(/\u0019/g, "'").replace(/\u0018/g, "'").trim(),
+    images,
+    price: Math.max(0, selling),
+    mrp: Math.max(Math.max(0, selling), mrp),
+    discount,
+    rating: typeof p.rating === "number" && Number.isFinite(p.rating)
+      ? p.rating.toFixed(1)
+      : "—",
+    ratingCount: typeof p.ratingCount === "number" && Number.isFinite(p.ratingCount)
+      ? String(p.ratingCount)
+      : "New",
+  };
+}
+
 function getCatalogProduct(id?: string | string[] | null): CatalogProduct {
   const raw = Array.isArray(id) ? id[0] : id;
   const pid = typeof raw === "string" ? raw.trim() : "";
@@ -683,6 +734,8 @@ export default function ProductDetail() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
+  const [categoryProducts, setCategoryProducts] = useState<any[]>([]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
 
   const getDetailAssetUriFromApiPath = useCallback((pathOrUrl: string): string => {
     const raw = String(pathOrUrl ?? "").trim();
@@ -751,6 +804,40 @@ export default function ProductDetail() {
     };
   }, [numericProductId]);
 
+  // Fetch category products based on current product's category
+  useEffect(() => {
+    if (!apiDetail || !apiDetail.categoryId) {
+      setCategoryProducts([]);
+      return;
+    }
+    
+    let cancelled = false;
+    setCategoryLoading(true);
+    (async () => {
+      try {
+        const { data } = await api.get(productsByCategoryPath(apiDetail.categoryId));
+        if (cancelled) return;
+        
+        // Handle paginated response with content array
+        if (data && data.content && Array.isArray(data.content)) {
+          setCategoryProducts(data.content);
+        } else if (Array.isArray(data)) {
+          setCategoryProducts(data);
+        } else {
+          setCategoryProducts([]);
+        }
+      } catch {
+        setCategoryProducts([]);
+      } finally {
+        if (!cancelled) setCategoryLoading(false);
+      }
+    })();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [apiDetail]);
+
   const product = useMemo(() => {
     if (apiDetail && typeof apiDetail.id === "number") {
       return mapApiProductDetailToCatalog(apiDetail, getDetailAssetUriFromApiPath);
@@ -771,21 +858,21 @@ export default function ProductDetail() {
   const [isSizeChartVisible, setIsSizeChartVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddressFormVisible, setIsAddressFormVisible] = useState(false);
-  // Saved address (shown in the UI)
-  const [savedAddressLine, setSavedAddressLine] = useState(
-    "Villa 113, Praveens Pride, Road No. 11"
-  );
-  const [savedCity, setSavedCity] = useState("Hyderabad");
-  const [savedPincode, setSavedPincode] = useState("500034");
-  const [savedAddressType, setSavedAddressType] = useState<"Home" | "Office">(
-    "Office"
-  );
-  // Editing fields (used only inside the form)
-  const [addressLine, setAddressLine] = useState(savedAddressLine);
-  const [city, setCity] = useState(savedCity);
-  const [pincode, setPincode] = useState(savedPincode);
-  const [selectedAddressType, setSelectedAddressType] =
-    useState<"Home" | "Office">(savedAddressType);
+  // Delivery addresses state
+  const [savedAddresses, setSavedAddresses] = useState<ApiAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [addressesLoading, setAddressesLoading] = useState(false);
+  
+  // Form state for new address
+  const [newAddressName, setNewAddressName] = useState("");
+  const [newAddressPhone, setNewAddressPhone] = useState("");
+  const [newAddressEmail, setNewAddressEmail] = useState("");
+  const [newAddressLine1, setNewAddressLine1] = useState("");
+  const [newAddressLine2, setNewAddressLine2] = useState("");
+  const [newAddressCity, setNewAddressCity] = useState("");
+  const [newAddressState, setNewAddressState] = useState("");
+  const [newAddressPincode, setNewAddressPincode] = useState("");
+  const [newAddressType, setNewAddressType] = useState<"home" | "work" | "other">("home");
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [reviews, setReviews] = useState<
@@ -860,17 +947,6 @@ export default function ProductDetail() {
     })();
   };
 
-  const currentAddress = `${savedAddressType} - ${savedAddressLine}, ${savedCity} - ${savedPincode}`;
-
-  const handleSaveAddress = () => {
-    // Persist edited values into saved address
-    setSavedAddressLine(addressLine.trim());
-    setSavedCity(city.trim());
-    setSavedPincode(pincode.trim());
-    setSavedAddressType(selectedAddressType);
-    setIsAddressFormVisible(false);
-  };
-
   const handleShare = async () => {
     try {
       await Share.share({
@@ -884,6 +960,107 @@ export default function ProductDetail() {
   const openProductDetail = (id: string) => {
     router.push({ pathname: "/productdetail", params: { id } } as any);
   };
+
+  // Load saved addresses
+  const loadSavedAddresses = useCallback(async () => {
+    try {
+      setAddressesLoading(true);
+      const addresses = await fetchAddresses();
+      setSavedAddresses(addresses);
+      
+      // Set default address if available
+      const defaultAddress = addresses.find(addr => addr.isDefault);
+      if (defaultAddress) {
+        setSelectedAddressId(String(defaultAddress.id));
+      } else if (addresses.length > 0) {
+        setSelectedAddressId(String(addresses[0].id));
+      }
+    } catch (error) {
+      console.error("Failed to load addresses:", error);
+    } finally {
+      setAddressesLoading(false);
+    }
+  }, []);
+
+  // Load addresses on component mount
+  useEffect(() => {
+    loadSavedAddresses();
+  }, [loadSavedAddresses]);
+
+  // Handle address selection
+  const handleSelectAddress = useCallback((addressId: string) => {
+    setSelectedAddressId(addressId);
+  }, []);
+
+  // Handle set default address
+  const handleSetDefaultAddress = useCallback(async (addressId: string) => {
+    try {
+      await setDefaultAddress(Number(addressId));
+      await loadSavedAddresses();
+    } catch (error) {
+      console.error("Failed to set default address:", error);
+    }
+  }, [loadSavedAddresses]);
+
+  // Handle delete address
+  const handleDeleteAddress = useCallback(async (addressId: string) => {
+    try {
+      await deleteAddress(Number(addressId));
+      await loadSavedAddresses();
+    } catch (error) {
+      console.error("Failed to delete address:", error);
+    }
+  }, [loadSavedAddresses]);
+
+  // Handle save new address
+  const handleSaveAddress = useCallback(async () => {
+    if (!newAddressName || !newAddressPhone || !newAddressLine1 || !newAddressCity || !newAddressState || !newAddressPincode) {
+      return;
+    }
+
+    try {
+      const payload: CreateAddressPayload = {
+        name: newAddressName.trim(),
+        email: newAddressEmail.trim(),
+        phone: newAddressPhone.trim().replace(/\D/g, "").slice(0, 10),
+        addressLine1: newAddressLine1.trim(),
+        addressLine2: newAddressLine2.trim(),
+        city: newAddressCity.trim(),
+        state: newAddressState.trim(),
+        country: "India",
+        pincode: newAddressPincode.trim(),
+        addressType: newAddressType,
+        isDefault: savedAddresses.length === 0,
+      };
+
+      await createAddress(payload);
+      await loadSavedAddresses();
+      
+      // Reset form
+      setNewAddressName("");
+      setNewAddressPhone("");
+      setNewAddressEmail("");
+      setNewAddressLine1("");
+      setNewAddressLine2("");
+      setNewAddressCity("");
+      setNewAddressState("");
+      setNewAddressPincode("");
+      setNewAddressType("home");
+      setIsAddressFormVisible(false);
+    } catch (error) {
+      console.error("Failed to save address:", error);
+    }
+  }, [newAddressName, newAddressPhone, newAddressEmail, newAddressLine1, newAddressLine2, newAddressCity, newAddressState, newAddressPincode, newAddressType, savedAddresses.length, loadSavedAddresses]);
+
+  // Get current selected address
+  const currentAddress = useMemo(() => {
+    if (!selectedAddressId) return null;
+    const address = savedAddresses.find(addr => String(addr.id) === selectedAddressId);
+    if (!address) return null;
+    
+    const addressLine = [address.addressLine1, address.addressLine2].filter(Boolean).join(", ");
+    return `${address.name} - ${addressLine}, ${address.city} - ${address.pincode}`;
+  }, [savedAddresses, selectedAddressId]);
 
 
   return (
@@ -1054,21 +1231,83 @@ export default function ProductDetail() {
             <TouchableOpacity
               style={styles.addressChangeButton}
               activeOpacity={0.75}
-              onPress={() => {
-                // Seed editing fields from saved address when opening
-                setAddressLine(savedAddressLine);
-                setCity(savedCity);
-                setPincode(savedPincode);
-                setSelectedAddressType(savedAddressType);
-                setIsAddressFormVisible(true);
-              }}
+              onPress={() => setIsAddressFormVisible(true)}
             >
               <Text style={styles.addressChangeText}>Change</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.addressText} numberOfLines={2}>
-            {currentAddress}
-          </Text>
+          
+          {addressesLoading ? (
+            <View style={styles.addressLoadingContainer}>
+              <ActivityIndicator size="small" color="#ef7b1a" />
+              <Text style={styles.addressLoadingText}>Loading addresses...</Text>
+            </View>
+          ) : savedAddresses.length > 0 ? (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.addressScrollContainer}
+            >
+              {savedAddresses.map((address) => (
+                <TouchableOpacity
+                  key={address.id}
+                  style={[
+                    styles.addressCard,
+                    selectedAddressId === String(address.id) && styles.addressCardSelected
+                  ]}
+                  activeOpacity={0.85}
+                  onPress={() => handleSelectAddress(String(address.id))}
+                >
+                  <View style={styles.addressCardHeader}>
+                    <Text style={styles.addressCardName}>{address.name}</Text>
+                    {address.isDefault && (
+                      <View style={styles.defaultBadge}>
+                        <Text style={styles.defaultBadgeText}>Default</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.addressCardLine} numberOfLines={2}>
+                    {[address.addressLine1, address.addressLine2].filter(Boolean).join(", ")}
+                  </Text>
+                  <Text style={styles.addressCardCity}>
+                    {address.city}, {address.state} - {address.pincode}
+                  </Text>
+                  <View style={styles.addressCardActions}>
+                    {!address.isDefault && (
+                      <TouchableOpacity
+                        style={styles.setDefaultButton}
+                        onPress={() => handleSetDefaultAddress(String(address.id))}
+                      >
+                        <Text style={styles.setDefaultButtonText}>Set Default</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={styles.deleteAddressButton}
+                      onPress={() => handleDeleteAddress(String(address.id))}
+                    >
+                      <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.noAddressContainer}>
+              <Text style={styles.noAddressText}>No saved addresses</Text>
+              <TouchableOpacity
+                style={styles.addFirstAddressButton}
+                onPress={() => setIsAddressFormVisible(true)}
+              >
+                <Text style={styles.addFirstAddressText}>Add Address</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {currentAddress && (
+            <Text style={styles.addressText} numberOfLines={2}>
+              {currentAddress}
+            </Text>
+          )}
           {product.deliveryNote ? (
             <View style={styles.deliveryEtaRow}>
               <Ionicons name="time-outline" size={14} color="#10893E" style={{ marginRight: 6 }} />
@@ -1459,46 +1698,58 @@ export default function ProductDetail() {
           <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
             All products
           </Text>
-          <View style={styles.allProductsGrid}>
-            {ALL_PRODUCTS.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.allProductCard}
-                activeOpacity={0.85}
-                onPress={() => openProductDetail(item.id)}
-              >
-                <View style={styles.allProductImageWrapper}>
-                  <Image source={item.image} style={styles.allProductImage} />
-                </View>
-                <Text style={styles.allProductName} numberOfLines={2}>
-                  {item.name}
-                </Text>
-                <View style={styles.allProductPriceRow}>
-                  <Text style={styles.allProductPrice}>
-                    ₹{item.price.toLocaleString()}
-                  </Text>
-                  <Text style={styles.allProductMrp}>
-                    ₹{item.mrp.toLocaleString()}
-                  </Text>
-                  <Text style={styles.allProductDiscount}>{item.discount}</Text>
-                </View>
-                <View style={styles.allProductRatingRow}>
-                  <View style={styles.allProductRatingBadge}>
-                    <Text style={styles.allProductRatingText}>{item.rating}</Text>
-                    <Ionicons
-                      name="star"
-                      size={9}
-                      color="#FFFFFF"
-                      style={{ marginLeft: 2 }}
-                    />
-                  </View>
-                  <Text style={styles.allProductRatingCount}>
-                    ({item.ratingCount})
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {categoryLoading ? (
+            <View style={styles.relatedLoadingContainer}>
+              <ActivityIndicator size="small" color="#ef7b1a" />
+              <Text style={styles.relatedLoadingText}>Loading products...</Text>
+            </View>
+          ) : categoryProducts.length > 0 ? (
+            <View style={styles.allProductsGrid}>
+              {categoryProducts.map((item) => {
+                const catalogItem = mapApiCategoryProductToCatalog(item);
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.allProductCard}
+                    activeOpacity={0.85}
+                    onPress={() => openProductDetail(item.id)}
+                  >
+                    <View style={styles.allProductImageWrapper}>
+                      <Image source={catalogItem.images[0]} style={styles.allProductImage} />
+                    </View>
+                    <Text style={styles.allProductName} numberOfLines={2}>
+                      {catalogItem.name}
+                    </Text>
+                    <View style={styles.allProductPriceRow}>
+                      <Text style={styles.allProductPrice}>
+                        {catalogItem.price.toLocaleString()}
+                      </Text>
+                      <Text style={styles.allProductMrp}>
+                        {catalogItem.mrp.toLocaleString()}
+                      </Text>
+                      <Text style={styles.allProductDiscount}>{catalogItem.discount}</Text>
+                    </View>
+                    <View style={styles.allProductRatingRow}>
+                      <View style={styles.allProductRatingBadge}>
+                        <Text style={styles.allProductRatingText}>{catalogItem.rating}</Text>
+                        <Ionicons
+                          name="star"
+                          size={9}
+                          color="#FFFFFF"
+                          style={{ marginLeft: 2 }}
+                        />
+                      </View>
+                      <Text style={styles.allProductRatingCount}>
+                        ({catalogItem.ratingCount})
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.noRelatedText}>No products found</Text>
+          )}
         </View>
       </ScrollView>
 
@@ -1574,48 +1825,82 @@ export default function ProductDetail() {
       {/* ADDRESS FORM MODAL (bottom sheet with extra top gap) */}
       {isAddressFormVisible && (
         <View style={styles.sizeChartOverlay}>
-          <ScrollView
-            contentContainerStyle={{ paddingBottom: 24 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={[styles.sizeChartModal, styles.addressModalExtra]}>
-              <View style={styles.sizeChartHeaderRow}>
-                <Text style={styles.sizeChartTitle}>Change address</Text>
-                <TouchableOpacity onPress={() => setIsAddressFormVisible(false)}>
-                  <Ionicons name="close" size={22} color="#333333" />
-                </TouchableOpacity>
-              </View>
+          <View style={styles.sizeChartModal}>
+            <View style={styles.sizeChartHeaderRow}>
+              <Text style={styles.sizeChartTitle}>Add Delivery Address</Text>
+              <TouchableOpacity onPress={() => setIsAddressFormVisible(false)}>
+                <Ionicons name="close" size={22} color="#333333" />
+              </TouchableOpacity>
+            </View>
 
+            <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={styles.sizeChartSubTitle}>
-                Update the address where you want this product to be delivered.
+                Enter your delivery address details
               </Text>
 
               <TextInput
-                placeholder="House / Flat / Building"
+                placeholder="Full Name"
                 placeholderTextColor="#999999"
-                value={addressLine}
-                onChangeText={setAddressLine}
+                value={newAddressName}
+                onChangeText={setNewAddressName}
+                style={styles.addressInput}
+              />
+              <TextInput
+                placeholder="Phone Number"
+                placeholderTextColor="#999999"
+                value={newAddressPhone}
+                onChangeText={setNewAddressPhone}
+                keyboardType="phone-pad"
+                style={styles.addressInput}
+              />
+              <TextInput
+                placeholder="Email Address (Optional)"
+                placeholderTextColor="#999999"
+                value={newAddressEmail}
+                onChangeText={setNewAddressEmail}
+                keyboardType="email-address"
+                style={styles.addressInput}
+              />
+              <TextInput
+                placeholder="Address Line 1"
+                placeholderTextColor="#999999"
+                value={newAddressLine1}
+                onChangeText={setNewAddressLine1}
+                style={styles.addressInput}
+              />
+              <TextInput
+                placeholder="Address Line 2 (Optional)"
+                placeholderTextColor="#999999"
+                value={newAddressLine2}
+                onChangeText={setNewAddressLine2}
                 style={styles.addressInput}
               />
               <TextInput
                 placeholder="City"
                 placeholderTextColor="#999999"
-                value={city}
-                onChangeText={setCity}
+                value={newAddressCity}
+                onChangeText={setNewAddressCity}
+                style={styles.addressInput}
+              />
+              <TextInput
+                placeholder="State"
+                placeholderTextColor="#999999"
+                value={newAddressState}
+                onChangeText={setNewAddressState}
                 style={styles.addressInput}
               />
               <TextInput
                 placeholder="Pincode"
                 placeholderTextColor="#999999"
-                value={pincode}
-                onChangeText={setPincode}
+                value={newAddressPincode}
+                onChangeText={setNewAddressPincode}
                 keyboardType="number-pad"
                 style={styles.addressInput}
               />
 
               <View style={styles.addressTypeRow}>
-                {(["Home", "Office"] as const).map((type) => {
-                  const isActive = selectedAddressType === type;
+                {(["home", "work", "other"] as const).map((type) => {
+                  const isActive = newAddressType === type;
                   return (
                     <TouchableOpacity
                       key={type}
@@ -1623,7 +1908,7 @@ export default function ProductDetail() {
                         styles.addressTypeChip,
                         isActive && styles.addressTypeChipActive,
                       ]}
-                      onPress={() => setSelectedAddressType(type)}
+                      onPress={() => setNewAddressType(type)}
                     >
                       <Text
                         style={[
@@ -1631,7 +1916,7 @@ export default function ProductDetail() {
                           isActive && styles.addressTypeChipTextActive,
                         ]}
                       >
-                        {type}
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -1643,10 +1928,10 @@ export default function ProductDetail() {
                 activeOpacity={0.85}
                 onPress={handleSaveAddress}
               >
-                <Text style={styles.addressSaveButtonText}>Save address</Text>
+                <Text style={styles.addressSaveButtonText}>Save Address</Text>
               </TouchableOpacity>
-            </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         </View>
       )}
 
@@ -2561,6 +2846,114 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#555555",
     marginTop: 12,
+  },
+  // Address styles
+  addressLoadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    justifyContent: "center",
+  },
+  addressLoadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#666666",
+  },
+  addressScrollContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  addressCard: {
+    width: 200,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    padding: 12,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addressCardSelected: {
+    borderColor: "#ef7b1a",
+    backgroundColor: "#FFF7F0",
+  },
+  addressCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  addressCardName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1d324e",
+    flex: 1,
+  },
+  defaultBadge: {
+    backgroundColor: "#10893E",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  addressCardLine: {
+    fontSize: 12,
+    color: "#666666",
+    marginBottom: 4,
+    lineHeight: 16,
+  },
+  addressCardCity: {
+    fontSize: 12,
+    color: "#666666",
+    fontWeight: "500",
+  },
+  addressCardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  setDefaultButton: {
+    backgroundColor: "#F0F9FF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  setDefaultButtonText: {
+    fontSize: 10,
+    color: "#0066CC",
+    fontWeight: "600",
+  },
+  deleteAddressButton: {
+    padding: 4,
+  },
+  noAddressContainer: {
+    alignItems: "center",
+    paddingVertical: 24,
+  },
+  noAddressText: {
+    fontSize: 14,
+    color: "#666666",
+    marginBottom: 16,
+  },
+  addFirstAddressButton: {
+    backgroundColor: "#ef7b1a",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  addFirstAddressText: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
 });
 
