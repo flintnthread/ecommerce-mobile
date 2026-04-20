@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api from "../services/api";
+import api, {
+  mapSearchResultsToUi,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 const { width } = Dimensions.get("window");
@@ -198,6 +202,9 @@ export default function FootwearScreen() {
   const activeBannerRef = useRef<GenderCategoryId | null>(null);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const MENU_BAR_HEIGHT = 86;
   const [headerHeight, setHeaderHeight] = useState(96);
   type TopMenuKey = "footwear" | "womens-footwear" | "mens-footwear" | "kids-footwear" | "trendnow";
@@ -250,6 +257,41 @@ export default function FootwearScreen() {
       .toLowerCase();
 
   const safeText = (value: string): string => value.replace(/\u0019/g, "'").trim();
+
+  // Search functionality
+  const handleSearch = useCallback(async (searchQuery: string) => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      const mappedResults = mapSearchResultsToUi(data).slice(0, 10);
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query.trim()) {
+        handleSearch(query);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [query, handleSearch]);
 
   const getMobileImageUriFromApi = (item: any): string => {
     const candidate =
@@ -721,6 +763,11 @@ export default function FootwearScreen() {
             placeholderTextColor="#8D97AA"
             value={query}
             onChangeText={setQuery}
+            onSubmitEditing={() => {
+              if (query.trim()) {
+                router.push({ pathname: "/searchresults", params: { q: query } });
+              }
+            }}
           />
           <Ionicons name="camera-outline" size={18} color="#72809A" />
         </View>

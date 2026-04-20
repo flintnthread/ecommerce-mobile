@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CONTENT_PAD = 20;
@@ -74,7 +75,54 @@ export default function BeautyPersonalCareScreen() {
   const pulseScale = useRef(new Animated.Value(1)).current;
   const [headerElevated, setHeaderElevated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [headerTotalHeight, setHeaderTotalHeight] = useState(headerPadTop + 72);
+
+  // Search functionality
+  const handleSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      // Map API response to simple format for beauty
+      const mappedResults = Array.isArray(data) ? data.slice(0, 10).map((item: any) => ({
+        id: String(item.id),
+        name: item.name || item.productName || item.title || `Product ${item.id}`,
+        imageUri: item.images?.[0]?.imagePath || "",
+        sellingPrice: item.sellingPrice || item.price || 0,
+        mrpPrice: item.mrpPrice || item.maxRetailPrice || 0,
+        discountPercentage: item.discountPercentage || 0,
+        rating: item.rating || 0,
+      })) : [];
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, handleSearch]);
   const mainScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -170,6 +218,11 @@ export default function BeautyPersonalCareScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
               returnKeyType="search"
+              onSubmitEditing={() => {
+                if (searchQuery.trim()) {
+                  router.push({ pathname: "/searchresults", params: { q: searchQuery } });
+                }
+              }}
             />
           </View>
 

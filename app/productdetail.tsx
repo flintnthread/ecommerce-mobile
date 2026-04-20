@@ -975,8 +975,13 @@ export default function ProductDetail() {
       } else if (addresses.length > 0) {
         setSelectedAddressId(String(addresses[0].id));
       }
-    } catch (error) {
-      console.error("Failed to load addresses:", error);
+    } catch (error: any) {
+      // Some environments may not expose `/api/addresses`; keep UI stable.
+      const status = Number(error?.response?.status ?? 0);
+      if (status === 404) {
+        setSavedAddresses([]);
+        setSelectedAddressId("");
+      }
     } finally {
       setAddressesLoading(false);
     }

@@ -26,7 +26,7 @@ import * as IntentLauncher from "expo-intent-launcher";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api from "../services/api";
+import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 import {
   addProductToCart,
   getWishlistIds,
@@ -1070,6 +1070,17 @@ export default function Home() {
  const [activeIndex, setActiveIndex] = useState(0);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const openSearchResults = useCallback(
+    (rawQuery?: string) => {
+      const q = String(rawQuery ?? "").trim();
+      if (q) {
+        router.push({ pathname: "/searchresults", params: { q } });
+        return;
+      }
+      router.push({ pathname: "/searchresults" });
+    },
+    [router]
+  );
   const openSubcatProducts = useCallback(
     (subCategory: string) => {
       router.push({ pathname: "/subcatProducts", params: { subCategory } } as any);
@@ -1282,7 +1293,10 @@ export default function Home() {
         if (Array.isArray(raw) && raw.length > 0) {
           const spoken = String(raw[0]).trim();
           if (spoken) {
+
             router.push({ pathname: "/searchresults", params: { q: spoken } });
+            openSearchResults(spoken);
+
           }
           return;
         }
@@ -2596,7 +2610,7 @@ const categoryData = [
                 <Ionicons name="search-outline" size={18} color="#64748B" />
                 <Pressable
                   style={{ flex: 1, minWidth: 0 }}
-                  onPress={() => router.push({ pathname: "/searchresults" })}
+                  onPress={() => openSearchResults()}
                   accessibilityRole="button"
                   accessibilityLabel="Search products"
                 >

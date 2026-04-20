@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
-import api from "../services/api";
+import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
@@ -177,10 +177,57 @@ export default function Sweets() {
   type CategoryKey = "dry" | "milk";
   const [active, setActive] = useState<CategoryKey>("dry");
   const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [drySubcategories, setDrySubcategories] =
     useState<SweetsSubItem[]>(DRY_SUBS_FALLBACK);
   const [milkSubcategories, setMilkSubcategories] =
     useState<SweetsSubItem[]>(MILK_SUBS_FALLBACK);
+
+  // Search functionality
+  const handleSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      // Map API response to simple format for sweets
+      const mappedResults = Array.isArray(data) ? data.slice(0, 10).map((item: any) => ({
+        id: String(item.id),
+        name: item.name || item.productName || item.title || `Product ${item.id}`,
+        imageUri: item.images?.[0]?.imagePath || "",
+        sellingPrice: item.sellingPrice || item.price || 0,
+        mrpPrice: item.mrpPrice || item.maxRetailPrice || 0,
+        discountPercentage: item.discountPercentage || 0,
+        rating: item.rating || 0,
+      })) : [];
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query.trim()) {
+        handleSearch(query);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [query, handleSearch]);
   const [categoryIconUrls, setCategoryIconUrls] = useState<
     Partial<Record<CategoryKey, string>>
   >({});
@@ -619,6 +666,11 @@ export default function Sweets() {
             placeholderTextColor="#8D97AA"
             value={query}
             onChangeText={setQuery}
+            onSubmitEditing={() => {
+              if (query.trim()) {
+                router.push({ pathname: "/searchresults", params: { q: query } });
+              }
+            }}
           />
           <Ionicons name="camera-outline" size={18} color="#72809A" />
         </View>

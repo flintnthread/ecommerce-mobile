@@ -27,6 +27,7 @@ import {
   getWishlistIds,
   toggleWishlistProduct,
 } from "../lib/shopStorage";
+import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const SIDE_PAD = 12;
@@ -426,6 +427,9 @@ export default function Products() {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedSort, setSelectedSort] = useState("Relevance");
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -458,6 +462,53 @@ export default function Products() {
     }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  // Search functionality
+  const handleSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      // Map API response to Product type (simplified for demo)
+      const mappedProducts: Product[] = Array.isArray(data) ? data.slice(0, 10).map((item: any) => ({
+        id: String(item.id),
+        name: item.name || item.productName || item.title || `Product ${item.id}`,
+        price: item.sellingPrice || item.price || 0,
+        mrp: item.mrpPrice || item.maxRetailPrice || item.sellingPrice || item.price || 0,
+        image: item.images?.[0]?.imagePath ? { uri: item.images[0].imagePath } : require("../assets/images/product1.png"),
+        rating: 4.0,
+        homeCategoryTags: [],
+        genderTag: "Women" as GenderTag,
+        colorTag: "",
+        sizeTag: "",
+      })) : [];
+      setSearchResults(mappedProducts);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, handleSearch]);
 
   const launchGoogleVoiceInput = async () => {
     if (Platform.OS !== "android") {
@@ -604,6 +655,8 @@ export default function Products() {
     const s = searchQuery.trim().toLowerCase();
     let list = !s
       ? [...demoProducts]
+      : showSearchResults
+      ? [...searchResults]
       : demoProducts.filter((p) => p.name.toLowerCase().includes(s));
 
     const categoryPick = new Set([
@@ -697,8 +750,10 @@ export default function Products() {
             placeholder={placeholderTexts[placeholderIndex]}
             placeholderTextColor="#94A3B8"
             style={styles.searchInput}
-            onFocus={() => {
-              router.push("/search");
+            onSubmitEditing={() => {
+              if (searchQuery.trim()) {
+                router.push({ pathname: "/searchresults", params: { q: searchQuery } });
+              }
             }}
           />
           <TouchableOpacity onPress={openCamera} style={styles.searchBarIconBtn}>

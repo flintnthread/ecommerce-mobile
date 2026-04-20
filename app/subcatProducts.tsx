@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import api from "../services/api";
+import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 /** Top Picks for You API endpoint - same as home.tsx */
@@ -1564,6 +1564,11 @@ const handleBannerScroll = (event: any) => {
               placeholderTextColor="#69798c"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onSubmitEditing={() => {
+                if (searchQuery.trim()) {
+                  router.push({ pathname: "/searchresults", params: { q: searchQuery } });
+                }
+              }}
               style={styles.searchInputHeader}
               autoFocus
             />
