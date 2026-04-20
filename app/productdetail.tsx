@@ -25,6 +25,12 @@ import {
   toggleWishlistProduct,
 } from "../lib/shopStorage";
 import { normalizeWishlistApiRows } from "../lib/wishlistApi";
+import {
+  getCartUnitCount,
+  parseCartApiError,
+  postCartAdd,
+  serverCartContainsVariant,
+} from "../lib/cartServerApi";
 import { parseWishlistApiError, postWishlistAdd } from "../lib/wishlistServerApi";
 import { buildProductGalleryUris } from "../lib/pickProductImageUri";
 import api, {
@@ -949,11 +955,36 @@ export default function ProductDetail() {
   const sizeChoices = product.sizeOptions?.length ? product.sizeOptions : AVAILABLE_SIZES;
 
   const refreshCartAndWishlistState = useCallback(async () => {
-    const [cart, wishlist] = await Promise.all([loadCart(), loadWishlist()]);
-    setCartCount(cart.reduce((sum, l) => sum + (l.quantity ?? 0), 0));
-    setHasAddedToCart(cart.some((l) => l.id === product.id));
+    setCartCount(await getCartUnitCount());
 
     const token = (await AsyncStorage.getItem("token"))?.trim();
+
+    if (
+      token &&
+      numericProductId != null &&
+      apiDetail &&
+      typeof apiDetail.id === "number"
+    ) {
+      const vrow = findVariantRowForWishlist(
+        apiDetail,
+        selectedSize,
+        selectedColor
+      );
+      const vid = vrow?.id ?? null;
+      if (vid != null && vid > 0) {
+        setHasAddedToCart(
+          await serverCartContainsVariant(numericProductId, vid)
+        );
+      } else {
+        setHasAddedToCart(false);
+      }
+    } else {
+      const cart = await loadCart();
+      setHasAddedToCart(cart.some((l) => l.id === product.id));
+    }
+
+    const wishlist = await loadWishlist();
+
     if (
       token &&
       numericProductId != null &&
@@ -1023,6 +1054,39 @@ export default function ProductDetail() {
   const handleAddToBag = () => {
     if (hasAddedToCart) return;
     void (async () => {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (
+        token &&
+        numericProductId != null &&
+        apiDetail &&
+        typeof apiDetail.id === "number"
+      ) {
+        const vrow = findVariantRowForWishlist(
+          apiDetail,
+          selectedSize,
+          selectedColor
+        );
+        const vid = vrow?.id;
+        if (!vid || vid <= 0) {
+          Alert.alert(
+            "Select size",
+            "Please choose a size (and color if shown) before adding to your bag."
+          );
+          return;
+        }
+        try {
+          await postCartAdd(numericProductId, vid, 1);
+          await refreshCartAndWishlistState();
+          setHasAddedToCart(true);
+          Alert.alert("Added to cart", product.name);
+        } catch (e: unknown) {
+          Alert.alert(
+            "Cart",
+            parseCartApiError(e, "Could not add to cart. Please try again.")
+          );
+        }
+        return;
+      }
       await addProductToCart({
         id: product.id,
         name: product.name,
@@ -1031,6 +1095,7 @@ export default function ProductDetail() {
       });
       await refreshCartAndWishlistState();
       setHasAddedToCart(true);
+      Alert.alert("Added to cart", product.name);
     })();
   };
 

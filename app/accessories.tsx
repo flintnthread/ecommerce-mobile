@@ -33,7 +33,8 @@ import api, {
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useLanguage } from "@/lib/language";
 import { pickPtbVariantPricing } from "../lib/mainCategoryPtbHelpers";
-import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
+import { getWishlistIds } from "../lib/shopStorage";
 import {
   categoryPtbRowWishlisted,
   fetchWishlistServerKeySet,
@@ -1268,9 +1269,7 @@ export default function Accessories() {
   }, []);
 
   const reloadCartCount = useCallback(async () => {
-    const cart = await loadCart();
-    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
-    setCartCount(count);
+    setCartCount(await getCartUnitCount());
   }, []);
 
   useEffect(() => {
@@ -1355,19 +1354,35 @@ export default function Accessories() {
   );
 
   const handleAddToCartForUniquePick = useCallback(
-    async (product: { id: string; name: string; sellingPrice: number | null; mrpPrice: number | null }) => {
+    async (product: {
+      id: string;
+      name: string;
+      sellingPrice: number | null;
+      mrpPrice: number | null;
+      variantId?: number;
+    }) => {
       const selling = product.sellingPrice != null && Number.isFinite(product.sellingPrice)
         ? Number(product.sellingPrice)
         : 0;
       const mrp = product.mrpPrice != null && Number.isFinite(product.mrpPrice)
         ? Number(product.mrpPrice)
         : selling;
-      await addProductToCart({
-        id: product.id,
-        name: product.name,
-        price: selling,
-        mrp,
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.name,
+          price: selling,
+          mrp,
+        },
       });
+      if (!r.ok) {
+        Alert.alert("Cart", r.message);
+        return;
+      }
       await reloadCartCount();
       Alert.alert("Added to cart", product.name);
     },

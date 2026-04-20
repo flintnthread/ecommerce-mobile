@@ -118,6 +118,22 @@ export const WISHLIST_USER_PATH = "/api/wishlist/user";
 /** DELETE with query params `productId`, `variantId`. */
 export const WISHLIST_REMOVE_PATH = "/api/wishlist/remove";
 
+/** GET current user's cart (JWT). */
+export const CART_PATH = "/api/cart";
+
+/** POST add line — body `{ productId, variantId, quantity }`. */
+export const CART_ADD_PATH = "/api/cart/add";
+
+/** DELETE clear entire cart. */
+export const CART_CLEAR_PATH = "/api/cart/clear";
+
+/** PUT update quantity by signed delta — `/api/cart/item/{itemId}?quantity=±n`. */
+export function cartItemPath(itemId: number): string {
+  const id = Math.floor(Number(itemId));
+  if (!Number.isFinite(id) || id <= 0) return "/api/cart/item/0";
+  return `/api/cart/item/${id}`;
+}
+
 export type WishlistAddPayload = {
   userId?: number;
   productId: number;

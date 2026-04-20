@@ -32,9 +32,9 @@ import api, {
   searchProductsPath,
   searchSuggestionsPath,
 } from "../services/api";
+import { addToCartPtbOrLocal } from "../lib/cartServerApi";
 import { parseWishlistApiError, postWishlistAdd } from "../lib/wishlistServerApi";
 import {
-  addProductToCart,
   addWishlistProductIfAbsent,
   getWishlistIds,
   loadWishlist,
@@ -278,6 +278,8 @@ type SuggestedForYouGridItem = {
   rating: string;
   priceNum: number;
   mrpNum: number;
+  /** API variant id for POST `/api/cart/add` when signed in. */
+  variantId?: number;
 };
 
 const SUGGESTED_FOR_YOU_FALLBACK: SuggestedForYouGridItem[] = [
@@ -444,6 +446,12 @@ function subcategoryApiProductToSuggestedForYouItem(
     Number.isFinite(sale) && sale > 0 ? Math.round(sale) : Math.round(mrp);
   const mrpNum = mrp > priceNum ? Math.round(mrp) : priceNum;
 
+  const rawVid = v?.id ?? v?.variantId;
+  const vidNum =
+    typeof rawVid === "string" ? Number.parseInt(rawVid, 10) : Number(rawVid);
+  const variantId =
+    Number.isFinite(vidNum) && vidNum > 0 ? Math.floor(vidNum) : undefined;
+
   return {
     cartId: String(productId),
     name,
@@ -453,6 +461,7 @@ function subcategoryApiProductToSuggestedForYouItem(
     rating: "4.5",
     priceNum: priceNum || mrpNum,
     mrpNum,
+    ...(variantId != null ? { variantId } : {}),
   };
 }
 
@@ -3397,12 +3406,22 @@ const categoryData = [
                     style={styles.addCartButton}
                     onPress={() => {
                       void (async () => {
-                        await addProductToCart({
-                          id: item.cartId,
-                          name: item.name,
-                          price: item.priceNum,
-                          mrp: item.mrpNum,
+                        const pid = Math.floor(Number(item.cartId));
+                        const r = await addToCartPtbOrLocal({
+                          productId: pid,
+                          variantId: item.variantId,
+                          quantity: 1,
+                          localLine: {
+                            id: item.cartId,
+                            name: item.name,
+                            price: item.priceNum,
+                            mrp: item.mrpNum,
+                          },
                         });
+                        if (r.ok === false) {
+                          Alert.alert("Cart", r.message);
+                          return;
+                        }
                         Alert.alert(
                           "Added to cart",
                           `${item.name} is in your cart.`

@@ -34,6 +34,7 @@ import {
   numLike,
   type ApiWishlistRow,
 } from "../lib/wishlistApi";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 /** Top Picks for You API endpoint - same as home.tsx */
@@ -629,7 +630,7 @@ export default function SubcategoriesScreen() {
   >({});
   const [bannerIndex, setBannerIndex] = useState(0);
   const bannerScrollRef = useRef<ScrollView | null>(null);
-  const [cartItems, setCartItems] = useState<string[]>([]);
+  const [cartBadgeCount, setCartBadgeCount] = useState(0);
   /** Local-only wishlist ids when not signed in, or non-API catalog rows. */
   const [wishlistItems, setWishlistItems] = useState<string[]>([]);
   /** Signed-in user wishlist from GET `/api/wishlist/user`. */
@@ -1631,10 +1632,15 @@ const wishlistedProducts = React.useMemo(() => {
     }
   }, []);
 
+  const reloadCartBadge = useCallback(async () => {
+    setCartBadgeCount(await getCartUnitCount());
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void loadWishlistFromApi();
-    }, [loadWishlistFromApi])
+      void reloadCartBadge();
+    }, [loadWishlistFromApi, reloadCartBadge])
   );
 
   const isProductInWishlist = useCallback(
@@ -1792,11 +1798,27 @@ const handleBannerScroll = (event: any) => {
     setExpandedCategory(null);
   }, [selectedSubCategory]);
 
-  const addToCart = (productId: string) => {
-    // Only add if not already in cart (no remove)
-    setCartItems((prev) =>
-      prev.includes(productId) ? prev : [...prev, productId]
-    );
+  const addToCart = (product: ProductItem) => {
+    void (async () => {
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.title,
+          price: product.price,
+          mrp: product.mrp,
+        },
+      });
+      if (r.ok === false) {
+        Alert.alert("Cart", r.message);
+        return;
+      }
+      setCartBadgeCount(await getCartUnitCount());
+      Alert.alert("Added to cart", product.title);
+    })();
   };
 
   const openSimilarProducts = (currentProduct: ProductItem) => {
@@ -1889,7 +1911,7 @@ const handleBannerScroll = (event: any) => {
         <View style={styles.productActionsRow}>
           <TouchableOpacity
             style={styles.addToCartButton}
-            onPress={() => addToCart(product.id)}
+            onPress={() => addToCart(product)}
           >
             <Ionicons
               name="cart-outline"
@@ -2010,9 +2032,11 @@ const handleBannerScroll = (event: any) => {
           </TouchableOpacity>
           <View style={styles.headerIconWrapper}>
             <Ionicons name="bag-outline" size={20} color="#1d324e" />
-            {cartItems.length > 0 && (
+            {cartBadgeCount > 0 && (
               <View style={styles.headerBadge}>
-                <Text style={styles.headerBadgeText}>{cartItems.length}</Text>
+                <Text style={styles.headerBadgeText}>
+                  {cartBadgeCount > 99 ? "99+" : String(cartBadgeCount)}
+                </Text>
               </View>
             )}
           </View>

@@ -19,8 +19,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import api, { WISHLIST_REMOVE_PATH, WISHLIST_USER_PATH } from "../services/api";
 import {
+  getCartUnitCount,
+  parseCartApiError,
+  postCartAdd,
+} from "../lib/cartServerApi";
+import {
   addProductToCart,
-  loadCart,
   loadWishlist,
   removeWishlistLine,
   resolveProductImage,
@@ -193,9 +197,7 @@ export default function WishlistScreen() {
   }, []);
 
   const reloadCartCount = useCallback(async () => {
-    const lines = await loadCart();
-    const count = lines.reduce((sum, l) => sum + (l.quantity || 0), 0);
-    setCartCount(count);
+    setCartCount(await getCartUnitCount());
   }, []);
 
   const loadWishlistScreen = useCallback(async () => {
@@ -266,12 +268,30 @@ export default function WishlistScreen() {
         item.serverBacked && item.productId > 0
           ? String(item.productId)
           : item.id;
-      const cart = await addProductToCart({
-        id: cartProductId,
-        name: item.name,
-        price: item.price,
-        mrp: item.originalPrice ?? item.price,
-      });
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (
+        token &&
+        item.serverBacked &&
+        item.productId > 0 &&
+        item.variantId > 0
+      ) {
+        try {
+          await postCartAdd(item.productId, item.variantId, 1);
+        } catch (e: unknown) {
+          Alert.alert(
+            "Cart",
+            parseCartApiError(e, "Could not add to cart. Please try again.")
+          );
+          return;
+        }
+      } else {
+        await addProductToCart({
+          id: cartProductId,
+          name: item.name,
+          price: item.price,
+          mrp: item.originalPrice ?? item.price,
+        });
+      }
       if (item.serverBacked && item.productId > 0 && item.variantId > 0) {
         try {
           await api.delete(WISHLIST_REMOVE_PATH, {
@@ -281,13 +301,12 @@ export default function WishlistScreen() {
             },
           });
         } catch {
-          /* cart already updated; wishlist refresh on next focus */
+          /* wishlist refresh on next focus */
         }
       }
       await removeWishlistLine(cartProductId);
       setWishlistItems((prev) => prev.filter((x) => x.id !== item.id));
-      const count = cart.reduce((sum, l) => sum + (l.quantity || 0), 0);
-      setCartCount(count);
+      setCartCount(await getCartUnitCount());
     })();
   };
 
