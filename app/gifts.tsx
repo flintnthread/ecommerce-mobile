@@ -29,7 +29,8 @@ import {
   pickPtbVariantPricing,
   safePtbText,
 } from "../lib/mainCategoryPtbHelpers";
-import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
+import { getWishlistIds } from "../lib/shopStorage";
 import {
   categoryPtbRowWishlisted,
   fetchWishlistServerKeySet,
@@ -1206,8 +1207,7 @@ export default function GiftsScreen() {
   }, []);
 
   const reloadGiftsCartCount = React.useCallback(async () => {
-    const cart = await loadCart();
-    setGiftsCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+    setGiftsCartCount(await getCartUnitCount());
   }, []);
 
   React.useEffect(() => {
@@ -1317,14 +1317,30 @@ export default function GiftsScreen() {
   );
 
   const handleAddGiftsPtbCart = React.useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const cart = await addProductToCart({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.name,
+          price: product.sellingNum,
+          mrp: product.mrpNum,
+        },
       });
-      setGiftsCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+      if (!r.ok) {
+        Alert.alert("Cart", r.message);
+        return;
+      }
+      setGiftsCartCount(await getCartUnitCount());
       Alert.alert("Added to cart", product.name);
     },
     []
@@ -3031,6 +3047,7 @@ export default function GiftsScreen() {
                                   name: product.name,
                                   sellingNum: product.sellingNum,
                                   mrpNum: product.mrpNum,
+                                  variantId: product.variantId,
                                 })
                               }
                               accessibilityRole="button"

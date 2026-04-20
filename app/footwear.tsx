@@ -26,7 +26,8 @@ import api, {
   subcategoriesByCategoryPath,
 } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
-import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
+import { getWishlistIds } from "../lib/shopStorage";
 import {
   categoryPtbRowWishlisted,
   fetchWishlistServerKeySet,
@@ -420,9 +421,7 @@ export default function FootwearScreen() {
   }, []);
 
   const reloadCartCount = useCallback(async () => {
-    const cart = await loadCart();
-    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
-    setCartCount(count);
+    setCartCount(await getCartUnitCount());
   }, []);
 
   useEffect(() => {
@@ -462,15 +461,30 @@ export default function FootwearScreen() {
   );
 
   const handleAddToCart = useCallback(
-    async (product: { id: string; name: string; sellingPriceNum: number; mrpPriceNum: number }) => {
-      const cart = await addProductToCart({
-        id: product.id,
-        name: product.name,
-        price: product.sellingPriceNum,
-        mrp: product.mrpPriceNum,
+    async (product: {
+      id: string;
+      name: string;
+      sellingPriceNum: number;
+      mrpPriceNum: number;
+      variantId?: number;
+    }) => {
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.name,
+          price: product.sellingPriceNum,
+          mrp: product.mrpPriceNum,
+        },
       });
-      const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
-      setCartCount(count);
+      if (!r.ok) {
+        Alert.alert("Cart", r.message);
+        return;
+      }
+      setCartCount(await getCartUnitCount());
       Alert.alert("Added to cart", product.name);
     },
     []
