@@ -26,7 +26,12 @@ import Svg, {
   Polygon,
 } from "react-native-svg";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api, { productsBySubcategoryPath } from "../services/api";
+import api, {
+  mapSearchResultsToUi,
+  productsBySubcategoryPath,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
@@ -929,6 +934,45 @@ export default function MenScreen() {
   /** +1 = scroll toward next tile (LTR feel), -1 = toward previous. Ping‑pongs at ends. */
   const shopAllScrollDirRef = useRef(1);
   const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  // Search functionality
+  const handleSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      const mappedResults = mapSearchResultsToUi(data).slice(0, 10);
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, handleSearch]);
 
   const MEN_PARENT_ID = 51;
   const [menApiCats, setMenApiCats] = useState<MenSubcategoryApiRow[]>([]);
@@ -1625,7 +1669,7 @@ export default function MenScreen() {
           <View style={styles.menSearchPill}>
             <TouchableOpacity
               style={styles.menSearchMain}
-              onPress={() => router.push("/search")}
+              onPress={() => router.push("/searchresults")}
               activeOpacity={0.88}
               accessibilityRole="button"
               accessibilityLabel="Search"

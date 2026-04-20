@@ -19,7 +19,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api from "../services/api";
+import api, {
+  mapSearchResultsToUi,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
 import { useLanguage } from "@/lib/language";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
@@ -826,6 +830,46 @@ export default function IndoorPlayScreen() {
   const [mainCategoryCards, setMainCategoryCards] = useState<MainCategoryShowcaseItem[]>(MAIN_CATEGORY_SHOWCASE);
   const [educationalMosaicCards, setEducationalMosaicCards] =
     useState<EducationalMosaicItem[]>(EDUCATIONAL_MOSAIC_FALLBACK);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  // Search functionality
+  const handleSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      const mappedResults = mapSearchResultsToUi(data).slice(0, 10);
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, handleSearch]);
+
   const [indoorLacingSpotlight, setIndoorLacingSpotlight] = useState<IndoorLacingThreadingSpotlightRow[]>(
     []
   );
@@ -1367,8 +1411,13 @@ export default function IndoorPlayScreen() {
                 placeholder={tr("Search..")}
                 placeholderTextColor="#b0b5ba"
                 style={styles.searchInput}
-                editable={false}
-                pointerEvents="none"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={() => {
+                  if (searchQuery.trim()) {
+                    router.push({ pathname: "/searchresults", params: { q: searchQuery } });
+                  }
+                }}
               />
             </TouchableOpacity>
             <TouchableOpacity

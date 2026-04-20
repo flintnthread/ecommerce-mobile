@@ -26,7 +26,11 @@ import Svg, {
   Polygon,
 } from "react-native-svg";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api from "../services/api";
+import api, {
+  mapSearchResultsToUi,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -698,6 +702,45 @@ export default function WomenScreen() {
   const shopAllScrollIndexRef = useRef(0);
   const shopAllScrollDirRef = useRef(1);
   const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  // Search functionality
+  const handleSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      const mappedResults = mapSearchResultsToUi(data).slice(0, 10);
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, handleSearch]);
 
   const WOMEN_PARENT_ID = 61;
   const [womenApiCats, setWomenApiCats] = useState<WomenSubcategoryApiRow[]>([]);
@@ -1441,7 +1484,7 @@ export default function WomenScreen() {
           <View style={styles.womenSearchPill}>
             <TouchableOpacity
               style={styles.womenSearchMain}
-              onPress={() => router.push("/search")}
+              onPress={() => router.push("/searchresults")}
               activeOpacity={0.88}
               accessibilityRole="button"
               accessibilityLabel="Search"

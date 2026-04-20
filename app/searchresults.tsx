@@ -12,53 +12,19 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import api from "../services/api";
-import {
-  pickPrimaryProductImage,
-  resolveProductPrimaryImageUri,
-} from "../lib/productImage";
-
-/** Product search — base URL comes from `services/api.tsx` */
-const PRODUCTS_SEARCH_PATH = "/api/products/search";
-
-/** Type-ahead suggestions — `GET` with `params: { keyword }` (base URL in `services/api.tsx`) */
-const SEARCH_SUGGESTIONS_PATH = "/api/search/suggestions";
+import api, {
+  mapSearchResultsToUi,
+  productsBySubcategoryPath,
+  type SearchUiResult,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
+import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 type SearchSuggestionsResponse = {
   success?: boolean;
   message?: string;
   data?: string[];
-};
-
-type SearchApiImage = {
-  imagePath?: string | null;
-  imageUrl?: string | null;
-  isPrimary?: boolean | null;
-  sortOrder?: number | null;
-};
-
-type SearchApiVariant = {
-  sellingPrice?: number | null;
-  mrpPrice?: number | null;
-  finalPrice?: number | null;
-  discountPercentage?: number | null;
-  inStock?: boolean | null;
-};
-
-type SearchApiProduct = {
-  id: number;
-  name?: string | null;
-  productName?: string | null;
-  title?: string | null;
-  status?: string | null;
-  salePrice?: number | null;
-  sellingPrice?: number | null;
-  price?: number | null;
-  mrp?: number | null;
-  maxRetailPrice?: number | null;
-  discountPercentage?: number | null;
-  images?: SearchApiImage[] | null;
-  variants?: SearchApiVariant[] | null;
 };
 
 type GridProduct = {
@@ -70,6 +36,7 @@ type GridProduct = {
   discount: string;
   rating: string;
   ratingCount: string;
+  kind: "product" | "category";
 };
 
 const PLACEHOLDER = require("../assets/images/product1.png");
@@ -79,83 +46,85 @@ function formatInrAmount(n: number): string {
   return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
 
-function pickVariant(p: SearchApiProduct): SearchApiVariant | undefined {
-  const vs = Array.isArray(p.variants) ? p.variants : [];
-  if (vs.length === 0) return undefined;
-  const inStock = vs.find((v) => v && v.inStock === true);
-  return inStock ?? vs[0];
+function mapApiToGrid(rows: SearchUiResult[]): GridProduct[] {
+  return rows.map((row) => {
+    const price = Number(row.sellingPrice) > 0 ? Number(row.sellingPrice) : 0;
+    const mrp = Number(row.mrpPrice) > 0 ? Number(row.mrpPrice) : price;
+    const discount =
+      row.discountPercentage > 0
+        ? `${Math.round(row.discountPercentage)}% off`
+        : mrp > price && mrp > 0
+          ? `${Math.round(((mrp - price) / mrp) * 100)}% off`
+          : "—";
+    const isCategory = row.kind === "category";
+    return {
+      id: String(row.id),
+      name: row.name,
+      image: row.imageUri ? ({ uri: row.imageUri } as const) : PLACEHOLDER,
+      price,
+      mrp,
+      discount,
+      rating: isCategory ? "—" : "4.2",
+      ratingCount: isCategory ? "Category" : "—",
+      kind: row.kind,
+    };
+  });
 }
 
-function normalizeRows(data: unknown): SearchApiProduct[] {
-  if (Array.isArray(data)) return data as SearchApiProduct[];
-  if (data && typeof data === "object") {
-    const o = data as Record<string, unknown>;
-    if (Array.isArray(o.content)) return o.content as SearchApiProduct[];
-    if (Array.isArray(o.data)) return o.data as SearchApiProduct[];
-    if (Array.isArray(o.products)) return o.products as SearchApiProduct[];
+function pickRowsFromProductListingPayload(payload: unknown): Record<string, any>[] {
+  if (Array.isArray(payload)) return payload as Record<string, any>[];
+  if (!payload || typeof payload !== "object") return [];
+  const o = payload as Record<string, unknown>;
+  if (Array.isArray(o.content)) return o.content as Record<string, any>[];
+  if (Array.isArray(o.products)) return o.products as Record<string, any>[];
+  if (Array.isArray(o.items)) return o.items as Record<string, any>[];
+  if (Array.isArray(o.data)) return o.data as Record<string, any>[];
+  if (o.data && typeof o.data === "object") {
+    const d = o.data as Record<string, unknown>;
+    if (Array.isArray(d.content)) return d.content as Record<string, any>[];
+    if (Array.isArray(d.products)) return d.products as Record<string, any>[];
+    if (Array.isArray(d.items)) return d.items as Record<string, any>[];
+    if (Array.isArray(d.data)) return d.data as Record<string, any>[];
   }
   return [];
 }
 
-function mapApiToGrid(
-  rows: SearchApiProduct[],
-  apiBase: string
-): GridProduct[] {
-  const root = apiBase.replace(/\/$/, "");
-  const resolvePath = (p: string) => {
-    const s = String(p ?? "").trim();
-    if (!s) return "";
-    if (/^https?:\/\//i.test(s)) return s;
-    if (!root) return "";
-    return s.startsWith("/") ? `${root}${s}` : `${root}/${s}`;
-  };
-
-  const out: GridProduct[] = [];
-
-  for (const p of rows) {
-    const st = String(p.status ?? "").trim().toLowerCase();
-    if (st && st !== "active") continue;
-
-    const primary = pickPrimaryProductImage(p.images);
-    const uri = resolveProductPrimaryImageUri(primary, resolvePath);
-
-    const name =
-      String(p.name ?? p.productName ?? p.title ?? "").trim() ||
-      `Product ${p.id}`;
-
-    const v = pickVariant(p);
-    const sale = Number(
-      v?.sellingPrice ?? v?.finalPrice ?? p.salePrice ?? p.sellingPrice ?? p.price ?? 0
-    );
-    const mrp = Number(v?.mrpPrice ?? p.mrp ?? p.maxRetailPrice ?? 0);
-
-    let discount = "";
-    if (mrp > 0 && sale > 0 && mrp > sale) {
-      discount = `${Math.round(((mrp - sale) / mrp) * 100)}% off`;
-    } else if (
-      typeof v?.discountPercentage === "number" &&
-      v.discountPercentage > 0
-    ) {
-      discount = `${Math.round(v.discountPercentage)}% off`;
-    } else if (
-      typeof p.discountPercentage === "number" &&
-      p.discountPercentage > 0
-    ) {
-      discount = `${Math.round(p.discountPercentage)}% off`;
+function normalizeSearchPayload(payload: unknown): Record<string, any> | null {
+  if (payload && typeof payload === "object") return payload as Record<string, any>;
+  if (typeof payload !== "string") return null;
+  const text = payload.trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as Record<string, any>;
+  } catch {
+    const trailingErrorIdx = text.lastIndexOf('{"success":false');
+    if (trailingErrorIdx > 0) {
+      try {
+        return JSON.parse(text.slice(0, trailingErrorIdx)) as Record<string, any>;
+      } catch {
+        return null;
+      }
     }
-
-    out.push({
-      id: String(p.id),
-      name,
-      image: uri ? ({ uri } as const) : PLACEHOLDER,
-      price: sale > 0 ? sale : 0,
-      mrp: mrp > 0 ? mrp : sale > 0 ? sale : 0,
-      discount: discount || "—",
-      rating: "4.2",
-      ratingCount: "—",
-    });
+    return null;
   }
+}
 
+function extractSubcategoryIdsFromSearchPayload(payload: unknown): number[] {
+  const normalized = normalizeSearchPayload(payload);
+  if (!normalized) return [];
+  const data = normalized.data;
+  if (!data || typeof data !== "object") return [];
+  const d = data as Record<string, unknown>;
+  const list = Array.isArray(d.subCategories)
+    ? d.subCategories
+    : Array.isArray(d.subcategories)
+      ? d.subcategories
+      : [];
+  const out: number[] = [];
+  for (const row of list) {
+    const id = Number((row as any)?.id);
+    if (Number.isFinite(id) && id > 0 && !out.includes(id)) out.push(id);
+  }
   return out;
 }
 
@@ -194,14 +163,95 @@ export default function SearchResults() {
     setError(null);
 
     try {
-      const { data } = await api.get<unknown>(PRODUCTS_SEARCH_PATH, {
-        params: { q: trimmed },
-      });
+      const { data } = await api.get<unknown>(searchProductsPath(trimmed));
       if (reqId.current !== id) return;
+      const rows = mapSearchResultsToUi(data);
+      const mapped = mapApiToGrid(rows);
+      const hasProductsFromSearch = mapped.some((x) => x.kind === "product");
 
-      const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
-      const rows = normalizeRows(data);
-      setItems(mapApiToGrid(rows, base));
+      // Fallback: if `/api/search` returns only names/categories, fetch products list and filter locally.
+      if (!hasProductsFromSearch) {
+        try {
+          const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+          const toGridProduct = (p: Record<string, any>): GridProduct => {
+            const sale = Number(p?.sellingPrice ?? p?.salePrice ?? p?.price ?? 0);
+            const mrp = Number(p?.mrpPrice ?? p?.mrp ?? p?.maxRetailPrice ?? sale ?? 0);
+            const discountPct = Number(p?.discountPercentage ?? 0);
+            const imageUri =
+              pickProductImageUriFromApi(p, (path: string) => {
+                const v = String(path ?? "").trim();
+                if (!v) return "";
+                if (/^https?:\/\//i.test(v)) return v;
+                if (!apiBase) return v;
+                return v.startsWith("/")
+                  ? `${apiBase}${v}`
+                  : `${apiBase}/${v.replace(/^\/+/, "")}`;
+              }) || "";
+            const discount =
+              discountPct > 0
+                ? `${Math.round(discountPct)}% off`
+                : mrp > sale && mrp > 0
+                  ? `${Math.round(((mrp - sale) / mrp) * 100)}% off`
+                  : "—";
+            return {
+              id: String(p?.id ?? p?.productId ?? `${Math.random()}`),
+              name: String(p?.name ?? p?.productName ?? p?.title ?? p?.displayName ?? "Product"),
+              image: imageUri ? ({ uri: imageUri } as const) : PLACEHOLDER,
+              price: Number.isFinite(sale) && sale > 0 ? sale : 0,
+              mrp: Number.isFinite(mrp) && mrp > 0 ? mrp : Number.isFinite(sale) ? sale : 0,
+              discount,
+              rating: "4.2",
+              ratingCount: "—",
+              kind: "product",
+            };
+          };
+
+          let relatedProductsBySubcategory: GridProduct[] = [];
+          const subCategoryIds = extractSubcategoryIdsFromSearchPayload(data).slice(0, 4);
+          if (subCategoryIds.length > 0) {
+            const responses = await Promise.all(
+              subCategoryIds.map((subId) =>
+                api.get<unknown>(productsBySubcategoryPath(subId)).catch(() => null)
+              )
+            );
+            if (reqId.current !== id) return;
+            const rowsFromSubs = responses
+              .filter((res): res is { data: unknown } => !!res)
+              .flatMap((res) => pickRowsFromProductListingPayload(res.data));
+            relatedProductsBySubcategory = rowsFromSubs.slice(0, 24).map(toGridProduct);
+          }
+
+          const fallbackRes = await api.get<unknown>("/api/products", {
+            params: { page: 0, size: 120 },
+          });
+          if (reqId.current !== id) return;
+          const allRows = pickRowsFromProductListingPayload(fallbackRes.data);
+          const queryLower = trimmed.toLowerCase();
+
+          const fallbackProducts: GridProduct[] = allRows
+            .filter((p) => {
+              const name = String(
+                p?.name ?? p?.productName ?? p?.title ?? p?.displayName ?? ""
+              )
+                .trim()
+                .toLowerCase();
+              return !!name && name.includes(queryLower);
+            })
+            .slice(0, 20)
+            .map(toGridProduct);
+
+          const dedupe = new Map<string, GridProduct>();
+          for (const row of [...relatedProductsBySubcategory, ...fallbackProducts, ...mapped]) {
+            const key = `${row.kind}:${row.id}`;
+            if (!dedupe.has(key)) dedupe.set(key, row);
+          }
+          setItems(Array.from(dedupe.values()));
+        } catch {
+          setItems(mapped);
+        }
+      } else {
+        setItems(mapped);
+      }
     } catch {
       if (reqId.current !== id) return;
       setItems([]);
@@ -232,8 +282,7 @@ export default function SearchResults() {
       void (async () => {
         try {
           const { data } = await api.get<SearchSuggestionsResponse>(
-            SEARCH_SUGGESTIONS_PATH,
-            { params: { keyword } }
+            searchSuggestionsPath(keyword)
           );
           if (suggestionsReqId.current !== id) return;
           const rows = Array.isArray(data?.data) ? data.data : [];
@@ -262,6 +311,14 @@ export default function SearchResults() {
   };
 
   const trimmed = inputQ.trim();
+  const productItems = useMemo(
+    () => items.filter((item) => item.kind === "product"),
+    [items]
+  );
+  const categoryItems = useMemo(
+    () => items.filter((item) => item.kind === "category"),
+    [items]
+  );
 
   return (
     <View style={styles.container}>
@@ -282,7 +339,16 @@ export default function SearchResults() {
 
       <View style={styles.searchSection}>
         <View style={styles.searchBarWrap}>
-          <Ionicons name="search-outline" size={20} color="#64748B" />
+          <TouchableOpacity
+            onPress={() => {
+              setSuggestionsDropdownVisible(false);
+              void runSearch(inputQ);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Run search"
+          >
+            <Ionicons name="search-outline" size={20} color="#64748B" />
+          </TouchableOpacity>
           <TextInput
             placeholder="Search products"
             placeholderTextColor="#94a3b8"
@@ -297,6 +363,10 @@ export default function SearchResults() {
               setTimeout(() => setSuggestionsDropdownVisible(false), 150);
             }}
             returnKeyType="search"
+            onSubmitEditing={() => {
+              setSuggestionsDropdownVisible(false);
+              void runSearch(inputQ);
+            }}
             autoCorrect={false}
             autoCapitalize="none"
           />
@@ -318,6 +388,7 @@ export default function SearchResults() {
                   onPress={() => {
                     setSuggestionsDropdownVisible(false);
                     setInputQ(s);
+                    void runSearch(s);
                   }}
                 >
                   <Ionicons
@@ -356,18 +427,18 @@ export default function SearchResults() {
               : loading
                 ? "Searching…"
                 : items.length
-                  ? `${items.length} products found`
+                  ? `${items.length} results found`
                   : "No products found for this search."}
           </Text>
         </View>
 
-        {trimmed && !loading && items.length > 0 ? (
+        {trimmed && !loading && productItems.length > 0 ? (
           <View style={styles.sectionBlock}>
             <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
-              Products
+              Related products
             </Text>
             <View style={styles.allProductsGrid}>
-              {items.map((item) => (
+              {productItems.map((item) => (
                 <TouchableOpacity
                   key={item.id}
                   style={styles.allProductCard}
@@ -407,6 +478,33 @@ export default function SearchResults() {
                       ({item.ratingCount})
                     </Text>
                   </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {trimmed && !loading && categoryItems.length > 0 ? (
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionLabel}>Categories</Text>
+            <View style={styles.allProductsGrid}>
+              {categoryItems.map((item) => (
+                <TouchableOpacity
+                  key={`cat-${item.id}`}
+                  style={styles.allProductCard}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    setInputQ(item.name);
+                    void runSearch(item.name);
+                  }}
+                >
+                  <View style={styles.allProductImageWrapper}>
+                    <Image source={item.image} style={styles.allProductImage} />
+                  </View>
+                  <Text style={styles.allProductName} numberOfLines={2}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.categoryHint}>Tap to search products</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -600,5 +698,10 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontSize: 11,
     color: "#777",
+  },
+  categoryHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#64748B",
   },
 });

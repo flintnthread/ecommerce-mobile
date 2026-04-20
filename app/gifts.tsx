@@ -14,7 +14,7 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api from "../services/api";
+import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 
 const HEADER_FT_LOGO = require("../assets/men/categories/fntfav.png");
 
@@ -569,9 +569,57 @@ const BEST_SELLER_PRODUCTS: TrendingProduct[] = [
 export default function GiftsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [searchResults, setSearchResults] = React.useState([]);
+  const [searchLoading, setSearchLoading] = React.useState(false);
+  const [showSearchResults, setShowSearchResults] = React.useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = React.useState<string | null>(
     null
   );
+
+  // Search functionality
+  const handleSearch = React.useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      // Map API response to simple format for gifts
+      const mappedResults = Array.isArray(data) ? data.slice(0, 10).map((item: any) => ({
+        id: String(item.id),
+        name: item.name || item.productName || item.title || `Product ${item.id}`,
+        imageUri: item.images?.[0]?.imagePath || "",
+        sellingPrice: item.sellingPrice || item.price || 0,
+        mrpPrice: item.mrpPrice || item.maxRetailPrice || 0,
+        discountPercentage: item.discountPercentage || 0,
+        rating: item.rating || 0,
+      })) : [];
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, handleSearch]);
 
   const SUBCATEGORIES_PARENT_ID = 89;
   const [giftApiSubcategories, setGiftApiSubcategories] = React.useState<
@@ -1235,7 +1283,11 @@ export default function GiftsScreen() {
           <View style={styles.giftsSearchPill}>
             <TouchableOpacity
               style={styles.giftsSearchMain}
-              onPress={() => router.push("/search")}
+              onPress={() => {
+                if (searchQuery.trim()) {
+                  router.push({ pathname: "/searchresults", params: { q: searchQuery } });
+                }
+              }}
               activeOpacity={0.88}
               accessibilityRole="button"
               accessibilityLabel="Search"
@@ -1252,6 +1304,33 @@ export default function GiftsScreen() {
             >
               <Ionicons name="camera-outline" size={22} color="#64748b" />
             </TouchableOpacity>
+            {showSearchResults && (
+              <View style={styles.searchResultsOverlay}>
+                <View style={styles.searchResultsContainer}>
+                  {searchLoading ? (
+                    <Text style={styles.searchLoadingText}>Loading...</Text>
+                  ) : (
+                    <>
+                      {searchResults.slice(0, 3).map((item) => (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={styles.searchResultItem}
+                          onPress={() => router.push({ pathname: "/searchresults", params: { q: item.name } })}
+                        >
+                          <Text style={styles.searchResultText}>{item.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.searchCloseButton}
+                  onPress={() => setShowSearchResults(false)}
+                >
+                  <Ionicons name="close" size={20} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           <View style={styles.giftsHeaderIconGroup}>
@@ -4770,5 +4849,60 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "700",
     fontSize: 11,
+  },
+  searchResultsOverlay: {
+    position: "absolute",
+    top: 46,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  searchResultsContainer: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  searchLoadingText: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: "#64748B",
+    fontSize: 13,
+  },
+  searchResultItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E2E8F0",
+  },
+  searchResultText: {
+    color: "#0F172A",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  searchCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
 });

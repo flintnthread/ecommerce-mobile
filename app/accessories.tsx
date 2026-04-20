@@ -23,7 +23,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { VideoView, useVideoPlayer } from "expo-video";
-import api from "../services/api";
+import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useLanguage } from "@/lib/language";
 import {
@@ -1174,6 +1174,55 @@ export default function Accessories() {
   );
   const [activeTopCategory, setActiveTopCategory] = useState("other_accessories");
   const [topCategoriesFromApi, setTopCategoriesFromApi] = useState<AccessoriesCategoryApi[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  // Search functionality
+  const handleSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      // Map API response to simple format for accessories
+      const mappedResults = Array.isArray(data) ? data.slice(0, 10).map((item: any) => ({
+        id: String(item.id),
+        name: item.name || item.productName || item.title || `Product ${item.id}`,
+        imageUri: item.images?.[0]?.imagePath || "",
+        sellingPrice: item.sellingPrice || item.price || 0,
+        mrpPrice: item.mrpPrice || item.maxRetailPrice || 0,
+        discountPercentage: item.discountPercentage || 0,
+        rating: item.rating || 0,
+      })) : [];
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, handleSearch]);
+
   const [womenSectionY, setWomenSectionY] = useState(0);
   const [menSectionY, setMenSectionY] = useState(0);
   const [kidsYouAreSectionY, setKidsYouAreSectionY] = useState(0);
@@ -2057,6 +2106,13 @@ export default function Accessories() {
               placeholder={tr("Search..")}
               placeholderTextColor="#b0b5ba"
               style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={() => {
+                if (searchQuery.trim()) {
+                  router.push({ pathname: "/searchresults", params: { q: searchQuery } });
+                }
+              }}
             />
             <TouchableOpacity activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="camera-outline" size={20} color="#9aa0a6" />

@@ -116,6 +116,177 @@ export function relatedProductsPath(productId: number): string {
   return `/api/products/related/${id}`;
 }
 
+
+/** Search products by keyword — path only (use with `api.get(...)`). */
+export function searchProductsPath(keyword: string): string {
+  const sanitizedKeyword = keyword.trim().replace(/[^a-zA-Z0-9\s]/g, '');
+  if (!sanitizedKeyword) return "/api/search";
+  return `/api/search?keyword=${encodeURIComponent(sanitizedKeyword)}`;
+}
+
+/** Search suggestions by keyword — path only (use with `api.get(...)`). */
+export function searchSuggestionsPath(keyword: string): string {
+  const sanitizedKeyword = keyword.trim().replace(/[^a-zA-Z0-9\s]/g, '');
+  if (!sanitizedKeyword) return "/api/search/suggestions";
+  return `/api/search/suggestions?keyword=${encodeURIComponent(sanitizedKeyword)}`;
+}
+
+export type SearchUiResult = {
+  id: string;
+  name: string;
+  imageUri: string;
+  sellingPrice: number;
+  mrpPrice: number;
+  discountPercentage: number;
+  rating: number;
+  kind: "product" | "category";
+};
+
+function toSafeNumber(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function resolveSearchImageUri(raw: unknown, apiBase: string): string {
+  const value = String(raw ?? "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  if (!apiBase) return value;
+  if (value.startsWith("/")) return `${apiBase}${value}`;
+  if (value.includes("/")) return `${apiBase}/${value.replace(/^\/+/, "")}`;
+  return `${apiBase}/uploads/${value}`;
+}
+
+function collectSearchRows(payload: unknown): Record<string, unknown>[] {
+  const normalizePayload = (value: unknown): unknown => {
+    if (typeof value !== "string") return value;
+    const text = value.trim();
+    if (!text) return value;
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      // Some responses are streamed as "success JSON" followed by an error JSON block.
+      const trailingErrorIdx = text.lastIndexOf('{"success":false');
+      if (trailingErrorIdx > 0) {
+        const head = text.slice(0, trailingErrorIdx).trim();
+        try {
+          return JSON.parse(head);
+        } catch {
+          return value;
+        }
+      }
+      return value;
+    }
+  };
+
+  const normalizedPayload = normalizePayload(payload);
+  const rows: Record<string, unknown>[] = [];
+  const pushRows = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    for (const item of value) {
+      if (item && typeof item === "object") {
+        rows.push(item as Record<string, unknown>);
+      }
+    }
+  };
+
+  pushRows(normalizedPayload);
+
+  if (normalizedPayload && typeof normalizedPayload === "object") {
+    const obj = normalizedPayload as Record<string, unknown>;
+    pushRows(obj.products);
+    pushRows(obj.categories);
+    pushRows(obj.relatedProducts);
+    pushRows(obj.related);
+    pushRows(obj.matchedProducts);
+    pushRows(obj.content);
+    pushRows(obj.items);
+    pushRows(obj.results);
+
+    const nested = obj.data;
+    pushRows(nested);
+    if (nested && typeof nested === "object") {
+      const d = nested as Record<string, unknown>;
+      pushRows(d.products);
+      pushRows(d.categories);
+      pushRows(d.relatedProducts);
+      pushRows(d.related);
+      pushRows(d.matchedProducts);
+      pushRows(d.content);
+      pushRows(d.items);
+      pushRows(d.results);
+    }
+  }
+
+  return rows;
+}
+
+export function mapSearchResultsToUi(payload: unknown): SearchUiResult[] {
+  const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  const rows = collectSearchRows(payload);
+  const seen = new Set<string>();
+  const out: SearchUiResult[] = [];
+
+  for (const item of rows) {
+    const id = String(item.id ?? item.productId ?? item.categoryId ?? "");
+    if (!id) continue;
+
+    const name = String(
+      item.name ??
+        item.productName ??
+        item.title ??
+        item.categoryName ??
+        ""
+    ).trim();
+    if (!name) continue;
+
+    const hasCategoryName =
+      typeof item.categoryName === "string" && item.categoryName.trim().length > 0;
+    const hasProductishName =
+      typeof item.productName === "string" ||
+      typeof item.sellingPrice !== "undefined" ||
+      Array.isArray(item.images);
+    const kind: "product" | "category" =
+      hasCategoryName && !hasProductishName ? "category" : "product";
+
+    const images = Array.isArray(item.images) ? item.images : [];
+    const firstImage =
+      images.find((img) => img && typeof img === "object") as
+        | Record<string, unknown>
+        | undefined;
+
+    const imageRaw =
+      item.mobileImage ??
+      item.imageUrl ??
+      item.image ??
+      item.bannerImage ??
+      item.thumbnail ??
+      firstImage?.imagePath ??
+      firstImage?.imageUrl ??
+      "";
+
+    const key = `${kind}:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    out.push({
+      id,
+      name,
+      imageUri: resolveSearchImageUri(imageRaw, apiBase),
+      sellingPrice: toSafeNumber(
+        item.sellingPrice ?? item.salePrice ?? item.price ?? 0
+      ),
+      mrpPrice: toSafeNumber(item.mrpPrice ?? item.maxRetailPrice ?? item.mrp ?? 0),
+      discountPercentage: toSafeNumber(item.discountPercentage ?? 0),
+      rating: toSafeNumber(item.rating ?? 0),
+      kind,
+    });
+  }
+
+  return out;
+}
+
 /** Products by category — path only (use with `api.get(...)`). */
 export function productsByCategoryPath(categoryId: number): string {
   const id = Math.floor(Number(categoryId));

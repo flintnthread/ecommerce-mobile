@@ -19,6 +19,7 @@ import {
   StackActions,
 } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 type BestDressItem = {
@@ -1138,16 +1139,61 @@ export default function SubcategoriesScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
   const [selectedFilterSection, setSelectedFilterSection] =
     useState<string>("Category");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchCategoryText, setSearchCategoryText] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<
     Record<string, string[]>
   >({});
+
+  const handleSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const { data } = await api.get(searchProductsPath(trimmed));
+      const mappedResults = Array.isArray(data) ? data.slice(0, 10).map((item: any) => ({
+        id: String(item.id),
+        name: item.name || item.productName || item.title || `Product ${item.id}`,
+        imageUri: item.images?.[0]?.imagePath || "",
+        sellingPrice: item.sellingPrice || item.price || 0,
+        mrpPrice: item.mrpPrice || item.maxRetailPrice || 0,
+        discountPercentage: item.discountPercentage || 0,
+        rating: item.rating || 0,
+      })) : [];
+      setSearchResults(mappedResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setShowSearchResults(false);
+        setSearchResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, handleSearch]);
+
   const [bannerIndex, setBannerIndex] = useState(0);
   const bannerScrollRef = useRef<ScrollView | null>(null);
   const [cartItems, setCartItems] = useState<string[]>([]);
   const [wishlistItems, setWishlistItems] = useState<string[]>([]);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   const goBackFromSubcateHub = useCallback(() => {
     if (isSearchVisible) {
@@ -1336,6 +1382,11 @@ export default function SubcategoriesScreen() {
               placeholderTextColor="#69798c"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onSubmitEditing={() => {
+                if (searchQuery.trim()) {
+                  router.push({ pathname: "/searchresults", params: { q: searchQuery } });
+                }
+              }}
               style={styles.searchInputHeader}
               autoFocus
             />
