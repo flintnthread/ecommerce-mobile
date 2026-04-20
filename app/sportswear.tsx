@@ -18,6 +18,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
@@ -28,12 +29,12 @@ import api, {
   searchSuggestionsPath,
 } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 
@@ -939,6 +940,7 @@ function pickVariantPricingSport(p: any): {
   sellingPrice: number | null;
   mrpPrice: number | null;
   discountPercentage: number | null;
+  variantId?: number;
 } {
   const variants = Array.isArray(p?.variants) ? p.variants : [];
   const v =
@@ -959,10 +961,16 @@ function pickVariantPricingSport(p: any): {
     }
     return null;
   };
+  const rawVid = v.id ?? v.variantId;
+  const vidNum =
+    typeof rawVid === "string" ? Number.parseInt(rawVid, 10) : Number(rawVid);
+  const variantId =
+    Number.isFinite(vidNum) && vidNum > 0 ? Math.floor(vidNum) : undefined;
   return {
     sellingPrice: num(v.sellingPrice),
     mrpPrice: num(v.mrpPrice),
     discountPercentage: num(v.discountPercentage),
+    ...(variantId != null ? { variantId } : {}),
   };
 }
 
@@ -1246,11 +1254,14 @@ export default function SportsWearSection() {
     mrpPrice: number | null;
     discountPercentage: number | null;
     rating: number | null;
+    variantId?: number;
   };
 
   const [productsToBuyApi, setProductsToBuyApi] = useState<ProductsToBuyApiRow[]>([]);
   const [productsToBuyLoading, setProductsToBuyLoading] = useState(false);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [wishlistServerKeys, setWishlistServerKeys] = useState<Set<string>>(new Set());
+  const [wishlistHasAuth, setWishlistHasAuth] = useState(false);
   const [cartCount, setCartCount] = useState(0);
 
   const insets = useSafeAreaInsets();
@@ -1305,8 +1316,14 @@ export default function SportsWearSection() {
   }, [searchQuery, handleSearch]);
 
   const reloadWishlistIds = useCallback(async () => {
-    const ids = await getWishlistIds();
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
     setWishlistIds(ids);
+    setWishlistServerKeys(keys);
   }, []);
 
   const reloadCartCount = useCallback(async () => {
@@ -1389,7 +1406,8 @@ export default function SportsWearSection() {
           .map((p) => {
             const imageUri = pickSportswearProductImageUri(p);
             if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage } = pickVariantPricingSport(p);
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickVariantPricingSport(p);
             return {
               id: p.id as number,
               name: safeTextSport(String(p.name ?? "")),
@@ -1398,6 +1416,7 @@ export default function SportsWearSection() {
               mrpPrice,
               discountPercentage,
               rating: pickProductRatingSport(p),
+              ...(variantId != null ? { variantId } : {}),
             } satisfies ProductsToBuyApiRow;
           })
           .filter(Boolean) as ProductsToBuyApiRow[];
@@ -1414,18 +1433,16 @@ export default function SportsWearSection() {
   }, [sportswearMainCategoryId]);
 
   const handleToggleWishlistPtb = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const nowInWishlist = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
-      });
-      await reloadWishlistIds();
-      Alert.alert(
-        nowInWishlist ? "Added to wishlist" : "Removed from wishlist",
-        product.name
-      );
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const r = await togglePtbWishlistWithServer(product, reloadWishlistIds);
+      if (!r.ok) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
   );
@@ -1464,6 +1481,7 @@ export default function SportsWearSection() {
         ratingLabel: string;
         sellingNum: number;
         mrpNum: number;
+        variantId?: number;
       }[];
     }
 
@@ -1495,6 +1513,7 @@ export default function SportsWearSection() {
               : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
               ? Number(p.sellingPrice)
               : 0,
+          ...(p.variantId != null ? { variantId: p.variantId } : {}),
         };
       });
     }
@@ -2559,10 +2578,14 @@ const rotate = rotateAnim.interpolate({
           onPress={() => router.push("/wishlist")}
         >
           <Ionicons name="heart-outline" size={24} color="#000" />
-          {wishlistIds.size > 0 ? (
+          {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 0 ? (
             <View style={styles.headerIconBadge}>
               <Text style={styles.headerIconBadgeText}>
-                {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+                {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 99
+                  ? "99+"
+                  : String(
+                      wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size
+                    )}
               </Text>
             </View>
           ) : null}
@@ -3715,17 +3738,43 @@ const rotate = rotateAnim.interpolate({
                                 name: product.name,
                                 sellingNum: product.sellingNum,
                                 mrpNum: product.mrpNum,
+                                variantId: product.variantId,
                               })
                             }
                             accessibilityRole="button"
                             accessibilityLabel={`${
-                              wishlistIds.has(product.id) ? "Remove from" : "Add to"
+                              categoryPtbRowWishlisted(
+                                product,
+                                wishlistHasAuth,
+                                wishlistServerKeys,
+                                wishlistIds
+                              )
+                                ? "Remove from"
+                                : "Add to"
                             } wishlist: ${product.name}`}
                           >
                             <Ionicons
-                              name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                              name={
+                                categoryPtbRowWishlisted(
+                                  product,
+                                  wishlistHasAuth,
+                                  wishlistServerKeys,
+                                  wishlistIds
+                                )
+                                  ? "heart"
+                                  : "heart-outline"
+                              }
                               size={16}
-                              color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                              color={
+                                categoryPtbRowWishlisted(
+                                  product,
+                                  wishlistHasAuth,
+                                  wishlistServerKeys,
+                                  wishlistIds
+                                )
+                                  ? "#E11D48"
+                                  : "#1d324e"
+                              }
                             />
                           </TouchableOpacity>
                           <TouchableOpacity

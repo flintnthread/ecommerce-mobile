@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,12 +29,12 @@ import {
   pickPtbVariantPricing,
   safePtbText,
 } from "../lib/mainCategoryPtbHelpers";
+import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 
 const HEADER_FT_LOGO = require("../assets/men/categories/fntfav.png");
 
@@ -1177,10 +1178,15 @@ export default function GiftsScreen() {
     mrpPrice: number | null;
     discountPercentage: number | null;
     rating: number | null;
+    variantId?: number;
   };
   const [giftsPtbApi, setGiftsPtbApi] = React.useState<GiftsPtbApiRow[]>([]);
   const [giftsPtbLoading, setGiftsPtbLoading] = React.useState(false);
   const [giftsWishlistIds, setGiftsWishlistIds] = React.useState<Set<string>>(new Set());
+  const [giftsWishlistServerKeys, setGiftsWishlistServerKeys] = React.useState<Set<string>>(
+    new Set()
+  );
+  const [giftsWishlistHasAuth, setGiftsWishlistHasAuth] = React.useState(false);
   const [giftsCartCount, setGiftsCartCount] = React.useState(0);
 
   const giftsPtbColW = React.useMemo(
@@ -1189,7 +1195,14 @@ export default function GiftsScreen() {
   );
 
   const reloadGiftsWishlistIds = React.useCallback(async () => {
-    setGiftsWishlistIds(await getWishlistIds());
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setGiftsWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
+    setGiftsWishlistIds(ids);
+    setGiftsWishlistServerKeys(keys);
   }, []);
 
   const reloadGiftsCartCount = React.useCallback(async () => {
@@ -1264,7 +1277,8 @@ export default function GiftsScreen() {
           .map((p) => {
             const imageUri = pickPtbProductImageUri(p);
             if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickPtbVariantPricing(p);
             return {
               id: (p as any).id as number,
               name: safePtbText(String((p as any).name ?? "")),
@@ -1273,6 +1287,7 @@ export default function GiftsScreen() {
               mrpPrice,
               discountPercentage,
               rating: pickPtbProductRating(p),
+              ...(variantId != null ? { variantId } : {}),
             } satisfies GiftsPtbApiRow;
           })
           .filter(Boolean) as GiftsPtbApiRow[];
@@ -1287,15 +1302,16 @@ export default function GiftsScreen() {
   }, [giftsMainCategoryIdForPtb]);
 
   const handleToggleGiftsPtbWishlist = React.useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const now = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
-      });
-      await reloadGiftsWishlistIds();
-      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const r = await togglePtbWishlistWithServer(product, reloadGiftsWishlistIds);
+      if (!r.ok) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadGiftsWishlistIds]
   );
@@ -1333,6 +1349,7 @@ export default function GiftsScreen() {
         ratingLabel: string;
         sellingNum: number;
         mrpNum: number;
+        variantId?: number;
       }[];
     }
     return giftsPtbApi.map((p) => {
@@ -1361,6 +1378,7 @@ export default function GiftsScreen() {
             : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
             ? Number(p.sellingPrice)
             : 0,
+        ...(p.variantId != null ? { variantId: p.variantId } : {}),
       };
     });
   }, [giftsPtbApi]);
@@ -1581,10 +1599,18 @@ export default function GiftsScreen() {
             >
               <View style={styles.giftsHeaderIconBadgeWrap}>
                 <Ionicons name="heart-outline" size={24} color="#c2410c" />
-                {giftsWishlistIds.size > 0 ? (
+                {(giftsWishlistHasAuth ? giftsWishlistServerKeys.size : giftsWishlistIds.size) >
+                0 ? (
                   <View style={styles.giftsHeaderIconBadge}>
                     <Text style={styles.giftsHeaderIconBadgeText}>
-                      {giftsWishlistIds.size > 99 ? "99+" : String(giftsWishlistIds.size)}
+                      {(giftsWishlistHasAuth ? giftsWishlistServerKeys.size : giftsWishlistIds.size) >
+                      99
+                        ? "99+"
+                        : String(
+                            giftsWishlistHasAuth
+                              ? giftsWishlistServerKeys.size
+                              : giftsWishlistIds.size
+                          )}
                     </Text>
                   </View>
                 ) : null}
@@ -2922,7 +2948,14 @@ export default function GiftsScreen() {
             <Text style={styles.giftsPtbStatus}>No products found.</Text>
           ) : (
             <View style={styles.giftsPtbGrid}>
-              {giftsPtbUiRows.map((product) => (
+              {giftsPtbUiRows.map((product) => {
+                const wishlisted = categoryPtbRowWishlisted(
+                  product,
+                  giftsWishlistHasAuth,
+                  giftsWishlistServerKeys,
+                  giftsWishlistIds
+                );
+                return (
                 <View key={product.id} style={[styles.giftsPtbCard, { width: giftsPtbColW }]}>
                   <TouchableOpacity
                     activeOpacity={0.9}
@@ -2975,17 +3008,18 @@ export default function GiftsScreen() {
                                   name: product.name,
                                   sellingNum: product.sellingNum,
                                   mrpNum: product.mrpNum,
+                                  variantId: product.variantId,
                                 })
                               }
                               accessibilityRole="button"
                               accessibilityLabel={`${
-                                giftsWishlistIds.has(product.id) ? "Remove from" : "Add to"
+                                wishlisted ? "Remove from" : "Add to"
                               } wishlist: ${product.name}`}
                             >
                               <Ionicons
-                                name={giftsWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                name={wishlisted ? "heart" : "heart-outline"}
                                 size={16}
-                                color={giftsWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                color={wishlisted ? "#E11D48" : "#1d324e"}
                               />
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -3011,7 +3045,8 @@ export default function GiftsScreen() {
                     </View>
                   </TouchableOpacity>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>

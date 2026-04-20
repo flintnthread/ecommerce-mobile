@@ -21,6 +21,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { VideoView, useVideoPlayer } from "expo-video";
@@ -31,12 +32,13 @@ import api, {
 } from "../services/api";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useLanguage } from "@/lib/language";
+import { pickPtbVariantPricing } from "../lib/mainCategoryPtbHelpers";
+import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 import {
   GestureHandlerRootView,
   TouchableOpacity as GestureTouchableOpacity,
@@ -1246,14 +1248,23 @@ export default function Accessories() {
       mrpPrice: number | null;
       discountPercentage: number | null;
       rating: number | null;
+      variantId?: number;
     }>
   >([]);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [wishlistServerKeys, setWishlistServerKeys] = useState<Set<string>>(new Set());
+  const [wishlistHasAuth, setWishlistHasAuth] = useState(false);
   const [cartCount, setCartCount] = useState(0);
 
   const reloadWishlistIds = useCallback(async () => {
-    const ids = await getWishlistIds();
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
     setWishlistIds(ids);
+    setWishlistServerKeys(keys);
   }, []);
 
   const reloadCartCount = useCallback(async () => {
@@ -1312,24 +1323,33 @@ export default function Accessories() {
   }, [routeAccessoriesMainCategoryId]);
 
   const handleToggleWishlistForUniquePick = useCallback(
-    async (product: { id: string; name: string; sellingPrice: number | null; mrpPrice: number | null }) => {
-      const selling = product.sellingPrice != null && Number.isFinite(product.sellingPrice)
-        ? Number(product.sellingPrice)
-        : 0;
-      const mrp = product.mrpPrice != null && Number.isFinite(product.mrpPrice)
-        ? Number(product.mrpPrice)
-        : selling;
-      const nowInWishlist = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: selling,
-        mrp,
-      });
-      await reloadWishlistIds();
-      Alert.alert(
-        nowInWishlist ? "Added to wishlist" : "Removed from wishlist",
-        product.name
+    async (product: {
+      id: string;
+      name: string;
+      sellingPrice: number | null;
+      mrpPrice: number | null;
+      variantId?: number;
+    }) => {
+      const sellingNum =
+        product.sellingPrice != null && Number.isFinite(product.sellingPrice)
+          ? Number(product.sellingPrice)
+          : 0;
+      const mrpNum =
+        product.mrpPrice != null && Number.isFinite(product.mrpPrice)
+          ? Number(product.mrpPrice)
+          : sellingNum;
+      const r = await togglePtbWishlistWithServer(
+        {
+          id: product.id,
+          name: product.name,
+          sellingNum,
+          mrpNum,
+          variantId: product.variantId,
+        },
+        reloadWishlistIds
       );
+      if (!r.ok) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
   );
@@ -1932,7 +1952,8 @@ export default function Accessories() {
                 : getSubcategoryTableImageUri(imageRaw)
               : "";
 
-            const firstVariant = Array.isArray(p.variants) ? p.variants[0] : null;
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickPtbVariantPricing(p);
             const ratingRaw =
               p.rating ?? p.averageRating ?? p.average_rating ?? p.reviewRating ?? p.review_rating;
             const rating = toNum(ratingRaw);
@@ -1940,10 +1961,12 @@ export default function Accessories() {
               id: String(p.id),
               name: String(p.name ?? "").trim(),
               imageUri,
-              sellingPrice: toNum(firstVariant?.sellingPrice),
-              mrpPrice: toNum(firstVariant?.mrpPrice),
-              discountPercentage: toNum(firstVariant?.discountPercentage),
+              sellingPrice: sellingPrice > 0 ? sellingPrice : null,
+              mrpPrice: mrpPrice > 0 ? mrpPrice : null,
+              discountPercentage:
+                discountPercentage > 0 ? discountPercentage : null,
               rating,
+              ...(variantId != null ? { variantId } : {}),
             };
           })
           .filter((p) => p.imageUri && p.name);
@@ -2375,10 +2398,14 @@ export default function Accessories() {
               onPress={() => router.push("/wishlist")}
             >
               <Ionicons name="heart-outline" size={23} color="#1d324e" />
-              {wishlistIds.size > 0 ? (
+              {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 0 ? (
                 <View style={styles.headerIconBadge}>
                   <Text style={styles.headerIconBadgeText}>
-                    {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+                    {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 99
+                      ? "99+"
+                      : String(
+                          wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size
+                        )}
                   </Text>
                 </View>
               ) : null}
@@ -4181,6 +4208,12 @@ export default function Accessories() {
               ) : (
                 <View style={styles.uniquePicksExpandedGrid}>
                   {uniquePicksExpandedRows.map((product) => {
+                    const wishlisted = categoryPtbRowWishlisted(
+                      product,
+                      wishlistHasAuth,
+                      wishlistServerKeys,
+                      wishlistIds
+                    );
                     const selling =
                       product.sellingPrice != null ? `Rs ${Math.round(product.sellingPrice)}` : "";
                     const mrp =
@@ -4249,13 +4282,13 @@ export default function Accessories() {
                                   onPress={() => void handleToggleWishlistForUniquePick(product)}
                                   accessibilityRole="button"
                                   accessibilityLabel={`${
-                                    wishlistIds.has(product.id) ? "Remove from" : "Add to"
+                                    wishlisted ? "Remove from" : "Add to"
                                   } wishlist: ${product.name}`}
                                 >
                                   <Ionicons
-                                    name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                    name={wishlisted ? "heart" : "heart-outline"}
                                     size={16}
-                                    color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                    color={wishlisted ? "#E11D48" : "#1d324e"}
                                   />
                                 </TouchableOpacity>
                                 <TouchableOpacity

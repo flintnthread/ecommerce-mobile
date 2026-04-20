@@ -11,18 +11,28 @@ import {
   Platform,
   Share,
   ActivityIndicator,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   addProductToCart,
+  addWishlistProductIfAbsent,
   loadCart,
   loadWishlist,
   toggleWishlistProduct,
 } from "../lib/shopStorage";
+import { normalizeWishlistApiRows } from "../lib/wishlistApi";
+import { parseWishlistApiError, postWishlistAdd } from "../lib/wishlistServerApi";
 import { buildProductGalleryUris } from "../lib/pickProductImageUri";
-import api, { productByIdPath, relatedProductsPath, productsByCategoryPath } from "../services/api";
+import api, {
+  productByIdPath,
+  relatedProductsPath,
+  productsByCategoryPath,
+  WISHLIST_USER_PATH,
+} from "../services/api";
 import {
   fetchAddresses,
   setDefaultAddress,
@@ -714,6 +724,40 @@ function mapApiProductDetailToCatalog(
   };
 }
 
+/** Resolve backend variant id for wishlist add/remove (matches size/color chips). */
+function findVariantRowForWishlist(
+  api: any,
+  size: string | null,
+  color: string | null
+): { id: number } | null {
+  const variants = Array.isArray(api?.variants) ? api.variants : [];
+  if (variants.length === 0) return null;
+  const trimmedSize = size?.trim() ?? "";
+  const trimmedColor = color?.trim() ?? "";
+  if (trimmedSize || trimmedColor) {
+    const match = variants.find((row: any) => {
+      if (!row) return false;
+      const sz = String(row.size ?? "").trim();
+      const cl = String(row.color ?? "").trim();
+      const sizeOk = !trimmedSize || sz === trimmedSize;
+      const colorOk = !trimmedColor || cl === trimmedColor;
+      return sizeOk && colorOk;
+    });
+    if (match) {
+      const id = Math.floor(Number(match.id ?? match.variantId));
+      return Number.isFinite(id) && id > 0 ? { id } : null;
+    }
+  }
+  const fallback =
+    variants.find((x: any) => {
+      const st = x?.stock;
+      if (typeof st === "number") return st > 0;
+      return x?.inStock !== false;
+    }) ?? variants[0];
+  const id = Math.floor(Number(fallback?.id ?? fallback?.variantId));
+  return Number.isFinite(id) && id > 0 ? { id } : null;
+}
+
 const AVAILABLE_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 
 export default function ProductDetail() {
@@ -907,12 +951,51 @@ export default function ProductDetail() {
   const refreshCartAndWishlistState = useCallback(async () => {
     const [cart, wishlist] = await Promise.all([loadCart(), loadWishlist()]);
     setCartCount(cart.reduce((sum, l) => sum + (l.quantity ?? 0), 0));
-    setWishlistCount(wishlist.length);
     setHasAddedToCart(cart.some((l) => l.id === product.id));
+
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    if (
+      token &&
+      numericProductId != null &&
+      apiDetail &&
+      typeof apiDetail.id === "number"
+    ) {
+      try {
+        const { data } = await api.get<unknown>(WISHLIST_USER_PATH);
+        const rows = normalizeWishlistApiRows(data);
+        setWishlistCount(rows.length);
+        const vrow = findVariantRowForWishlist(
+          apiDetail,
+          selectedSize,
+          selectedColor
+        );
+        const vid = vrow?.id ?? null;
+        const listed =
+          vid != null &&
+          rows.some(
+            (r) =>
+              Math.floor(Number(r.productId)) === numericProductId &&
+              Math.floor(Number(r.variantId)) === vid
+          );
+        setIsWishlisted(listed);
+        setHasCountedWishlist(listed);
+        return;
+      } catch {
+        /* fall through to local wishlist */
+      }
+    }
+
+    setWishlistCount(wishlist.length);
     const wish = wishlist.some((l) => l.id === product.id);
     setIsWishlisted(wish);
     setHasCountedWishlist(wish);
-  }, [product.id]);
+  }, [
+    product.id,
+    numericProductId,
+    apiDetail,
+    selectedSize,
+    selectedColor,
+  ]);
 
   useEffect(() => {
     setActiveImageIndex(0);
@@ -921,6 +1004,10 @@ export default function ProductDetail() {
     setSearchQuery("");
     void refreshCartAndWishlistState();
   }, [productId, apiDetail?.id]);
+
+  useEffect(() => {
+    void refreshCartAndWishlistState();
+  }, [selectedSize, selectedColor, refreshCartAndWishlistState]);
 
   useEffect(() => {
     const n = product.images?.length ?? 0;
@@ -1391,6 +1478,56 @@ export default function ProductDetail() {
                     router.push("/wishlist");
                   } else {
                     void (async () => {
+                      if (numericProductId != null) {
+                        const token = (await AsyncStorage.getItem("token"))?.trim();
+                        if (!token) {
+                          Alert.alert(
+                            "Sign in required",
+                            "Please log in to save items to your wishlist."
+                          );
+                          return;
+                        }
+                        if (!apiDetail || typeof apiDetail.id !== "number") {
+                          Alert.alert(
+                            "Please wait",
+                            "Product details are still loading."
+                          );
+                          return;
+                        }
+                        const vrow = findVariantRowForWishlist(
+                          apiDetail,
+                          selectedSize,
+                          selectedColor
+                        );
+                        const vid = vrow?.id;
+                        if (!vid || vid <= 0) {
+                          Alert.alert(
+                            "Select size",
+                            "Please choose a size (and color if shown) before adding to your wishlist."
+                          );
+                          return;
+                        }
+                        try {
+                          await postWishlistAdd(numericProductId, vid);
+                          await addWishlistProductIfAbsent({
+                            id: String(numericProductId),
+                            name: product.name,
+                            price: product.price,
+                            mrp: product.mrp,
+                          });
+                          Alert.alert("Added to wishlist", product.name);
+                          await refreshCartAndWishlistState();
+                        } catch (e: unknown) {
+                          Alert.alert(
+                            "Wishlist",
+                            parseWishlistApiError(
+                              e,
+                              "Could not add to wishlist. Please try again."
+                            )
+                          );
+                        }
+                        return;
+                      }
                       await toggleWishlistProduct({
                         id: product.id,
                         name: product.name,

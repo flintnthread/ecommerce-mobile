@@ -18,6 +18,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
@@ -37,12 +38,12 @@ import {
   pickPtbVariantPricing,
   safePtbText,
 } from "../lib/mainCategoryPtbHelpers";
+import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 
 const HEADER_BRAND_LOGO = require("../assets/images/logo.png");
 const INDOOR_IMAGE = require("../assets/MainCatImages/images/IndoorPlayEquipments.png");
@@ -921,10 +922,15 @@ export default function IndoorPlayScreen() {
     mrpPrice: number | null;
     discountPercentage: number | null;
     rating: number | null;
+    variantId?: number;
   };
   const [indoorPtbApi, setIndoorPtbApi] = useState<IndoorPtbApiRow[]>([]);
   const [indoorPtbLoading, setIndoorPtbLoading] = useState(false);
   const [indoorWishlistIds, setIndoorWishlistIds] = useState<Set<string>>(new Set());
+  const [indoorWishlistServerKeys, setIndoorWishlistServerKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [indoorWishlistHasAuth, setIndoorWishlistHasAuth] = useState(false);
   const [indoorCartCount, setIndoorCartCount] = useState(0);
 
   const indoorPtbColW = useMemo(
@@ -933,7 +939,14 @@ export default function IndoorPlayScreen() {
   );
 
   const reloadIndoorWishlistIds = useCallback(async () => {
-    setIndoorWishlistIds(await getWishlistIds());
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setIndoorWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
+    setIndoorWishlistIds(ids);
+    setIndoorWishlistServerKeys(keys);
   }, []);
 
   const reloadIndoorCartCount = useCallback(async () => {
@@ -1009,7 +1022,8 @@ export default function IndoorPlayScreen() {
           .map((p) => {
             const imageUri = pickPtbProductImageUri(p);
             if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickPtbVariantPricing(p);
             return {
               id: (p as any).id as number,
               name: safePtbText(String((p as any).name ?? "")),
@@ -1018,6 +1032,7 @@ export default function IndoorPlayScreen() {
               mrpPrice,
               discountPercentage,
               rating: pickPtbProductRating(p),
+              ...(variantId != null ? { variantId } : {}),
             } satisfies IndoorPtbApiRow;
           })
           .filter(Boolean) as IndoorPtbApiRow[];
@@ -1032,15 +1047,16 @@ export default function IndoorPlayScreen() {
   }, [indoorMainCategoryIdForPtb]);
 
   const handleToggleIndoorPtbWishlist = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const now = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
-      });
-      await reloadIndoorWishlistIds();
-      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const r = await togglePtbWishlistWithServer(product, reloadIndoorWishlistIds);
+      if (!r.ok) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadIndoorWishlistIds]
   );
@@ -1078,6 +1094,7 @@ export default function IndoorPlayScreen() {
         ratingLabel: string;
         sellingNum: number;
         mrpNum: number;
+        variantId?: number;
       }[];
     }
     return indoorPtbApi.map((p) => {
@@ -1106,6 +1123,7 @@ export default function IndoorPlayScreen() {
             : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
             ? Number(p.sellingPrice)
             : 0,
+        ...(p.variantId != null ? { variantId: p.variantId } : {}),
       };
     });
   }, [indoorPtbApi]);
@@ -1680,10 +1698,19 @@ export default function IndoorPlayScreen() {
             >
               <View style={styles.indoorHeaderBadgeWrap}>
                 <Ionicons name="heart-outline" size={23} color="#1d324e" />
-                {indoorWishlistIds.size > 0 ? (
+                {(indoorWishlistHasAuth ? indoorWishlistServerKeys.size : indoorWishlistIds.size) >
+                0 ? (
                   <View style={styles.indoorHeaderBadge}>
                     <Text style={styles.indoorHeaderBadgeText}>
-                      {indoorWishlistIds.size > 99 ? "99+" : String(indoorWishlistIds.size)}
+                      {(indoorWishlistHasAuth
+                        ? indoorWishlistServerKeys.size
+                        : indoorWishlistIds.size) > 99
+                        ? "99+"
+                        : String(
+                            indoorWishlistHasAuth
+                              ? indoorWishlistServerKeys.size
+                              : indoorWishlistIds.size
+                          )}
                     </Text>
                   </View>
                 ) : null}
@@ -2550,7 +2577,14 @@ export default function IndoorPlayScreen() {
             <Text style={styles.indoorPtbStatus}>{tr("No products found.")}</Text>
           ) : (
             <View style={styles.indoorPtbGrid}>
-              {indoorPtbUiRows.map((product) => (
+              {indoorPtbUiRows.map((product) => {
+                const wishlisted = categoryPtbRowWishlisted(
+                  product,
+                  indoorWishlistHasAuth,
+                  indoorWishlistServerKeys,
+                  indoorWishlistIds
+                );
+                return (
                 <View key={product.id} style={[styles.indoorPtbCard, { width: indoorPtbColW }]}>
                   <TouchableOpacity
                     activeOpacity={0.9}
@@ -2603,17 +2637,18 @@ export default function IndoorPlayScreen() {
                                   name: product.name,
                                   sellingNum: product.sellingNum,
                                   mrpNum: product.mrpNum,
+                                  variantId: product.variantId,
                                 })
                               }
                               accessibilityRole="button"
                               accessibilityLabel={`${
-                                indoorWishlistIds.has(product.id) ? "Remove from" : "Add to"
+                                wishlisted ? "Remove from" : "Add to"
                               } wishlist: ${product.name}`}
                             >
                               <Ionicons
-                                name={indoorWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                name={wishlisted ? "heart" : "heart-outline"}
                                 size={16}
-                                color={indoorWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                color={wishlisted ? "#E11D48" : "#1d324e"}
                               />
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -2639,7 +2674,8 @@ export default function IndoorPlayScreen() {
                     </View>
                   </TouchableOpacity>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>

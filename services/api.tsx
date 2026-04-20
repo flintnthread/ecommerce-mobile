@@ -109,6 +109,21 @@ export function productByIdPath(productId: number): string {
   return `/api/products/${id}`;
 }
 
+/** POST add to wishlist — server uses JWT; `userId` in body is optional. */
+export const WISHLIST_ADD_PATH = "/api/wishlist/add";
+
+/** GET current user's wishlist (JWT). */
+export const WISHLIST_USER_PATH = "/api/wishlist/user";
+
+/** DELETE with query params `productId`, `variantId`. */
+export const WISHLIST_REMOVE_PATH = "/api/wishlist/remove";
+
+export type WishlistAddPayload = {
+  userId?: number;
+  productId: number;
+  variantId: number;
+};
+
 /** Related products for a product — path only (use with `api.get(...)`). */
 export function relatedProductsPath(productId: number): string {
   const id = Math.floor(Number(productId));
@@ -299,6 +314,31 @@ export function productsByMainCategoryPath(mainCategoryId: number): string {
   const id = Math.floor(Number(mainCategoryId));
   if (!Number.isFinite(id) || id <= 0) return "/api/products/main-category/0";
   return `/api/products/main-category/${id}`;
+}
+
+/**
+ * Product search with query params — path only (use with `api.get(...)`).
+ * Example: `/api/products/search?q=men&categoryId=29` (base URL from axios `baseURL`).
+ */
+export function productsSearchPath(params: {
+  q?: string;
+  categoryId?: number;
+  sort?: string;
+  gender?: string;
+}): string {
+  const sp = new URLSearchParams();
+  const q = String(params.q ?? "").trim();
+  if (q) sp.set("q", q);
+  const cid = params.categoryId;
+  if (cid != null && Number.isFinite(cid) && cid > 0) {
+    sp.set("categoryId", String(Math.floor(Number(cid))));
+  }
+  const sort = String(params.sort ?? "").trim();
+  if (sort) sp.set("sort", sort);
+  const gender = String(params.gender ?? "").trim();
+  if (gender) sp.set("gender", gender);
+  const qs = sp.toString();
+  return qs ? `/api/products/search?${qs}` : "/api/products/search";
 }
 
 /** Subcategories by category — path only (use with `api.get(...)`). */
