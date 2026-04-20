@@ -19,6 +19,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
@@ -42,12 +43,12 @@ import {
   pickPtbVariantPricing,
   safePtbText,
 } from "../lib/mainCategoryPtbHelpers";
+import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -792,10 +793,15 @@ export default function WomenScreen() {
     mrpPrice: number | null;
     discountPercentage: number | null;
     rating: number | null;
+    variantId?: number;
   };
   const [womenPtbApi, setWomenPtbApi] = useState<WomenPtbApiRow[]>([]);
   const [womenPtbLoading, setWomenPtbLoading] = useState(false);
   const [womenWishlistIds, setWomenWishlistIds] = useState<Set<string>>(new Set());
+  const [womenWishlistServerKeys, setWomenWishlistServerKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [womenWishlistHasAuth, setWomenWishlistHasAuth] = useState(false);
   const [womenCartCount, setWomenCartCount] = useState(0);
 
   const womenPtbColW = useMemo(
@@ -804,7 +810,14 @@ export default function WomenScreen() {
   );
 
   const reloadWomenWishlistIds = useCallback(async () => {
-    setWomenWishlistIds(await getWishlistIds());
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setWomenWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
+    setWomenWishlistIds(ids);
+    setWomenWishlistServerKeys(keys);
   }, []);
 
   const reloadWomenCartCount = useCallback(async () => {
@@ -882,7 +895,8 @@ export default function WomenScreen() {
           .map((p) => {
             const imageUri = pickPtbProductImageUri(p);
             if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickPtbVariantPricing(p);
             return {
               id: (p as any).id as number,
               name: safePtbText(String((p as any).name ?? "")),
@@ -891,6 +905,7 @@ export default function WomenScreen() {
               mrpPrice,
               discountPercentage,
               rating: pickPtbProductRating(p),
+              ...(variantId != null ? { variantId } : {}),
             } satisfies WomenPtbApiRow;
           })
           .filter(Boolean) as WomenPtbApiRow[];
@@ -905,15 +920,16 @@ export default function WomenScreen() {
   }, [womenMainCategoryIdForPtb]);
 
   const handleToggleWomenPtbWishlist = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const now = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
-      });
-      await reloadWomenWishlistIds();
-      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const r = await togglePtbWishlistWithServer(product, reloadWomenWishlistIds);
+      if (!r.ok) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadWomenWishlistIds]
   );
@@ -951,6 +967,7 @@ export default function WomenScreen() {
         ratingLabel: string;
         sellingNum: number;
         mrpNum: number;
+        variantId?: number;
       }[];
     }
     return womenPtbApi.map((p) => {
@@ -979,6 +996,7 @@ export default function WomenScreen() {
             : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
             ? Number(p.sellingPrice)
             : 0,
+        ...(p.variantId != null ? { variantId: p.variantId } : {}),
       };
     });
   }, [womenPtbApi]);
@@ -1752,10 +1770,20 @@ export default function WomenScreen() {
             >
               <View style={styles.womenHeaderIconBadgeWrap}>
                 <Ionicons name="heart-outline" size={24} color="#c2410c" />
-                {womenWishlistIds.size > 0 ? (
+                {(womenWishlistHasAuth
+                  ? womenWishlistServerKeys.size
+                  : womenWishlistIds.size) > 0 ? (
                   <View style={styles.womenHeaderIconBadge}>
                     <Text style={styles.womenHeaderIconBadgeText}>
-                      {womenWishlistIds.size > 99 ? "99+" : String(womenWishlistIds.size)}
+                      {(womenWishlistHasAuth
+                        ? womenWishlistServerKeys.size
+                        : womenWishlistIds.size) > 99
+                        ? "99+"
+                        : String(
+                            womenWishlistHasAuth
+                              ? womenWishlistServerKeys.size
+                              : womenWishlistIds.size
+                          )}
                     </Text>
                   </View>
                 ) : null}
@@ -2840,17 +2868,43 @@ export default function WomenScreen() {
                                     name: product.name,
                                     sellingNum: product.sellingNum,
                                     mrpNum: product.mrpNum,
+                                    variantId: product.variantId,
                                   })
                                 }
                                 accessibilityRole="button"
                                 accessibilityLabel={`${
-                                  womenWishlistIds.has(product.id) ? "Remove from" : "Add to"
+                                  categoryPtbRowWishlisted(
+                                    product,
+                                    womenWishlistHasAuth,
+                                    womenWishlistServerKeys,
+                                    womenWishlistIds
+                                  )
+                                    ? "Remove from"
+                                    : "Add to"
                                 } wishlist: ${product.name}`}
                               >
                                 <Ionicons
-                                  name={womenWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                  name={
+                                    categoryPtbRowWishlisted(
+                                      product,
+                                      womenWishlistHasAuth,
+                                      womenWishlistServerKeys,
+                                      womenWishlistIds
+                                    )
+                                      ? "heart"
+                                      : "heart-outline"
+                                  }
                                   size={16}
-                                  color={womenWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                  color={
+                                    categoryPtbRowWishlisted(
+                                      product,
+                                      womenWishlistHasAuth,
+                                      womenWishlistServerKeys,
+                                      womenWishlistIds
+                                    )
+                                      ? "#E11D48"
+                                      : "#1d324e"
+                                  }
                                 />
                               </TouchableOpacity>
                               <TouchableOpacity

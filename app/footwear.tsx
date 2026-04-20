@@ -13,6 +13,8 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
@@ -24,12 +26,12 @@ import api, {
   subcategoriesByCategoryPath,
 } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import { addProductToCart, getWishlistIds, loadCart } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 
 const { width } = Dimensions.get("window");
 const DESK_INNER_WIDTH = width - 20; // deskSection marginHorizontal: 10 × 2
@@ -260,12 +262,15 @@ export default function FootwearScreen() {
     mrpPrice: number | null;
     discountPercentage: number | null;
     rating: number | null;
+    variantId?: number;
   };
 
   const [relatedMensProducts, setRelatedMensProducts] = useState<RelatedMensProductRow[]>([]);
   const [relatedProductsLoading, setRelatedProductsLoading] = useState(false);
   const [resolvingMainCategoryId, setResolvingMainCategoryId] = useState(false);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [wishlistServerKeys, setWishlistServerKeys] = useState<Set<string>>(new Set());
+  const [wishlistHasAuth, setWishlistHasAuth] = useState(false);
   const [cartCount, setCartCount] = useState(0);
 
   const [apiFootwearCategoriesByGender, setApiFootwearCategoriesByGender] = useState<
@@ -354,7 +359,12 @@ export default function FootwearScreen() {
 
   const pickVariantPricing = (
     p: any
-  ): { sellingPrice: number | null; mrpPrice: number | null; discountPercentage: number | null } => {
+  ): {
+    sellingPrice: number | null;
+    mrpPrice: number | null;
+    discountPercentage: number | null;
+    variantId?: number;
+  } => {
     const variants = Array.isArray(p?.variants) ? p.variants : [];
     const v =
       variants.find(
@@ -374,10 +384,16 @@ export default function FootwearScreen() {
       }
       return null;
     };
+    const rawVid = v.id ?? v.variantId;
+    const vidNum =
+      typeof rawVid === "string" ? Number.parseInt(rawVid, 10) : Number(rawVid);
+    const variantId =
+      Number.isFinite(vidNum) && vidNum > 0 ? Math.floor(vidNum) : undefined;
     return {
       sellingPrice: num(v.sellingPrice),
       mrpPrice: num(v.mrpPrice),
       discountPercentage: num(v.discountPercentage),
+      ...(variantId != null ? { variantId } : {}),
     };
   };
 
@@ -393,8 +409,14 @@ export default function FootwearScreen() {
   };
 
   const reloadWishlistIds = useCallback(async () => {
-    const ids = await getWishlistIds();
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
     setWishlistIds(ids);
+    setWishlistServerKeys(keys);
   }, []);
 
   const reloadCartCount = useCallback(async () => {
@@ -408,19 +430,33 @@ export default function FootwearScreen() {
     void reloadCartCount();
   }, [reloadWishlistIds, reloadCartCount]);
 
+  useFocusEffect(
+    useCallback(() => {
+      void reloadWishlistIds();
+      void reloadCartCount();
+    }, [reloadWishlistIds, reloadCartCount])
+  );
+
   const handleToggleWishlist = useCallback(
-    async (product: { id: string; name: string; sellingPriceNum: number; mrpPriceNum: number }) => {
-      const nowInWishlist = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: product.sellingPriceNum,
-        mrp: product.mrpPriceNum,
-      });
-      await reloadWishlistIds();
-      Alert.alert(
-        nowInWishlist ? "Added to wishlist" : "Removed from wishlist",
-        product.name
+    async (product: {
+      id: string;
+      name: string;
+      sellingPriceNum: number;
+      mrpPriceNum: number;
+      variantId?: number;
+    }) => {
+      const r = await togglePtbWishlistWithServer(
+        {
+          id: product.id,
+          name: product.name,
+          sellingNum: product.sellingPriceNum,
+          mrpNum: product.mrpPriceNum,
+          variantId: product.variantId,
+        },
+        reloadWishlistIds
       );
+      if (!r.ok) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
   );
@@ -537,7 +573,8 @@ export default function FootwearScreen() {
           .map((p) => {
             const imageUri = pickRelatedProductImageUri(p);
             if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage } = pickVariantPricing(p);
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickVariantPricing(p);
             const categoryName = safeText(String(p.categoryName ?? p.subcategoryName ?? "Footwear"));
             return {
               id: p.id as number,
@@ -548,6 +585,7 @@ export default function FootwearScreen() {
               mrpPrice,
               discountPercentage,
               rating: pickProductRating(p),
+              ...(variantId != null ? { variantId } : {}),
             } satisfies RelatedMensProductRow;
           })
           .filter(Boolean) as RelatedMensProductRow[];
@@ -885,10 +923,14 @@ export default function FootwearScreen() {
 
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push("/wishlist")}>
           <Ionicons name="heart-outline" size={24} color="#1D2430" />
-          {wishlistIds.size > 0 ? (
+          {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 0 ? (
             <View style={styles.headerIconBadge}>
               <Text style={styles.headerIconBadgeText}>
-                {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+                {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 99
+                  ? "99+"
+                  : String(
+                      wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size
+                    )}
               </Text>
             </View>
           ) : null}
@@ -1494,6 +1536,7 @@ export default function FootwearScreen() {
                   p.rating != null && Number.isFinite(p.rating)
                     ? Number(p.rating).toFixed(1)
                     : "—",
+                ...(p.variantId != null ? { variantId: p.variantId } : {}),
               };
             });
 
@@ -1518,7 +1561,14 @@ export default function FootwearScreen() {
                         : "No related products found."}
                     </Text>
                   ) : null}
-                  {related.map((product: any) => (
+                  {related.map((product: any) => {
+                    const wishlisted = categoryPtbRowWishlisted(
+                      product,
+                      wishlistHasAuth,
+                      wishlistServerKeys,
+                      wishlistIds
+                    );
+                    return (
               <TouchableOpacity
                 key={product.id}
                 style={styles.relatedProductCard}
@@ -1571,12 +1621,14 @@ export default function FootwearScreen() {
                           activeOpacity={0.85}
                           onPress={() => void handleToggleWishlist(product)}
                           accessibilityRole="button"
-                          accessibilityLabel={`${wishlistIds.has(product.id) ? "Remove from" : "Add to"} wishlist: ${product.name}`}
+                          accessibilityLabel={`${
+                            wishlisted ? "Remove from" : "Add to"
+                          } wishlist: ${product.name}`}
                         >
                           <Ionicons
-                            name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                            name={wishlisted ? "heart" : "heart-outline"}
                             size={16}
-                            color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                            color={wishlisted ? "#E11D48" : "#1d324e"}
                           />
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -1596,7 +1648,8 @@ export default function FootwearScreen() {
                   </View>
                 </View>
               </TouchableOpacity>
-            ))}
+                    );
+                  })}
           </View>
               </>
             );

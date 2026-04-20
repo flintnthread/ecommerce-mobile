@@ -32,12 +32,13 @@ import api, {
   searchProductsPath,
   searchSuggestionsPath,
 } from "../services/api";
+import { parseWishlistApiError, postWishlistAdd } from "../lib/wishlistServerApi";
 import {
   addProductToCart,
+  addWishlistProductIfAbsent,
   getWishlistIds,
   loadWishlist,
   resolveProductImage,
-  toggleWishlistProduct,
   type PersistedWishlistLine,
 } from "../lib/shopStorage";
 import {
@@ -105,6 +106,8 @@ type HomeWishlistCandidate = {
   image: ImageSourcePropType;
   price: string;
   oldPrice?: string;
+  /** From API variant `id` — required for POST `/api/wishlist/add`. */
+  variantId?: number;
 };
 
 /** “More picks” grid row — API-mapped or fallback */
@@ -116,6 +119,8 @@ type MorePicksGridItem = {
   price: string;
   oldPrice?: string;
   discount?: string;
+  /** Backend `ProductVariantDTO.id` for wishlist add. */
+  variantId?: number;
 };
 
 type MorePicksApiImage = {
@@ -126,6 +131,8 @@ type MorePicksApiImage = {
 };
 
 type MorePicksApiVariant = {
+  id?: number | string | null;
+  variantId?: number | string | null;
   sellingPrice?: number | string | null;
   mrpPrice?: number | string | null;
   finalPrice?: number | string | null;
@@ -182,37 +189,6 @@ const FRESH_FINDS_RECENT_PATH = "/api/products/recent";
 const TOP_PICKS_POPULAR_PATH = "/api/products/popular";
 /** Preview strip vs expanded list (Spring `page` / `size` when supported). */
 const TOP_PICKS_PREVIEW_SIZE = 5;
-
-/**
- * Suggested for you — wishlist by user.
- * Use a path-only URL with the shared axios client (`services/api.tsx` `baseURL`); never concatenate a full `http://…` here.
- * Spring expects a numeric `Long` path segment — not a Swagger placeholder like `{id}`.
- */
-const ASYNC_USER_ID_KEYS = ["userId", "id"] as const;
-
-/** Only digits; rejects `{id}`, `{userId}`, empty, decimals, etc. */
-function extractSpringLongUserIdSegment(raw: string | null | undefined): string | null {
-  const s = String(raw ?? "").trim();
-  if (!s) return null;
-  if (/^\{[^}]+\}$/.test(s)) return null;
-  if (!/^\d+$/.test(s)) return null;
-  return s;
-}
-
-/** Path relative to `api.defaults.baseURL`, e.g. `/api/wishlist/user/42` */
-function wishlistUserPath(numericUserId: string): string {
-  return `/api/wishlist/user/${encodeURIComponent(numericUserId)}`;
-}
-
-async function readNumericUserIdFromStorage(): Promise<string | null> {
-  for (const key of ASYNC_USER_ID_KEYS) {
-    const seg = extractSpringLongUserIdSegment(
-      (await AsyncStorage.getItem(key)) ?? undefined
-    );
-    if (seg) return seg;
-  }
-  return null;
-}
 
 type ApiWishlistImage = {
   imagePath?: string | null;
@@ -774,6 +750,16 @@ function mapMorePicksApiToGrid(
       discount = `${Math.round(p.discountPercentage)}%`;
     }
 
+    const rawVariantId = v?.id ?? v?.variantId;
+    const variantIdNum =
+      typeof rawVariantId === "string"
+        ? Number.parseInt(rawVariantId, 10)
+        : Number(rawVariantId);
+    const variantId =
+      Number.isFinite(variantIdNum) && variantIdNum > 0
+        ? Math.floor(variantIdNum)
+        : undefined;
+
     out.push({
       id: String(idNum),
       name,
@@ -782,6 +768,7 @@ function mapMorePicksApiToGrid(
       price: sale > 0 ? formatInrAmount(sale) : "—",
       oldPrice,
       discount,
+      variantId,
     });
   }
 
@@ -1993,6 +1980,7 @@ export default function Home() {
                     image: item.image,
                     price: item.price,
                     oldPrice: item.oldPrice,
+                    variantId: item.variantId,
                   })
                 }
               >
@@ -2144,6 +2132,34 @@ export default function Home() {
       return;
     }
 
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    if (!token) {
+      Alert.alert(
+        "Sign in required",
+        "Please log in to save items to your wishlist."
+      );
+      return;
+    }
+
+    const productId = Math.floor(Number(pendingWishlist.id));
+    if (!Number.isFinite(productId) || productId <= 0) {
+      Alert.alert("Cannot add", "Invalid product.");
+      return;
+    }
+
+    const variantId = pendingWishlist.variantId;
+    if (
+      variantId == null ||
+      !Number.isFinite(variantId) ||
+      Math.floor(variantId) <= 0
+    ) {
+      Alert.alert(
+        "Cannot add to wishlist",
+        "This listing does not include a variant id. Open the product page, choose size or color, then add to wishlist."
+      );
+      return;
+    }
+
     const line: PersistedWishlistLine = {
       id: pendingWishlist.id,
       name: pendingWishlist.name,
@@ -2154,10 +2170,30 @@ export default function Home() {
       ),
     };
 
-    await toggleWishlistProduct(line);
-    await reloadWishlistBadge();
-    setSaveToWishlistVisible(false);
-    setPendingWishlist(null);
+    try {
+      const { productName: nameFromServer } = await postWishlistAdd(
+        productId,
+        Math.floor(variantId)
+      );
+
+      await addWishlistProductIfAbsent(line);
+      await reloadWishlistBadge();
+      setSaveToWishlistVisible(false);
+      setPendingWishlist(null);
+
+      Alert.alert(
+        "Added to wishlist",
+        (nameFromServer && nameFromServer.trim()) || line.name
+      );
+    } catch (e: unknown) {
+      Alert.alert(
+        "Wishlist",
+        parseWishlistApiError(
+          e,
+          "We could not add this item to your wishlist. Please try again."
+        )
+      );
+    }
   }, [
     parseRupee,
     pendingWishlist,
