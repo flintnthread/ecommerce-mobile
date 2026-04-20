@@ -2,6 +2,7 @@ import "react-native-gesture-handler";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Alert,
   Easing,
   Image,
   ImageBackground,
@@ -23,9 +24,19 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { VideoView, useVideoPlayer } from "expo-video";
-import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
+import api, {
+  productsByMainCategoryPath,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useLanguage } from "@/lib/language";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadCart,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 import {
   GestureHandlerRootView,
   TouchableOpacity as GestureTouchableOpacity,
@@ -76,6 +87,32 @@ type AccessoriesCategoryApi = {
   categoryName: string;
   image: string | null;
   mobileImage: string | null;
+  status?: number;
+};
+
+type MainCategoryProductApi = {
+  id: number;
+  name?: string | null;
+  rating?: number | string | null;
+  averageRating?: number | string | null;
+  average_rating?: number | string | null;
+  reviewRating?: number | string | null;
+  review_rating?: number | string | null;
+  images?: Array<{
+    imagePath?: string | null;
+    imageUrl?: string | null;
+    isPrimary?: boolean;
+  }> | null;
+  variants?: Array<{
+    sellingPrice?: number | string | null;
+    mrpPrice?: number | string | null;
+    discountPercentage?: number | string | null;
+  }> | null;
+};
+
+type MainCategoryApiRow = {
+  id: number;
+  categoryName: string;
   status?: number;
 };
 
@@ -420,28 +457,28 @@ const womenAccessoriesItems: CollectionItem[] = [
     title: "Tote Bags",
     subtitle: "Work, travel & everyday",
     tag: "Bags",
-    image: require("../assets/images/look3.png"),
+    image: require("../assets/images/Totebags.png"),
   },
   {
     id: "w2",
     title: "Chic Handbags",
     subtitle: "Party & daily carry",
     tag: "Bags",
-    image: require("../assets/images/look4.png"),
+    image: require("../assets/images/ChicHandbgs.png"),
   },
   {
     id: "w3",
     title: "Sling & Crossbody",
     subtitle: "Hands-free everyday",
     tag: "Bags",
-    image: require("../assets/images/look2.png"),
+    image: require("../assets/images/SlingCrossbody.png"),
   },
   {
     id: "w4",
     title: "Clutches & Evening",
     subtitle: "Occasion-ready picks",
     tag: "Bags",
-    image: require("../assets/images/product2.png"),
+    image: require("../assets/images/ClutchesEvening.png"),
   },
 ];
 
@@ -478,21 +515,21 @@ const styleLabItems: CollectionItem[] = [
     title: "Minimal Gold Set",
     subtitle: "Office-ready picks",
     tag: "Editor Pick",
-    image: require("../assets/images/latest3.png"),
+    image: require("../assets/images/MinimalGoldSet.png"),
   },
   {
     id: "sl2",
     title: "Weekend Sling Edit",
     subtitle: "Light and stylish",
     tag: "New",
-    image: require("../assets/images/look2.png"),
+    image: require("../assets/images/WeekendSlingEdit.png"),
   },
   {
     id: "sl3",
     title: "Classic Watch Pairing",
     subtitle: "Match every outfit",
     tag: "Must Have",
-    image: require("../assets/images/accessoriescate.png"),
+    image: require("../assets/images/Classicwatchpairing.png"),
   },
 ];
 
@@ -502,28 +539,28 @@ const menAccessoriesItems: CollectionItem[] = [
     title: "Dress & Leather Belts",
     subtitle: "Formal fits & slim profiles",
     tag: "Belts & Caps",
-    image: require("../assets/images/product6.png"),
+    image: require("../assets/images/DressLeatherBelts.png"),
   },
   {
     id: "m2",
     title: "Premium Casual Belts",
     subtitle: "Canvas, web & everyday",
     tag: "Belts & Caps",
-    image: require("../assets/images/product1.png"),
+    image: require("../assets/images/PremiumCasualbelts.png"),
   },
   {
     id: "m3",
     title: "Caps & Snapbacks",
     subtitle: "Street, sport & everyday",
     tag: "Belts & Caps",
-    image: require("../assets/images/look2.png"),
+    image: require("../assets/images/CapsSnapbacks.png"),
   },
   {
     id: "m4",
     title: "Beanies & Bucket Hats",
     subtitle: "Seasonal headwear picks",
     tag: "Belts & Caps",
-    image: require("../assets/images/look4.png"),
+    image: require("../assets/images/BeaniesBuckethats.png"),
   },
 ];
 
@@ -1029,28 +1066,28 @@ function womanYouAreCardScrollFocusOpacity(
 const spotlightFooterAdBanners: SpotlightFooterAdBanner[] = [
   {
     id: "fb1",
-    image: require("../assets/images/latest1.png"),
+    image: require("../assets/images/bangles.png"),
     caption: "Bangles",
     title: "Limited-time accessory picks",
     subtitle: "Tap to explore the collection",
   },
   {
     id: "fb2",
-    image: require("../assets/images/accessariescate.png"),
+    image: require("../assets/images/Watches.png"),
     caption: "Watches",
     title: "Statement timepieces",
     subtitle: "Curated straps & dials",
   },
   {
     id: "fb3",
-    image: require("../assets/images/latest3.png"),
+    image: require("../assets/images/Jewellery.png"),
     caption: "Jewellery",
     title: "Sparkle for every occasion",
     subtitle: "Necklaces, rings & more",
   },
   {
     id: "fb4",
-    image: require("../assets/images/accessoriescate.png"),
+    image: require("../assets/images/NewIn.png"),
     caption: "New in",
     title: "Fresh drops this week",
     subtitle: "Discover accessories you will love",
@@ -1165,7 +1202,27 @@ const finalUniquePicks: CollectionItem[] = [
 export default function Accessories() {
   const { tr } = useLanguage();
   const router = useRouter();
-  const params = useLocalSearchParams<{ focus?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    focus?: string | string[];
+    id?: string | string[];
+    mainCategoryId?: string | string[];
+  }>();
+  const rawMainCategoryId = Array.isArray(params.id)
+    ? params.id[0]
+    : params.id ?? Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const parsedMainCategoryId = Number.parseInt(String(rawMainCategoryId ?? ""), 10);
+  const routeAccessoriesMainCategoryId =
+    Number.isFinite(parsedMainCategoryId) && parsedMainCategoryId > 0
+      ? parsedMainCategoryId
+      : null;
+  const [resolvedAccessoriesMainCategoryId, setResolvedAccessoriesMainCategoryId] = useState<
+    number | null
+  >(null);
+  const [resolvingAccessoriesMainCategoryId, setResolvingAccessoriesMainCategoryId] = useState(false);
+  const accessoriesMainCategoryId =
+    routeAccessoriesMainCategoryId ?? resolvedAccessoriesMainCategoryId;
   const { width: windowWidth } = useWindowDimensions();
   const [topCollectionBannerAspectRatio, setTopCollectionBannerAspectRatio] = useState(16 / 9);
   const [spotlightBannerAspectRatio, setSpotlightBannerAspectRatio] = useState(2.2);
@@ -1178,6 +1235,124 @@ export default function Accessories() {
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [showAllUniquePicks, setShowAllUniquePicks] = useState(false);
+  const [uniquePicksLoading, setUniquePicksLoading] = useState(false);
+  const [uniquePicksRows, setUniquePicksRows] = useState<
+    Array<{
+      id: string;
+      name: string;
+      imageUri: string;
+      sellingPrice: number | null;
+      mrpPrice: number | null;
+      discountPercentage: number | null;
+      rating: number | null;
+    }>
+  >([]);
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [cartCount, setCartCount] = useState(0);
+
+  const reloadWishlistIds = useCallback(async () => {
+    const ids = await getWishlistIds();
+    setWishlistIds(ids);
+  }, []);
+
+  const reloadCartCount = useCallback(async () => {
+    const cart = await loadCart();
+    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
+    setCartCount(count);
+  }, []);
+
+  useEffect(() => {
+    void reloadWishlistIds();
+    void reloadCartCount();
+  }, [reloadWishlistIds, reloadCartCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadWishlistIds();
+      void reloadCartCount();
+    }, [reloadWishlistIds, reloadCartCount])
+  );
+
+  useEffect(() => {
+    if (routeAccessoriesMainCategoryId != null) {
+      setResolvedAccessoriesMainCategoryId(null);
+      setResolvingAccessoriesMainCategoryId(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setResolvingAccessoriesMainCategoryId(true);
+      try {
+        const { data } = await api.get("/api/categories/main");
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? (data as MainCategoryApiRow[]) : [];
+        const accessoriesRow = rows.find((row) => {
+          if (!row || typeof row.id !== "number") return false;
+          if (typeof row.status === "number" && row.status !== 1) return false;
+          const name = String(row.categoryName ?? "").trim().toLowerCase();
+          return name === "accessories";
+        });
+        setResolvedAccessoriesMainCategoryId(
+          accessoriesRow && Number.isFinite(accessoriesRow.id) && accessoriesRow.id > 0
+            ? accessoriesRow.id
+            : null
+        );
+      } catch {
+        if (!cancelled) setResolvedAccessoriesMainCategoryId(null);
+      } finally {
+        if (!cancelled) setResolvingAccessoriesMainCategoryId(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeAccessoriesMainCategoryId]);
+
+  const handleToggleWishlistForUniquePick = useCallback(
+    async (product: { id: string; name: string; sellingPrice: number | null; mrpPrice: number | null }) => {
+      const selling = product.sellingPrice != null && Number.isFinite(product.sellingPrice)
+        ? Number(product.sellingPrice)
+        : 0;
+      const mrp = product.mrpPrice != null && Number.isFinite(product.mrpPrice)
+        ? Number(product.mrpPrice)
+        : selling;
+      const nowInWishlist = await toggleWishlistProduct({
+        id: product.id,
+        name: product.name,
+        price: selling,
+        mrp,
+      });
+      await reloadWishlistIds();
+      Alert.alert(
+        nowInWishlist ? "Added to wishlist" : "Removed from wishlist",
+        product.name
+      );
+    },
+    [reloadWishlistIds]
+  );
+
+  const handleAddToCartForUniquePick = useCallback(
+    async (product: { id: string; name: string; sellingPrice: number | null; mrpPrice: number | null }) => {
+      const selling = product.sellingPrice != null && Number.isFinite(product.sellingPrice)
+        ? Number(product.sellingPrice)
+        : 0;
+      const mrp = product.mrpPrice != null && Number.isFinite(product.mrpPrice)
+        ? Number(product.mrpPrice)
+        : selling;
+      await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: selling,
+        mrp,
+      });
+      await reloadCartCount();
+      Alert.alert("Added to cart", product.name);
+    },
+    [reloadCartCount]
+  );
 
   // Search functionality
   const handleSearch = useCallback(async (query: string) => {
@@ -1716,6 +1891,80 @@ export default function Accessories() {
   const spotlightFooterAdPageWidth = Math.max(windowWidth, 1);
 
   useEffect(() => {
+    if (accessoriesMainCategoryId == null) {
+      setUniquePicksRows([]);
+      setUniquePicksLoading(false);
+      return;
+    }
+    let cancelled = false;
+
+    const toNum = (value: unknown): number | null => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string") {
+        const n = Number.parseFloat(value);
+        return Number.isFinite(n) ? n : null;
+      }
+      return null;
+    };
+
+    (async () => {
+      setUniquePicksLoading(true);
+      try {
+        const { data } = await api.get(productsByMainCategoryPath(accessoriesMainCategoryId));
+        if (cancelled) return;
+        if (!Array.isArray(data)) {
+          setUniquePicksRows([]);
+          return;
+        }
+
+        const mapped = (data as MainCategoryProductApi[])
+          .filter((p) => p && typeof p.id === "number" && typeof p.name === "string")
+          .map((p) => {
+            const images = Array.isArray(p.images) ? p.images : [];
+            const primary =
+              images.find((img) => img?.isPrimary) ??
+              images.find((img) => img?.imageUrl || img?.imagePath) ??
+              null;
+            const imageRaw = String(primary?.imageUrl ?? primary?.imagePath ?? "").trim();
+            const imageUri = imageRaw
+              ? /^https?:\/\//i.test(imageRaw)
+                ? imageRaw
+                : getSubcategoryTableImageUri(imageRaw)
+              : "";
+
+            const firstVariant = Array.isArray(p.variants) ? p.variants[0] : null;
+            const ratingRaw =
+              p.rating ?? p.averageRating ?? p.average_rating ?? p.reviewRating ?? p.review_rating;
+            const rating = toNum(ratingRaw);
+            return {
+              id: String(p.id),
+              name: String(p.name ?? "").trim(),
+              imageUri,
+              sellingPrice: toNum(firstVariant?.sellingPrice),
+              mrpPrice: toNum(firstVariant?.mrpPrice),
+              discountPercentage: toNum(firstVariant?.discountPercentage),
+              rating,
+            };
+          })
+          .filter((p) => p.imageUri && p.name);
+
+        setUniquePicksRows(mapped);
+      } catch {
+        if (!cancelled) setUniquePicksRows([]);
+      } finally {
+        if (!cancelled) setUniquePicksLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessoriesMainCategoryId]);
+
+  const uniquePicksPreviewRows = useMemo(() => uniquePicksRows.slice(0, 3), [uniquePicksRows]);
+  const uniquePicksExpandedRows = useMemo(() => uniquePicksRows.slice(3), [uniquePicksRows]);
+
+  useEffect(() => {
     const n = spotlightFooterAdBanners.length;
     if (n <= 1) return;
     const t = setInterval(() => {
@@ -2120,11 +2369,33 @@ export default function Accessories() {
           </View>
 
           <View style={styles.headerIcons}>
-            <TouchableOpacity activeOpacity={0.7}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.headerIconBtn}
+              onPress={() => router.push("/wishlist")}
+            >
               <Ionicons name="heart-outline" size={23} color="#1d324e" />
+              {wishlistIds.size > 0 ? (
+                <View style={styles.headerIconBadge}>
+                  <Text style={styles.headerIconBadgeText}>
+                    {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.7}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.headerIconBtn}
+              onPress={() => router.push("/cart")}
+            >
               <Ionicons name="bag-outline" size={23} color="#1d324e" />
+              {cartCount > 0 ? (
+                <View style={styles.headerIconBadge}>
+                  <Text style={styles.headerIconBadgeText}>
+                    {cartCount > 99 ? "99+" : String(cartCount)}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           </View>
         </View>
@@ -3826,15 +4097,16 @@ export default function Accessories() {
             <TouchableOpacity
               activeOpacity={0.85}
               style={styles.finalUniqueViewAll}
-              onPress={() =>
-                router.push({
-                  pathname: "/subcatProducts",
-                  params: accessoriesSubcatNavigatorParams("Unique Picks"),
-                })
-              }
+              onPress={() => setShowAllUniquePicks((prev) => !prev)}
             >
-              <Text style={styles.finalUniqueViewAllText}>{tr("View All")}</Text>
-              <Ionicons name="chevron-forward" size={16} color="#9a3412" />
+              <Text style={styles.finalUniqueViewAllText}>
+                {showAllUniquePicks ? tr("Hide") : tr("View All")}
+              </Text>
+              <Ionicons
+                name={showAllUniquePicks ? "chevron-up" : "chevron-forward"}
+                size={16}
+                color="#9a3412"
+              />
             </TouchableOpacity>
           </View>
 
@@ -3843,28 +4115,172 @@ export default function Accessories() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.finalUniqueRow}
           >
-            {finalUniquePicks.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.finalUniqueCard}
-                activeOpacity={0.9}
-                onPress={() => router.push("/productdetail")}
-              >
-                <Image source={item.image} style={styles.finalUniqueCardImage} resizeMode="cover" />
-                <View style={styles.finalUniqueTagPill}>
-                  <Text style={styles.finalUniqueTagText}>{item.tag}</Text>
-                </View>
-                <View style={styles.finalUniqueCardContent}>
-                  <Text style={styles.finalUniqueCardTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.finalUniqueCardSubtitle} numberOfLines={1}>
-                    {item.subtitle}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {(uniquePicksPreviewRows.length > 0 ? uniquePicksPreviewRows : finalUniquePicks).map(
+              (item: any) => {
+                const isApiRow = "imageUri" in item;
+                const previewTag = isApiRow
+                  ? item.discountPercentage != null
+                    ? `${Number(item.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+                    : "Unique"
+                  : item.tag;
+                const previewTitle = isApiRow ? String(item.name ?? "") : String(item.title ?? "");
+                const previewSubtitle = isApiRow
+                  ? item.sellingPrice != null
+                    ? `Rs ${Math.round(item.sellingPrice)}`
+                    : "Fresh pick"
+                  : String(item.subtitle ?? "");
+                const previewImage = isApiRow ? { uri: item.imageUri } : item.image;
+                const previewId = isApiRow ? String(item.id) : undefined;
+
+                return (
+                  <TouchableOpacity
+                    key={String(item.id)}
+                    style={styles.finalUniqueCard}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      previewId
+                        ? router.push({
+                            pathname: "/productdetail",
+                            params: { id: previewId },
+                          } as any)
+                        : router.push("/productdetail")
+                    }
+                  >
+                    <Image source={previewImage} style={styles.finalUniqueCardImage} resizeMode="cover" />
+                    <View style={styles.finalUniqueTagPill}>
+                      <Text style={styles.finalUniqueTagText}>{previewTag}</Text>
+                    </View>
+                    <View style={styles.finalUniqueCardContent}>
+                      <Text style={styles.finalUniqueCardTitle} numberOfLines={1}>
+                        {previewTitle}
+                      </Text>
+                      <Text style={styles.finalUniqueCardSubtitle} numberOfLines={1}>
+                        {previewSubtitle}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }
+            )}
           </ScrollView>
+
+          {showAllUniquePicks ? (
+            <View style={styles.uniquePicksExpandedBlock}>
+              {accessoriesMainCategoryId == null ? (
+                <Text style={styles.uniquePicksExpandedInfoText}>
+                  {resolvingAccessoriesMainCategoryId
+                    ? "Resolving accessories category..."
+                    : "Accessories category id not found."}
+                </Text>
+              ) : uniquePicksLoading ? (
+                <Text style={styles.uniquePicksExpandedInfoText}>Loading products...</Text>
+              ) : uniquePicksRows.length === 0 ? (
+                <Text style={styles.uniquePicksExpandedInfoText}>No products found.</Text>
+              ) : uniquePicksExpandedRows.length === 0 ? (
+                <Text style={styles.uniquePicksExpandedInfoText}>No more products.</Text>
+              ) : (
+                <View style={styles.uniquePicksExpandedGrid}>
+                  {uniquePicksExpandedRows.map((product) => {
+                    const selling =
+                      product.sellingPrice != null ? `Rs ${Math.round(product.sellingPrice)}` : "";
+                    const mrp =
+                      product.mrpPrice != null ? `Rs ${Math.round(product.mrpPrice)}` : "";
+                    const showMrp =
+                      product.mrpPrice != null &&
+                      product.sellingPrice != null &&
+                      product.mrpPrice > product.sellingPrice + 0.009;
+                    const discount =
+                      product.discountPercentage != null
+                        ? `${Number(product.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+                        : "";
+                    const ratingLabel =
+                      product.rating != null && Number.isFinite(product.rating)
+                        ? Number(product.rating).toFixed(1)
+                        : "—";
+
+                    return (
+                      <TouchableOpacity
+                        key={product.id}
+                        style={styles.uniquePicksExpandedCard}
+                        activeOpacity={0.9}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/productdetail",
+                            params: { id: product.id },
+                          } as any)
+                        }
+                      >
+                        <View style={styles.uniquePicksExpandedInner}>
+                          <Image
+                            source={{ uri: product.imageUri }}
+                            style={styles.uniquePicksExpandedImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.uniquePicksExpandedMeta}>
+                            <Text style={styles.uniquePicksExpandedName} numberOfLines={2}>
+                              {product.name}
+                            </Text>
+                            <View style={styles.uniquePicksExpandedCategory}>
+                              <View style={styles.uniquePicksExpandedRatingPill}>
+                                <Ionicons name="star" size={12} color="#ef7b1a" />
+                                <Text style={styles.uniquePicksExpandedRatingText}>
+                                  {ratingLabel}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.uniquePicksExpandedPriceRow}>
+                              {selling ? (
+                                <Text style={styles.uniquePicksExpandedSelling}>{selling}</Text>
+                              ) : null}
+                              {showMrp ? (
+                                <Text style={styles.uniquePicksExpandedMrp}>{mrp}</Text>
+                              ) : null}
+                              {discount ? (
+                                <View style={styles.uniquePicksExpandedDiscountPill}>
+                                  <Text style={styles.uniquePicksExpandedDiscount}>{discount}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            <View style={styles.uniquePicksExpandedBottomRow}>
+                              <View style={styles.uniquePicksExpandedActionsRow}>
+                                <TouchableOpacity
+                                  style={styles.uniquePicksExpandedWishlistBtn}
+                                  activeOpacity={0.85}
+                                  onPress={() => void handleToggleWishlistForUniquePick(product)}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`${
+                                    wishlistIds.has(product.id) ? "Remove from" : "Add to"
+                                  } wishlist: ${product.name}`}
+                                >
+                                  <Ionicons
+                                    name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                    size={16}
+                                    color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                  />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={styles.uniquePicksExpandedCartBtn}
+                                  activeOpacity={0.85}
+                                  onPress={() => void handleAddToCartForUniquePick(product)}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Add to cart: ${product.name}`}
+                                >
+                                  <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                                  <Text style={styles.uniquePicksExpandedCartBtnText}>
+                                    Add to Cart
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -3938,6 +4354,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  headerIconBtn: {
+    position: "relative",
+  },
+  headerIconBadge: {
+    position: "absolute",
+    top: -8,
+    right: -10,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ef4444",
+  },
+  headerIconBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#ffffff",
   },
   topStrip: {
     backgroundColor: "transparent",
@@ -7028,5 +7464,140 @@ const styles = StyleSheet.create({
     color: "#69798c",
     fontSize: 11,
     fontWeight: "600",
+  },
+  uniquePicksExpandedBlock: {
+    marginTop: 10,
+    paddingHorizontal: 12,
+  },
+  uniquePicksExpandedInfoText: {
+    color: "#5a6578",
+    fontSize: 13,
+    fontWeight: "600",
+    paddingVertical: 8,
+  },
+  uniquePicksExpandedGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  uniquePicksExpandedCard: {
+    width: "48.5%",
+    borderRadius: 12,
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 10,
+    overflow: "visible",
+  },
+  uniquePicksExpandedInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  uniquePicksExpandedImage: {
+    width: "100%",
+    height: 130,
+    backgroundColor: "#ffffff",
+  },
+  uniquePicksExpandedMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  uniquePicksExpandedName: {
+    color: "#1D2430",
+    fontSize: 12,
+    fontWeight: "800",
+    minHeight: 30,
+  },
+  uniquePicksExpandedCategory: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  uniquePicksExpandedPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    gap: 6,
+  },
+  uniquePicksExpandedSelling: {
+    color: "#1d324e",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  uniquePicksExpandedMrp: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    textDecorationLine: "line-through",
+  },
+  uniquePicksExpandedDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  uniquePicksExpandedDiscount: {
+    color: "#b45309",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  uniquePicksExpandedBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 6,
+  },
+  uniquePicksExpandedActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    marginRight: 4,
+  },
+  uniquePicksExpandedWishlistBtn: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.25)",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+  },
+  uniquePicksExpandedCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: "#1d324e",
+  },
+  uniquePicksExpandedCartBtnText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  uniquePicksExpandedRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  uniquePicksExpandedRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
   },
 });

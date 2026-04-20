@@ -10,17 +10,26 @@ import {
   Animated,
   Dimensions,
   ImageSourcePropType,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api, {
   mapSearchResultsToUi,
+  productsByMainCategoryPath,
   searchProductsPath,
   searchSuggestionsPath,
+  subcategoriesByCategoryPath,
 } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadCart,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 
 const { width } = Dimensions.get("window");
 const DESK_INNER_WIDTH = width - 20; // deskSection marginHorizontal: 10 × 2
@@ -35,7 +44,7 @@ const FW4 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.
 const FW5 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM (1).jpeg");
 const FW6 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.33 AM.jpeg");
 const FW7 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.21.01 AM.jpeg");
-const BOTTOM3_MAIN_BANNER = require("../assets/footwearimages/main.png");
+const BOTTOM3_MAIN_BANNER = require("../assets/footwearimages/Footwearbanner.png");
 const HEADER_FAVICON = require("../assets/footwearimages/Fav Icon.png");
 
 /**
@@ -56,9 +65,9 @@ const TOP_MENU_ICON_KIDS = require("../assets/footwearimages/Kids.png");
 const TOP_MENU_ICON_TRENDNOW = require("../assets/footwearimages/trendnow.png");
 
 const BANNER_IMAGES = [
-  require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM.jpeg"),
-  require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.15 AM (1).jpeg"),
-  require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.33 AM.jpeg"),
+  require("../assets/footwearimages/WomensFootwear.png"),
+  require("../assets/footwearimages/KidsFootwear.png"),
+  require("../assets/footwearimages/Mensfootwear.png"),
 ];
 
 const CATEGORY_TILES = [
@@ -127,9 +136,6 @@ type FootwearApiSubcategory = {
   sellerId?: number | null;
 };
 
-const FOOTWEAR_CATEGORIES_URL =
-  "/api/categories/29/subcategories";
-
 const FOOTWEAR_MENS_SUBCATEGORIES_TABLE_URL =
   "/api/categories/44/subcategories-table";
 
@@ -138,11 +144,6 @@ const FOOTWEAR_WOMENS_SUBCATEGORIES_TABLE_URL =
 
 const FOOTWEAR_KIDS_SUBCATEGORIES_TABLE_URL =
   "/api/categories/46/subcategories-table";
-
-const FOOTWEAR_PRODUCTS_BY_SUBCATEGORY_URL = (subcategoryId: number) =>
-  `/api/products/subcategory/${subcategoryId}`;
-
-const RELATED_MENS_SUBCATEGORY_IDS = [94, 95] as const;
 
 type FootwearSubcategoryTableSub = {
   id: number;
@@ -153,6 +154,12 @@ type FootwearSubcategoryTableSub = {
 type FootwearSubcategoryTableRow = {
   categoryName: string;
   subcategories: FootwearSubcategoryTableSub[];
+};
+
+type MainCategoryApiRow = {
+  id: number;
+  categoryName: string;
+  status?: number;
 };
 
 /** Banner above Womens-Footwear subcategories (`Image` at ~589) */
@@ -188,6 +195,25 @@ const RELATED_FOOTWEAR_PRODUCTS = [
 
 export default function FootwearScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    mainCategoryId?: string | string[];
+  }>();
+  const rawMainCategoryId = Array.isArray(params.id)
+    ? params.id[0]
+    : params.id ?? Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const parsedMainCategoryId = Number.parseInt(String(rawMainCategoryId ?? ""), 10);
+  const routeFootwearMainCategoryId =
+    Number.isFinite(parsedMainCategoryId) && parsedMainCategoryId > 0
+      ? parsedMainCategoryId
+      : null;
+  const [resolvedFootwearMainCategoryId, setResolvedFootwearMainCategoryId] = useState<
+    number | null
+  >(null);
+  const footwearMainCategoryId =
+    routeFootwearMainCategoryId ?? resolvedFootwearMainCategoryId;
   const mainScrollRef = useRef<ScrollView>(null);
   const heroScrollRef = useRef<ScrollView>(null);
   const categoriesListYRef = useRef(0);
@@ -229,7 +255,7 @@ export default function FootwearScreen() {
     id: number;
     name: string;
     imageUri: string;
-    subcategoryId: number;
+    categoryName: string;
     sellingPrice: number | null;
     mrpPrice: number | null;
     discountPercentage: number | null;
@@ -237,9 +263,10 @@ export default function FootwearScreen() {
   };
 
   const [relatedMensProducts, setRelatedMensProducts] = useState<RelatedMensProductRow[]>([]);
-
-  const relatedMensFetchedIdsRef = useRef(new Set<number>());
-  const relatedMensInFlightIdsRef = useRef(new Set<number>());
+  const [relatedProductsLoading, setRelatedProductsLoading] = useState(false);
+  const [resolvingMainCategoryId, setResolvingMainCategoryId] = useState(false);
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [cartCount, setCartCount] = useState(0);
 
   const [apiFootwearCategoriesByGender, setApiFootwearCategoriesByGender] = useState<
     Partial<Record<GenderCategoryId, FootwearApiSubcategory>>
@@ -365,57 +392,105 @@ export default function FootwearScreen() {
     return null;
   };
 
-  const appendRelatedMensProductsForSubcategory = async (
-    subcategoryId: number
-  ): Promise<void> => {
-    if (!Number.isFinite(subcategoryId) || subcategoryId <= 0) return;
-    if (relatedMensFetchedIdsRef.current.has(subcategoryId)) return;
-    if (relatedMensInFlightIdsRef.current.has(subcategoryId)) return;
+  const reloadWishlistIds = useCallback(async () => {
+    const ids = await getWishlistIds();
+    setWishlistIds(ids);
+  }, []);
 
-    relatedMensInFlightIdsRef.current.add(subcategoryId);
-    try {
-      const { data } = await api.get(FOOTWEAR_PRODUCTS_BY_SUBCATEGORY_URL(subcategoryId));
-      if (!Array.isArray(data)) return;
-      const mapped = (data as any[])
-        .filter((p) => p && typeof p.id === "number" && typeof p.name === "string")
-        .map((p) => {
-          const imageUri = pickRelatedProductImageUri(p);
-          if (!imageUri) return null;
-          const { sellingPrice, mrpPrice, discountPercentage } = pickVariantPricing(p);
-          return {
-            id: p.id as number,
-            name: p.name as string,
-            imageUri,
-            subcategoryId,
-            sellingPrice,
-            mrpPrice,
-            discountPercentage,
-            rating: pickProductRating(p),
-          } satisfies RelatedMensProductRow;
-        })
-        .filter(Boolean) as RelatedMensProductRow[];
-
-      setRelatedMensProducts((prev) => {
-        const byId = new Map<string, (typeof prev)[number]>();
-        for (const p of prev) byId.set(String(p.id), p);
-        for (const p of mapped) byId.set(String(p.id), p);
-        return Array.from(byId.values());
-      });
-
-      relatedMensFetchedIdsRef.current.add(subcategoryId);
-    } catch {
-      // ignore network errors
-    } finally {
-      relatedMensInFlightIdsRef.current.delete(subcategoryId);
-    }
-  };
+  const reloadCartCount = useCallback(async () => {
+    const cart = await loadCart();
+    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
+    setCartCount(count);
+  }, []);
 
   useEffect(() => {
+    void reloadWishlistIds();
+    void reloadCartCount();
+  }, [reloadWishlistIds, reloadCartCount]);
+
+  const handleToggleWishlist = useCallback(
+    async (product: { id: string; name: string; sellingPriceNum: number; mrpPriceNum: number }) => {
+      const nowInWishlist = await toggleWishlistProduct({
+        id: product.id,
+        name: product.name,
+        price: product.sellingPriceNum,
+        mrp: product.mrpPriceNum,
+      });
+      await reloadWishlistIds();
+      Alert.alert(
+        nowInWishlist ? "Added to wishlist" : "Removed from wishlist",
+        product.name
+      );
+    },
+    [reloadWishlistIds]
+  );
+
+  const handleAddToCart = useCallback(
+    async (product: { id: string; name: string; sellingPriceNum: number; mrpPriceNum: number }) => {
+      const cart = await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: product.sellingPriceNum,
+        mrp: product.mrpPriceNum,
+      });
+      const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
+      setCartCount(count);
+      Alert.alert("Added to cart", product.name);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (routeFootwearMainCategoryId != null) {
+      setResolvedFootwearMainCategoryId(null);
+      setResolvingMainCategoryId(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setResolvingMainCategoryId(true);
+      try {
+        const { data } = await api.get("/api/categories/main");
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? (data as MainCategoryApiRow[]) : [];
+        const footwearRow = rows.find((row) => {
+          if (!row || typeof row.id !== "number") return false;
+          if (typeof row.status === "number" && row.status !== 1) return false;
+          const name = String(row.categoryName ?? "").trim().toLowerCase();
+          return name === "footwear";
+        });
+        setResolvedFootwearMainCategoryId(
+          footwearRow && Number.isFinite(footwearRow.id) && footwearRow.id > 0
+            ? footwearRow.id
+            : null
+        );
+      } catch {
+        if (!cancelled) setResolvedFootwearMainCategoryId(null);
+      } finally {
+        if (!cancelled) setResolvingMainCategoryId(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeFootwearMainCategoryId]);
+
+  useEffect(() => {
+    if (footwearMainCategoryId == null) {
+      setApiFootwearCategoriesByGender({});
+      return;
+    }
+
     const controller = new AbortController();
 
     (async () => {
       try {
-        const { data } = await api.get(FOOTWEAR_CATEGORIES_URL, { signal: controller.signal });
+        const { data } = await api.get(
+          subcategoriesByCategoryPath(footwearMainCategoryId),
+          { signal: controller.signal }
+        );
         if (!Array.isArray(data)) return;
 
         const next: Partial<Record<GenderCategoryId, FootwearApiSubcategory>> = {};
@@ -435,7 +510,58 @@ export default function FootwearScreen() {
     })();
 
     return () => controller.abort();
-  }, []);
+  }, [footwearMainCategoryId]);
+
+  useEffect(() => {
+    if (footwearMainCategoryId == null) {
+      setRelatedMensProducts([]);
+      setRelatedProductsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    (async () => {
+      setRelatedProductsLoading(true);
+      try {
+        const { data } = await api.get(productsByMainCategoryPath(footwearMainCategoryId), {
+          signal: controller.signal,
+        });
+        if (!Array.isArray(data)) {
+          setRelatedMensProducts([]);
+          return;
+        }
+
+        const mapped = (data as any[])
+          .filter((p) => p && typeof p.id === "number" && typeof p.name === "string")
+          .map((p) => {
+            const imageUri = pickRelatedProductImageUri(p);
+            if (!imageUri) return null;
+            const { sellingPrice, mrpPrice, discountPercentage } = pickVariantPricing(p);
+            const categoryName = safeText(String(p.categoryName ?? p.subcategoryName ?? "Footwear"));
+            return {
+              id: p.id as number,
+              name: safeText(String(p.name ?? "")),
+              imageUri,
+              categoryName: categoryName || "Footwear",
+              sellingPrice,
+              mrpPrice,
+              discountPercentage,
+              rating: pickProductRating(p),
+            } satisfies RelatedMensProductRow;
+          })
+          .filter(Boolean) as RelatedMensProductRow[];
+
+        setRelatedMensProducts(mapped);
+      } catch {
+        // ignore network errors
+      } finally {
+        setRelatedProductsLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [footwearMainCategoryId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -525,16 +651,9 @@ export default function FootwearScreen() {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    // Prefetch both Men subcategory products for the related section.
-    RELATED_MENS_SUBCATEGORY_IDS.forEach((id) => {
-      void appendRelatedMensProductsForSubcategory(id);
-    });
-  }, []);
-
   // Temporary tall video banner until you provide final asset.
   const tallBannerPlayer = useVideoPlayer(
-    require("../assets/images/videobanner.mp4"),
+    require("../assets/footwearimages/videofootwear.mp4"),
     (player) => {
       player.loop = true;
       player.muted = true;
@@ -606,14 +725,6 @@ export default function FootwearScreen() {
       kids: "kidswear",
     };
     const numericSubcategoryId = Number.parseInt(String(sub.id), 10);
-
-    if (
-      section === "men" &&
-      Number.isFinite(numericSubcategoryId) &&
-      RELATED_MENS_SUBCATEGORY_IDS.includes(numericSubcategoryId as any)
-    ) {
-      void appendRelatedMensProductsForSubcategory(numericSubcategoryId);
-    }
 
     router.push({
       pathname: "/subcatProducts",
@@ -773,10 +884,24 @@ export default function FootwearScreen() {
         </View>
 
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push("/wishlist")}>
-          <Ionicons name="heart-outline" size={22} color="#1D2430" />
+          <Ionicons name="heart-outline" size={24} color="#1D2430" />
+          {wishlistIds.size > 0 ? (
+            <View style={styles.headerIconBadge}>
+              <Text style={styles.headerIconBadgeText}>
+                {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+              </Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push("/cart")}>
-          <Ionicons name="bag-outline" size={22} color="#1D2430" />
+          <Ionicons name="bag-outline" size={24} color="#1D2430" />
+          {cartCount > 0 ? (
+            <View style={styles.headerIconBadge}>
+              <Text style={styles.headerIconBadgeText}>
+                {cartCount > 99 ? "99+" : String(cartCount)}
+              </Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
       </View>
 
@@ -1348,8 +1473,17 @@ export default function FootwearScreen() {
               return {
                 id: String(p.id),
                 name: safeText(p.name),
-                category: p.subcategoryId === 94 ? "Men • Casual Shoes" : "Men • Formal Shoes",
                 image: { uri: p.imageUri } as ImageSourcePropType,
+                sellingPriceNum:
+                  p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+                    ? Number(p.sellingPrice)
+                    : 0,
+                mrpPriceNum:
+                  p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+                    ? Number(p.mrpPrice)
+                    : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+                    ? Number(p.sellingPrice)
+                    : 0,
                 sellingLabel: fmtRs(p.sellingPrice),
                 mrpLabel: showMrp ? fmtRs(p.mrpPrice) : "",
                 discountLabel:
@@ -1375,7 +1509,13 @@ export default function FootwearScreen() {
           <View style={styles.relatedProductsGrid}>
                   {related.length === 0 ? (
                     <Text style={styles.relatedProductsEmptyText}>
-                      Loading products…
+                      {footwearMainCategoryId == null
+                        ? resolvingMainCategoryId
+                          ? "Resolving footwear category..."
+                          : "Footwear category id not found."
+                        : relatedProductsLoading
+                        ? "Loading products..."
+                        : "No related products found."}
                     </Text>
                   ) : null}
                   {related.map((product: any) => (
@@ -1401,12 +1541,20 @@ export default function FootwearScreen() {
                     <Text style={styles.relatedProductName} numberOfLines={2}>
                       {product.name}
                     </Text>
-                    <Text style={styles.relatedProductCategory}>
-                      {product.category}
-                    </Text>
+                    <View style={styles.relatedProductCategory}>
+                      <View style={styles.relatedProductRatingPill}>
+                        <Ionicons name="star" size={12} color="#ef7b1a" />
+                        <Text style={styles.relatedProductRatingText}>
+                          {product.ratingLabel}
+                        </Text>
+                      </View>
+                    </View>
                     <View style={styles.relatedProductPriceRow}>
                       {product.sellingLabel ? (
                         <Text style={styles.relatedProductPrice}>{product.sellingLabel}</Text>
+                      ) : null}
+                      {product.mrpLabel ? (
+                        <Text style={styles.relatedProductMrp}>{product.mrpLabel}</Text>
                       ) : null}
                       {product.discountLabel ? (
                         <View style={styles.relatedProductDiscountPill}>
@@ -1416,16 +1564,33 @@ export default function FootwearScreen() {
                         </View>
                       ) : null}
                     </View>
-                    {product.mrpLabel ? (
-                      <Text style={styles.relatedProductMrp}>{product.mrpLabel}</Text>
-                    ) : null}
                     <View style={styles.relatedProductBottomRow}>
-                      <View style={{ flex: 1 }} />
-                      <View style={styles.relatedProductRatingPill}>
-                        <Ionicons name="star" size={12} color="#ef7b1a" />
-                        <Text style={styles.relatedProductRatingText}>
-                          {product.ratingLabel}
-                        </Text>
+                      <View style={styles.relatedProductActionsRow}>
+                        <TouchableOpacity
+                          style={styles.relatedProductWishlistBtn}
+                          activeOpacity={0.85}
+                          onPress={() => void handleToggleWishlist(product)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${wishlistIds.has(product.id) ? "Remove from" : "Add to"} wishlist: ${product.name}`}
+                        >
+                          <Ionicons
+                            name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                            size={16}
+                            color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.relatedProductCartBtn}
+                          activeOpacity={0.85}
+                          onPress={() => void handleAddToCart(product)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add to cart: ${product.name}`}
+                        >
+                          <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                          <Text style={styles.relatedProductCartBtnText}>
+                            Add to Cart
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   </View>
@@ -1542,6 +1707,24 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     marginLeft: 12,
+    position: "relative",
+  },
+  headerIconBadge: {
+    position: "absolute",
+    top: -8,
+    right: -10,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ef4444",
+  },
+  headerIconBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#ffffff",
   },
   dualBannerCard: {
     marginHorizontal: 0,
@@ -2202,16 +2385,15 @@ const styles = StyleSheet.create({
     minHeight: 30,
   },
   relatedProductCategory: {
-    marginTop: 2,
-    fontSize: 11,
-    color: "#6f7a8d",
-    fontWeight: "600",
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
   },
   relatedProductPriceRow: {
     marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     gap: 6,
   },
   relatedProductDiscountPill: {
@@ -2226,7 +2408,6 @@ const styles = StyleSheet.create({
     color: "#b45309",
   },
   relatedProductMrp: {
-    marginTop: 2,
     fontSize: 11,
     fontWeight: "700",
     color: "#94a3b8",
@@ -2235,8 +2416,40 @@ const styles = StyleSheet.create({
   relatedProductBottomRow: {
     marginTop: 8,
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     alignItems: "center",
+    gap: 6,
+  },
+  relatedProductActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 4,
+  },
+  relatedProductWishlistBtn: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.25)",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+  },
+  relatedProductCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#1d324e",
+  },
+  relatedProductCartBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   relatedProductPrice: {
     fontSize: 13,

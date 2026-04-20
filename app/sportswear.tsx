@@ -17,12 +17,23 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
+import api, {
+  productsByMainCategoryPath,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadCart,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 
@@ -901,6 +912,77 @@ function buildLocalLookbookForMensSubcategory(
 const PTB_GRID_GAP = 12;
 const PTB_GRID_COL_W = Math.floor((width - 32 - PTB_GRID_GAP) / 2);
 
+type MainCategoryApiRowSport = {
+  id: number;
+  categoryName: string;
+  status?: number;
+};
+
+function safeTextSport(value: string): string {
+  return value.replace(/\u0019/g, "'").trim();
+}
+
+function getAssetUriFromApiPathSport(pathOrUrl: string): string {
+  const raw = String(pathOrUrl ?? "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  if (!apiBase) return raw;
+  return `${apiBase}/${raw.replace(/^\/+/, "")}`;
+}
+
+function pickSportswearProductImageUri(p: any): string | null {
+  return pickProductImageUriFromApi(p, getAssetUriFromApiPathSport);
+}
+
+function pickVariantPricingSport(p: any): {
+  sellingPrice: number | null;
+  mrpPrice: number | null;
+  discountPercentage: number | null;
+} {
+  const variants = Array.isArray(p?.variants) ? p.variants : [];
+  const v =
+    variants.find(
+      (x: any) =>
+        x &&
+        (typeof x.sellingPrice === "number" ||
+          typeof x.mrpPrice === "number" ||
+          typeof x.sellingPrice === "string" ||
+          typeof x.mrpPrice === "string")
+    ) ?? null;
+  if (!v) return { sellingPrice: null, mrpPrice: null, discountPercentage: null };
+  const num = (x: unknown): number | null => {
+    if (typeof x === "number" && Number.isFinite(x)) return x;
+    if (typeof x === "string") {
+      const n = parseFloat(x);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  return {
+    sellingPrice: num(v.sellingPrice),
+    mrpPrice: num(v.mrpPrice),
+    discountPercentage: num(v.discountPercentage),
+  };
+}
+
+function pickProductRatingSport(p: any): number | null {
+  const r =
+    p?.rating ?? p?.averageRating ?? p?.average_rating ?? p?.reviewRating ?? p?.review_rating;
+  if (typeof r === "number" && Number.isFinite(r)) return r;
+  if (typeof r === "string") {
+    const n = parseFloat(r);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function parseRupeeFromLabel(label: string): number {
+  const raw = String(label ?? "").replace(/[^\d.]/g, "");
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 const imagesByColor = {
   black: [
     require("../assets/images/blacksport2.png"),
@@ -1135,6 +1217,42 @@ function SportswearGlassDealCard({
 
 export default function SportsWearSection() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    mainCategoryId?: string | string[];
+  }>();
+  const rawSportswearMainCategoryId = Array.isArray(params.id)
+    ? params.id[0]
+    : params.id ?? Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const parsedSportswearMainCategoryId = Number.parseInt(String(rawSportswearMainCategoryId ?? ""), 10);
+  const routeSportswearMainCategoryId =
+    Number.isFinite(parsedSportswearMainCategoryId) && parsedSportswearMainCategoryId > 0
+      ? parsedSportswearMainCategoryId
+      : null;
+  const [resolvedSportswearMainCategoryId, setResolvedSportswearMainCategoryId] = useState<
+    number | null
+  >(null);
+  const [resolvingSportswearMainCategoryId, setResolvingSportswearMainCategoryId] = useState(false);
+  const sportswearMainCategoryId =
+    routeSportswearMainCategoryId ?? resolvedSportswearMainCategoryId;
+
+  type ProductsToBuyApiRow = {
+    id: number;
+    name: string;
+    imageUri: string;
+    sellingPrice: number | null;
+    mrpPrice: number | null;
+    discountPercentage: number | null;
+    rating: number | null;
+  };
+
+  const [productsToBuyApi, setProductsToBuyApi] = useState<ProductsToBuyApiRow[]>([]);
+  const [productsToBuyLoading, setProductsToBuyLoading] = useState(false);
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [cartCount, setCartCount] = useState(0);
+
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -1185,6 +1303,227 @@ export default function SportsWearSection() {
     }, 500);
     return () => clearTimeout(timer);
   }, [searchQuery, handleSearch]);
+
+  const reloadWishlistIds = useCallback(async () => {
+    const ids = await getWishlistIds();
+    setWishlistIds(ids);
+  }, []);
+
+  const reloadCartCount = useCallback(async () => {
+    const cart = await loadCart();
+    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
+    setCartCount(count);
+  }, []);
+
+  useEffect(() => {
+    void reloadWishlistIds();
+    void reloadCartCount();
+  }, [reloadWishlistIds, reloadCartCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadWishlistIds();
+      void reloadCartCount();
+    }, [reloadWishlistIds, reloadCartCount])
+  );
+
+  useEffect(() => {
+    if (routeSportswearMainCategoryId != null) {
+      setResolvedSportswearMainCategoryId(null);
+      setResolvingSportswearMainCategoryId(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setResolvingSportswearMainCategoryId(true);
+      try {
+        const { data } = await api.get("/api/categories/main");
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? (data as MainCategoryApiRowSport[]) : [];
+        const sportswearRow = rows.find((row) => {
+          if (!row || typeof row.id !== "number") return false;
+          if (typeof row.status === "number" && row.status !== 1) return false;
+          const name = String(row.categoryName ?? "").trim().toLowerCase();
+          return name === "sportswear";
+        });
+        setResolvedSportswearMainCategoryId(
+          sportswearRow && Number.isFinite(sportswearRow.id) && sportswearRow.id > 0
+            ? sportswearRow.id
+            : null
+        );
+      } catch {
+        if (!cancelled) setResolvedSportswearMainCategoryId(null);
+      } finally {
+        if (!cancelled) setResolvingSportswearMainCategoryId(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeSportswearMainCategoryId]);
+
+  useEffect(() => {
+    if (sportswearMainCategoryId == null) {
+      setProductsToBuyApi([]);
+      setProductsToBuyLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    (async () => {
+      setProductsToBuyLoading(true);
+      try {
+        const { data } = await api.get(productsByMainCategoryPath(sportswearMainCategoryId), {
+          signal: controller.signal,
+        });
+        if (!Array.isArray(data)) {
+          setProductsToBuyApi([]);
+          return;
+        }
+
+        const mapped = (data as any[])
+          .filter((p) => p && typeof p.id === "number" && typeof p.name === "string")
+          .map((p) => {
+            const imageUri = pickSportswearProductImageUri(p);
+            if (!imageUri) return null;
+            const { sellingPrice, mrpPrice, discountPercentage } = pickVariantPricingSport(p);
+            return {
+              id: p.id as number,
+              name: safeTextSport(String(p.name ?? "")),
+              imageUri,
+              sellingPrice,
+              mrpPrice,
+              discountPercentage,
+              rating: pickProductRatingSport(p),
+            } satisfies ProductsToBuyApiRow;
+          })
+          .filter(Boolean) as ProductsToBuyApiRow[];
+
+        setProductsToBuyApi(mapped);
+      } catch {
+        setProductsToBuyApi([]);
+      } finally {
+        setProductsToBuyLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [sportswearMainCategoryId]);
+
+  const handleToggleWishlistPtb = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const nowInWishlist = await toggleWishlistProduct({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      await reloadWishlistIds();
+      Alert.alert(
+        nowInWishlist ? "Added to wishlist" : "Removed from wishlist",
+        product.name
+      );
+    },
+    [reloadWishlistIds]
+  );
+
+  const handleAddToCartPtb = useCallback(async (product: {
+    id: string;
+    name: string;
+    sellingNum: number;
+    mrpNum: number;
+  }) => {
+    const cart = await addProductToCart({
+      id: product.id,
+      name: product.name,
+      price: product.sellingNum,
+      mrp: product.mrpNum,
+    });
+    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
+    setCartCount(count);
+    Alert.alert("Added to cart", product.name);
+  }, []);
+
+  const productsToBuyUiRows = useMemo(() => {
+    const fmtRs = (n: number | null) =>
+      n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+
+    if (sportswearMainCategoryId == null) {
+      return [] as {
+        id: string;
+        name: string;
+        imageSource: ImageSourcePropType;
+        fromApi: boolean;
+        sellingLabel: string;
+        mrpLabel: string;
+        showMrp: boolean;
+        discountLabel: string;
+        ratingLabel: string;
+        sellingNum: number;
+        mrpNum: number;
+      }[];
+    }
+
+    if (productsToBuyApi.length > 0) {
+      return productsToBuyApi.map((p) => {
+        const showMrp =
+          p.mrpPrice != null &&
+          p.sellingPrice != null &&
+          p.mrpPrice > p.sellingPrice + 0.009;
+        return {
+          id: String(p.id),
+          name: p.name,
+          imageSource: { uri: p.imageUri } as ImageSourcePropType,
+          fromApi: true as const,
+          sellingLabel: fmtRs(p.sellingPrice),
+          mrpLabel: showMrp ? fmtRs(p.mrpPrice) : "",
+          showMrp,
+          discountLabel:
+            p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+              ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+              : "",
+          ratingLabel:
+            p.rating != null && Number.isFinite(p.rating) ? Number(p.rating).toFixed(1) : "—",
+          sellingNum:
+            p.sellingPrice != null && Number.isFinite(p.sellingPrice) ? Number(p.sellingPrice) : 0,
+          mrpNum:
+            p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+              ? Number(p.mrpPrice)
+              : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+              ? Number(p.sellingPrice)
+              : 0,
+        };
+      });
+    }
+
+    if (productsToBuyLoading) {
+      return [];
+    }
+
+    return PRODUCTS_TO_BUY.map((p) => {
+      const sellingNum = parseRupeeFromLabel(p.price);
+      const mrpNum = p.mrp ? parseRupeeFromLabel(p.mrp) : sellingNum;
+      const showMrp = Boolean(p.mrp) && mrpNum > sellingNum + 0.009;
+      const ratingLabel = p.rating > 0 ? p.rating.toFixed(1) : "—";
+      return {
+        id: p.id,
+        name: p.name,
+        imageSource: p.image as ImageSourcePropType,
+        fromApi: false as const,
+        sellingLabel: fmtRs(sellingNum),
+        mrpLabel: showMrp ? fmtRs(mrpNum) : "",
+        showMrp,
+        discountLabel:
+          p.discountPercent != null && p.discountPercent > 0 ? `${p.discountPercent}% off` : "",
+        ratingLabel,
+        sellingNum,
+        mrpNum,
+      };
+    });
+  }, [productsToBuyApi, productsToBuyLoading, sportswearMainCategoryId]);
 
   const [selectedColor, setSelectedColor] = useState("white");
   const [sportswearBrowseCards, setSportswearBrowseCards] = useState<SportswearBrowseCard[]>(
@@ -2220,12 +2559,26 @@ const rotate = rotateAnim.interpolate({
           onPress={() => router.push("/wishlist")}
         >
           <Ionicons name="heart-outline" size={24} color="#000" />
+          {wishlistIds.size > 0 ? (
+            <View style={styles.headerIconBadge}>
+              <Text style={styles.headerIconBadgeText}>
+                {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+              </Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.cartBtn}
           onPress={() => router.push("/cart")}
         >
           <Ionicons name="cart-outline" size={24} color="#000" />
+          {cartCount > 0 ? (
+            <View style={styles.headerIconBadge}>
+              <Text style={styles.headerIconBadgeText}>
+                {cartCount > 99 ? "99+" : String(cartCount)}
+              </Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
       </View>
 
@@ -3283,7 +3636,7 @@ const rotate = rotateAnim.interpolate({
         </View>
       </View>
 
-      {/* products to buy — 2 per row, no inner scroll */}
+      {/* products to buy — main-category API + footwear-style product cards */}
       <View
         ref={productsToBuyRef}
         style={styles.ptbSection}
@@ -3297,73 +3650,110 @@ const rotate = rotateAnim.interpolate({
             <Text style={styles.ptbSeeAllText}>See all</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.ptbGrid}>
-          {PRODUCTS_TO_BUY.map((p) => (
-            <View
-              key={p.id}
-              style={[styles.ptbCard, { width: PTB_GRID_COL_W }]}
-            >
-              <TouchableOpacity
-                activeOpacity={0.92}
-                onPress={goShop}
-                accessibilityRole="button"
-                accessibilityLabel={`${p.name}, ${p.price}`}
-              >
-                <View style={styles.ptbCardImageWrap}>
-                  {p.discountPercent != null && p.discountPercent > 0 ? (
-                    <View style={styles.ptbDiscountBadge}>
-                      <Text style={styles.ptbDiscountBadgeText}>
-                        {p.discountPercent}%
+        {sportswearMainCategoryId == null && resolvingSportswearMainCategoryId ? (
+          <Text style={styles.ptbStatusText}>Resolving sportswear category...</Text>
+        ) : sportswearMainCategoryId == null ? (
+          <Text style={styles.ptbStatusText}>Sportswear category id not found.</Text>
+        ) : productsToBuyLoading && productsToBuyApi.length === 0 ? (
+          <Text style={styles.ptbStatusText}>Loading products...</Text>
+        ) : productsToBuyUiRows.length === 0 ? (
+          <Text style={styles.ptbStatusText}>No products found.</Text>
+        ) : (
+          <View style={styles.ptbGrid}>
+            {productsToBuyUiRows.map((product) => (
+              <View key={product.id} style={[styles.ptbFpCard, { width: PTB_GRID_COL_W }]}>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    product.fromApi
+                      ? router.push({
+                          pathname: "/productdetail",
+                          params: { id: String(product.id) },
+                        } as any)
+                      : goShop()
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`${product.name}, view details`}
+                >
+                  <View style={styles.ptbFpInner}>
+                    <Image
+                      source={product.imageSource}
+                      style={styles.ptbFpImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.ptbFpMeta}>
+                      <Text style={styles.ptbFpName} numberOfLines={2}>
+                        {product.name}
                       </Text>
+                      <View style={styles.ptbFpCategory}>
+                        <View style={styles.ptbFpRatingPill}>
+                          <Ionicons name="star" size={12} color="#ef7b1a" />
+                          <Text style={styles.ptbFpRatingText}>{product.ratingLabel}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.ptbFpPriceRow}>
+                        {product.sellingLabel ? (
+                          <Text style={styles.ptbFpPrice}>{product.sellingLabel}</Text>
+                        ) : null}
+                        {product.showMrp && product.mrpLabel ? (
+                          <Text style={styles.ptbFpMrp}>{product.mrpLabel}</Text>
+                        ) : null}
+                        {product.discountLabel ? (
+                          <View style={styles.ptbFpDiscountPill}>
+                            <Text style={styles.ptbFpDiscountText}>{product.discountLabel}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.ptbFpBottomRow}>
+                        <View style={styles.ptbFpActionsRow}>
+                          <TouchableOpacity
+                            style={styles.ptbFpWishlistBtn}
+                            activeOpacity={0.85}
+                            onPress={() =>
+                              void handleToggleWishlistPtb({
+                                id: product.id,
+                                name: product.name,
+                                sellingNum: product.sellingNum,
+                                mrpNum: product.mrpNum,
+                              })
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel={`${
+                              wishlistIds.has(product.id) ? "Remove from" : "Add to"
+                            } wishlist: ${product.name}`}
+                          >
+                            <Ionicons
+                              name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                              size={16}
+                              color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.ptbFpCartBtn}
+                            activeOpacity={0.85}
+                            onPress={() =>
+                              void handleAddToCartPtb({
+                                id: product.id,
+                                name: product.name,
+                                sellingNum: product.sellingNum,
+                                mrpNum: product.mrpNum,
+                              })
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel={`Add to cart: ${product.name}`}
+                          >
+                            <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                            <Text style={styles.ptbFpCartBtnText}>Add to Cart</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
                     </View>
-                  ) : null}
-                  <Image
-                    source={p.image}
-                    style={styles.ptbCardImage}
-                    resizeMode="cover"
-                  />
-                </View>
-                <View style={styles.ptbCardBody}>
-                  <Text style={styles.ptbCardName} numberOfLines={3}>
-                    {p.name}
-                  </Text>
-                  <View style={styles.ptbRatingRow}>
-                    {[1, 2, 3, 4, 5].map((i) => {
-                      const filled = i <= Math.round(p.rating);
-                      return (
-                        <Ionicons
-                          key={`${p.id}-star-${i}`}
-                          name={filled ? "star" : "star-outline"}
-                          size={11}
-                          color={filled ? "#f59e0b" : "#cbd5e1"}
-                        />
-                      );
-                    })}
-                    <Text style={styles.ptbRatingMeta}>
-                      {p.rating.toFixed(1)} ({p.reviewCount})
-                    </Text>
                   </View>
-                  <View style={styles.ptbPriceRow}>
-                    {p.mrp ? (
-                      <Text style={styles.ptbMrp}>{p.mrp}</Text>
-                    ) : null}
-                    <Text style={styles.ptbSalePrice}>{p.price}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.ptbAddToCart}
-                activeOpacity={0.9}
-                onPress={() => router.push("/cart")}
-                accessibilityRole="button"
-                accessibilityLabel={`Add to cart: ${p.name}`}
-              >
-                <Ionicons name="cart-outline" size={17} color="#fff" />
-                <Text style={styles.ptbAddToCartText}>Add to Cart</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
   
@@ -3427,11 +3817,31 @@ const styles = StyleSheet.create({
   cartBtn: {
     marginLeft: 4,
     padding: 4,
+    position: "relative",
   },
 
   iconBtn: {
     marginLeft: 4,
     padding: 4,
+    position: "relative",
+  },
+
+  headerIconBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ef4444",
+  },
+  headerIconBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#ffffff",
   },
 
   bannerContainer: {
@@ -5701,6 +6111,133 @@ container2: {
     fontSize: 14,
     fontWeight: "700",
     color: "#ea580c",
+  },
+  ptbStatusText: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  ptbFpCard: {
+    borderRadius: 12,
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  ptbFpInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  ptbFpImage: {
+    width: "100%",
+    height: 130,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  ptbFpMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  ptbFpName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 30,
+  },
+  ptbFpCategory: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  ptbFpPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    gap: 6,
+  },
+  ptbFpPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  ptbFpMrp: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  ptbFpDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  ptbFpDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#b45309",
+  },
+  ptbFpBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 6,
+  },
+  ptbFpActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 4,
+  },
+  ptbFpWishlistBtn: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.25)",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+  },
+  ptbFpCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#1d324e",
+  },
+  ptbFpCartBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  ptbFpRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  ptbFpRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
   },
   ptbGrid: {
     flexDirection: "row",

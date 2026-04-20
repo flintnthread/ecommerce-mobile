@@ -294,6 +294,20 @@ export function productsByCategoryPath(categoryId: number): string {
   return `/api/products/category/${id}`;
 }
 
+/** Products by main category — path only (use with `api.get(...)`). */
+export function productsByMainCategoryPath(mainCategoryId: number): string {
+  const id = Math.floor(Number(mainCategoryId));
+  if (!Number.isFinite(id) || id <= 0) return "/api/products/main-category/0";
+  return `/api/products/main-category/${id}`;
+}
+
+/** Subcategories by category — path only (use with `api.get(...)`). */
+export function subcategoriesByCategoryPath(categoryId: number): string {
+  const id = Math.floor(Number(categoryId));
+  if (!Number.isFinite(id) || id <= 0) return "/api/categories/0/subcategories";
+  return `/api/categories/${id}/subcategories`;
+}
+
 // ===== ADDRESS API FUNCTIONS =====
 
 // Address interface for TypeScript
