@@ -12,7 +12,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
+import api, {
+  productsByMainCategoryPath,
+  productsSearchPath,
+  searchProductsPath,
+  searchSuggestionsPath,
+} from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 /** Top Picks for You API endpoint - same as home.tsx */
@@ -497,6 +502,11 @@ export default function SubcategoriesScreen() {
     mainCat?: string | string[];
     subCategory?: string | string[];
     subcategoryId?: string | string[];
+    mainCategoryId?: string | string[];
+    productsSearchQ?: string | string[];
+    productsSearchCategoryId?: string | string[];
+    productsSearchSort?: string | string[];
+    productsSearchGender?: string | string[];
   }>();
   const mainCat = Array.isArray(params.mainCat)
     ? params.mainCat[0]
@@ -510,6 +520,30 @@ export default function SubcategoriesScreen() {
   const routedSubcategoryId = routedSubcategoryIdRaw
     ? Number.parseInt(String(routedSubcategoryIdRaw), 10)
     : NaN;
+  const routedMainCategoryIdRaw = Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const routedMainCategoryId = routedMainCategoryIdRaw
+    ? Number.parseInt(String(routedMainCategoryIdRaw), 10)
+    : NaN;
+  const productsSearchQRaw = Array.isArray(params.productsSearchQ)
+    ? params.productsSearchQ[0]
+    : params.productsSearchQ;
+  const routedProductsSearchQ = String(productsSearchQRaw ?? "").trim();
+  const productsSearchCategoryIdRaw = Array.isArray(params.productsSearchCategoryId)
+    ? params.productsSearchCategoryId[0]
+    : params.productsSearchCategoryId;
+  const routedProductsSearchCategoryId = productsSearchCategoryIdRaw
+    ? Number.parseInt(String(productsSearchCategoryIdRaw), 10)
+    : NaN;
+  const productsSearchSortRaw = Array.isArray(params.productsSearchSort)
+    ? params.productsSearchSort[0]
+    : params.productsSearchSort;
+  const routedProductsSearchSort = String(productsSearchSortRaw ?? "").trim();
+  const productsSearchGenderRaw = Array.isArray(params.productsSearchGender)
+    ? params.productsSearchGender[0]
+    : params.productsSearchGender;
+  const routedProductsSearchGender = String(productsSearchGenderRaw ?? "").trim();
   const pageTitle = (selectedSubCategory || "Products").toUpperCase();
 
   useEffect(() => {
@@ -556,6 +590,12 @@ export default function SubcategoriesScreen() {
   const [apiRoutedProducts, setApiRoutedProducts] = useState<ProductItem[]>([]);
   /** When `subcategoryId` is in the route, we only show API rows (no fallback to synthetic catalog). */
   const [apiRoutedFromIdReady, setApiRoutedFromIdReady] = useState(false);
+
+  const [mainCategoryApiProducts, setMainCategoryApiProducts] = useState<ProductItem[]>([]);
+  const [mainCategoryApiReady, setMainCategoryApiReady] = useState(false);
+
+  const [productsSearchApiProducts, setProductsSearchApiProducts] = useState<ProductItem[]>([]);
+  const [productsSearchApiReady, setProductsSearchApiReady] = useState(false);
 
   /** Top Picks for You products state */
   const [topPicksProducts, setTopPicksProducts] = useState<ProductItem[]>([]);
@@ -921,6 +961,94 @@ export default function SubcategoriesScreen() {
   const routedFromSubcategoryId =
     Number.isFinite(routedSubcategoryId) && routedSubcategoryId > 0;
 
+  const routedFromMainCategoryId =
+    Number.isFinite(routedMainCategoryId) && routedMainCategoryId > 0;
+
+  const routedFromProductsSearch =
+    routedProductsSearchQ.length > 0 ||
+    (Number.isFinite(routedProductsSearchCategoryId) && routedProductsSearchCategoryId > 0);
+
+  useEffect(() => {
+    if (!routedFromProductsSearch) {
+      setProductsSearchApiProducts([]);
+      setProductsSearchApiReady(false);
+      return;
+    }
+
+    setProductsSearchApiReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const path = productsSearchPath({
+          q: routedProductsSearchQ || undefined,
+          categoryId:
+            Number.isFinite(routedProductsSearchCategoryId) &&
+            routedProductsSearchCategoryId > 0
+              ? routedProductsSearchCategoryId
+              : undefined,
+          sort: routedProductsSearchSort || undefined,
+          gender: routedProductsSearchGender || undefined,
+        });
+        const { data } = await api.get<unknown>(path, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        const rows = Array.isArray(data)
+          ? (data as unknown[])
+          : normalizeProductListPayload(data);
+        const mapped = rows
+          .map((row) => mapApiProductToProductItem(row))
+          .filter(Boolean) as ProductItem[];
+        setProductsSearchApiProducts(mapped);
+      } catch {
+        if (!controller.signal.aborted) setProductsSearchApiProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setProductsSearchApiReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [
+    routedFromProductsSearch,
+    routedProductsSearchQ,
+    routedProductsSearchCategoryId,
+    routedProductsSearchSort,
+    routedProductsSearchGender,
+    selectedSubCategory,
+    mainCat,
+  ]);
+
+  useEffect(() => {
+    if (!routedFromMainCategoryId) {
+      setMainCategoryApiProducts([]);
+      setMainCategoryApiReady(false);
+      return;
+    }
+
+    setMainCategoryApiReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(
+          productsByMainCategoryPath(routedMainCategoryId),
+          { signal: controller.signal }
+        );
+        if (controller.signal.aborted) return;
+        const rows = Array.isArray(data)
+          ? (data as unknown[])
+          : normalizeProductListPayload(data);
+        const mapped = rows
+          .map((row) => mapApiProductToProductItem(row))
+          .filter(Boolean) as ProductItem[];
+        setMainCategoryApiProducts(mapped);
+      } catch {
+        if (!controller.signal.aborted) setMainCategoryApiProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setMainCategoryApiReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [routedMainCategoryId, routedFromMainCategoryId, selectedSubCategory, mainCat]);
+
   useEffect(() => {
     if (!routedFromSubcategoryId) {
       setApiRoutedProducts([]);
@@ -1192,6 +1320,16 @@ export default function SubcategoriesScreen() {
 const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
   const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
 
+  if (routedFromProductsSearch) {
+    if (!productsSearchApiReady) return [];
+    return productsSearchApiProducts;
+  }
+
+  if (routedFromMainCategoryId) {
+    if (!mainCategoryApiReady) return [];
+    return mainCategoryApiProducts;
+  }
+
   // Handle Top Picks for You category
   if (subNorm === "top picks for you") {
     if (!topPicksReady) return [];
@@ -1237,6 +1375,12 @@ const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
   premiumFindsProducts,
   freshFindsReady,
   freshFindsProducts,
+  routedFromMainCategoryId,
+  mainCategoryApiReady,
+  mainCategoryApiProducts,
+  routedFromProductsSearch,
+  productsSearchApiReady,
+  productsSearchApiProducts,
 ]);
 
 const filteredRoutedProducts = React.useMemo(() => {
@@ -1796,7 +1940,9 @@ const handleBannerScroll = (event: any) => {
                 {filteredRoutedProducts.length} items
               </Text>
             </View>
-            {routedFromSubcategoryId && !apiRoutedFromIdReady ? (
+            {(routedFromSubcategoryId && !apiRoutedFromIdReady) ||
+            (routedFromMainCategoryId && !mainCategoryApiReady) ||
+            (routedFromProductsSearch && !productsSearchApiReady) ? (
               <Text style={styles.apiRoutedLoadingHint}>Loading products…</Text>
             ) : null}
             <View style={styles.productGrid}>
