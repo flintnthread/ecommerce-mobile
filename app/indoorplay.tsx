@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Platform,
   TextInput,
+  Alert,
   type ImageSourcePropType,
   useWindowDimensions,
   type NativeSyntheticEvent,
@@ -16,16 +17,32 @@ import {
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api, {
   mapSearchResultsToUi,
+  productsByMainCategoryPath,
   searchProductsPath,
   searchSuggestionsPath,
 } from "../services/api";
 import { useLanguage } from "@/lib/language";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import {
+  MainCategoryApiRowPtb,
+  normalizeMainCategoryName,
+  pickPtbProductImageUri,
+  pickPtbProductRating,
+  pickPtbVariantPricing,
+  safePtbText,
+} from "../lib/mainCategoryPtbHelpers";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadCart,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 
 const HEADER_BRAND_LOGO = require("../assets/images/logo.png");
 const INDOOR_IMAGE = require("../assets/MainCatImages/images/IndoorPlayEquipments.png");
@@ -109,6 +126,10 @@ const MAIN_CATEGORY_SHOWCASE: MainCategoryShowcaseItem[] = [
 
 const MAIN_CATEGORY_API_URL =
   "/api/categories/80/subcategories";
+
+const INDOOR_PTB_GRID_GAP = 12;
+/** Default main-category id for indoor play products (parent of `MAIN_CATEGORY_API_URL`). */
+const INDOOR_MAIN_CATEGORY_FALLBACK_ID = 80;
 
 const MAIN_CATEGORY_FALLBACK_BY_NAME = new Map(
   MAIN_CATEGORY_SHOWCASE.map((item) => [item.title.trim().toLowerCase(), item])
@@ -820,6 +841,7 @@ export default function IndoorPlayScreen() {
   const router = useRouter();
   const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
+  const { width: indoorWinW } = useWindowDimensions();
   const mainScrollRef = useRef<ScrollView>(null);
   const educationalSectionY = useRef(0);
   const preIndoorSectionY = useRef(0);
@@ -869,6 +891,224 @@ export default function IndoorPlayScreen() {
     }, 500);
     return () => clearTimeout(timer);
   }, [searchQuery, handleSearch]);
+
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    mainCategoryId?: string | string[];
+  }>();
+  const rawIndoorMainCat = Array.isArray(params.id)
+    ? params.id[0]
+    : params.id ?? Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const parsedRouteIndoorMainCat = Number.parseInt(String(rawIndoorMainCat ?? ""), 10);
+  const routeIndoorMainCategoryId =
+    Number.isFinite(parsedRouteIndoorMainCat) && parsedRouteIndoorMainCat > 0
+      ? parsedRouteIndoorMainCat
+      : null;
+  const [resolvedIndoorMainCategoryId, setResolvedIndoorMainCategoryId] = useState<number | null>(
+    null
+  );
+  const [resolvingIndoorMainCategoryId, setResolvingIndoorMainCategoryId] = useState(false);
+  const indoorMainCategoryIdForPtb =
+    routeIndoorMainCategoryId ?? resolvedIndoorMainCategoryId ?? INDOOR_MAIN_CATEGORY_FALLBACK_ID;
+
+  type IndoorPtbApiRow = {
+    id: number;
+    name: string;
+    imageUri: string;
+    sellingPrice: number | null;
+    mrpPrice: number | null;
+    discountPercentage: number | null;
+    rating: number | null;
+  };
+  const [indoorPtbApi, setIndoorPtbApi] = useState<IndoorPtbApiRow[]>([]);
+  const [indoorPtbLoading, setIndoorPtbLoading] = useState(false);
+  const [indoorWishlistIds, setIndoorWishlistIds] = useState<Set<string>>(new Set());
+  const [indoorCartCount, setIndoorCartCount] = useState(0);
+
+  const indoorPtbColW = useMemo(
+    () => Math.floor((indoorWinW - 32 - INDOOR_PTB_GRID_GAP) / 2),
+    [indoorWinW]
+  );
+
+  const reloadIndoorWishlistIds = useCallback(async () => {
+    setIndoorWishlistIds(await getWishlistIds());
+  }, []);
+
+  const reloadIndoorCartCount = useCallback(async () => {
+    const cart = await loadCart();
+    setIndoorCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+  }, []);
+
+  useEffect(() => {
+    void reloadIndoorWishlistIds();
+    void reloadIndoorCartCount();
+  }, [reloadIndoorWishlistIds, reloadIndoorCartCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadIndoorWishlistIds();
+      void reloadIndoorCartCount();
+    }, [reloadIndoorWishlistIds, reloadIndoorCartCount])
+  );
+
+  useEffect(() => {
+    if (routeIndoorMainCategoryId != null) {
+      setResolvedIndoorMainCategoryId(null);
+      setResolvingIndoorMainCategoryId(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setResolvingIndoorMainCategoryId(true);
+      try {
+        const { data } = await api.get("/api/categories/main");
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? (data as MainCategoryApiRowPtb[]) : [];
+        const row = rows.find((r) => {
+          if (!r || typeof r.id !== "number") return false;
+          if (typeof r.status === "number" && r.status !== 1) return false;
+          const n = normalizeMainCategoryName(String(r.categoryName ?? ""));
+          return (
+            n.includes("indoor") ||
+            n.includes("play equipment") ||
+            n.includes("preschool") ||
+            n === "toys" ||
+            n.includes("kids play")
+          );
+        });
+        setResolvedIndoorMainCategoryId(
+          row && Number.isFinite(row.id) && row.id > 0 ? row.id : null
+        );
+      } catch {
+        if (!cancelled) setResolvedIndoorMainCategoryId(null);
+      } finally {
+        if (!cancelled) setResolvingIndoorMainCategoryId(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeIndoorMainCategoryId]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setIndoorPtbLoading(true);
+      try {
+        const { data } = await api.get(productsByMainCategoryPath(indoorMainCategoryIdForPtb), {
+          signal: c.signal,
+        });
+        if (!Array.isArray(data)) {
+          setIndoorPtbApi([]);
+          return;
+        }
+        const mapped = (data as unknown[])
+          .filter((p) => p && typeof (p as any).id === "number" && typeof (p as any).name === "string")
+          .map((p) => {
+            const imageUri = pickPtbProductImageUri(p);
+            if (!imageUri) return null;
+            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            return {
+              id: (p as any).id as number,
+              name: safePtbText(String((p as any).name ?? "")),
+              imageUri,
+              sellingPrice,
+              mrpPrice,
+              discountPercentage,
+              rating: pickPtbProductRating(p),
+            } satisfies IndoorPtbApiRow;
+          })
+          .filter(Boolean) as IndoorPtbApiRow[];
+        setIndoorPtbApi(mapped);
+      } catch {
+        setIndoorPtbApi([]);
+      } finally {
+        setIndoorPtbLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [indoorMainCategoryIdForPtb]);
+
+  const handleToggleIndoorPtbWishlist = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const now = await toggleWishlistProduct({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      await reloadIndoorWishlistIds();
+      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    },
+    [reloadIndoorWishlistIds]
+  );
+
+  const handleAddIndoorPtbCart = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const cart = await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      setIndoorCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+      Alert.alert("Added to cart", product.name);
+    },
+    []
+  );
+
+  const goIndoorPtbShop = useCallback(() => {
+    router.push("/subcatProducts");
+  }, [router]);
+
+  const indoorPtbUiRows = useMemo(() => {
+    const fmtRs = (n: number | null) =>
+      n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+    if (indoorPtbApi.length === 0) {
+      return [] as {
+        id: string;
+        name: string;
+        imageSource: ImageSourcePropType;
+        sellingLabel: string;
+        mrpLabel: string;
+        showMrp: boolean;
+        discountLabel: string;
+        ratingLabel: string;
+        sellingNum: number;
+        mrpNum: number;
+      }[];
+    }
+    return indoorPtbApi.map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      return {
+        id: String(p.id),
+        name: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        sellingLabel: fmtRs(p.sellingPrice),
+        mrpLabel: showMrp ? fmtRs(p.mrpPrice) : "",
+        showMrp,
+        discountLabel:
+          p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+            ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+            : "",
+        ratingLabel:
+          p.rating != null && Number.isFinite(p.rating) ? Number(p.rating).toFixed(1) : "—",
+        sellingNum:
+          p.sellingPrice != null && Number.isFinite(p.sellingPrice) ? Number(p.sellingPrice) : 0,
+        mrpNum:
+          p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+            ? Number(p.mrpPrice)
+            : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+            ? Number(p.sellingPrice)
+            : 0,
+      };
+    });
+  }, [indoorPtbApi]);
 
   const [indoorLacingSpotlight, setIndoorLacingSpotlight] = useState<IndoorLacingThreadingSpotlightRow[]>(
     []
@@ -1432,11 +1672,39 @@ export default function IndoorPlayScreen() {
           </View>
 
           <View style={styles.headerIcons}>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/wishlist")} accessibilityRole="button" accessibilityLabel="Wishlist">
-              <Ionicons name="heart-outline" size={23} color="#1d324e" />
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push("/wishlist")}
+              accessibilityRole="button"
+              accessibilityLabel="Wishlist"
+            >
+              <View style={styles.indoorHeaderBadgeWrap}>
+                <Ionicons name="heart-outline" size={23} color="#1d324e" />
+                {indoorWishlistIds.size > 0 ? (
+                  <View style={styles.indoorHeaderBadge}>
+                    <Text style={styles.indoorHeaderBadgeText}>
+                      {indoorWishlistIds.size > 99 ? "99+" : String(indoorWishlistIds.size)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/cart")} accessibilityRole="button" accessibilityLabel="Cart">
-              <Ionicons name="bag-outline" size={23} color="#1d324e" />
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push("/cart")}
+              accessibilityRole="button"
+              accessibilityLabel="Cart"
+            >
+              <View style={styles.indoorHeaderBadgeWrap}>
+                <Ionicons name="bag-outline" size={23} color="#1d324e" />
+                {indoorCartCount > 0 ? (
+                  <View style={styles.indoorHeaderBadge}>
+                    <Text style={styles.indoorHeaderBadgeText}>
+                      {indoorCartCount > 99 ? "99+" : String(indoorCartCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -2266,6 +2534,116 @@ export default function IndoorPlayScreen() {
           </TouchableOpacity>
         </View>
 
+        <View style={styles.indoorPtbWrap}>
+          <View style={styles.indoorPtbHeaderRow}>
+            <Text style={styles.indoorPtbHeading}>{tr("Products to buy")}</Text>
+            <TouchableOpacity onPress={goIndoorPtbShop} activeOpacity={0.85}>
+              <Text style={styles.indoorPtbSeeAll}>{tr("See all")}</Text>
+            </TouchableOpacity>
+          </View>
+          {routeIndoorMainCategoryId == null && resolvingIndoorMainCategoryId ? (
+            <Text style={styles.indoorPtbStatus}>{tr("Matching store category…")}</Text>
+          ) : null}
+          {indoorPtbLoading && indoorPtbApi.length === 0 ? (
+            <Text style={styles.indoorPtbStatus}>{tr("Loading products...")}</Text>
+          ) : indoorPtbUiRows.length === 0 ? (
+            <Text style={styles.indoorPtbStatus}>{tr("No products found.")}</Text>
+          ) : (
+            <View style={styles.indoorPtbGrid}>
+              {indoorPtbUiRows.map((product) => (
+                <View key={product.id} style={[styles.indoorPtbCard, { width: indoorPtbColW }]}>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: String(product.id) },
+                      } as any)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`${product.name}, view details`}
+                  >
+                    <View style={styles.indoorPtbCardInner}>
+                      <Image
+                        source={product.imageSource}
+                        style={styles.indoorPtbImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.indoorPtbMeta}>
+                        <Text style={styles.indoorPtbName} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                        <View style={styles.indoorPtbRatingRow}>
+                          <View style={styles.indoorPtbRatingPill}>
+                            <Ionicons name="star" size={12} color="#ef7b1a" />
+                            <Text style={styles.indoorPtbRatingText}>{product.ratingLabel}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.indoorPtbPriceRow}>
+                          {product.sellingLabel ? (
+                            <Text style={styles.indoorPtbPrice}>{product.sellingLabel}</Text>
+                          ) : null}
+                          {product.showMrp && product.mrpLabel ? (
+                            <Text style={styles.indoorPtbMrp}>{product.mrpLabel}</Text>
+                          ) : null}
+                          {product.discountLabel ? (
+                            <View style={styles.indoorPtbDiscountPill}>
+                              <Text style={styles.indoorPtbDiscountText}>{product.discountLabel}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <View style={styles.indoorPtbBottomRow}>
+                          <View style={styles.indoorPtbActionsRow}>
+                            <TouchableOpacity
+                              style={styles.indoorPtbWishBtn}
+                              activeOpacity={0.85}
+                              onPress={() =>
+                                void handleToggleIndoorPtbWishlist({
+                                  id: product.id,
+                                  name: product.name,
+                                  sellingNum: product.sellingNum,
+                                  mrpNum: product.mrpNum,
+                                })
+                              }
+                              accessibilityRole="button"
+                              accessibilityLabel={`${
+                                indoorWishlistIds.has(product.id) ? "Remove from" : "Add to"
+                              } wishlist: ${product.name}`}
+                            >
+                              <Ionicons
+                                name={indoorWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                size={16}
+                                color={indoorWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.indoorPtbCartBtn}
+                              activeOpacity={0.85}
+                              onPress={() =>
+                                void handleAddIndoorPtbCart({
+                                  id: product.id,
+                                  name: product.name,
+                                  sellingNum: product.sellingNum,
+                                  mrpNum: product.mrpNum,
+                                })
+                              }
+                              accessibilityRole="button"
+                              accessibilityLabel={`Add to cart: ${product.name}`}
+                            >
+                              <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                              <Text style={styles.indoorPtbCartBtnText}>{tr("Add to Cart")}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
         {/* Fills space above overlay tab bar; white so no gray strip after last section */}
         <View style={[styles.scrollEndSpacer, { height: Math.max(insets.bottom + 58, 68) }]} />
       </ScrollView>
@@ -2336,6 +2714,182 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  indoorHeaderBadgeWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  indoorHeaderBadge: {
+    position: "absolute",
+    top: -5,
+    right: -6,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ef4444",
+  },
+  indoorHeaderBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  indoorPtbWrap: {
+    marginTop: 18,
+    paddingBottom: 16,
+    backgroundColor: "#ffffff",
+  },
+  indoorPtbHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  indoorPtbHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  indoorPtbSeeAll: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#ea580c",
+  },
+  indoorPtbStatus: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  indoorPtbGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: INDOOR_PTB_GRID_GAP,
+  },
+  indoorPtbCard: {
+    borderRadius: 12,
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  indoorPtbCardInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  indoorPtbImage: {
+    width: "100%",
+    height: 130,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  indoorPtbMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  indoorPtbName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 30,
+  },
+  indoorPtbRatingRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  indoorPtbRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  indoorPtbRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
+  },
+  indoorPtbPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    gap: 6,
+  },
+  indoorPtbPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  indoorPtbMrp: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  indoorPtbDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  indoorPtbDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#b45309",
+  },
+  indoorPtbBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  indoorPtbActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 4,
+  },
+  indoorPtbWishBtn: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.25)",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+  },
+  indoorPtbCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#1d324e",
+  },
+  indoorPtbCartBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   scroll: { flex: 1, backgroundColor: "#ffffff" },
   /** No flexGrow — avoids stretching content to fill the viewport. Bottom inset is scrollEndSpacer (white). */

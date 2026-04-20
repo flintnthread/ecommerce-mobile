@@ -1,5 +1,6 @@
 import React from "react";
-import { View,
+import {
+  View,
   Text,
   StyleSheet,
   TouchableOpacity,
@@ -8,13 +9,31 @@ import { View,
   ImageBackground,
   StatusBar,
   ActivityIndicator,
+  Alert,
+  useWindowDimensions,
+  type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
+import api, { productsByMainCategoryPath, searchProductsPath, searchSuggestionsPath } from "../services/api";
+import {
+  MainCategoryApiRowPtb,
+  normalizeMainCategoryName,
+  pickPtbProductImageUri,
+  pickPtbProductRating,
+  pickPtbVariantPricing,
+  safePtbText,
+} from "../lib/mainCategoryPtbHelpers";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadCart,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 
 const HEADER_FT_LOGO = require("../assets/men/categories/fntfav.png");
 
@@ -566,9 +585,12 @@ const BEST_SELLER_PRODUCTS: TrendingProduct[] = [
   { ...TRENDING_PRODUCTS[3], id: "bs-4", badge: "Top gift" },
 ];
 
+const GIFTS_PTB_GRID_GAP = 12;
+
 export default function GiftsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: giftWinW } = useWindowDimensions();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchResults, setSearchResults] = React.useState([]);
   const [searchLoading, setSearchLoading] = React.useState(false);
@@ -1126,6 +1148,223 @@ export default function GiftsScreen() {
     };
   }, [selectedCategoryId]);
 
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    mainCategoryId?: string | string[];
+  }>();
+  const rawGiftsMainCat = Array.isArray(params.id)
+    ? params.id[0]
+    : params.id ?? Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const parsedRouteGiftsMainCat = Number.parseInt(String(rawGiftsMainCat ?? ""), 10);
+  const routeGiftsMainCategoryId =
+    Number.isFinite(parsedRouteGiftsMainCat) && parsedRouteGiftsMainCat > 0
+      ? parsedRouteGiftsMainCat
+      : null;
+  const [resolvedGiftsMainCategoryId, setResolvedGiftsMainCategoryId] = React.useState<
+    number | null
+  >(null);
+  const [resolvingGiftsMainCategoryId, setResolvingGiftsMainCategoryId] = React.useState(false);
+  const giftsMainCategoryIdForPtb =
+    routeGiftsMainCategoryId ?? resolvedGiftsMainCategoryId ?? SUBCATEGORIES_PARENT_ID;
+
+  type GiftsPtbApiRow = {
+    id: number;
+    name: string;
+    imageUri: string;
+    sellingPrice: number | null;
+    mrpPrice: number | null;
+    discountPercentage: number | null;
+    rating: number | null;
+  };
+  const [giftsPtbApi, setGiftsPtbApi] = React.useState<GiftsPtbApiRow[]>([]);
+  const [giftsPtbLoading, setGiftsPtbLoading] = React.useState(false);
+  const [giftsWishlistIds, setGiftsWishlistIds] = React.useState<Set<string>>(new Set());
+  const [giftsCartCount, setGiftsCartCount] = React.useState(0);
+
+  const giftsPtbColW = React.useMemo(
+    () => Math.floor((giftWinW - 32 - GIFTS_PTB_GRID_GAP) / 2),
+    [giftWinW]
+  );
+
+  const reloadGiftsWishlistIds = React.useCallback(async () => {
+    setGiftsWishlistIds(await getWishlistIds());
+  }, []);
+
+  const reloadGiftsCartCount = React.useCallback(async () => {
+    const cart = await loadCart();
+    setGiftsCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+  }, []);
+
+  React.useEffect(() => {
+    void reloadGiftsWishlistIds();
+    void reloadGiftsCartCount();
+  }, [reloadGiftsWishlistIds, reloadGiftsCartCount]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void reloadGiftsWishlistIds();
+      void reloadGiftsCartCount();
+    }, [reloadGiftsWishlistIds, reloadGiftsCartCount])
+  );
+
+  React.useEffect(() => {
+    if (routeGiftsMainCategoryId != null) {
+      setResolvedGiftsMainCategoryId(null);
+      setResolvingGiftsMainCategoryId(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setResolvingGiftsMainCategoryId(true);
+      try {
+        const { data } = await api.get("/api/categories/main");
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? (data as MainCategoryApiRowPtb[]) : [];
+        const row = rows.find((r) => {
+          if (!r || typeof r.id !== "number") return false;
+          if (typeof r.status === "number" && r.status !== 1) return false;
+          const n = normalizeMainCategoryName(String(r.categoryName ?? ""));
+          return (
+            n.includes("gift") ||
+            n.includes("homely") ||
+            n.includes("gifting") ||
+            n === "presents"
+          );
+        });
+        setResolvedGiftsMainCategoryId(
+          row && Number.isFinite(row.id) && row.id > 0 ? row.id : null
+        );
+      } catch {
+        if (!cancelled) setResolvedGiftsMainCategoryId(null);
+      } finally {
+        if (!cancelled) setResolvingGiftsMainCategoryId(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeGiftsMainCategoryId]);
+
+  React.useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setGiftsPtbLoading(true);
+      try {
+        const { data } = await api.get(productsByMainCategoryPath(giftsMainCategoryIdForPtb), {
+          signal: c.signal,
+        });
+        if (!Array.isArray(data)) {
+          setGiftsPtbApi([]);
+          return;
+        }
+        const mapped = (data as unknown[])
+          .filter((p) => p && typeof (p as any).id === "number" && typeof (p as any).name === "string")
+          .map((p) => {
+            const imageUri = pickPtbProductImageUri(p);
+            if (!imageUri) return null;
+            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            return {
+              id: (p as any).id as number,
+              name: safePtbText(String((p as any).name ?? "")),
+              imageUri,
+              sellingPrice,
+              mrpPrice,
+              discountPercentage,
+              rating: pickPtbProductRating(p),
+            } satisfies GiftsPtbApiRow;
+          })
+          .filter(Boolean) as GiftsPtbApiRow[];
+        setGiftsPtbApi(mapped);
+      } catch {
+        setGiftsPtbApi([]);
+      } finally {
+        setGiftsPtbLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [giftsMainCategoryIdForPtb]);
+
+  const handleToggleGiftsPtbWishlist = React.useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const now = await toggleWishlistProduct({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      await reloadGiftsWishlistIds();
+      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    },
+    [reloadGiftsWishlistIds]
+  );
+
+  const handleAddGiftsPtbCart = React.useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const cart = await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      setGiftsCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+      Alert.alert("Added to cart", product.name);
+    },
+    []
+  );
+
+  const goGiftsPtbShop = React.useCallback(() => {
+    router.push("/subcatProducts");
+  }, [router]);
+
+  const giftsPtbUiRows = React.useMemo(() => {
+    const fmtRs = (n: number | null) =>
+      n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+    if (giftsPtbApi.length === 0) {
+      return [] as {
+        id: string;
+        name: string;
+        imageSource: ImageSourcePropType;
+        sellingLabel: string;
+        mrpLabel: string;
+        showMrp: boolean;
+        discountLabel: string;
+        ratingLabel: string;
+        sellingNum: number;
+        mrpNum: number;
+      }[];
+    }
+    return giftsPtbApi.map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      return {
+        id: String(p.id),
+        name: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        sellingLabel: fmtRs(p.sellingPrice),
+        mrpLabel: showMrp ? fmtRs(p.mrpPrice) : "",
+        showMrp,
+        discountLabel:
+          p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+            ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+            : "",
+        ratingLabel:
+          p.rating != null && Number.isFinite(p.rating) ? Number(p.rating).toFixed(1) : "—",
+        sellingNum:
+          p.sellingPrice != null && Number.isFinite(p.sellingPrice) ? Number(p.sellingPrice) : 0,
+        mrpNum:
+          p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+            ? Number(p.mrpPrice)
+            : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+            ? Number(p.sellingPrice)
+            : 0,
+      };
+    });
+  }, [giftsPtbApi]);
+
   const activeHero = React.useMemo(() => {
     if (selectedCategoryId && GIFT_CATEGORY_HERO[selectedCategoryId]) {
       return GIFT_CATEGORY_HERO[selectedCategoryId];
@@ -1340,7 +1579,33 @@ export default function GiftsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Wishlist"
             >
-              <Ionicons name="heart-outline" size={24} color="#c2410c" />
+              <View style={styles.giftsHeaderIconBadgeWrap}>
+                <Ionicons name="heart-outline" size={24} color="#c2410c" />
+                {giftsWishlistIds.size > 0 ? (
+                  <View style={styles.giftsHeaderIconBadge}>
+                    <Text style={styles.giftsHeaderIconBadgeText}>
+                      {giftsWishlistIds.size > 99 ? "99+" : String(giftsWishlistIds.size)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.giftsHeaderIconHit}
+              onPress={() => router.push("/cart")}
+              accessibilityRole="button"
+              accessibilityLabel="Cart"
+            >
+              <View style={styles.giftsHeaderIconBadgeWrap}>
+                <Ionicons name="cart-outline" size={24} color="#c2410c" />
+                {giftsCartCount > 0 ? (
+                  <View style={styles.giftsHeaderIconBadge}>
+                    <Text style={styles.giftsHeaderIconBadgeText}>
+                      {giftsCartCount > 99 ? "99+" : String(giftsCartCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.giftsHeaderIconHit}
@@ -1806,7 +2071,7 @@ export default function GiftsScreen() {
               <View style={styles.eventBanner2Content}>
                 <Text style={styles.eventBanner2Eyebrow}>LIMITED TIME OFFER</Text>
                 <Text style={styles.eventBanner2Title}>50% Off Selected Items</Text>
-                <Text style={styles.eventBanner2SubTitle}>Don't miss out on amazing deals</Text>
+                <Text style={styles.eventBanner2SubTitle}>Don{"'"}t miss out on amazing deals</Text>
                 <View style={styles.eventBanner2Cta}>
                   <Text style={styles.eventBanner2CtaText}>Shop Now</Text>
                 </View>
@@ -2641,6 +2906,116 @@ export default function GiftsScreen() {
           {renderTrendingProductRow("Best Sellers", BEST_SELLER_PRODUCTS)}
         </View>
 
+        <View style={styles.giftsPtbWrap}>
+          <View style={styles.giftsPtbHeaderRow}>
+            <Text style={styles.giftsPtbHeading}>Products to buy</Text>
+            <TouchableOpacity onPress={goGiftsPtbShop} activeOpacity={0.85}>
+              <Text style={styles.giftsPtbSeeAll}>See all</Text>
+            </TouchableOpacity>
+          </View>
+          {routeGiftsMainCategoryId == null && resolvingGiftsMainCategoryId ? (
+            <Text style={styles.giftsPtbStatus}>Matching store category…</Text>
+          ) : null}
+          {giftsPtbLoading && giftsPtbApi.length === 0 ? (
+            <Text style={styles.giftsPtbStatus}>Loading products...</Text>
+          ) : giftsPtbUiRows.length === 0 ? (
+            <Text style={styles.giftsPtbStatus}>No products found.</Text>
+          ) : (
+            <View style={styles.giftsPtbGrid}>
+              {giftsPtbUiRows.map((product) => (
+                <View key={product.id} style={[styles.giftsPtbCard, { width: giftsPtbColW }]}>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: String(product.id) },
+                      } as any)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`${product.name}, view details`}
+                  >
+                    <View style={styles.giftsPtbCardInner}>
+                      <Image
+                        source={product.imageSource}
+                        style={styles.giftsPtbImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.giftsPtbMeta}>
+                        <Text style={styles.giftsPtbName} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                        <View style={styles.giftsPtbRatingRow}>
+                          <View style={styles.giftsPtbRatingPill}>
+                            <Ionicons name="star" size={12} color="#ef7b1a" />
+                            <Text style={styles.giftsPtbRatingText}>{product.ratingLabel}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.giftsPtbPriceRow}>
+                          {product.sellingLabel ? (
+                            <Text style={styles.giftsPtbPrice}>{product.sellingLabel}</Text>
+                          ) : null}
+                          {product.showMrp && product.mrpLabel ? (
+                            <Text style={styles.giftsPtbMrp}>{product.mrpLabel}</Text>
+                          ) : null}
+                          {product.discountLabel ? (
+                            <View style={styles.giftsPtbDiscountPill}>
+                              <Text style={styles.giftsPtbDiscountText}>{product.discountLabel}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <View style={styles.giftsPtbBottomRow}>
+                          <View style={styles.giftsPtbActionsRow}>
+                            <TouchableOpacity
+                              style={styles.giftsPtbWishBtn}
+                              activeOpacity={0.85}
+                              onPress={() =>
+                                void handleToggleGiftsPtbWishlist({
+                                  id: product.id,
+                                  name: product.name,
+                                  sellingNum: product.sellingNum,
+                                  mrpNum: product.mrpNum,
+                                })
+                              }
+                              accessibilityRole="button"
+                              accessibilityLabel={`${
+                                giftsWishlistIds.has(product.id) ? "Remove from" : "Add to"
+                              } wishlist: ${product.name}`}
+                            >
+                              <Ionicons
+                                name={giftsWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                size={16}
+                                color={giftsWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.giftsPtbCartBtn}
+                              activeOpacity={0.85}
+                              onPress={() =>
+                                void handleAddGiftsPtbCart({
+                                  id: product.id,
+                                  name: product.name,
+                                  sellingNum: product.sellingNum,
+                                  mrpNum: product.mrpNum,
+                                })
+                              }
+                              accessibilityRole="button"
+                              accessibilityLabel={`Add to cart: ${product.name}`}
+                            >
+                              <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                              <Text style={styles.giftsPtbCartBtnText}>Add to Cart</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
       </ScrollView>
 
       <HomeBottomTabBar />
@@ -2731,6 +3106,181 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.65)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(29, 50, 78, 0.06)",
+  },
+  giftsHeaderIconBadgeWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  giftsHeaderIconBadge: {
+    position: "absolute",
+    top: -6,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ef4444",
+  },
+  giftsHeaderIconBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  giftsPtbWrap: {
+    marginTop: 18,
+    paddingBottom: 24,
+  },
+  giftsPtbHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  giftsPtbHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  giftsPtbSeeAll: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#ea580c",
+  },
+  giftsPtbStatus: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  giftsPtbGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: GIFTS_PTB_GRID_GAP,
+  },
+  giftsPtbCard: {
+    borderRadius: 12,
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  giftsPtbCardInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  giftsPtbImage: {
+    width: "100%",
+    height: 130,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  giftsPtbMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  giftsPtbName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 30,
+  },
+  giftsPtbRatingRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  giftsPtbRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  giftsPtbRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
+  },
+  giftsPtbPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    gap: 6,
+  },
+  giftsPtbPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  giftsPtbMrp: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  giftsPtbDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  giftsPtbDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#b45309",
+  },
+  giftsPtbBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  giftsPtbActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 4,
+  },
+  giftsPtbWishBtn: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.25)",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+  },
+  giftsPtbCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#1d324e",
+  },
+  giftsPtbCartBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   scroll: {
     flex: 1,
