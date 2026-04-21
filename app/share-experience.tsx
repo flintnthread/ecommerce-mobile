@@ -19,6 +19,7 @@ import {
   getRatePurchaseCard,
   RATE_STAR_LABELS,
 } from "../lib/ratePurchaseCatalog";
+import { useLanguage } from "../lib/language";
 
 function parseInitialRating(raw: string | undefined): number {
   const n = Number(raw);
@@ -31,6 +32,7 @@ function parseInitialRating(raw: string | undefined): number {
 
 export default function ShareExperienceScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     productId?: string;
@@ -55,8 +57,8 @@ export default function ShareExperienceScreen() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
-        "Permission needed",
-        "Allow photo library access to attach a photo."
+        tr("Permission needed"),
+        tr("Allow photo library access to attach a photo.")
       );
       return;
     }
@@ -71,9 +73,9 @@ export default function ShareExperienceScreen() {
 
   const onSubmit = useCallback(() => {
     Alert.alert(
-      "Thank you",
-      "Your review helps other shoppers. We appreciate you taking the time.",
-      [{ text: "OK", onPress: () => router.back() }]
+      tr("Thank you"),
+      tr("Your review helps other shoppers. We appreciate you taking the time."),
+      [{ text: tr("OK"), onPress: () => router.back() }]
     );
   }, [router]);
 
@@ -90,9 +92,9 @@ export default function ShareExperienceScreen() {
           style={styles.missingBtn}
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={tr("Go back")}
         >
-          <Text style={styles.missingBtnText}>Go back</Text>
+          <Text style={styles.missingBtnText}>{tr("Go back")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -109,11 +111,11 @@ export default function ShareExperienceScreen() {
             onPress={() => router.back()}
             hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={tr("Close")}
           >
             <Ionicons name="close" size={28} color="#111827" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Share your experience</Text>
+          <Text style={styles.headerTitle}>{tr("Share your experience")}</Text>
           <View style={styles.headerBadge}>
             <Text style={styles.headerBadgeText}>Only takes 2 min.</Text>
           </View>

@@ -1440,7 +1440,7 @@ export default function SportsWearSection() {
       variantId?: number;
     }) => {
       const r = await togglePtbWishlistWithServer(product, reloadWishlistIds);
-      if (!r.ok) Alert.alert("Wishlist", r.message);
+      if (r.ok === false) Alert.alert("Wishlist", r.message);
       else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
@@ -1466,7 +1466,7 @@ export default function SportsWearSection() {
           mrp: product.mrpNum,
         },
       });
-      if (!r.ok) {
+      if (r.ok === false) {
         Alert.alert("Cart", r.message);
         return;
       }

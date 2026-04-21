@@ -37,6 +37,7 @@ import {
   togglePtbWishlistWithServer,
 } from "../lib/wishlistServerApi";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import { useLanguage } from "../lib/language";
 
 /** Dry sweets — Dry fruit laddu (and siblings under same API subcategory). */
 const DRY_DRYFRUIT_LADDU_SUBCATEGORY_ID = 142;
@@ -173,6 +174,7 @@ const RELATED_SWEETS_PRODUCTS: SweetsHubProduct[] = [
 
 export default function Sweets() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const { width } = Dimensions.get("window");
   const scrollRef = useRef<ScrollView>(null);
   const bannerListRef = useRef<any>(null);
@@ -936,7 +938,7 @@ export default function Sweets() {
           <Ionicons name="search-outline" size={16} color="#1d324e" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search.."
+            placeholder={tr("Search..")}
             placeholderTextColor="#8D97AA"
             value={query}
             onChangeText={setQuery}

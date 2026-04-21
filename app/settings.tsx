@@ -22,6 +22,7 @@ import {
   setDefaultAddress,
   type SettingsAddressCard,
 } from "../services/addresses";
+import { useLanguage } from "../lib/language";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -31,6 +32,7 @@ type Address = SettingsAddressCard;
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const [activeTab, setActiveTab] = useState<SettingsTab>("account");
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
   const [showAddAddressModal, setShowAddAddressModal] = useState(false);
@@ -63,8 +65,8 @@ export default function SettingsScreen() {
       setAddresses(rows.map(mapApiAddressToSettingsCard));
     } catch {
       Alert.alert(
-        "Addresses",
-        "Could not load saved addresses. Check your connection and try again."
+        tr("Addresses"),
+        tr("Could not load saved addresses. Check your connection and try again.")
       );
     } finally {
       setAddressesLoading(false);
@@ -92,10 +94,10 @@ export default function SettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const tabs: { key: SettingsTab; label: string; icon: string }[] = [
-    { key: "account", label: "Account Info", icon: "person" },
-    { key: "address", label: "Addresses", icon: "location" },
-    { key: "security", label: "Security", icon: "lock-closed" },
-    { key: "notifications", label: "Notifications", icon: "notifications" },
+    { key: "account", label: tr("Account Info"), icon: "person" },
+    { key: "address", label: tr("Addresses"), icon: "location" },
+    { key: "security", label: tr("Security"), icon: "lock-closed" },
+    { key: "notifications", label: tr("Notifications"), icon: "notifications" },
   ];
 
   const handleSaveAccount = () => {
@@ -262,7 +264,7 @@ export default function SettingsScreen() {
 
         {/* Centered Title Section */}
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Settings</Text>
+          <Text style={styles.headerTitle}>{tr("Settings")}</Text>
           <Text style={styles.headerSubtitle}>
             Manage your account and preferences
           </Text>

@@ -15,6 +15,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLanguage } from "../lib/language";
 
 const placeholderTexts = [" Shoes", " Womens Wear", " Fashion", " Sportswear"];
 
@@ -43,6 +44,7 @@ const sellerGallery = [
 
 export default function SellerGalleryScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -59,8 +61,8 @@ export default function SellerGalleryScreen() {
   const launchGoogleVoiceInput = async () => {
     if (Platform.OS !== "android") {
       Alert.alert(
-        "Voice search",
-        "Google voice input is available on Android. On iPhone, type your search in the bar."
+        tr("Voice search"),
+        tr("Google voice input is available on Android. On iPhone, type your search in the bar.")
       );
       return;
     }
@@ -88,19 +90,19 @@ export default function SellerGalleryScreen() {
       }
     } catch {
       Alert.alert(
-        "Voice search",
-        "Could not open speech recognition. Check Google / speech services on your device."
+        tr("Voice search"),
+        tr("Could not open speech recognition. Check Google / speech services on your device.")
       );
     }
   };
 
   const startVoiceSearch = () => {
     Alert.alert(
-      "Microphone access",
-      "Allow microphone access to use voice search?",
+      tr("Microphone access"),
+      tr("Allow microphone access to use voice search?"),
       [
-        { text: "Don't allow", style: "cancel" },
-        { text: "Allow", onPress: () => void launchGoogleVoiceInput() },
+        { text: tr("Don't allow"), style: "cancel" },
+        { text: tr("Allow"), onPress: () => void launchGoogleVoiceInput() },
       ]
     );
   };

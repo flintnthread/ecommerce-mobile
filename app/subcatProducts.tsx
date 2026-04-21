@@ -28,6 +28,7 @@ import {
   addWishlistProductIfAbsent,
   removeWishlistLine,
 } from "../lib/shopStorage";
+import { useLanguage } from "../lib/language";
 import {
   firstWishlistRowImageUri,
   normalizeWishlistApiRows,
@@ -551,6 +552,7 @@ function runProductPipeline(
 
 export default function SubcategoriesScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const params = useLocalSearchParams<{
     mainCat?: string | string[];
     subCategory?: string | string[];
@@ -597,7 +599,7 @@ export default function SubcategoriesScreen() {
     ? params.productsSearchGender[0]
     : params.productsSearchGender;
   const routedProductsSearchGender = String(productsSearchGenderRaw ?? "").trim();
-  const pageTitle = (selectedSubCategory || "Products").toUpperCase();
+  const pageTitle = tr(selectedSubCategory || "Products").toUpperCase();
 
   useEffect(() => {
     const norm = String(selectedSubCategory ?? "")
@@ -1671,8 +1673,8 @@ const wishlistedProducts = React.useMemo(() => {
         const vid = product.variantId;
         if (!vid || vid <= 0) {
           Alert.alert(
-            "Choose options",
-            "Open the product page, pick size and color, then add to wishlist."
+            tr("Choose options"),
+            tr("Open the product page, pick size and color, then add to wishlist.")
           );
           return;
         }
@@ -1685,8 +1687,8 @@ const wishlistedProducts = React.useMemo(() => {
             await removeWishlistLine(String(pidNum));
             await loadWishlistFromApi();
             Alert.alert(
-              "Removed",
-              `"${product.title}" was removed from your wishlist.`
+              tr("Removed"),
+              `"${tr(product.title)}" ${tr("was removed from your wishlist.")}`
             );
           } else {
             await api.post(WISHLIST_ADD_PATH, {
@@ -1700,18 +1702,18 @@ const wishlistedProducts = React.useMemo(() => {
               mrp: product.mrp,
             });
             await loadWishlistFromApi();
-            Alert.alert("Added to wishlist", product.title);
+            Alert.alert(tr("Added to wishlist"), tr(product.title));
           }
         } catch (e: unknown) {
           const ax = e as { response?: { data?: unknown } };
-          let msg = "Wishlist could not be updated. Please try again.";
+          let msg = tr("Wishlist could not be updated. Please try again.");
           const d = ax.response?.data;
           if (typeof d === "string" && d.trim()) msg = d.trim();
           else if (d && typeof d === "object") {
             const m = (d as { message?: unknown }).message;
             if (typeof m === "string" && m.trim()) msg = m.trim();
           }
-          Alert.alert("Wishlist", msg);
+          Alert.alert(tr("Wishlist"), tr(msg));
         }
         return;
       }
@@ -1728,12 +1730,12 @@ const wishlistedProducts = React.useMemo(() => {
   const confirmRemoveApiWishlistEntry = useCallback(
     (entry: SubcatWishlistApiEntry) => {
       Alert.alert(
-        "Remove item",
-        `Remove "${entry.title}" from your wishlist?`,
+        tr("Remove item"),
+        `${tr("Remove")} "${tr(entry.title)}" ${tr("from your wishlist?")}`,
         [
-          { text: "Cancel", style: "cancel" },
+          { text: tr("Cancel"), style: "cancel" },
           {
-            text: "Remove",
+            text: tr("Remove"),
             style: "destructive",
             onPress: () => {
               void (async () => {
@@ -1747,19 +1749,19 @@ const wishlistedProducts = React.useMemo(() => {
                   await removeWishlistLine(String(entry.productId));
                   await loadWishlistFromApi();
                   Alert.alert(
-                    "Removed",
-                    "Item has been removed from your wishlist."
+                    tr("Removed"),
+                    tr("Item has been removed from your wishlist.")
                   );
                 } catch (e: unknown) {
                   const ax = e as { response?: { data?: unknown } };
-                  let msg = "Could not remove this item.";
+                  let msg = tr("Could not remove this item.");
                   const d = ax.response?.data;
                   if (typeof d === "string" && d.trim()) msg = d.trim();
                   else if (d && typeof d === "object") {
                     const m = (d as { message?: unknown }).message;
                     if (typeof m === "string" && m.trim()) msg = m.trim();
                   }
-                  Alert.alert("Wishlist", msg);
+                  Alert.alert(tr("Wishlist"), tr(msg));
                 }
               })();
             },
@@ -1813,11 +1815,11 @@ const handleBannerScroll = (event: any) => {
         },
       });
       if (r.ok === false) {
-        Alert.alert("Cart", r.message);
+        Alert.alert(tr("Cart"), tr(r.message));
         return;
       }
       setCartBadgeCount(await getCartUnitCount());
-      Alert.alert("Added to cart", product.title);
+      Alert.alert(tr("Added to cart"), tr(product.title));
     })();
   };
 
@@ -1874,10 +1876,10 @@ const handleBannerScroll = (event: any) => {
 
       <View style={styles.productInfoPanel}>
         <Text style={styles.productTitle} numberOfLines={2}>
-          {product.title}
+          {tr(product.title)}
         </Text>
         <Text style={styles.productSubtitle} numberOfLines={1}>
-          {product.benefitText}
+          {tr(product.benefitText)}
         </Text>
 
         <View style={styles.priceRow}>
@@ -2211,16 +2213,16 @@ const handleBannerScroll = (event: any) => {
           <>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                ALL <Text style={styles.sectionTitleAccent}>PRODUCTS</Text>
+                {tr("ALL")} <Text style={styles.sectionTitleAccent}>{tr("PRODUCTS")}</Text>
               </Text>
               <Text style={styles.categoryProductCount}>
-                {filteredRoutedProducts.length} items
+                {filteredRoutedProducts.length} {tr("items")}
               </Text>
             </View>
             {(routedFromSubcategoryId && !apiRoutedFromIdReady) ||
             (routedFromMainCategoryId && !mainCategoryApiReady) ||
             (routedFromProductsSearch && !productsSearchApiReady) ? (
-              <Text style={styles.apiRoutedLoadingHint}>Loading products…</Text>
+              <Text style={styles.apiRoutedLoadingHint}>{tr("Loading products…")}</Text>
             ) : null}
             <View style={styles.productGrid}>
               {filteredRoutedProducts.map((product) => (
@@ -2232,10 +2234,10 @@ const handleBannerScroll = (event: any) => {
           <>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                ALL <Text style={styles.sectionTitleAccent}>PRODUCTS</Text>
+                {tr("ALL")} <Text style={styles.sectionTitleAccent}>{tr("PRODUCTS")}</Text>
               </Text>
               <Text style={styles.categoryProductCount}>
-                {expandedCategoryProducts.length} items
+                {expandedCategoryProducts.length} {tr("items")}
               </Text>
             </View>
             <View style={styles.productGrid}>
@@ -2248,8 +2250,8 @@ const handleBannerScroll = (event: any) => {
           <>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                SHOP BY{" "}
-                <Text style={styles.sectionTitleAccent}>CATEGORY</Text>
+                {tr("SHOP BY")}{" "}
+                <Text style={styles.sectionTitleAccent}>{tr("CATEGORY")}</Text>
               </Text>
             </View>
             {browseCategoryOptions.map((cat) => {
@@ -2274,9 +2276,9 @@ const handleBannerScroll = (event: any) => {
                     activeOpacity={0.75}
                     onPress={() => setExpandedCategory(cat)}
                   >
-                    <Text style={styles.categorySectionTitle}>{cat}</Text>
+                    <Text style={styles.categorySectionTitle}>{tr(cat)}</Text>
                     <View style={styles.categoryViewAllRow}>
-                      <Text style={styles.categoryViewAllText}>View all</Text>
+                      <Text style={styles.categoryViewAllText}>{tr("View all")}</Text>
                       <Ionicons
                         name="chevron-forward"
                         size={16}
@@ -2300,7 +2302,7 @@ const handleBannerScroll = (event: any) => {
 
         {/* BEST OF DRESSES SECTION */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>BEST OF DRESS</Text>
+          <Text style={styles.sectionTitle}>{tr("BEST OF DRESS")}</Text>
         </View>
 
         <ScrollView
@@ -2328,10 +2330,10 @@ const handleBannerScroll = (event: any) => {
                 )}
               </View>
               <Text style={styles.bestTitle} numberOfLines={1}>
-                {item.title}
+                {tr(item.title)}
               </Text>
               <Text style={styles.bestSubtitle} numberOfLines={1}>
-                {item.subtitle}
+                {tr(item.subtitle)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -2339,7 +2341,7 @@ const handleBannerScroll = (event: any) => {
 
         {/* TRENDING DRESSES BANNER */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>TRENDING DRESSES</Text>
+          <Text style={styles.sectionTitle}>{tr("TRENDING DRESSES")}</Text>
         </View>
 
         <View style={styles.bannerCarouselWrapper}>
@@ -2373,7 +2375,7 @@ const handleBannerScroll = (event: any) => {
 
         {/* LATEST PRODUCTS SECTION */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>LATEST PRODUCTS</Text>
+          <Text style={styles.sectionTitle}>{tr("LATEST PRODUCTS")}</Text>
         </View>
         <ScrollView
           horizontal
@@ -2393,7 +2395,7 @@ const handleBannerScroll = (event: any) => {
                 resizeMode="cover"
               />
               <Text style={styles.latestTitle} numberOfLines={1}>
-                {product.title}
+                {tr(product.title)}
               </Text>
               <Text style={styles.latestPrice}>₹{product.price}</Text>
             </TouchableOpacity>
@@ -2411,7 +2413,7 @@ const handleBannerScroll = (event: any) => {
         <View style={styles.similarModalOverlay}>
           <View style={styles.similarModalCard}>
             <View style={styles.similarModalHeader}>
-              <Text style={styles.similarModalTitle}>SIMILAR PRODUCTS</Text>
+              <Text style={styles.similarModalTitle}>{tr("SIMILAR PRODUCTS")}</Text>
               <TouchableOpacity onPress={() => setSimilarModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#374151" />
               </TouchableOpacity>
@@ -2439,10 +2441,10 @@ const handleBannerScroll = (event: any) => {
                   />
                   <View style={styles.similarInfoPanel}>
                     <Text style={styles.similarProductTitle} numberOfLines={2}>
-                      {product.title}
+                      {tr(product.title)}
                     </Text>
                     <Text style={styles.similarProductSubtitle} numberOfLines={1}>
-                      {product.benefitText}
+                      {tr(product.benefitText)}
                     </Text>
                     <View style={styles.similarPriceRow}>
                       <Text style={styles.similarProductPrice}>₹{product.price}</Text>
@@ -2474,7 +2476,7 @@ const handleBannerScroll = (event: any) => {
           <View style={styles.wishlistModalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                WISHLIST ({wishlistBadgeCount})
+                {tr("WISHLIST")} ({wishlistBadgeCount})
               </Text>
               <TouchableOpacity onPress={() => setWishlistModalVisible(false)}>
                 <Ionicons name="close" size={30} color="#555" />
@@ -2494,10 +2496,10 @@ const handleBannerScroll = (event: any) => {
                     color="#D1D5DB"
                   />
                   <Text style={styles.wishlistEmptyTitle}>
-                    Your wishlist is empty
+                    {tr("Your wishlist is empty")}
                   </Text>
                   <Text style={styles.wishlistEmptySub}>
-                    Tap the heart on a product to save it here
+                    {tr("Tap the heart on a product to save it here")}
                   </Text>
                 </View>
               ) : hasAuthToken ? (
@@ -2527,7 +2529,7 @@ const handleBannerScroll = (event: any) => {
                           style={styles.wishlistRowTitle}
                           numberOfLines={2}
                         >
-                          {entry.title}
+                          {tr(entry.title)}
                         </Text>
                         <Text style={styles.wishlistRowPrice}>
                           ₹{entry.price}
@@ -2565,7 +2567,7 @@ const handleBannerScroll = (event: any) => {
                           style={styles.wishlistRowTitle}
                           numberOfLines={2}
                         >
-                          {product.title}
+                          {tr(product.title)}
                         </Text>
                         <Text style={styles.wishlistRowPrice}>
                           ₹{product.price}

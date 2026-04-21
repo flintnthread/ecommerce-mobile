@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useLanguage } from "../lib/language";
 
 type GenderOption = "FEMALE" | "MALE";
 
@@ -18,6 +19,7 @@ const AGE_GROUPS = ["0-18 YEARS", "19-24 YEARS", "25-40 YEARS", "40+ YEARS"] as 
 export default function GenderAgeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { tr } = useLanguage();
 
   const [gender, setGender] = useState<GenderOption | null>(null);
   const [ageGroup, setAgeGroup] = useState<(typeof AGE_GROUPS)[number] | null>(null);
@@ -35,7 +37,7 @@ export default function GenderAgeScreen() {
         style={[styles.backBtnTop, { top: Math.max(insets.top, 12) }]}
         activeOpacity={0.75}
         accessibilityRole="button"
-        accessibilityLabel="Go back"
+        accessibilityLabel={tr("Go back")}
       >
         <Ionicons name="arrow-back" size={22} color="#0F172A" />
       </TouchableOpacity>
@@ -44,19 +46,19 @@ export default function GenderAgeScreen() {
         <View style={styles.heroTopRow}>
           <View style={styles.heroBadge}>
             <Ionicons name="sparkles" size={14} color="#9A3412" />
-            <Text style={styles.heroBadgeText}>Personalize</Text>
+            <Text style={styles.heroBadgeText}>{tr("Personalize")}</Text>
           </View>
           <View style={styles.heroStepPill}>
-            <Text style={styles.heroStepText}>Step 2 of 3</Text>
+            <Text style={styles.heroStepText}>{tr("Step 2 of 3")}</Text>
           </View>
         </View>
 
-        <Text style={styles.heroTitle}>Tell us about you</Text>
+        <Text style={styles.heroTitle}>{tr("Tell us about you")}</Text>
         <Text style={styles.heroSubtitle}>
-          Pick a gender and age group to improve recommendations.
+          {tr("Pick a gender and age group to improve recommendations.")}
         </Text>
 
-        <View style={styles.progressTrack} accessibilityLabel="Progress">
+        <View style={styles.progressTrack} accessibilityLabel={tr("Progress")}>
           <View style={styles.progressFill} />
         </View>
       </View>
@@ -71,15 +73,15 @@ export default function GenderAgeScreen() {
       >
         <View style={styles.block}>
           <View style={styles.blockHeader}>
-            <Text style={styles.blockTitle}>Gender</Text>
-            <Text style={styles.blockHint}>Choose 1</Text>
+            <Text style={styles.blockTitle}>{tr("Gender")}</Text>
+            <Text style={styles.blockHint}>{tr("Choose 1")}</Text>
           </View>
 
           <View style={styles.tileStack}>
             <Pressable
               onPress={() => setGender("FEMALE")}
               accessibilityRole="button"
-              accessibilityLabel="Select female"
+              accessibilityLabel={tr("Select female")}
               style={({ pressed }) => [
                 styles.tile,
                 gender === "FEMALE" && styles.tileSelected,
@@ -94,8 +96,8 @@ export default function GenderAgeScreen() {
                 />
               </View>
               <View style={styles.tileText}>
-                <Text style={styles.tileTitle}>Female</Text>
-                <Text style={styles.tileSubtitle}>Shop women’s picks</Text>
+                <Text style={styles.tileTitle}>{tr("Female")}</Text>
+                <Text style={styles.tileSubtitle}>{tr("Shop women’s picks")}</Text>
               </View>
               <Ionicons
                 name={gender === "FEMALE" ? "checkmark-circle" : "chevron-forward"}
@@ -107,7 +109,7 @@ export default function GenderAgeScreen() {
             <Pressable
               onPress={() => setGender("MALE")}
               accessibilityRole="button"
-              accessibilityLabel="Select male"
+              accessibilityLabel={tr("Select male")}
               style={({ pressed }) => [
                 styles.tile,
                 gender === "MALE" && styles.tileSelected,
@@ -122,8 +124,8 @@ export default function GenderAgeScreen() {
                 />
               </View>
               <View style={styles.tileText}>
-                <Text style={styles.tileTitle}>Male</Text>
-                <Text style={styles.tileSubtitle}>Shop men’s picks</Text>
+                <Text style={styles.tileTitle}>{tr("Male")}</Text>
+                <Text style={styles.tileSubtitle}>{tr("Shop men’s picks")}</Text>
               </View>
               <Ionicons
                 name={gender === "MALE" ? "checkmark-circle" : "chevron-forward"}
@@ -136,8 +138,8 @@ export default function GenderAgeScreen() {
 
         <View style={styles.block}>
           <View style={styles.blockHeader}>
-            <Text style={styles.blockTitle}>Age group</Text>
-            <Text style={styles.blockHint}>Choose 1</Text>
+            <Text style={styles.blockTitle}>{tr("Age group")}</Text>
+            <Text style={styles.blockHint}>{tr("Choose 1")}</Text>
           </View>
 
           <View style={styles.ageTilesGrid}>
@@ -148,7 +150,7 @@ export default function GenderAgeScreen() {
                   key={g}
                   onPress={() => setAgeGroup(g)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Select age group ${g}`}
+                  accessibilityLabel={tr(`Select age group ${g}`)}
                   style={({ pressed }) => [
                     styles.ageTile,
                     selected && styles.ageTileSelected,
@@ -156,7 +158,7 @@ export default function GenderAgeScreen() {
                   ]}
                 >
                   <Text style={[styles.ageTileText, selected && styles.ageTileTextSelected]}>
-                    {g}
+                    {tr(g)}
                   </Text>
                   <View style={[styles.ageTileCheck, selected && styles.ageTileCheckSelected]}>
                     <Ionicons
@@ -179,7 +181,7 @@ export default function GenderAgeScreen() {
         ]}
       >
         <TouchableOpacity onPress={skip} style={styles.footerBtnGhost} activeOpacity={0.75}>
-          <Text style={styles.footerBtnGhostText}>Skip</Text>
+          <Text style={styles.footerBtnGhostText}>{tr("Skip")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -188,10 +190,10 @@ export default function GenderAgeScreen() {
           style={[styles.footerBtnPrimary, !canContinue && styles.footerBtnPrimaryDisabled]}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel="Continue"
+          accessibilityLabel={tr("Continue")}
         >
           <Text style={[styles.footerBtnPrimaryText, !canContinue && styles.footerBtnTextDisabled]}>
-            Continue
+            {tr("Continue")}
           </Text>
         </TouchableOpacity>
       </View>

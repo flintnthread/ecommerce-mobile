@@ -18,6 +18,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import { useLanguage } from "../lib/language";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -147,6 +148,7 @@ const sampleOrders: Order[] = [
 
 export default function OrdersScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const [activeTab, setActiveTab] = useState<OrderStatus>("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -220,27 +222,27 @@ export default function OrdersScreen() {
   const getStatusConfig = (status: OrderStatus) => {
     switch (status) {
       case "delivered":
-        return { color: "#10B981", bgColor: "#D1FAE5", icon: "checkmark-circle", text: "Delivered" };
+        return { color: "#10B981", bgColor: "#D1FAE5", icon: "checkmark-circle", text: tr("Delivered") };
       case "shipped":
-        return { color: "#3B82F6", bgColor: "#DBEAFE", icon: "car", text: "Shipped" };
+        return { color: "#3B82F6", bgColor: "#DBEAFE", icon: "car", text: tr("Shipped") };
       case "processing":
-        return { color: "#F59E0B", bgColor: "#FEF3C7", icon: "time", text: "Processing" };
+        return { color: "#F59E0B", bgColor: "#FEF3C7", icon: "time", text: tr("Processing") };
       case "cancelled":
-        return { color: "#EF4444", bgColor: "#FEE2E2", icon: "close-circle", text: "Cancelled" };
+        return { color: "#EF4444", bgColor: "#FEE2E2", icon: "close-circle", text: tr("Cancelled") };
       case "returns":
-        return { color: "#8B5CF6", bgColor: "#EDE9FE", icon: "return-down-back", text: "Return" };
+        return { color: "#8B5CF6", bgColor: "#EDE9FE", icon: "return-down-back", text: tr("Return") };
       default:
         return { color: "#6B7280", bgColor: "#F3F4F6", icon: "ellipse", text: status };
     }
   };
 
   const tabs = [
-    { key: "all" as OrderStatus, label: "All", icon: "list" },
-    { key: "processing" as OrderStatus, label: "Processing", icon: "time-outline" },
-    { key: "shipped" as OrderStatus, label: "Shipped", icon: "car-outline" },
-    { key: "delivered" as OrderStatus, label: "Delivered", icon: "checkmark-circle-outline" },
-    { key: "cancelled" as OrderStatus, label: "Cancelled", icon: "close-circle-outline" },
-    { key: "returns" as OrderStatus, label: "Returns", icon: "return-down-back-outline" },
+    { key: "all" as OrderStatus, label: tr("All"), icon: "list" },
+    { key: "processing" as OrderStatus, label: tr("Processing"), icon: "time-outline" },
+    { key: "shipped" as OrderStatus, label: tr("Shipped"), icon: "car-outline" },
+    { key: "delivered" as OrderStatus, label: tr("Delivered"), icon: "checkmark-circle-outline" },
+    { key: "cancelled" as OrderStatus, label: tr("Cancelled"), icon: "close-circle-outline" },
+    { key: "returns" as OrderStatus, label: tr("Returns"), icon: "return-down-back-outline" },
   ];
 
   const handleOrderPress = (order: Order) => {
@@ -255,20 +257,20 @@ export default function OrdersScreen() {
 
   const handleCancel = () => {
     if (!cancelReason.trim()) {
-      Alert.alert("Required", "Please provide a reason");
+      Alert.alert(tr("Required"), tr("Please provide a reason"));
       return;
     }
-    Alert.alert("Success", "Order cancelled successfully");
+    Alert.alert(tr("Success"), tr("Order cancelled successfully"));
     setShowCancelModal(false);
     setCancelReason("");
   };
 
   const handleReturn = () => {
     if (!returnReason) {
-      Alert.alert("Required", "Please select a reason");
+      Alert.alert(tr("Required"), tr("Please select a reason"));
       return;
     }
-    Alert.alert("Success", "Return request submitted");
+    Alert.alert(tr("Success"), tr("Return request submitted"));
     setShowReturnModal(false);
     setReturnReason("");
   };
@@ -296,9 +298,9 @@ export default function OrdersScreen() {
               <Ionicons name="arrow-back" size={24} color="#111827" />
             </TouchableOpacity>
             <View style={styles.headerContent}>
-              <Text style={styles.headerTitle}>{showDetails ? "Order Details" : "My Orders"}</Text>
+              <Text style={styles.headerTitle}>{showDetails ? tr("Order Details") : tr("My Orders")}</Text>
               {!showDetails && (
-                <Text style={styles.headerSubtitle}>{filteredOrders.length} orders</Text>
+                <Text style={styles.headerSubtitle}>{filteredOrders.length} {tr("orders")}</Text>
               )}
             </View>
             {!showDetails ? (
@@ -319,7 +321,7 @@ export default function OrdersScreen() {
               <TextInput
                 ref={searchInputRef}
                 style={styles.searchInput}
-                placeholder="Search orders, tracking number..."
+                placeholder={tr("Search orders, tracking number...")}
                 placeholderTextColor="#9CA3AF"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -346,7 +348,7 @@ export default function OrdersScreen() {
               }}
               style={styles.cancelSearchBtn}
             >
-              <Text style={styles.cancelSearchText}>Cancel</Text>
+              <Text style={styles.cancelSearchText}>{tr("Cancel")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -407,14 +409,14 @@ export default function OrdersScreen() {
                 color="#D1D5DB" 
               />
               <Text style={styles.emptyText}>
-                {searchQuery.trim() ? "No results found" : "No orders found"}
+                {searchQuery.trim() ? tr("No results found") : tr("No orders found")}
               </Text>
               <Text style={styles.emptySubtext}>
                 {searchQuery.trim() 
-                  ? `No orders match "${searchQuery}"` 
+                  ? `${tr("No orders match")} "${searchQuery}"` 
                   : activeTab === "all" 
-                    ? "Start shopping to see your orders here" 
-                    : `No ${getStatusConfig(activeTab).text.toLowerCase()} orders`}
+                    ? tr("Start shopping to see your orders here") 
+                    : `${tr("No")} ${getStatusConfig(activeTab).text.toLowerCase()} ${tr("orders")}`}
               </Text>
               {searchQuery.trim() && (
                 <TouchableOpacity
@@ -424,7 +426,7 @@ export default function OrdersScreen() {
                     setShowSearch(false);
                   }}
                 >
-                  <Text style={styles.clearSearchText}>Clear Search</Text>
+                  <Text style={styles.clearSearchText}>{tr("Clear Search")}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -456,7 +458,7 @@ export default function OrdersScreen() {
                       <Image source={order.image} style={styles.orderImage} />
                       <View style={styles.orderDetails}>
                         <Text style={styles.orderItemsText}>
-                          {order.items} {order.items === 1 ? "item" : "items"}
+                          {order.items} {order.items === 1 ? tr("item") : tr("items")}
                         </Text>
                         <Text style={styles.orderTotal}>{order.total}</Text>
                       </View>
@@ -474,7 +476,7 @@ export default function OrdersScreen() {
                         style={styles.viewDetailsBtn}
                         onPress={() => handleOrderPress(order)}
                       >
-                        <Text style={styles.viewDetailsText}>View Details</Text>
+                        <Text style={styles.viewDetailsText}>{tr("View Details")}</Text>
                         <Ionicons name="chevron-forward" size={16} color="#E97A1F" />
                       </TouchableOpacity>
                     </View>
@@ -523,6 +525,7 @@ function OrderDetailsView({
   onReturn: () => void;
   getStatusConfig: (status: OrderStatus) => any;
 }) {
+  const { tr } = useLanguage();
   const statusConfig = getStatusConfig(order.status);
 
   return (
@@ -535,7 +538,7 @@ function OrderDetailsView({
       <View style={styles.statusCard}>
         <View style={styles.statusCardHeader}>
           <View>
-            <Text style={styles.statusCardLabel}>Order Status</Text>
+            <Text style={styles.statusCardLabel}>{tr("Order Status")}</Text>
             <Text style={styles.statusCardValue}>{statusConfig.text}</Text>
           </View>
           <View style={[styles.statusIconWrapper, { backgroundColor: statusConfig.bgColor }]}>
@@ -555,9 +558,9 @@ function OrderDetailsView({
             {/* Visual state matches common e-commerce trackers while still "Processing" */}
             <OrderProgressStepper currentStep={3} />
             <View style={styles.processingMessageWrap}>
-              <Text style={styles.processingMessageTitle}>We’re preparing your order</Text>
+              <Text style={styles.processingMessageTitle}>{tr("We’re preparing your order")}</Text>
               <Text style={styles.processingMessageSub}>
-                Your items are being picked and packed. You’ll get an update when it ships.
+                {tr("Your items are being picked and packed. You’ll get an update when it ships.")}
               </Text>
             </View>
           </View>
@@ -570,9 +573,9 @@ function OrderDetailsView({
               currentStep={order.returnStage ?? 2}
             />
             <View style={styles.returnMessageWrap}>
-              <Text style={styles.returnMessageTitle}>Return is in progress</Text>
+              <Text style={styles.returnMessageTitle}>{tr("Return is in progress")}</Text>
               <Text style={styles.returnMessageSub}>
-                We’ll keep you posted at every step — from pickup to refund completion.
+                {tr("We’ll keep you posted at every step — from pickup to refund completion.")}
               </Text>
             </View>
           </View>
@@ -581,26 +584,26 @@ function OrderDetailsView({
 
       {/* Order Info */}
       <View style={styles.infoCard}>
-        <InfoRow label="Order Number" value={order.orderNumber} />
-        <InfoRow label="Order Date" value={order.date} />
+        <InfoRow label={tr("Order Number")} value={order.orderNumber} />
+        <InfoRow label={tr("Order Date")} value={order.date} />
         {order.trackingNumber && (
-          <InfoRow label="Tracking Number" value={order.trackingNumber} highlight />
+          <InfoRow label={tr("Tracking Number")} value={order.trackingNumber} highlight />
         )}
         {order.paymentMethod && (
-          <InfoRow label="Payment Method" value={order.paymentMethod} />
+          <InfoRow label={tr("Payment Method")} value={order.paymentMethod} />
         )}
       </View>
 
       {/* Products */}
       <View style={styles.productsCard}>
-        <Text style={styles.cardTitle}>Products ({order.items})</Text>
+        <Text style={styles.cardTitle}>{tr("Products")} ({order.items})</Text>
         {order.products?.map((product) => (
           <View key={product.id} style={styles.productItem}>
             <Image source={product.image} style={styles.productImage} />
             <View style={styles.productInfo}>
               <Text style={styles.productName}>{product.name}</Text>
               <Text style={styles.productMeta}>
-                Qty: {product.quantity} × {product.price}
+                {tr("Qty")}: {product.quantity} × {product.price}
               </Text>
             </View>
             <Text style={styles.productPrice}>{product.price}</Text>
@@ -613,7 +616,7 @@ function OrderDetailsView({
         <View style={styles.infoCard}>
           <View style={styles.addressHeader}>
             <Ionicons name="location" size={20} color="#E97A1F" />
-            <Text style={styles.cardTitle}>Delivery Address</Text>
+            <Text style={styles.cardTitle}>{tr("Delivery Address")}</Text>
           </View>
           <Text style={styles.addressText}>{order.deliveryAddress}</Text>
         </View>
@@ -621,12 +624,12 @@ function OrderDetailsView({
 
       {/* Summary */}
       <View style={styles.summaryCard}>
-        <Text style={styles.cardTitle}>Order Summary</Text>
-        <SummaryRow label="Subtotal" value={order.total} />
-        <SummaryRow label="Shipping" value="₹99" />
-        <SummaryRow label="Tax" value="₹0" />
+        <Text style={styles.cardTitle}>{tr("Order Summary")}</Text>
+        <SummaryRow label={tr("Subtotal")} value={order.total} />
+        <SummaryRow label={tr("Shipping")} value="₹99" />
+        <SummaryRow label={tr("Tax")} value="₹0" />
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalLabel}>{tr("Total")}</Text>
           <Text style={styles.totalValue}>{order.total}</Text>
         </View>
       </View>
@@ -636,34 +639,34 @@ function OrderDetailsView({
         {order.status === "processing" && (
           <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
             <Ionicons name="close-circle" size={20} color="#FFFFFF" />
-            <Text style={styles.cancelBtnText}>Cancel Order</Text>
+            <Text style={styles.cancelBtnText}>{tr("Cancel Order")}</Text>
           </TouchableOpacity>
         )}
         {order.status === "shipped" && (
           <TouchableOpacity style={styles.trackBtn}>
             <Ionicons name="location" size={20} color="#FFFFFF" />
-            <Text style={styles.trackBtnText}>Track Package</Text>
+            <Text style={styles.trackBtnText}>{tr("Track Package")}</Text>
           </TouchableOpacity>
         )}
         {order.status === "delivered" && (
           <>
             <TouchableOpacity
               style={styles.primaryBtn}
-              onPress={() => Alert.alert("Success", "Added to cart")}
+              onPress={() => Alert.alert(tr("Success"), tr("Added to cart"))}
             >
               <Ionicons name="cart" size={20} color="#FFFFFF" />
-              <Text style={styles.primaryBtnText}>Buy Again</Text>
+              <Text style={styles.primaryBtnText}>{tr("Buy Again")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryBtn} onPress={onReturn}>
               <Ionicons name="return-down-back" size={20} color="#2196F3" />
-              <Text style={styles.secondaryBtnText}>Return / Replace</Text>
+              <Text style={styles.secondaryBtnText}>{tr("Return / Replace")}</Text>
             </TouchableOpacity>
           </>
         )}
         {order.status === "returns" && (
           <TouchableOpacity style={styles.secondaryBtn} onPress={onReturn}>
             <Ionicons name="refresh" size={20} color="#8B5CF6" />
-            <Text style={[styles.secondaryBtnText, { color: "#8B5CF6" }]}>View Return Status</Text>
+            <Text style={[styles.secondaryBtnText, { color: "#8B5CF6" }]}>{tr("View Return Status")}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -838,26 +841,27 @@ function CancelModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { tr } = useLanguage();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Cancel Order</Text>
+            <Text style={styles.modalTitle}>{tr("Cancel Order")}</Text>
             <TouchableOpacity onPress={onCancel}>
               <Ionicons name="close" size={24} color="#111827" />
             </TouchableOpacity>
           </View>
           {order && (
             <View style={styles.modalOrderInfo}>
-              <Text style={styles.modalOrderLabel}>Order: {order.orderNumber}</Text>
-              <Text style={styles.modalOrderValue}>Amount: {order.total}</Text>
+              <Text style={styles.modalOrderLabel}>{tr("Order")}: {order.orderNumber}</Text>
+              <Text style={styles.modalOrderValue}>{tr("Amount")}: {order.total}</Text>
             </View>
           )}
-          <Text style={styles.modalLabel}>Reason for cancellation</Text>
+          <Text style={styles.modalLabel}>{tr("Reason for cancellation")}</Text>
           <TextInput
             style={styles.modalInput}
-            placeholder="Enter reason..."
+            placeholder={tr("Enter reason...")}
             multiline
             value={reason}
             onChangeText={onReasonChange}
@@ -865,10 +869,10 @@ function CancelModal({
           />
           <View style={styles.modalActions}>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={onCancel}>
-              <Text style={styles.modalCancelText}>Keep Order</Text>
+              <Text style={styles.modalCancelText}>{tr("Keep Order")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalConfirmBtn} onPress={onConfirm}>
-              <Text style={styles.modalConfirmText}>Cancel Order</Text>
+              <Text style={styles.modalConfirmText}>{tr("Cancel Order")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -893,6 +897,7 @@ function ReturnModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { tr } = useLanguage();
   const reasons = ["Wrong Item", "Defective", "Size Issue", "Not as Described", "Other"];
 
   return (
@@ -900,7 +905,7 @@ function ReturnModal({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Return / Replace</Text>
+            <Text style={styles.modalTitle}>{tr("Return / Replace")}</Text>
             <TouchableOpacity onPress={onCancel}>
               <Ionicons name="close" size={24} color="#111827" />
             </TouchableOpacity>
@@ -909,28 +914,28 @@ function ReturnModal({
             <View style={styles.modalProductInfo}>
               <Image source={order.image} style={styles.modalProductImage} />
               <View>
-                <Text style={styles.modalProductName}>{order.products?.[0]?.name || "Product"}</Text>
+                <Text style={styles.modalProductName}>{tr(order.products?.[0]?.name || "Product")}</Text>
                 <Text style={styles.modalProductMeta}>{order.orderNumber}</Text>
               </View>
             </View>
           )}
-          <Text style={styles.modalLabel}>Select reason</Text>
+          <Text style={styles.modalLabel}>{tr("Select reason")}</Text>
           {reasons.map((r) => (
             <TouchableOpacity
               key={r}
               style={[styles.reasonBtn, reason === r && styles.reasonBtnActive]}
               onPress={() => onReasonChange(r)}
             >
-              <Text style={[styles.reasonText, reason === r && styles.reasonTextActive]}>{r}</Text>
+              <Text style={[styles.reasonText, reason === r && styles.reasonTextActive]}>{tr(r)}</Text>
               {reason === r && <Ionicons name="checkmark-circle" size={20} color="#3B82F6" />}
             </TouchableOpacity>
           ))}
           <View style={styles.modalActions}>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={onCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{tr("Cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalConfirmBtn} onPress={onConfirm}>
-              <Text style={styles.modalConfirmText}>Submit</Text>
+              <Text style={styles.modalConfirmText}>{tr("Submit")}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -47,6 +47,7 @@ import {
   type ApiAddress,
   type CreateAddressPayload,
 } from "../services/addresses";
+import { useLanguage } from "../lib/language";
 
 type CatalogProduct = {
   id: string;
@@ -768,6 +769,7 @@ const AVAILABLE_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 
 export default function ProductDetail() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const productIdRaw = params.id;
   const productId = Array.isArray(productIdRaw) ? productIdRaw[0] : productIdRaw;
@@ -1234,7 +1236,7 @@ export default function ProductDetail() {
 
         <View style={styles.headerSearchWrapper}>
           <TextInput
-            placeholder="Search in product"
+            placeholder={tr("Search in product")}
             placeholderTextColor="#69798c"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -1696,7 +1698,7 @@ export default function ProductDetail() {
               } as any)
             }
             accessibilityRole="button"
-            accessibilityLabel="Open seller store"
+            accessibilityLabel={tr("Open seller store")}
           >
             <View style={styles.soldByLeft}>
               <Text style={styles.soldByLabel}>Sold by</Text>
@@ -2046,14 +2048,14 @@ export default function ProductDetail() {
               </Text>
 
               <TextInput
-                placeholder="Full Name"
+                placeholder={tr("Full Name")}
                 placeholderTextColor="#999999"
                 value={newAddressName}
                 onChangeText={setNewAddressName}
                 style={styles.addressInput}
               />
               <TextInput
-                placeholder="Phone Number"
+                placeholder={tr("Phone Number")}
                 placeholderTextColor="#999999"
                 value={newAddressPhone}
                 onChangeText={setNewAddressPhone}
