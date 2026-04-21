@@ -10,10 +10,13 @@ import {
   TextInput,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
+import { payWithRazorpay } from "../lib/payment/razorpayFlow";
 
 type ReviewItem = {
   id: string;
@@ -28,6 +31,7 @@ type ReviewItem = {
 
 export default function ReviewOrdersScreen() {
   const router = useRouter();
+  const [paying, setPaying] = useState(false);
 
   // NOTE: Cart in this project is local-state; until global cart is added,
   // we show realistic dummy items here.
@@ -85,8 +89,44 @@ export default function ReviewOrdersScreen() {
     [items]
   );
 
-  const handlePlaceOrder = () => {
-    router.push("/payment-selection" as any);
+  const handlePlaceOrder = async () => {
+    if (paying) return;
+    if (total <= 0) {
+      Alert.alert("Checkout", "Amount must be greater than zero.");
+      return;
+    }
+
+    setPaying(true);
+    try {
+      const result = await payWithRazorpay(total);
+      if (result.ok === false) {
+        if (result.reason === "use_web_checkout") {
+          router.push({
+            pathname: "/razorpay-web-checkout",
+            params: {
+              key: result.razorpayKeyId,
+              orderId: result.orderId,
+              amount: String(result.amountPaise),
+              currency: result.currency,
+            },
+          } as any);
+          return;
+        }
+        if (result.reason === "cancelled") {
+          return;
+        }
+        Alert.alert("Payment", result.message);
+        return;
+      }
+      Alert.alert("Payment successful", result.verify.message ?? "Your payment was verified.", [
+        { text: "OK", onPress: () => router.replace("/orders" as any) },
+      ]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      Alert.alert("Payment", msg);
+    } finally {
+      setPaying(false);
+    }
   };
 
   return (
@@ -238,12 +278,19 @@ export default function ReviewOrdersScreen() {
           <Text style={styles.bottomItemsText}>{totalItems} item(s)</Text>
         </View>
         <TouchableOpacity
-          style={styles.placeOrderBtn}
+          style={[styles.placeOrderBtn, paying && styles.placeOrderBtnDisabled]}
           activeOpacity={0.9}
           onPress={handlePlaceOrder}
+          disabled={paying}
         >
-          <Text style={styles.placeOrderText}>Place order</Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+          {paying ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <>
+              <Text style={styles.placeOrderText}>Place order</Text>
+              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -590,6 +637,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
+  },
+  placeOrderBtnDisabled: {
+    opacity: 0.75,
   },
   placeOrderText: {
     fontSize: 13,
