@@ -33,6 +33,7 @@ import {
   parseCartApiError,
   putCartItemQuantityDelta,
 } from "../lib/cartServerApi";
+import { useLanguage } from "../lib/language";
 
 const { width, height } = Dimensions.get("window");
 const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
@@ -101,6 +102,7 @@ function serverRowToCartItem(row: ApiCartItem): CartItem {
 
 export default function CartScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartSource, setCartSource] = useState<CartItemSource>("local");
   const [serverPriceSummary, setServerPriceSummary] = useState<ApiCartPriceSummary | null>(
@@ -361,7 +363,7 @@ export default function CartScreen() {
           }
           await reloadCartFromStorage();
         } catch (e) {
-          Alert.alert("Cart", parseCartApiError(e, "Could not update quantity."));
+          Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not update quantity.")));
         }
         return;
       }
@@ -373,12 +375,12 @@ export default function CartScreen() {
   // Remove product
   const removeProduct = (id: string) => {
     Alert.alert(
-      "Remove Item",
-      "Are you sure you want to remove this item from your cart?",
+      tr("Remove Item"),
+      tr("Are you sure you want to remove this item from your cart?"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: tr("Cancel"), style: "cancel" },
         {
-          text: "Remove",
+          text: tr("Remove"),
           style: "destructive",
           onPress: () => {
             void (async () => {
@@ -390,9 +392,9 @@ export default function CartScreen() {
                   await removeCartLine(id);
                 }
                 await reloadCartFromStorage();
-                Alert.alert("Removed", "Item has been removed from your cart.");
+                Alert.alert(tr("Removed"), tr("Item has been removed from your cart."));
               } catch (e) {
-                Alert.alert("Cart", parseCartApiError(e, "Could not remove item."));
+                Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not remove item.")));
               }
             })();
           },
@@ -403,12 +405,12 @@ export default function CartScreen() {
 
   const handleClearServerCart = () => {
     Alert.alert(
-      "Clear cart",
-      "Remove all items from your cart?",
+      tr("Clear cart"),
+      tr("Remove all items from your cart?"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: tr("Cancel"), style: "cancel" },
         {
-          text: "Clear all",
+          text: tr("Clear all"),
           style: "destructive",
           onPress: () => {
             void (async () => {
@@ -416,7 +418,7 @@ export default function CartScreen() {
                 await deleteCartClearServer();
                 await reloadCartFromStorage();
               } catch (e) {
-                Alert.alert("Cart", parseCartApiError(e, "Could not clear cart."));
+                Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not clear cart.")));
               }
             })();
           },
@@ -428,7 +430,7 @@ export default function CartScreen() {
   // Apply coupon
   const handleApplyCoupon = () => {
     if (!couponCode.trim()) {
-      Alert.alert("Invalid Coupon", "Please enter a coupon code.");
+      Alert.alert(tr("Invalid Coupon"), tr("Please enter a coupon code."));
       return;
     }
 
@@ -444,9 +446,9 @@ export default function CartScreen() {
       const discountAmount = Math.min(validCoupons[coupon], subtotal * 0.1);
       setAppliedCoupon(coupon);
       setCouponDiscount(discountAmount);
-      Alert.alert("Success", `Coupon "${coupon}" applied successfully!`);
+      Alert.alert(tr("Success"), tr(`Coupon "${coupon}" applied successfully!`));
     } else {
-      Alert.alert("Invalid Coupon", "The coupon code you entered is invalid.");
+      Alert.alert(tr("Invalid Coupon"), tr("The coupon code you entered is invalid."));
     }
   };
 
@@ -455,7 +457,7 @@ export default function CartScreen() {
     setAppliedCoupon(null);
     setCouponDiscount(0);
     setCouponCode("");
-    Alert.alert("Coupon Removed", "Coupon has been removed.");
+    Alert.alert(tr("Coupon Removed"), tr("Coupon has been removed."));
   };
 
   // Add similar product to cart
@@ -468,14 +470,14 @@ export default function CartScreen() {
         mrp: product.originalPrice ?? product.price,
       });
       await reloadCartFromStorage();
-      Alert.alert("Added to Cart", `${product.name} has been added to your cart!`);
+      Alert.alert(tr("Added to Cart"), tr(`${product.name} has been added to your cart!`));
     })();
   };
 
   // Proceed to checkout
   const handleCheckout = () => {
     if (cartItems.length === 0) {
-      Alert.alert("Empty Cart", "Your cart is empty. Add some items first!");
+      Alert.alert(tr("Empty Cart"), tr("Your cart is empty. Add some items first!"));
       return;
     }
     router.push("/revieworders");
@@ -491,7 +493,7 @@ export default function CartScreen() {
             style={styles.backButton}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={tr("Go back")}
           >
             <Image
               source={require("../assets/MainCatImages/images/fntfav.png")}
@@ -541,7 +543,7 @@ export default function CartScreen() {
               style={styles.searchIcon}
             />
             <TextInput
-              placeholder="Search cart"
+              placeholder={tr("Search cart")}
               placeholderTextColor="#69798c"
               value={headerSearchQuery}
               onChangeText={setHeaderSearchQuery}
@@ -558,7 +560,7 @@ export default function CartScreen() {
             onPress={() => setIsSearchVisible((prev) => !prev)}
             style={styles.headerIcon}
             accessibilityRole="button"
-            accessibilityLabel="Toggle search"
+            accessibilityLabel={tr("Toggle search")}
             onLayout={onSearchIconLayout}
           >
             <Ionicons name="search-outline" size={20} color="#ef7b1a" />
@@ -569,7 +571,7 @@ export default function CartScreen() {
             style={styles.headerIcon}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Wishlist"
+            accessibilityLabel={tr("Wishlist")}
           >
             <Ionicons name="heart" size={20} color="red" />
           </TouchableOpacity>
@@ -588,15 +590,15 @@ export default function CartScreen() {
             <View style={styles.emptyIcon}>
               <Ionicons name="cart-outline" size={80} color="#E0E0E0" />
             </View>
-            <Text style={styles.emptyText}>Your cart is empty</Text>
+            <Text style={styles.emptyText}>{tr("Your cart is empty")}</Text>
             <Text style={styles.emptySubtext}>
-              Add some items to get started!
+              {tr("Add some items to get started!")}
             </Text>
             <TouchableOpacity
               style={styles.shopNowButton}
               onPress={() => router.push("/home")}
             >
-              <Text style={styles.shopNowButtonText}>Shop Now</Text>
+              <Text style={styles.shopNowButtonText}>{tr("Shop Now")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -604,10 +606,10 @@ export default function CartScreen() {
             {/* Cart Items */}
             <View style={styles.section}>
               <View style={styles.cartSectionTitleRow}>
-                <Text style={styles.sectionTitle}>Cart Items</Text>
+                <Text style={styles.sectionTitle}>{tr("Cart Items")}</Text>
                 {cartSource === "server" && cartItems.length > 0 ? (
                   <TouchableOpacity onPress={handleClearServerCart} hitSlop={12}>
-                    <Text style={styles.clearCartText}>Clear all</Text>
+                    <Text style={styles.clearCartText}>{tr("Clear all")}</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -624,9 +626,9 @@ export default function CartScreen() {
                     <Text style={styles.cartItemName}>{item.name}</Text>
                     {(item.size || item.color) && (
                       <Text style={styles.cartItemMeta}>
-                        {item.size ? `Size: ${item.size}` : ""}
+                        {item.size ? `${tr("Size")}: ${item.size}` : ""}
                         {item.size && item.color ? " • " : ""}
-                        {item.color ? `Color: ${item.color}` : ""}
+                        {item.color ? `${tr("Color")}: ${item.color}` : ""}
                       </Text>
                     )}
                     <View style={styles.cartItemPriceRow}>
@@ -644,7 +646,7 @@ export default function CartScreen() {
 
                     {/* Quantity Controls */}
                     <View style={styles.quantityContainer}>
-                      <Text style={styles.quantityLabel}>Quantity:</Text>
+                      <Text style={styles.quantityLabel}>{tr("Quantity")}:</Text>
                       <View style={styles.quantityControls}>
                         <TouchableOpacity
                           style={styles.quantityButton}
@@ -679,7 +681,7 @@ export default function CartScreen() {
                       onPress={() => removeProduct(item.id)}
                     >
                       <Ionicons name="trash-outline" size={16} color="#F44336" />
-                      <Text style={styles.removeButtonText}>Remove</Text>
+                      <Text style={styles.removeButtonText}>{tr("Remove")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -689,14 +691,14 @@ export default function CartScreen() {
             {/* Apply Coupon — local cart only (server totals from checkout API) */}
             {cartSource === "local" ? (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Apply Coupon</Text>
+                <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{tr("Apply Coupon")}</Text>
                 <View style={styles.couponContainer}>
                   {appliedCoupon ? (
                     <View style={styles.appliedCouponCard}>
                       <View style={styles.appliedCouponInfo}>
                         <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                         <Text style={styles.appliedCouponText}>
-                          {appliedCoupon} applied
+                          {tr(`${appliedCoupon} applied`)}
                         </Text>
                         <Text style={styles.appliedCouponDiscount}>
                           -₹{couponDiscount.toLocaleString()}
@@ -713,7 +715,7 @@ export default function CartScreen() {
                     <View style={styles.couponInputContainer}>
                       <TextInput
                         style={styles.couponInput}
-                        placeholder="Enter coupon code"
+                        placeholder={tr("Enter coupon code")}
                         value={couponCode}
                         onChangeText={setCouponCode}
                         autoCapitalize="characters"
@@ -722,7 +724,7 @@ export default function CartScreen() {
                         style={styles.applyCouponButton}
                         onPress={handleApplyCoupon}
                       >
-                        <Text style={styles.applyCouponButtonText}>Apply</Text>
+                        <Text style={styles.applyCouponButtonText}>{tr("Apply")}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -732,17 +734,17 @@ export default function CartScreen() {
 
             {/* Price Summary */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Price Summary</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{tr("Price Summary")}</Text>
               <View style={styles.priceSummaryCard}>
                 <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Subtotal</Text>
+                  <Text style={styles.priceLabel}>{tr("Subtotal")}</Text>
                   <Text style={styles.priceValue}>
                     ₹{subtotal.toLocaleString()}
                   </Text>
                 </View>
                 {discount > 0 && (
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Product Discount</Text>
+                    <Text style={styles.priceLabel}>{tr("Product Discount")}</Text>
                     <Text style={[styles.priceValue, styles.discountText]}>
                       -₹{discount.toLocaleString()}
                     </Text>
@@ -750,17 +752,17 @@ export default function CartScreen() {
                 )}
                 {cartSource === "local" && couponDiscount > 0 ? (
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Coupon Discount</Text>
+                    <Text style={styles.priceLabel}>{tr("Coupon Discount")}</Text>
                     <Text style={[styles.priceValue, styles.discountText]}>
                       -₹{couponDiscount.toLocaleString()}
                     </Text>
                   </View>
                 ) : null}
                 <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Delivery Charge</Text>
+                  <Text style={styles.priceLabel}>{tr("Delivery Charge")}</Text>
                   <Text style={styles.priceValue}>
                     {deliveryCharge === 0 ? (
-                      <Text style={styles.freeText}>FREE</Text>
+                      <Text style={styles.freeText}>{tr("FREE")}</Text>
                     ) : (
                       `₹${deliveryCharge}`
                     )}
@@ -768,7 +770,7 @@ export default function CartScreen() {
                 </View>
                 <View style={styles.priceDivider} />
                 <View style={styles.priceRow}>
-                  <Text style={styles.totalLabel}>Total</Text>
+                  <Text style={styles.totalLabel}>{tr("Total")}</Text>
                   <Text style={styles.totalValue}>₹{orderTotal.toLocaleString()}</Text>
                 </View>
               </View>
@@ -777,9 +779,9 @@ export default function CartScreen() {
             {/* Similar Products Section */}
             <View style={styles.section}>
               <View style={styles.similarProductsHeader}>
-                <Text style={styles.sectionTitle}>You May Also Like</Text>
+                <Text style={styles.sectionTitle}>{tr("You May Also Like")}</Text>
                 <Text style={styles.similarProductsSubtitle}>
-                  Similar products you might enjoy
+                  {tr("Similar products you might enjoy")}
                 </Text>
               </View>
               <ScrollView
@@ -845,7 +847,7 @@ export default function CartScreen() {
                       >
                         <Ionicons name="add" size={18} color="#FFFFFF" />
                         <Text style={styles.similarProductAddButtonText}>
-                          Add to Cart
+                          {tr("Add to Cart")}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -861,7 +863,7 @@ export default function CartScreen() {
       {cartItems.length > 0 && (
         <View style={styles.footer}>
           <View style={styles.footerTotal}>
-            <Text style={styles.footerTotalLabel}>Total:</Text>
+            <Text style={styles.footerTotalLabel}>{tr("Total")}:</Text>
             <Text style={styles.footerTotalValue}>₹{orderTotal.toLocaleString()}</Text>
           </View>
           <TouchableOpacity
@@ -869,7 +871,7 @@ export default function CartScreen() {
             onPress={handleCheckout}
             activeOpacity={0.8}
           >
-            <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
+            <Text style={styles.checkoutButtonText}>{tr("Proceed to Checkout")}</Text>
             <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>

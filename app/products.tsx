@@ -28,6 +28,7 @@ import {
   toggleWishlistProduct,
 } from "../lib/shopStorage";
 import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
+import { useLanguage } from "../lib/language";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const SIDE_PAD = 12;
@@ -424,6 +425,7 @@ function ProductGridCard({
 
 export default function Products() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -773,7 +775,7 @@ export default function Products() {
           style={styles.filterCell}
           onPress={() => handleFilterPress("Sort")}
           accessibilityRole="button"
-          accessibilityLabel="Sort"
+          accessibilityLabel={tr("Sort")}
         >
           <MaterialIcons name="swap-vert" size={18} color="#334155" />
           <Text style={styles.filterLabel}>Sort</Text>
@@ -782,7 +784,7 @@ export default function Products() {
         <TouchableOpacity
           style={styles.filterCell}
           accessibilityRole="button"
-          accessibilityLabel="Category"
+          accessibilityLabel={tr("CATEGORY")}
           onPress={() => handleFilterPress("Category")}
         >
           <Ionicons name="chevron-down" size={16} color="#334155" />
@@ -792,7 +794,7 @@ export default function Products() {
         <TouchableOpacity
           style={styles.filterCell}
           accessibilityRole="button"
-          accessibilityLabel="Gender"
+          accessibilityLabel={tr("Gender")}
           onPress={() => handleFilterPress("Gender")}
         >
           <Ionicons name="chevron-down" size={16} color="#334155" />
@@ -802,7 +804,7 @@ export default function Products() {
         <TouchableOpacity
           style={styles.filterCell}
           accessibilityRole="button"
-          accessibilityLabel="Filters"
+          accessibilityLabel={tr("Filters")}
           onPress={() => handleFilterPress("Filter")}
         >
           <MaterialIcons name="tune" size={18} color="#334155" />
@@ -926,7 +928,7 @@ export default function Products() {
                 style={{ marginRight: 8 }}
               />
               <TextInput
-                placeholder="Search"
+                placeholder={tr("Search")}
                 placeholderTextColor="#999"
                 value={searchCategoryText}
                 onChangeText={setSearchCategoryText}

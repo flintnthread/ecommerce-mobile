@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useLanguage } from "../lib/language";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -46,6 +47,7 @@ interface Wallet {
 
 export default function PaymentMethodsScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const [activeTab, setActiveTab] = useState<PaymentTab>("cards");
   const [showAddCardModal, setShowAddCardModal] = useState(false);
   const [showAddUPIModal, setShowAddUPIModal] = useState(false);
@@ -120,10 +122,10 @@ export default function PaymentMethodsScreen() {
   ];
 
   const tabs: { key: PaymentTab; label: string; icon: string }[] = [
-    { key: "cards", label: "Cards", icon: "card" },
+    { key: "cards", label: tr("Cards"), icon: "card" },
     { key: "upi", label: "UPI", icon: "phone-portrait" },
-    { key: "wallet", label: "Wallet", icon: "wallet" },
-    { key: "cod", label: "Cash on Delivery", icon: "cash" },
+    { key: "wallet", label: tr("Wallet"), icon: "wallet" },
+    { key: "cod", label: tr("Cash on Delivery"), icon: "cash" },
   ];
 
   const getCardTypeIcon = (type: string) => {
@@ -214,7 +216,7 @@ export default function PaymentMethodsScreen() {
 
         {/* Centered Title Section */}
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Payment Methods</Text>
+          <Text style={styles.headerTitle}>{tr("Payment Methods")}</Text>
           <Text style={styles.headerSubtitle}>
             {activeTab === "cards" && `${paymentCards.length} saved cards`}
             {activeTab === "upi" && `${upiAccounts.length} UPI accounts`}

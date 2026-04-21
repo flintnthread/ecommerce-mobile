@@ -44,6 +44,7 @@ import {
   fetchWishlistServerKeySet,
   togglePtbWishlistWithServer,
 } from "../lib/wishlistServerApi";
+import { useLanguage } from "../lib/language";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -1005,6 +1006,7 @@ function pickMenPtbProductRating(p: any): number | null {
 
 export default function MenScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -1230,7 +1232,7 @@ export default function MenScreen() {
       variantId?: number;
     }) => {
       const r = await togglePtbWishlistWithServer(product, reloadWishlistIds);
-      if (!r.ok) Alert.alert("Wishlist", r.message);
+      if (r.ok === false) Alert.alert("Wishlist", r.message);
       else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
@@ -1256,7 +1258,7 @@ export default function MenScreen() {
           mrp: product.mrpNum,
         },
       });
-      if (!r.ok) {
+      if (r.ok === false) {
         Alert.alert("Cart", r.message);
         return;
       }
@@ -2222,7 +2224,7 @@ export default function MenScreen() {
                       activeOpacity={0.88}
                       onPress={() => openMenSubcategoryProducts(s.label, s.subcategoryId)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Shop ${s.label}`}
+                      accessibilityLabel={`${tr("Shop")} ${tr(s.label)}`}
                     >
                       <View style={styles.railCardArt}>
                         <Image
@@ -2245,7 +2247,7 @@ export default function MenScreen() {
                       </View>
                       <View style={styles.railCardBody}>
                         <Text style={styles.railCardLabel} numberOfLines={2}>
-                          {s.label}
+                          {tr(s.label)}
                         </Text>
                         <Text style={styles.railCardHint}>Tap to shop</Text>
                       </View>
@@ -2288,7 +2290,7 @@ export default function MenScreen() {
                             } as any)
                           }
                           accessibilityRole="button"
-                          accessibilityLabel={`${product.name}, view details`}
+                          accessibilityLabel={`${tr(product.name)}, ${tr("view details")}`}
                         >
                           <View style={styles.menEthnicKurtaSpotlightInner}>
                             <Image
@@ -2297,7 +2299,7 @@ export default function MenScreen() {
                             />
                             <View style={styles.menEthnicKurtaSpotlightMeta}>
                               <Text style={styles.menEthnicKurtaSpotlightName} numberOfLines={2}>
-                                {product.name}
+                                {tr(product.name)}
                               </Text>
                               <View style={styles.menEthnicKurtaSpotlightPriceRow}>
                                 <Text style={styles.menEthnicKurtaSpotlightPrice}>
@@ -2747,7 +2749,7 @@ export default function MenScreen() {
                     activeOpacity={0.92}
                     onPress={() => openMenSubcategoryProducts(item.label)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Shop ${item.label}`}
+                    accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                   >
                     <LinearGradient
                       colors={[item.deptColor, hexToRgba(item.deptColor, 0.75)]}
@@ -2793,7 +2795,7 @@ export default function MenScreen() {
                             <View style={styles.fcShopAllListMeta}>
                               <View style={styles.fcShopAllListTextCol}>
                                 <Text style={styles.fcShopAllLabelList} numberOfLines={2}>
-                                  {item.label}
+                                  {tr(item.label)}
                                 </Text>
                                 <Text style={styles.fcShopAllHint}>Tap to see products</Text>
                               </View>
@@ -2828,7 +2830,7 @@ export default function MenScreen() {
                         activeOpacity={0.93}
                         onPress={() => openMenSubcategoryProducts(item.label)}
                         accessibilityRole="button"
-                        accessibilityLabel={`Shop ${item.label}`}
+                        accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                       >
                         <LinearGradient
                           colors={[item.deptColor, hexToRgba(item.deptColor, 0.7)]}
@@ -2877,7 +2879,7 @@ export default function MenScreen() {
                               style={styles.shopAllGridBody}
                             >
                               <Text style={styles.shopAllGridLabel} numberOfLines={2}>
-                                {item.label}
+                                {tr(item.label)}
                               </Text>
                               <View style={styles.shopAllGridCtaRow}>
                                 <Text style={styles.shopAllGridCta}>View range</Text>
@@ -3257,7 +3259,7 @@ export default function MenScreen() {
                           } as any)
                         }
                         accessibilityRole="button"
-                        accessibilityLabel={`${product.name}, view details`}
+                        accessibilityLabel={`${tr(product.name)}, ${tr("view details")}`}
                       >
                         <View style={styles.menPtbCardInner}>
                           <Image
@@ -3267,7 +3269,7 @@ export default function MenScreen() {
                           />
                           <View style={styles.menPtbMeta}>
                             <Text style={styles.menPtbName} numberOfLines={2}>
-                              {product.name}
+                              {tr(product.name)}
                             </Text>
                             <View style={styles.menPtbCategoryRow}>
                               <View style={styles.menPtbRatingPill}>
@@ -3314,7 +3316,7 @@ export default function MenScreen() {
                                     )
                                       ? "Remove from"
                                       : "Add to"
-                                  } wishlist: ${product.name}`}
+                                  } ${tr("wishlist")}: ${tr(product.name)}`}
                                 >
                                   <Ionicons
                                     name={
@@ -3353,7 +3355,7 @@ export default function MenScreen() {
                                     })
                                   }
                                   accessibilityRole="button"
-                                  accessibilityLabel={`Add to cart: ${product.name}`}
+                                  accessibilityLabel={`${tr("Add to cart")}: ${tr(product.name)}`}
                                 >
                                   <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
                                   <Text style={styles.menPtbCartBtnText}>Add to Cart</Text>

@@ -30,6 +30,7 @@ import {
   resolveProductImage,
   type PersistedWishlistLine,
 } from "../lib/shopStorage";
+import { useLanguage } from "../lib/language";
 
 const { width, height } = Dimensions.get("window");
 
@@ -169,6 +170,7 @@ function persistedToWishlistItem(line: PersistedWishlistLine): WishlistItem {
 
 export default function WishlistScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [wishlistLoading, setWishlistLoading] = useState(true);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -392,7 +394,7 @@ export default function WishlistScreen() {
           style={styles.backButton}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={tr("Go back")}
         >
           <Image
             source={require("../assets/MainCatImages/images/fntfav.png")}
@@ -419,7 +421,7 @@ export default function WishlistScreen() {
             />
           </View>
         ) : (
-          <Text style={styles.headerTitle}>Wishlist</Text>
+          <Text style={styles.headerTitle}>{tr("WISHLIST")}</Text>
         )}
 
         <View style={styles.headerIcons}>
@@ -468,7 +470,7 @@ export default function WishlistScreen() {
               <View style={styles.emptyIcon}>
                 <Ionicons name="heart-outline" size={80} color="#E0E0E0" />
               </View>
-              <Text style={styles.emptyText}>Your wishlist is empty</Text>
+              <Text style={styles.emptyText}>{tr("Your wishlist is empty")}</Text>
               <Text style={styles.emptySubtext}>
                 Add items you love to your wishlist!
               </Text>

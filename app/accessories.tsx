@@ -1347,7 +1347,7 @@ export default function Accessories() {
         },
         reloadWishlistIds
       );
-      if (!r.ok) Alert.alert("Wishlist", r.message);
+      if (r.ok === false) Alert.alert("Wishlist", r.message);
       else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
@@ -1379,7 +1379,7 @@ export default function Accessories() {
           mrp,
         },
       });
-      if (!r.ok) {
+      if (r.ok === false) {
         Alert.alert("Cart", r.message);
         return;
       }
@@ -2514,7 +2514,7 @@ export default function Accessories() {
                       activeTopCategory === item.id && styles.topCategoryTextActive,
                     ]}
                   >
-                    {item.label}
+                    {tr(item.label)}
                   </Text>
                   <View
                     style={[
@@ -2984,9 +2984,11 @@ export default function Accessories() {
           <View style={styles.womenRelatedTitleRow}>
             <Ionicons name="sparkles" size={14} color="#ef7b1a" />
             <Text style={styles.womenRelatedTitle}>
-              Related categories for{" "}
-              {womenAccessoriesItems.find((item) => item.id === selectedWomenItemId)?.title ??
-                "Bags"}
+              {tr("Related categories for")}{" "}
+              {tr(
+                womenAccessoriesItems.find((item) => item.id === selectedWomenItemId)?.title ??
+                  "Bags"
+              )}
             </Text>
           </View>
           <View style={styles.womenRelatedTitleUnderline} />
@@ -3013,7 +3015,7 @@ export default function Accessories() {
                     resizeMode="cover"
                   />
                 </View>
-                <Text style={styles.womenRelatedChipText}>{chip.label}</Text>
+                <Text style={styles.womenRelatedChipText}>{tr(chip.label)}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -3160,9 +3162,11 @@ export default function Accessories() {
           <View style={styles.menRelatedTitleRow}>
             <Ionicons name="sparkles" size={14} color="#ef7b1a" />
             <Text style={styles.menRelatedTitle}>
-              Related categories for{" "}
-              {menAccessoriesItems.find((item) => item.id === selectedMenItemId)?.title ??
-                "Belts & Caps"}
+              {tr("Related categories for")}{" "}
+              {tr(
+                menAccessoriesItems.find((item) => item.id === selectedMenItemId)?.title ??
+                  "Belts & Caps"
+              )}
             </Text>
           </View>
           <View style={styles.menRelatedTitleUnderline} />
@@ -3181,7 +3185,7 @@ export default function Accessories() {
                 <View style={styles.menRelatedImageWrap}>
                   <Image source={chip.source} style={styles.menRelatedImage} resizeMode="cover" />
                 </View>
-                <Text style={styles.menRelatedChipText}>{chip.label}</Text>
+                <Text style={styles.menRelatedChipText}>{tr(chip.label)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -3253,7 +3257,7 @@ export default function Accessories() {
 
                       <View style={styles.splitProductCopyBlock}>
                         <Text style={styles.splitProductTitle} numberOfLines={2}>
-                          {product.title}
+                          {tr(product.title)}
                         </Text>
 
                         <View style={styles.splitProductRatingPill}>
@@ -3697,8 +3701,8 @@ export default function Accessories() {
               <Ionicons name="pricetags" size={16} color="#1d324e" />
             </View>
             <Text style={styles.kidsRelatedTitle} numberOfLines={3}>
-              Jewellery subcategories for{" "}
-              {womanYouAreCardFooters[selectedJewelleryCarouselIndex] ?? "Jewellery"}
+              {tr("Jewellery subcategories for")}{" "}
+              {tr(womanYouAreCardFooters[selectedJewelleryCarouselIndex] ?? "Jewellery")}
             </Text>
           </View>
           <View style={styles.kidsRelatedTitleUnderline} />
@@ -3724,7 +3728,7 @@ export default function Accessories() {
                   <Image source={chip.source} style={styles.kidsRelatedPillImage} resizeMode="cover" />
                 </View>
                 <Text style={styles.kidsRelatedPillText} numberOfLines={2}>
-                  {chip.label}
+                  {tr(chip.label)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -3850,9 +3854,11 @@ export default function Accessories() {
             <View style={styles.accessoriesReplicaRelatedTitleRow}>
               <Ionicons name="sparkles" size={14} color="#ef7b1a" />
               <Text style={styles.accessoriesReplicaRelatedTitle}>
-                Related categories for{" "}
-                {accessoriesHeroDeals.find((deal) => deal.id === selectedAccessoriesDealId)?.title ??
-                  "Accessories"}
+                {tr("Related categories for")}{" "}
+                {tr(
+                  accessoriesHeroDeals.find((deal) => deal.id === selectedAccessoriesDealId)?.title ??
+                    "Accessories"
+                )}
               </Text>
             </View>
             <View style={styles.accessoriesReplicaRelatedTitleUnderline} />
@@ -3875,7 +3881,7 @@ export default function Accessories() {
                   <View style={styles.accessoriesReplicaRelatedImageWrap}>
                     <Image source={chip.source} style={styles.accessoriesReplicaRelatedImage} resizeMode="cover" />
                   </View>
-                  <Text style={styles.accessoriesReplicaRelatedChipText}>{chip.label}</Text>
+                  <Text style={styles.accessoriesReplicaRelatedChipText}>{tr(chip.label)}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -4266,7 +4272,7 @@ export default function Accessories() {
                           />
                           <View style={styles.uniquePicksExpandedMeta}>
                             <Text style={styles.uniquePicksExpandedName} numberOfLines={2}>
-                              {product.name}
+                              {tr(product.name)}
                             </Text>
                             <View style={styles.uniquePicksExpandedCategory}>
                               <View style={styles.uniquePicksExpandedRatingPill}>
@@ -4297,8 +4303,8 @@ export default function Accessories() {
                                   onPress={() => void handleToggleWishlistForUniquePick(product)}
                                   accessibilityRole="button"
                                   accessibilityLabel={`${
-                                    wishlisted ? "Remove from" : "Add to"
-                                  } wishlist: ${product.name}`}
+                                    wishlisted ? tr("Remove from") : tr("Add to")
+                                  } ${tr("wishlist")}: ${tr(product.name)}`}
                                 >
                                   <Ionicons
                                     name={wishlisted ? "heart" : "heart-outline"}
@@ -4311,11 +4317,11 @@ export default function Accessories() {
                                   activeOpacity={0.85}
                                   onPress={() => void handleAddToCartForUniquePick(product)}
                                   accessibilityRole="button"
-                                  accessibilityLabel={`Add to cart: ${product.name}`}
+                                  accessibilityLabel={`${tr("Add to cart")}: ${tr(product.name)}`}
                                 >
                                   <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
                                   <Text style={styles.uniquePicksExpandedCartBtnText}>
-                                    Add to Cart
+                                    {tr("Add to Cart")}
                                   </Text>
                                 </TouchableOpacity>
                               </View>

@@ -50,6 +50,7 @@ import {
   fetchWishlistServerKeySet,
   togglePtbWishlistWithServer,
 } from "../lib/wishlistServerApi";
+import { useLanguage } from "../lib/language";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -709,6 +710,7 @@ const WOMEN_PTB_GRID_GAP = 12;
 
 export default function WomenScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -1988,7 +1990,7 @@ export default function WomenScreen() {
                       activeOpacity={0.88}
                       onPress={() => openWomenSubcategoryProducts(s.label, s.subcategoryId)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Shop ${s.label}`}
+                      accessibilityLabel={`${tr("Shop")} ${tr(s.label)}`}
                     >
                       <View style={styles.railCardArt}>
                         <Image
@@ -2011,7 +2013,7 @@ export default function WomenScreen() {
                       </View>
                       <View style={styles.railCardBody}>
                         <Text style={styles.railCardLabel} numberOfLines={2}>
-                          {s.label}
+                          {tr(s.label)}
                         </Text>
                         <Text style={styles.railCardHint}>Tap to shop</Text>
                       </View>
@@ -2334,7 +2336,7 @@ export default function WomenScreen() {
                       openWomenSubcategoryProducts(item.label, item.subcategoryId)
                     }
                     accessibilityRole="button"
-                    accessibilityLabel={`Shop ${item.label}`}
+                    accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                   >
                     <LinearGradient
                       colors={[item.deptColor, hexToRgba(item.deptColor, 0.75)]}
@@ -2380,7 +2382,7 @@ export default function WomenScreen() {
                             <View style={styles.fcShopAllListMeta}>
                               <View style={styles.fcShopAllListTextCol}>
                                 <Text style={styles.fcShopAllLabelList} numberOfLines={2}>
-                                  {item.label}
+                                  {tr(item.label)}
                                 </Text>
                                 <Text style={styles.fcShopAllHint}>Tap to see products</Text>
                               </View>
@@ -2417,7 +2419,7 @@ export default function WomenScreen() {
                           openWomenSubcategoryProducts(item.label, item.subcategoryId)
                         }
                         accessibilityRole="button"
-                        accessibilityLabel={`Shop ${item.label}`}
+                        accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                       >
                         <LinearGradient
                           colors={[item.deptColor, hexToRgba(item.deptColor, 0.7)]}
@@ -2466,7 +2468,7 @@ export default function WomenScreen() {
                               style={styles.shopAllGridBody}
                             >
                               <Text style={styles.shopAllGridLabel} numberOfLines={2}>
-                                {item.label}
+                                {tr(item.label)}
                               </Text>
                               <View style={styles.shopAllGridCtaRow}>
                                 <Text style={styles.shopAllGridCta}>View range</Text>
@@ -2840,7 +2842,7 @@ export default function WomenScreen() {
                         } as any)
                       }
                       accessibilityRole="button"
-                      accessibilityLabel={`${product.name}, view details`}
+                      accessibilityLabel={`${tr(product.name)}, ${tr("view details")}`}
                     >
                       <View style={styles.womenPtbCardInner}>
                         <Image
@@ -2850,7 +2852,7 @@ export default function WomenScreen() {
                         />
                         <View style={styles.womenPtbMeta}>
                           <Text style={styles.womenPtbName} numberOfLines={2}>
-                            {product.name}
+                            {tr(product.name)}
                           </Text>
                           <View style={styles.womenPtbRatingRow}>
                             <View style={styles.womenPtbRatingPill}>
@@ -2897,7 +2899,7 @@ export default function WomenScreen() {
                                   )
                                     ? "Remove from"
                                     : "Add to"
-                                } wishlist: ${product.name}`}
+                                } ${tr("wishlist")}: ${tr(product.name)}`}
                               >
                                 <Ionicons
                                   name={
@@ -2936,7 +2938,7 @@ export default function WomenScreen() {
                                   })
                                 }
                                 accessibilityRole="button"
-                                accessibilityLabel={`Add to cart: ${product.name}`}
+                                accessibilityLabel={`${tr("Add to cart")}: ${tr(product.name)}`}
                               >
                                 <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
                                 <Text style={styles.womenPtbCartBtnText}>Add to Cart</Text>

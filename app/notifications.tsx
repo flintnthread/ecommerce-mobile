@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useLanguage } from "../lib/language";
 
 const MOCK_NOTIFICATIONS = [
   {
@@ -42,6 +43,7 @@ const MOCK_NOTIFICATIONS = [
 
 export default function Notifications() {
   const router = useRouter();
+  const { tr } = useLanguage();
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -65,7 +67,7 @@ export default function Notifications() {
         >
           <Ionicons name="arrow-back" size={22} color="#111" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text style={styles.headerTitle}>{tr("Notifications")}</Text>
         <View style={styles.iconBtn} />
       </View>
 
@@ -77,12 +79,12 @@ export default function Notifications() {
             </View>
             <View style={styles.textBlock}>
               <Text style={styles.title} numberOfLines={2}>
-                {n.title}
+                {tr(n.title)}
               </Text>
               <Text style={styles.body} numberOfLines={3}>
-                {n.body}
+                {tr(n.body)}
               </Text>
-              <Text style={styles.time}>{n.time}</Text>
+              <Text style={styles.time}>{tr(n.time)}</Text>
             </View>
           </TouchableOpacity>
         ))}

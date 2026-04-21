@@ -31,6 +31,7 @@ import api, {
   searchProductsPath,
   searchSuggestionsPath,
 } from "../services/api";
+import { useLanguage } from "../lib/language";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -659,6 +660,7 @@ const LOVE_MASONRY_SHORT = 168;
 
 export default function KidsScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -1466,7 +1468,7 @@ export default function KidsScreen() {
                       activeOpacity={0.88}
                       onPress={() => openKidsSubcategoryProducts(s.label, s.subcategoryId)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Shop ${s.label}`}
+                      accessibilityLabel={`${tr("Shop")} ${tr(s.label)}`}
                     >
                       <View style={styles.railCardArt}>
                         <Image
@@ -1489,7 +1491,7 @@ export default function KidsScreen() {
                       </View>
                       <View style={styles.railCardBody}>
                         <Text style={styles.railCardLabel} numberOfLines={2}>
-                          {s.label}
+                          {tr(s.label)}
                         </Text>
                         <Text style={styles.railCardHint}>Tap to shop</Text>
                       </View>
@@ -1812,7 +1814,7 @@ export default function KidsScreen() {
                       openKidsSubcategoryProducts(item.label, item.subcategoryId)
                     }
                     accessibilityRole="button"
-                    accessibilityLabel={`Shop ${item.label}`}
+                    accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                   >
                     <LinearGradient
                       colors={[item.deptColor, hexToRgba(item.deptColor, 0.75)]}
@@ -1858,7 +1860,7 @@ export default function KidsScreen() {
                             <View style={styles.fcShopAllListMeta}>
                               <View style={styles.fcShopAllListTextCol}>
                                 <Text style={styles.fcShopAllLabelList} numberOfLines={2}>
-                                  {item.label}
+                                  {tr(item.label)}
                                 </Text>
                                 <Text style={styles.fcShopAllHint}>Tap to see products</Text>
                               </View>
@@ -1895,7 +1897,7 @@ export default function KidsScreen() {
                           openKidsSubcategoryProducts(item.label, item.subcategoryId)
                         }
                         accessibilityRole="button"
-                        accessibilityLabel={`Shop ${item.label}`}
+                        accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                       >
                         <LinearGradient
                           colors={[item.deptColor, hexToRgba(item.deptColor, 0.7)]}
@@ -1944,7 +1946,7 @@ export default function KidsScreen() {
                               style={styles.shopAllGridBody}
                             >
                               <Text style={styles.shopAllGridLabel} numberOfLines={2}>
-                                {item.label}
+                                {tr(item.label)}
                               </Text>
                               <View style={styles.shopAllGridCtaRow}>
                                 <Text style={styles.shopAllGridCta}>View range</Text>

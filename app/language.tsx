@@ -6,11 +6,13 @@ import {
   StyleSheet,
   Image,
   Animated,
+  type ImageSourcePropType,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import NotificationPermission from "./notification";
 import LocationPermission from "./loc";
+import { type SupportedLanguage, useLanguage } from "../lib/language";
 
 const languages = [
   { name: "Telugu", image: require("../assets/images/telugu.png") },
@@ -21,10 +23,11 @@ const languages = [
   { name: "Kannada", image: require("../assets/images/kannada.png") },
   { name: "Marathi", image: require("../assets/images/marathi.png") },
   { name: "Bengali", image: require("../assets/images/bengali.png") },
-];
+] as { name: SupportedLanguage; image: ImageSourcePropType }[];
 
 export default function LanguageScreen() {
   const router = useRouter();
+  const { selectedLanguage, setSelectedLanguage } = useLanguage();
   const [showNotification, setShowNotification] = useState(false);
   const [showLocation, setShowLocation] = useState(false);
 
@@ -33,6 +36,13 @@ export default function LanguageScreen() {
   ).current;
 
   const handleSelect = (index: number) => {
+    const nextLanguage = languages[index]?.name;
+    if (!nextLanguage) return;
+
+    // Move flow forward on first tap; do not wait for animation completion.
+    void setSelectedLanguage(nextLanguage);
+    setShowNotification(true);
+
     Animated.sequence([
       Animated.timing(scales[index], {
         toValue: 1.1,
@@ -44,9 +54,7 @@ export default function LanguageScreen() {
         duration: 150,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      setShowNotification(true);
-    });
+    ]).start();
   };
 
   const handleNotificationAllow = () => {
@@ -121,6 +129,7 @@ export default function LanguageScreen() {
                 <Image source={item.image} style={styles.image} />
               </View>
               <Text style={styles.text}>{item.name}</Text>
+              {selectedLanguage === item.name ? <View style={styles.selectedDot} /> : null}
             </Animated.View>
           </TouchableOpacity>
         ))}
@@ -238,5 +247,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#000",
+  },
+  selectedDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#22c55e",
   },
 });

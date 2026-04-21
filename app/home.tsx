@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
-import { VideoView, useVideoPlayer } from 'expo-video';
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 import {
@@ -52,6 +51,7 @@ import {
   resolveProductPrimaryImageUri,
 } from "../lib/productImage";
 import * as ImagePicker from "expo-image-picker";
+import { useLanguage } from "../lib/language";
 
 const { width, height } = Dimensions.get("window");
 const HIDE_TOP_BAR_H = 66;
@@ -1120,29 +1120,10 @@ const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
   },
 ];
 
-/** expo-video uses a native SharedObject; play/pause can throw or reject after it is released. */
-function safeVideoPlayback(
-  player: { play(): unknown; pause(): unknown },
-  action: "play" | "pause"
-): void {
-  try {
-    const result = action === "play" ? player.play() : player.pause();
-    if (
-      result != null &&
-      typeof result === "object" &&
-      "then" in result &&
-      typeof (result as PromiseLike<void>).then === "function"
-    ) {
-      void Promise.resolve(result as Promise<unknown>).then(undefined, () => undefined);
-    }
-  } catch {
-    /* ignored */
-  }
-}
-
 export default function Home() {
  const [activeIndex, setActiveIndex] = useState(0);
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const openSearchResults = useCallback(
     (rawQuery?: string) => {
@@ -1493,16 +1474,6 @@ export default function Home() {
     selectedBrowseMainCategoryId,
     selectedSort,
   ]);
-
-  const videoBannerPlayer = useVideoPlayer(
-    require("../assets/images/videobanner.mp4"),
-    (p) => {
-      p.loop = true;
-      p.muted = true;
-    }
-  );
-
-  const isHomeFocused = useIsFocused();
 
   const [wishlistCount, setWishlistCount] = useState(0);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
@@ -1939,15 +1910,6 @@ export default function Home() {
       void loadSuggestedForYouFromSubcategoryApi();
     }, [loadSuggestedForYouFromSubcategoryApi])
   );
-
-  /** Sync play/pause with screen focus. Do not use useFocusEffect cleanup to pause — it can run after expo-video's shared player is released (native crash / rejection). */
-  useEffect(() => {
-    if (!isHomeFocused) {
-      safeVideoPlayback(videoBannerPlayer, "pause");
-      return;
-    }
-    safeVideoPlayback(videoBannerPlayer, "play");
-  }, [isHomeFocused, videoBannerPlayer]);
 
   const openSaveToWishlistSheet = useCallback((p: HomeWishlistCandidate) => {
     setPendingWishlist(p);
@@ -2749,7 +2711,7 @@ const categoryData = [
                 activeOpacity={0.88}
                 onPress={() => setPromoSpotlightModalVisible(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Open promotional offer"
+                accessibilityLabel={tr("Open promotional offer")}
               >
                 <LinearGradient
                   colors={[...GREETING_CHIP_COLORS]}
@@ -2759,11 +2721,11 @@ const categoryData = [
                   style={styles.greetingTextChip}
                 >
                   <Text style={styles.helloLine} numberOfLines={1}>
-                    <Text style={styles.helloMuted}>Hi, </Text>
+                    <Text style={styles.helloMuted}>{tr("Hi, ")}</Text>
                     <Text style={styles.helloName}>{userDisplayName}</Text>
                   </Text>
                   <Text style={styles.shopText} numberOfLines={1}>
-                    New finds await
+                    {tr("New finds await")}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -3108,14 +3070,14 @@ const categoryData = [
           style={styles.userSuggestionCard}
         >
           <View style={styles.userSuggestionHeaderRow}>
-            <Text style={styles.userSuggestionTitle}>Top Picks for You</Text>
+            <Text style={styles.userSuggestionTitle}>{tr("Top Picks for You")}</Text>
             {topPicksShowArrow ? (
               <TouchableOpacity
                 style={styles.userSuggestionArrow}
                 onPress={() => onTopPicksArrowPress()}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel="View all top picks"
+                accessibilityLabel={tr("View all top picks")}
               >
                 <Ionicons name="arrow-forward" size={20} color="#1E40AF" />
               </TouchableOpacity>
@@ -3342,9 +3304,9 @@ const categoryData = [
     <View style={styles.suggestedTitleWrap}>
       <View style={styles.suggestedTitleBadge}>
         <Ionicons name="sparkles" size={18} color="#FDE047" />
-        <Text style={styles.suggestedTitleBadgeText}>Suggested For You</Text>
+        <Text style={styles.suggestedTitleBadgeText}>{tr("Suggested For You")}</Text>
       </View>
-      <Text style={styles.suggestedTitleTagline}>Handpicked just for you</Text>
+      <Text style={styles.suggestedTitleTagline}>{tr("Handpicked just for you")}</Text>
     </View>
     <TouchableOpacity
       style={styles.productArrowButton}
@@ -3443,15 +3405,14 @@ const categoryData = [
   </View>
 </View>
 
-{/* Video Banner Section */}
+{/* Banner (static image — add assets/images/accessories.mp4 to restore video) */}
 <View style={styles.homeVideoShell}>
   <View style={styles.videoBannerContainer}>
-    <VideoView
-      player={videoBannerPlayer}
+    <Image
+      source={require("../assets/images/accessarieshomebanner.png")}
       style={styles.videoBanner}
-      contentFit="cover"
-      nativeControls={false}
-      fullscreenOptions={{ enable: false }}
+      resizeMode="cover"
+      accessibilityIgnoresInvertColors
     />
   </View>
 </View>
@@ -3527,7 +3488,7 @@ const categoryData = [
 
 {/* Rate your recent purchase — auto-scrolling card */}
 <View style={styles.rateSection}>
-  <Text style={styles.rateSectionTitle}>Rate Your Recent Purchase</Text>
+  <Text style={styles.rateSectionTitle}>{tr("Rate Your Recent Purchase")}</Text>
 
   <ScrollView
     ref={rateCarouselRef}
@@ -3842,10 +3803,10 @@ const categoryData = [
         <MaterialIcons name="local-offer" size={22} color="#C2410C" />
       </View>
       <View style={styles.latestHeaderTextCol}>
-        <Text style={styles.latestHeaderEyebrow}>Recommended for you</Text>
-        <Text style={styles.latestHeaderTitle}>More picks</Text>
+        <Text style={styles.latestHeaderEyebrow}>{tr("Recommended for you")}</Text>
+        <Text style={styles.latestHeaderTitle}>{tr("More picks")}</Text>
         <Text style={styles.latestHeaderSub} numberOfLines={1}>
-          Deals and essentials picked today
+          {tr("Deals and essentials picked today")}
         </Text>
       </View>
     </View>
@@ -3855,7 +3816,7 @@ const categoryData = [
       activeOpacity={0.9}
       onPress={() => openSubcatProducts("More picks")}
       accessibilityRole="button"
-      accessibilityLabel="See all recommended products"
+      accessibilityLabel={tr("See all recommended products")}
     >
       <Ionicons name="arrow-forward" size={20} color="#7C2D12" />
     </TouchableOpacity>
@@ -3879,12 +3840,12 @@ const categoryData = [
         disabled={morePicksLoadingMore}
         onPress={() => void loadMoreMorePicks()}
         accessibilityRole="button"
-        accessibilityLabel="Load more recommended products"
+        accessibilityLabel={tr("Load more recommended products")}
       >
         {morePicksLoadingMore ? (
           <ActivityIndicator color="#C2410C" />
         ) : (
-          <Text style={styles.latestLoadMoreBtnText}>Load more</Text>
+          <Text style={styles.latestLoadMoreBtnText}>{tr("Load more")}</Text>
         )}
       </TouchableOpacity>
     ) : null}
@@ -4121,7 +4082,7 @@ const categoryData = [
                   <View style={styles.deliverySearchBox}>
                     <Ionicons name="search-outline" size={20} color="#999" />
                     <TextInput
-                      placeholder="Search by area, street name, pin code"
+                      placeholder={tr("Search by area, street name, pin code")}
                       placeholderTextColor="#999"
                       style={styles.deliverySearchInput}
                       value={deliveryAddressSearchQuery}
@@ -4134,17 +4095,17 @@ const categoryData = [
                     activeOpacity={0.75}
                     onPress={() => void handleUseCurrentLocation()}
                     accessibilityRole="button"
-                    accessibilityLabel="Use my current location"
+                    accessibilityLabel={tr("Use my current location")}
                   >
                     <View style={styles.deliveryUseCurrentIconWrap}>
                       <Ionicons name="locate" size={22} color="#1976D2" />
                     </View>
                     <View style={styles.deliveryUseCurrentTextCol}>
                       <Text style={styles.deliveryUseCurrentTitle}>
-                        Use my current location
+                        {tr("Use my current location")}
                       </Text>
                       <Text style={styles.deliveryUseCurrentSub}>
-                        Allow access to location
+                        {tr("Allow access to location")}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -4152,12 +4113,12 @@ const categoryData = [
                   <View style={styles.deliveryDividerDashed} />
 
                   <View style={styles.deliverySavedHeaderRow}>
-                    <Text style={styles.deliverySavedTitle}>Saved addresses</Text>
+                    <Text style={styles.deliverySavedTitle}>{tr("Saved addresses")}</Text>
                     <TouchableOpacity
                       onPress={openAddNewAddressForm}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.deliveryAddNewText}>+ Add New</Text>
+                      <Text style={styles.deliveryAddNewText}>{tr("+ Add New")}</Text>
                     </TouchableOpacity>
                   </View>
 

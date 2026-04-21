@@ -19,6 +19,7 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getWishlistIds, loadWishlist, toggleWishlistProduct } from "../lib/shopStorage";
+import { useLanguage } from "../lib/language";
 
 type SellerProduct = {
   id: string;
@@ -80,6 +81,7 @@ const SELLER_PRODUCTS: SellerProduct[] = [
 
 export default function SellerStoreScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const sellerName = String(params.name ?? "@ SHIV CREATION");
@@ -104,8 +106,8 @@ export default function SellerStoreScreen() {
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [wishlistCount, setWishlistCount] = useState(0);
   const shareMessage = useMemo(
-    () => `Check out this shop on our app - ${sellerName}`,
-    [sellerName]
+    () => `${tr("Check out this shop on our app")} - ${sellerName}`,
+    [sellerName, tr]
   );
 
   const reloadWishlist = useCallback(async () => {
@@ -137,8 +139,8 @@ export default function SellerStoreScreen() {
       });
       await reloadWishlist();
       Alert.alert(
-        "Wishlist",
-        nowInWishlist ? "Added to wishlist" : "Removed from wishlist"
+        tr("WISHLIST"),
+        nowInWishlist ? tr("Added to wishlist") : tr("Removed from wishlist")
       );
     },
     [reloadWishlist]
