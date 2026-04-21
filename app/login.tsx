@@ -14,10 +14,12 @@ import { useRouter } from "expo-router";
 import { Checkbox } from "expo-checkbox";
 import * as WebBrowser from "expo-web-browser";
 import { Ionicons } from "@expo/vector-icons";
+import { useLanguage } from "../lib/language";
 
 export default function Login() {
 
   const router = useRouter();
+  const { tr } = useLanguage();
 
   const [isChecked, setChecked] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -33,17 +35,17 @@ export default function Login() {
     const value = inputValue.trim();
 
     if (!value) {
-      Alert.alert("Error", "Please enter Email or Mobile Number");
+      Alert.alert(tr("Error"), tr("Please enter Email or Mobile Number"));
       return;
     }
 
     if (!emailRegex.test(value) && !mobileRegex.test(value)) {
-      Alert.alert("Invalid Input", "Enter valid Email or 10-digit Mobile Number");
+      Alert.alert(tr("Invalid Input"), tr("Enter valid Email or 10-digit Mobile Number"));
       return;
     }
 
     if (!isChecked) {
-      Alert.alert("Error", "Please accept terms & conditions");
+      Alert.alert(tr("Error"), tr("Please accept terms & conditions"));
       return;
     }
 
@@ -62,10 +64,10 @@ export default function Login() {
       if (data) {
 
         Alert.alert(
-          "OTP Sent",
+          tr("OTP Sent"),
           emailRegex.test(value)
-            ? "OTP sent to your email"
-            : "OTP sent to your mobile"
+            ? tr("OTP sent to your email")
+            : tr("OTP sent to your mobile")
         );
 
         router.push({
@@ -76,7 +78,7 @@ export default function Login() {
         });
 
       } else {
-        Alert.alert("Error", "Failed to send OTP");
+        Alert.alert(tr("Error"), tr("Failed to send OTP"));
       }
 
     } catch (error) {
@@ -84,9 +86,9 @@ export default function Login() {
       console.log("API Error:", error?.response || error);
 
       if (error?.response?.data?.message) {
-        Alert.alert("Error", error.response.data.message);
+        Alert.alert(tr("Error"), tr(error.response.data.message));
       } else {
-        Alert.alert("Error", "Server not reachable");
+        Alert.alert(tr("Error"), tr("Server not reachable"));
       }
 
     } finally {
@@ -109,14 +111,14 @@ export default function Login() {
         resizeMode="contain"
       />
 
-      <Text style={styles.welcome}>welcome back 👋</Text>
-      <Text style={styles.signIn}>Sign In or create account</Text>
+      <Text style={styles.welcome}>{tr("welcome back 👋")}</Text>
+      <Text style={styles.signIn}>{tr("Sign In or create account")}</Text>
 
       <View style={styles.inputContainer}>
         <Ionicons name="mail-outline" size={20} color="#888" />
 
         <TextInput
-          placeholder="Email or Mobile Number"
+          placeholder={tr("Email or Mobile Number")}
           value={inputValue}
           onChangeText={(text) => setInputValue(text.replace(/\s/g, ""))}
           style={styles.input}
@@ -135,8 +137,9 @@ export default function Login() {
         />
 
         <Text style={styles.checkboxText}>
-          By continue you agree to flint & thread terms & conditions
-          and along with privacy policy
+          {tr("By continue you agree to flint & thread terms & conditions")}
+          {" "}
+          {tr("and along with privacy policy")}
         </Text>
 
       </View>
@@ -149,16 +152,16 @@ export default function Login() {
 
         {loading
           ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.signButtonText}>Sign in to continue</Text>
+          : <Text style={styles.signButtonText}>{tr("Sign in to continue")}</Text>
         }
 
       </TouchableOpacity>
 
       <View style={styles.createAccountRow}>
-        <Text style={styles.newText}>New to FlintThread?</Text>
+        <Text style={styles.newText}>{tr("New to FlintThread?")}</Text>
 
         <TouchableOpacity onPress={() => router.push("/login")}>
-          <Text style={styles.createText}> Create an account</Text>
+          <Text style={styles.createText}> {tr("Create an account")}</Text>
         </TouchableOpacity>
 
       </View>
@@ -175,7 +178,7 @@ export default function Login() {
           style={styles.googleIcon}
         />
 
-        <Text style={styles.googleText}>Continue with Google</Text>
+        <Text style={styles.googleText}>{tr("Continue with Google")}</Text>
 
       </TouchableOpacity>
 

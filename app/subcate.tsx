@@ -21,6 +21,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import { useLanguage } from "../lib/language";
 
 type BestDressItem = {
   id: string;
@@ -1096,6 +1097,7 @@ function tryPopBackToRouteName(
 
 export default function SubcategoriesScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const navigation = useNavigation();
   const params = useLocalSearchParams<{
     mainCat?: string | string[];
@@ -1378,7 +1380,7 @@ export default function SubcategoriesScreen() {
         {isSearchVisible ? (
           <View style={styles.headerSearchWrapper}>
             <TextInput
-              placeholder="Search products"
+              placeholder={tr("Search products")}
               placeholderTextColor="#69798c"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -1685,7 +1687,7 @@ export default function SubcategoriesScreen() {
             </ScrollView>
 
             <View style={styles.bottomActionBar}>
-              <Text style={styles.productCount}>1000+ Products</Text>
+              <Text style={styles.productCount}>1000+ {tr("PRODUCTS")}</Text>
               <TouchableOpacity
                 style={styles.doneButton}
                 onPress={() => setCategoryModalVisible(false)}

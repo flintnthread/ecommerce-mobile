@@ -12,16 +12,17 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { type SupportedLanguage, useLanguage } from "../lib/language";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function OtherScreen() {
   const router = useRouter();
+  const { tr, selectedLanguage, setSelectedLanguage } = useLanguage();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
-  const [selectedLanguage, setSelectedLanguage] = useState("English");
 
   const languages = [
     { code: "en", name: "English", nativeName: "English" },
@@ -34,9 +35,9 @@ export default function OtherScreen() {
 
   const appVersion = "1.0.0";
 
-  const handleLanguageSelect = (language: string) => {
-    setSelectedLanguage(language);
-    Alert.alert("Language Changed", `App language changed to ${language}`);
+  const handleLanguageSelect = async (language: SupportedLanguage) => {
+    await setSelectedLanguage(language);
+    Alert.alert(tr("Language Changed"), `${tr("App language changed to")} ${language}`);
   };
 
   const handlePrivacyPolicy = () => {
@@ -125,9 +126,9 @@ export default function OtherScreen() {
 
         {/* Centered Title Section */}
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Other</Text>
+          <Text style={styles.headerTitle}>{tr("Other")}</Text>
           <Text style={styles.headerSubtitle}>
-            App settings and information
+            {tr("App settings and information")}
           </Text>
         </View>
       </View>
