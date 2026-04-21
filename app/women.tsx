@@ -10,6 +10,7 @@ import {
   Pressable,
   Modal,
   ActivityIndicator,
+  Alert,
   useWindowDimensions,
   type ImageSourcePropType,
   type NativeSyntheticEvent,
@@ -17,7 +18,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   ClipPath,
@@ -28,9 +30,24 @@ import Svg, {
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api, {
   mapSearchResultsToUi,
+  productsByMainCategoryPath,
   searchProductsPath,
   searchSuggestionsPath,
 } from "../services/api";
+import {
+  MainCategoryApiRowPtb,
+  normalizeMainCategoryName,
+  pickPtbProductImageUri,
+  pickPtbProductRating,
+  pickPtbVariantPricing,
+  safePtbText,
+} from "../lib/mainCategoryPtbHelpers";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadCart,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -686,6 +703,8 @@ const LOVE_MASONRY_GAP = 10;
 const LOVE_MASONRY_TALL = 216;
 const LOVE_MASONRY_SHORT = 168;
 
+const WOMEN_PTB_GRID_GAP = 12;
+
 export default function WomenScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -743,6 +762,227 @@ export default function WomenScreen() {
   }, [searchQuery, handleSearch]);
 
   const WOMEN_PARENT_ID = 61;
+
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    mainCategoryId?: string | string[];
+  }>();
+  const rawWomenMainCat = Array.isArray(params.id)
+    ? params.id[0]
+    : params.id ?? Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const parsedRouteWomenMainCat = Number.parseInt(String(rawWomenMainCat ?? ""), 10);
+  const routeWomenMainCategoryId =
+    Number.isFinite(parsedRouteWomenMainCat) && parsedRouteWomenMainCat > 0
+      ? parsedRouteWomenMainCat
+      : null;
+  const [resolvedWomenMainCategoryId, setResolvedWomenMainCategoryId] = useState<number | null>(
+    null
+  );
+  const [resolvingWomenMainCategoryId, setResolvingWomenMainCategoryId] = useState(false);
+  const womenMainCategoryIdForPtb =
+    routeWomenMainCategoryId ?? resolvedWomenMainCategoryId ?? WOMEN_PARENT_ID;
+
+  type WomenPtbApiRow = {
+    id: number;
+    name: string;
+    imageUri: string;
+    sellingPrice: number | null;
+    mrpPrice: number | null;
+    discountPercentage: number | null;
+    rating: number | null;
+  };
+  const [womenPtbApi, setWomenPtbApi] = useState<WomenPtbApiRow[]>([]);
+  const [womenPtbLoading, setWomenPtbLoading] = useState(false);
+  const [womenWishlistIds, setWomenWishlistIds] = useState<Set<string>>(new Set());
+  const [womenCartCount, setWomenCartCount] = useState(0);
+
+  const womenPtbColW = useMemo(
+    () => Math.floor((windowWidth - 32 - WOMEN_PTB_GRID_GAP) / 2),
+    [windowWidth]
+  );
+
+  const reloadWomenWishlistIds = useCallback(async () => {
+    setWomenWishlistIds(await getWishlistIds());
+  }, []);
+
+  const reloadWomenCartCount = useCallback(async () => {
+    const cart = await loadCart();
+    setWomenCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+  }, []);
+
+  useEffect(() => {
+    void reloadWomenWishlistIds();
+    void reloadWomenCartCount();
+  }, [reloadWomenWishlistIds, reloadWomenCartCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadWomenWishlistIds();
+      void reloadWomenCartCount();
+    }, [reloadWomenWishlistIds, reloadWomenCartCount])
+  );
+
+  useEffect(() => {
+    if (routeWomenMainCategoryId != null) {
+      setResolvedWomenMainCategoryId(null);
+      setResolvingWomenMainCategoryId(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setResolvingWomenMainCategoryId(true);
+      try {
+        const { data } = await api.get("/api/categories/main");
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? (data as MainCategoryApiRowPtb[]) : [];
+        const row = rows.find((r) => {
+          if (!r || typeof r.id !== "number") return false;
+          if (typeof r.status === "number" && r.status !== 1) return false;
+          const n = normalizeMainCategoryName(String(r.categoryName ?? ""));
+          return (
+            n === "women" ||
+            n === "womens" ||
+            n === "womenswear" ||
+            n === "womens wear" ||
+            n === "women wear" ||
+            n === "ladies" ||
+            n.includes("women")
+          );
+        });
+        setResolvedWomenMainCategoryId(
+          row && Number.isFinite(row.id) && row.id > 0 ? row.id : null
+        );
+      } catch {
+        if (!cancelled) setResolvedWomenMainCategoryId(null);
+      } finally {
+        if (!cancelled) setResolvingWomenMainCategoryId(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeWomenMainCategoryId]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setWomenPtbLoading(true);
+      try {
+        const { data } = await api.get(productsByMainCategoryPath(womenMainCategoryIdForPtb), {
+          signal: c.signal,
+        });
+        if (!Array.isArray(data)) {
+          setWomenPtbApi([]);
+          return;
+        }
+        const mapped = (data as unknown[])
+          .filter((p) => p && typeof (p as any).id === "number" && typeof (p as any).name === "string")
+          .map((p) => {
+            const imageUri = pickPtbProductImageUri(p);
+            if (!imageUri) return null;
+            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            return {
+              id: (p as any).id as number,
+              name: safePtbText(String((p as any).name ?? "")),
+              imageUri,
+              sellingPrice,
+              mrpPrice,
+              discountPercentage,
+              rating: pickPtbProductRating(p),
+            } satisfies WomenPtbApiRow;
+          })
+          .filter(Boolean) as WomenPtbApiRow[];
+        setWomenPtbApi(mapped);
+      } catch {
+        setWomenPtbApi([]);
+      } finally {
+        setWomenPtbLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [womenMainCategoryIdForPtb]);
+
+  const handleToggleWomenPtbWishlist = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const now = await toggleWishlistProduct({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      await reloadWomenWishlistIds();
+      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    },
+    [reloadWomenWishlistIds]
+  );
+
+  const handleAddWomenPtbCart = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const cart = await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      setWomenCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+      Alert.alert("Added to cart", product.name);
+    },
+    []
+  );
+
+  const goWomenPtbShop = useCallback(() => {
+    router.push("/subcatProducts");
+  }, [router]);
+
+  const womenPtbUiRows = useMemo(() => {
+    const fmtRs = (n: number | null) =>
+      n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+    if (womenPtbApi.length === 0) {
+      return [] as {
+        id: string;
+        name: string;
+        imageSource: ImageSourcePropType;
+        sellingLabel: string;
+        mrpLabel: string;
+        showMrp: boolean;
+        discountLabel: string;
+        ratingLabel: string;
+        sellingNum: number;
+        mrpNum: number;
+      }[];
+    }
+    return womenPtbApi.map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      return {
+        id: String(p.id),
+        name: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        sellingLabel: fmtRs(p.sellingPrice),
+        mrpLabel: showMrp ? fmtRs(p.mrpPrice) : "",
+        showMrp,
+        discountLabel:
+          p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+            ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+            : "",
+        ratingLabel:
+          p.rating != null && Number.isFinite(p.rating) ? Number(p.rating).toFixed(1) : "—",
+        sellingNum:
+          p.sellingPrice != null && Number.isFinite(p.sellingPrice) ? Number(p.sellingPrice) : 0,
+        mrpNum:
+          p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+            ? Number(p.mrpPrice)
+            : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+            ? Number(p.sellingPrice)
+            : 0,
+      };
+    });
+  }, [womenPtbApi]);
+
   const [womenApiCats, setWomenApiCats] = useState<WomenSubcategoryApiRow[]>([]);
   const [womenApiLoading, setWomenApiLoading] = useState<boolean>(true);
   const [womenApiError, setWomenApiError] = useState<string | null>(null);
@@ -1510,7 +1750,33 @@ export default function WomenScreen() {
               accessibilityRole="button"
               accessibilityLabel="Wishlist"
             >
-              <Ionicons name="heart-outline" size={24} color="#c2410c" />
+              <View style={styles.womenHeaderIconBadgeWrap}>
+                <Ionicons name="heart-outline" size={24} color="#c2410c" />
+                {womenWishlistIds.size > 0 ? (
+                  <View style={styles.womenHeaderIconBadge}>
+                    <Text style={styles.womenHeaderIconBadgeText}>
+                      {womenWishlistIds.size > 99 ? "99+" : String(womenWishlistIds.size)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.womenHeaderIconHit}
+              onPress={() => router.push("/cart")}
+              accessibilityRole="button"
+              accessibilityLabel="Cart"
+            >
+              <View style={styles.womenHeaderIconBadgeWrap}>
+                <Ionicons name="cart-outline" size={24} color="#c2410c" />
+                {womenCartCount > 0 ? (
+                  <View style={styles.womenHeaderIconBadge}>
+                    <Text style={styles.womenHeaderIconBadgeText}>
+                      {womenCartCount > 99 ? "99+" : String(womenCartCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.womenHeaderIconHit}
@@ -2277,7 +2543,7 @@ export default function WomenScreen() {
               <View style={styles.womenLabFollowBannerContent}>
                 <View style={styles.womenLabFollowBannerPill}>
                   <Ionicons name="shirt-outline" size={13} color="#1d324e" />
-                  <Text style={styles.womenLabFollowBannerPillText}>Women's picks</Text>
+                  <Text style={styles.womenLabFollowBannerPillText}>Women{"'"}s picks</Text>
                 </View>
                 <Text style={styles.womenLabFollowBannerTitle} numberOfLines={2}>
                   From Style lab to your wardrobe
@@ -2502,6 +2768,118 @@ export default function WomenScreen() {
               </View>
             </View>
           </WomenStoreSection>
+
+          <View style={styles.womenPtbSectionWrap}>
+            <View style={styles.womenPtbHeaderRow}>
+              <Text style={styles.womenPtbHeading}>Products to buy</Text>
+              <TouchableOpacity onPress={goWomenPtbShop} activeOpacity={0.85}>
+                <Text style={styles.womenPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {routeWomenMainCategoryId == null && resolvingWomenMainCategoryId ? (
+              <Text style={styles.womenPtbStatus}>Matching store category…</Text>
+            ) : null}
+            {womenPtbLoading && womenPtbApi.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>Loading products...</Text>
+            ) : womenPtbUiRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>No products found.</Text>
+            ) : (
+              <View style={styles.womenPtbGrid}>
+                {womenPtbUiRows.map((product) => (
+                  <View key={product.id} style={[styles.womenPtbCard, { width: womenPtbColW }]}>
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/productdetail",
+                          params: { id: String(product.id) },
+                        } as any)
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`${product.name}, view details`}
+                    >
+                      <View style={styles.womenPtbCardInner}>
+                        <Image
+                          source={product.imageSource}
+                          style={styles.womenPtbImage}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.womenPtbMeta}>
+                          <Text style={styles.womenPtbName} numberOfLines={2}>
+                            {product.name}
+                          </Text>
+                          <View style={styles.womenPtbRatingRow}>
+                            <View style={styles.womenPtbRatingPill}>
+                              <Ionicons name="star" size={12} color="#ef7b1a" />
+                              <Text style={styles.womenPtbRatingText}>{product.ratingLabel}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.womenPtbPriceRow}>
+                            {product.sellingLabel ? (
+                              <Text style={styles.womenPtbPrice}>{product.sellingLabel}</Text>
+                            ) : null}
+                            {product.showMrp && product.mrpLabel ? (
+                              <Text style={styles.womenPtbMrp}>{product.mrpLabel}</Text>
+                            ) : null}
+                            {product.discountLabel ? (
+                              <View style={styles.womenPtbDiscountPill}>
+                                <Text style={styles.womenPtbDiscountText}>
+                                  {product.discountLabel}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <View style={styles.womenPtbBottomRow}>
+                            <View style={styles.womenPtbActionsRow}>
+                              <TouchableOpacity
+                                style={styles.womenPtbWishBtn}
+                                activeOpacity={0.85}
+                                onPress={() =>
+                                  void handleToggleWomenPtbWishlist({
+                                    id: product.id,
+                                    name: product.name,
+                                    sellingNum: product.sellingNum,
+                                    mrpNum: product.mrpNum,
+                                  })
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel={`${
+                                  womenWishlistIds.has(product.id) ? "Remove from" : "Add to"
+                                } wishlist: ${product.name}`}
+                              >
+                                <Ionicons
+                                  name={womenWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                  size={16}
+                                  color={womenWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.womenPtbCartBtn}
+                                activeOpacity={0.85}
+                                onPress={() =>
+                                  void handleAddWomenPtbCart({
+                                    id: product.id,
+                                    name: product.name,
+                                    sellingNum: product.sellingNum,
+                                    mrpNum: product.mrpNum,
+                                  })
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel={`Add to cart: ${product.name}`}
+                              >
+                                <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                                <Text style={styles.womenPtbCartBtnText}>Add to Cart</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
 
       </ScrollView>
@@ -2689,6 +3067,182 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.65)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(29, 50, 78, 0.06)",
+  },
+  womenHeaderIconBadgeWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  womenHeaderIconBadge: {
+    position: "absolute",
+    top: -6,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ef4444",
+  },
+  womenHeaderIconBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  womenPtbSectionWrap: {
+    marginTop: 18,
+    paddingBottom: 20,
+    backgroundColor: "transparent",
+  },
+  womenPtbHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  womenPtbHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  womenPtbSeeAll: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#ea580c",
+  },
+  womenPtbStatus: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  womenPtbGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: WOMEN_PTB_GRID_GAP,
+  },
+  womenPtbCard: {
+    borderRadius: 12,
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  womenPtbCardInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  womenPtbImage: {
+    width: "100%",
+    height: 130,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  womenPtbMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  womenPtbName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 30,
+  },
+  womenPtbRatingRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  womenPtbRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  womenPtbRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
+  },
+  womenPtbPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    gap: 6,
+  },
+  womenPtbPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  womenPtbMrp: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  womenPtbDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  womenPtbDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#b45309",
+  },
+  womenPtbBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  womenPtbActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 4,
+  },
+  womenPtbWishBtn: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.25)",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+  },
+  womenPtbCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#1d324e",
+  },
+  womenPtbCartBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   scroll: {
     flex: 1,

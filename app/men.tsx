@@ -10,6 +10,7 @@ import {
   Pressable,
   Modal,
   ActivityIndicator,
+  Alert,
   useWindowDimensions,
   type ImageSourcePropType,
   type NativeSyntheticEvent,
@@ -17,7 +18,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   ClipPath,
@@ -28,11 +30,18 @@ import Svg, {
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api, {
   mapSearchResultsToUi,
+  productsByMainCategoryPath,
   productsBySubcategoryPath,
   searchProductsPath,
   searchSuggestionsPath,
 } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadCart,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -917,6 +926,74 @@ const LOVE_MASONRY_GAP = 10;
 const LOVE_MASONRY_TALL = 216;
 const LOVE_MASONRY_SHORT = 168;
 
+/** Products to buy — gap between cells (see `menPtbGrid`). */
+const MEN_PTB_GRID_GAP = 12;
+
+type MainCategoryApiRowMen = {
+  id: number;
+  categoryName: string;
+  status?: number;
+};
+
+function safeTextMen(value: string): string {
+  return value.replace(/\u0019/g, "'").trim();
+}
+
+function getAssetUriFromApiPathMen(pathOrUrl: string): string {
+  const raw = String(pathOrUrl ?? "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  if (!apiBase) return raw;
+  return `${apiBase}/${raw.replace(/^\/+/, "")}`;
+}
+
+function pickMenPtbProductImageUri(p: any): string | null {
+  return pickProductImageUriFromApi(p, getAssetUriFromApiPathMen);
+}
+
+function pickMenPtbVariantPricing(p: any): {
+  sellingPrice: number | null;
+  mrpPrice: number | null;
+  discountPercentage: number | null;
+} {
+  const variants = Array.isArray(p?.variants) ? p.variants : [];
+  const v =
+    variants.find(
+      (x: any) =>
+        x &&
+        (typeof x.sellingPrice === "number" ||
+          typeof x.mrpPrice === "number" ||
+          typeof x.sellingPrice === "string" ||
+          typeof x.mrpPrice === "string")
+    ) ?? null;
+  if (!v) return { sellingPrice: null, mrpPrice: null, discountPercentage: null };
+  const num = (x: unknown): number | null => {
+    if (typeof x === "number" && Number.isFinite(x)) return x;
+    if (typeof x === "string") {
+      const n = parseFloat(x);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  return {
+    sellingPrice: num(v.sellingPrice),
+    mrpPrice: num(v.mrpPrice),
+    discountPercentage: num(v.discountPercentage),
+  };
+}
+
+function pickMenPtbProductRating(p: any): number | null {
+  const r =
+    p?.rating ?? p?.averageRating ?? p?.average_rating ?? p?.reviewRating ?? p?.review_rating;
+  if (typeof r === "number" && Number.isFinite(r)) return r;
+  if (typeof r === "string") {
+    const n = parseFloat(r);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 export default function MenScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -975,6 +1052,239 @@ export default function MenScreen() {
   }, [searchQuery, handleSearch]);
 
   const MEN_PARENT_ID = 51;
+
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    mainCategoryId?: string | string[];
+  }>();
+  const rawMenMainCategoryId = Array.isArray(params.id)
+    ? params.id[0]
+    : params.id ?? Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const parsedRouteMenMainCategoryId = Number.parseInt(String(rawMenMainCategoryId ?? ""), 10);
+  const routeMenMainCategoryId =
+    Number.isFinite(parsedRouteMenMainCategoryId) && parsedRouteMenMainCategoryId > 0
+      ? parsedRouteMenMainCategoryId
+      : null;
+  const [resolvedMenMainCategoryId, setResolvedMenMainCategoryId] = useState<number | null>(null);
+  const [resolvingMenMainCategoryId, setResolvingMenMainCategoryId] = useState(false);
+  const menMainCategoryIdForPtb =
+    routeMenMainCategoryId ?? resolvedMenMainCategoryId ?? MEN_PARENT_ID;
+
+  type MenProductsToBuyApiRow = {
+    id: number;
+    name: string;
+    imageUri: string;
+    sellingPrice: number | null;
+    mrpPrice: number | null;
+    discountPercentage: number | null;
+    rating: number | null;
+  };
+
+  const [menProductsToBuyApi, setMenProductsToBuyApi] = useState<MenProductsToBuyApiRow[]>([]);
+  const [menProductsToBuyLoading, setMenProductsToBuyLoading] = useState(false);
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [cartCount, setCartCount] = useState(0);
+
+  const menPtbColW = useMemo(
+    () => Math.floor((windowWidth - 32 - MEN_PTB_GRID_GAP) / 2),
+    [windowWidth]
+  );
+
+  const reloadWishlistIds = useCallback(async () => {
+    const ids = await getWishlistIds();
+    setWishlistIds(ids);
+  }, []);
+
+  const reloadCartCount = useCallback(async () => {
+    const cart = await loadCart();
+    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
+    setCartCount(count);
+  }, []);
+
+  useEffect(() => {
+    void reloadWishlistIds();
+    void reloadCartCount();
+  }, [reloadWishlistIds, reloadCartCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadWishlistIds();
+      void reloadCartCount();
+    }, [reloadWishlistIds, reloadCartCount])
+  );
+
+  useEffect(() => {
+    if (routeMenMainCategoryId != null) {
+      setResolvedMenMainCategoryId(null);
+      setResolvingMenMainCategoryId(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setResolvingMenMainCategoryId(true);
+      try {
+        const { data } = await api.get("/api/categories/main");
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? (data as MainCategoryApiRowMen[]) : [];
+        const menRow = rows.find((row) => {
+          if (!row || typeof row.id !== "number") return false;
+          if (typeof row.status === "number" && row.status !== 1) return false;
+          const name = String(row.categoryName ?? "")
+            .trim()
+            .toLowerCase()
+            .replace(/['’]/g, "")
+            .replace(/\s+/g, " ");
+          return (
+            name === "men" ||
+            name === "mens" ||
+            name === "menswear" ||
+            name === "mens wear" ||
+            name === "men wear"
+          );
+        });
+        setResolvedMenMainCategoryId(
+          menRow && Number.isFinite(menRow.id) && menRow.id > 0 ? menRow.id : null
+        );
+      } catch {
+        if (!cancelled) setResolvedMenMainCategoryId(null);
+      } finally {
+        if (!cancelled) setResolvingMenMainCategoryId(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeMenMainCategoryId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    (async () => {
+      setMenProductsToBuyLoading(true);
+      try {
+        const { data } = await api.get(productsByMainCategoryPath(menMainCategoryIdForPtb), {
+          signal: controller.signal,
+        });
+        if (!Array.isArray(data)) {
+          setMenProductsToBuyApi([]);
+          return;
+        }
+
+        const mapped = (data as any[])
+          .filter((p) => p && typeof p.id === "number" && typeof p.name === "string")
+          .map((p) => {
+            const imageUri = pickMenPtbProductImageUri(p);
+            if (!imageUri) return null;
+            const { sellingPrice, mrpPrice, discountPercentage } = pickMenPtbVariantPricing(p);
+            return {
+              id: p.id as number,
+              name: safeTextMen(String(p.name ?? "")),
+              imageUri,
+              sellingPrice,
+              mrpPrice,
+              discountPercentage,
+              rating: pickMenPtbProductRating(p),
+            } satisfies MenProductsToBuyApiRow;
+          })
+          .filter(Boolean) as MenProductsToBuyApiRow[];
+
+        setMenProductsToBuyApi(mapped);
+      } catch {
+        setMenProductsToBuyApi([]);
+      } finally {
+        setMenProductsToBuyLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [menMainCategoryIdForPtb]);
+
+  const handleToggleWishlistMenPtb = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const nowInWishlist = await toggleWishlistProduct({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      await reloadWishlistIds();
+      Alert.alert(nowInWishlist ? "Added to wishlist" : "Removed from wishlist", product.name);
+    },
+    [reloadWishlistIds]
+  );
+
+  const handleAddToCartMenPtb = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const cart = await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
+      setCartCount(count);
+      Alert.alert("Added to cart", product.name);
+    },
+    []
+  );
+
+  const goMenPtbShop = useCallback(() => {
+    router.push("/subcatProducts");
+  }, [router]);
+
+  const menProductsToBuyUiRows = useMemo(() => {
+    const fmtRs = (n: number | null) =>
+      n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+
+    if (menProductsToBuyApi.length === 0) {
+      return [] as {
+        id: string;
+        name: string;
+        imageSource: ImageSourcePropType;
+        sellingLabel: string;
+        mrpLabel: string;
+        showMrp: boolean;
+        discountLabel: string;
+        ratingLabel: string;
+        sellingNum: number;
+        mrpNum: number;
+      }[];
+    }
+
+    return menProductsToBuyApi.map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      return {
+        id: String(p.id),
+        name: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        sellingLabel: fmtRs(p.sellingPrice),
+        mrpLabel: showMrp ? fmtRs(p.mrpPrice) : "",
+        showMrp,
+        discountLabel:
+          p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+            ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+            : "",
+        ratingLabel:
+          p.rating != null && Number.isFinite(p.rating) ? Number(p.rating).toFixed(1) : "—",
+        sellingNum:
+          p.sellingPrice != null && Number.isFinite(p.sellingPrice) ? Number(p.sellingPrice) : 0,
+        mrpNum:
+          p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+            ? Number(p.mrpPrice)
+            : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+            ? Number(p.sellingPrice)
+            : 0,
+      };
+    });
+  }, [menProductsToBuyApi]);
+
   const [menApiCats, setMenApiCats] = useState<MenSubcategoryApiRow[]>([]);
   const [menApiLoading, setMenApiLoading] = useState<boolean>(true);
   const [menApiError, setMenApiError] = useState<string | null>(null);
@@ -1695,7 +2005,33 @@ export default function MenScreen() {
               accessibilityRole="button"
               accessibilityLabel="Wishlist"
             >
-              <Ionicons name="heart-outline" size={24} color="#c2410c" />
+              <View style={styles.menHeaderIconBadgeWrap}>
+                <Ionicons name="heart-outline" size={24} color="#c2410c" />
+                {wishlistIds.size > 0 ? (
+                  <View style={styles.menHeaderIconBadge}>
+                    <Text style={styles.menHeaderIconBadgeText}>
+                      {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menHeaderIconHit}
+              onPress={() => router.push("/cart")}
+              accessibilityRole="button"
+              accessibilityLabel="Cart"
+            >
+              <View style={styles.menHeaderIconBadgeWrap}>
+                <Ionicons name="cart-outline" size={24} color="#c2410c" />
+                {cartCount > 0 ? (
+                  <View style={styles.menHeaderIconBadge}>
+                    <Text style={styles.menHeaderIconBadgeText}>
+                      {cartCount > 99 ? "99+" : String(cartCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.menHeaderIconHit}
@@ -2847,6 +3183,124 @@ export default function MenScreen() {
               </View>
             </View>
           </MenStoreSection>
+
+          {/* Products to buy — full-width strip (no store card shell) */}
+          <View style={styles.menPtbSectionWrap}>
+            <View style={styles.menPtbHeaderRow}>
+              <Text style={styles.menPtbHeading}>Products to buy</Text>
+              <TouchableOpacity onPress={goMenPtbShop} activeOpacity={0.85}>
+                <Text style={styles.menPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {routeMenMainCategoryId == null && resolvingMenMainCategoryId ? (
+              <Text style={[styles.menPtbStatus, { marginTop: -6 }]}>
+                Matching store category…
+              </Text>
+            ) : null}
+            {menProductsToBuyLoading && menProductsToBuyApi.length === 0 ? (
+              <Text style={styles.menPtbStatus}>Loading products...</Text>
+            ) : menProductsToBuyUiRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>No products found.</Text>
+            ) : (
+              <View style={styles.menPtbGrid}>
+                  {menProductsToBuyUiRows.map((product) => (
+                    <View
+                      key={product.id}
+                      style={[styles.menPtbCard, { width: menPtbColW }]}
+                    >
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/productdetail",
+                            params: { id: String(product.id) },
+                          } as any)
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={`${product.name}, view details`}
+                      >
+                        <View style={styles.menPtbCardInner}>
+                          <Image
+                            source={product.imageSource}
+                            style={styles.menPtbImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.menPtbMeta}>
+                            <Text style={styles.menPtbName} numberOfLines={2}>
+                              {product.name}
+                            </Text>
+                            <View style={styles.menPtbCategoryRow}>
+                              <View style={styles.menPtbRatingPill}>
+                                <Ionicons name="star" size={12} color="#ef7b1a" />
+                                <Text style={styles.menPtbRatingText}>{product.ratingLabel}</Text>
+                              </View>
+                            </View>
+                            <View style={styles.menPtbPriceRow}>
+                              {product.sellingLabel ? (
+                                <Text style={styles.menPtbPrice}>{product.sellingLabel}</Text>
+                              ) : null}
+                              {product.showMrp && product.mrpLabel ? (
+                                <Text style={styles.menPtbMrp}>{product.mrpLabel}</Text>
+                              ) : null}
+                              {product.discountLabel ? (
+                                <View style={styles.menPtbDiscountPill}>
+                                  <Text style={styles.menPtbDiscountText}>
+                                    {product.discountLabel}
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            <View style={styles.menPtbBottomRow}>
+                              <View style={styles.menPtbActionsRow}>
+                                <TouchableOpacity
+                                  style={styles.menPtbWishlistBtn}
+                                  activeOpacity={0.85}
+                                  onPress={() =>
+                                    void handleToggleWishlistMenPtb({
+                                      id: product.id,
+                                      name: product.name,
+                                      sellingNum: product.sellingNum,
+                                      mrpNum: product.mrpNum,
+                                    })
+                                  }
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`${
+                                    wishlistIds.has(product.id) ? "Remove from" : "Add to"
+                                  } wishlist: ${product.name}`}
+                                >
+                                  <Ionicons
+                                    name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                    size={16}
+                                    color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                  />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={styles.menPtbCartBtn}
+                                  activeOpacity={0.85}
+                                  onPress={() =>
+                                    void handleAddToCartMenPtb({
+                                      id: product.id,
+                                      name: product.name,
+                                      sellingNum: product.sellingNum,
+                                      mrpNum: product.mrpNum,
+                                    })
+                                  }
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Add to cart: ${product.name}`}
+                                >
+                                  <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                                  <Text style={styles.menPtbCartBtnText}>Add to Cart</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+              </View>
+            )}
+          </View>
         </View>
 
       </ScrollView>
@@ -3034,6 +3488,183 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.65)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(29, 50, 78, 0.06)",
+  },
+  menHeaderIconBadgeWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menHeaderIconBadge: {
+    position: "absolute",
+    top: -6,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ef4444",
+  },
+  menHeaderIconBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  menPtbSectionWrap: {
+    marginTop: 18,
+    paddingBottom: 20,
+    backgroundColor: "transparent",
+  },
+  menPtbHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  menPtbHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  menPtbSeeAll: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#ea580c",
+  },
+  menPtbStatus: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  menPtbGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: MEN_PTB_GRID_GAP,
+  },
+  menPtbCard: {
+    borderRadius: 12,
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  menPtbCardInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  menPtbImage: {
+    width: "100%",
+    height: 130,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  menPtbMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  menPtbName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 30,
+  },
+  menPtbCategoryRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  menPtbPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    gap: 6,
+  },
+  menPtbPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  menPtbMrp: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  menPtbDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  menPtbDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#b45309",
+  },
+  menPtbBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 6,
+  },
+  menPtbActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 4,
+  },
+  menPtbWishlistBtn: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.25)",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+  },
+  menPtbCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#1d324e",
+  },
+  menPtbCartBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  menPtbRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  menPtbRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
   },
   scroll: {
     flex: 1,

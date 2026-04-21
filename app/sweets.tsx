@@ -10,13 +10,30 @@ import {
   Animated,
   TextInput,
   Dimensions,
+  Alert,
+  type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
-import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
+import api, { productsByMainCategoryPath, searchProductsPath, searchSuggestionsPath } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import {
+  MainCategoryApiRowPtb,
+  normalizeMainCategoryName,
+  pickPtbProductImageUri,
+  pickPtbProductRating,
+  pickPtbVariantPricing,
+  safePtbText,
+} from "../lib/mainCategoryPtbHelpers";
+import {
+  addProductToCart,
+  getWishlistIds,
+  loadCart,
+  toggleWishlistProduct,
+} from "../lib/shopStorage";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 /** Dry sweets — Dry fruit laddu (and siblings under same API subcategory). */
@@ -88,6 +105,10 @@ type SweetsHubProduct = {
   rating: number;
   image: any;
 };
+
+const SWEETS_PTB_GRID_GAP = 12;
+/** Parent used by sweets subcategory APIs — default main-category products id. */
+const SWEETS_MAIN_CATEGORY_FALLBACK_ID = 53;
 
 const RELATED_SWEETS_PRODUCTS: SweetsHubProduct[] = [
   {
@@ -562,6 +583,225 @@ export default function Sweets() {
     );
   }, [query]);
 
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    mainCategoryId?: string | string[];
+  }>();
+  const rawSweetsMainCat = Array.isArray(params.id)
+    ? params.id[0]
+    : params.id ?? Array.isArray(params.mainCategoryId)
+    ? params.mainCategoryId[0]
+    : params.mainCategoryId;
+  const parsedRouteSweetsMainCat = Number.parseInt(String(rawSweetsMainCat ?? ""), 10);
+  const routeSweetsMainCategoryId =
+    Number.isFinite(parsedRouteSweetsMainCat) && parsedRouteSweetsMainCat > 0
+      ? parsedRouteSweetsMainCat
+      : null;
+  const [resolvedSweetsMainCategoryId, setResolvedSweetsMainCategoryId] = useState<number | null>(
+    null
+  );
+  const [resolvingSweetsMainCategoryId, setResolvingSweetsMainCategoryId] = useState(false);
+  const sweetsMainCategoryIdForPtb =
+    routeSweetsMainCategoryId ?? resolvedSweetsMainCategoryId ?? SWEETS_MAIN_CATEGORY_FALLBACK_ID;
+
+  type SweetsPtbApiRow = {
+    id: number;
+    name: string;
+    imageUri: string;
+    sellingPrice: number | null;
+    mrpPrice: number | null;
+    discountPercentage: number | null;
+    rating: number | null;
+  };
+  const [sweetsPtbApi, setSweetsPtbApi] = useState<SweetsPtbApiRow[]>([]);
+  const [sweetsPtbLoading, setSweetsPtbLoading] = useState(false);
+  const [sweetsWishlistIds, setSweetsWishlistIds] = useState<Set<string>>(new Set());
+  const [sweetsCartCount, setSweetsCartCount] = useState(0);
+
+  const sweetsPtbColW = useMemo(
+    () => Math.floor((width - 32 - SWEETS_PTB_GRID_GAP) / 2),
+    [width]
+  );
+
+  const reloadSweetsWishlistIds = useCallback(async () => {
+    setSweetsWishlistIds(await getWishlistIds());
+  }, []);
+
+  const reloadSweetsCartCount = useCallback(async () => {
+    const cart = await loadCart();
+    setSweetsCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+  }, []);
+
+  useEffect(() => {
+    void reloadSweetsWishlistIds();
+    void reloadSweetsCartCount();
+  }, [reloadSweetsWishlistIds, reloadSweetsCartCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadSweetsWishlistIds();
+      void reloadSweetsCartCount();
+    }, [reloadSweetsWishlistIds, reloadSweetsCartCount])
+  );
+
+  useEffect(() => {
+    if (routeSweetsMainCategoryId != null) {
+      setResolvedSweetsMainCategoryId(null);
+      setResolvingSweetsMainCategoryId(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setResolvingSweetsMainCategoryId(true);
+      try {
+        const { data } = await api.get("/api/categories/main");
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? (data as MainCategoryApiRowPtb[]) : [];
+        const row = rows.find((r) => {
+          if (!r || typeof r.id !== "number") return false;
+          if (typeof r.status === "number" && r.status !== 1) return false;
+          const n = normalizeMainCategoryName(String(r.categoryName ?? ""));
+          return (
+            n === "sweets" ||
+            n === "sweet" ||
+            n === "mithai" ||
+            n === "confectionery" ||
+            n === "desserts" ||
+            n.includes("sweet")
+          );
+        });
+        setResolvedSweetsMainCategoryId(
+          row && Number.isFinite(row.id) && row.id > 0 ? row.id : null
+        );
+      } catch {
+        if (!cancelled) setResolvedSweetsMainCategoryId(null);
+      } finally {
+        if (!cancelled) setResolvingSweetsMainCategoryId(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeSweetsMainCategoryId]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setSweetsPtbLoading(true);
+      try {
+        const { data } = await api.get(productsByMainCategoryPath(sweetsMainCategoryIdForPtb), {
+          signal: c.signal,
+        });
+        if (!Array.isArray(data)) {
+          setSweetsPtbApi([]);
+          return;
+        }
+        const mapped = (data as unknown[])
+          .filter((p) => p && typeof (p as any).id === "number" && typeof (p as any).name === "string")
+          .map((p) => {
+            const imageUri = pickPtbProductImageUri(p);
+            if (!imageUri) return null;
+            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            return {
+              id: (p as any).id as number,
+              name: safePtbText(String((p as any).name ?? "")),
+              imageUri,
+              sellingPrice,
+              mrpPrice,
+              discountPercentage,
+              rating: pickPtbProductRating(p),
+            } satisfies SweetsPtbApiRow;
+          })
+          .filter(Boolean) as SweetsPtbApiRow[];
+        setSweetsPtbApi(mapped);
+      } catch {
+        setSweetsPtbApi([]);
+      } finally {
+        setSweetsPtbLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [sweetsMainCategoryIdForPtb]);
+
+  const handleToggleSweetsPtbWishlist = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const now = await toggleWishlistProduct({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      await reloadSweetsWishlistIds();
+      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    },
+    [reloadSweetsWishlistIds]
+  );
+
+  const handleAddSweetsPtbCart = useCallback(
+    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
+      const cart = await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: product.sellingNum,
+        mrp: product.mrpNum,
+      });
+      setSweetsCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+      Alert.alert("Added to cart", product.name);
+    },
+    []
+  );
+
+  const goSweetsPtbShop = useCallback(() => {
+    router.push("/subcatProducts");
+  }, [router]);
+
+  const sweetsPtbUiRows = useMemo(() => {
+    const fmtRs = (n: number | null) =>
+      n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+    if (sweetsPtbApi.length === 0) {
+      return [] as {
+        id: string;
+        name: string;
+        imageSource: ImageSourcePropType;
+        sellingLabel: string;
+        mrpLabel: string;
+        showMrp: boolean;
+        discountLabel: string;
+        ratingLabel: string;
+        sellingNum: number;
+        mrpNum: number;
+      }[];
+    }
+    return sweetsPtbApi.map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      return {
+        id: String(p.id),
+        name: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        sellingLabel: fmtRs(p.sellingPrice),
+        mrpLabel: showMrp ? fmtRs(p.mrpPrice) : "",
+        showMrp,
+        discountLabel:
+          p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+            ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+            : "",
+        ratingLabel:
+          p.rating != null && Number.isFinite(p.rating) ? Number(p.rating).toFixed(1) : "—",
+        sellingNum:
+          p.sellingPrice != null && Number.isFinite(p.sellingPrice) ? Number(p.sellingPrice) : 0,
+        mrpNum:
+          p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+            ? Number(p.mrpPrice)
+            : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+            ? Number(p.sellingPrice)
+            : 0,
+      };
+    });
+  }, [sweetsPtbApi]);
+
   const scrollTo = (key: CategoryKey) => {
     setActive(key);
     const y = sectionY.current[key] ?? 0;
@@ -675,11 +915,41 @@ export default function Sweets() {
           <Ionicons name="camera-outline" size={18} color="#72809A" />
         </View>
 
-        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-          <Ionicons name="heart-outline" size={22} color="#1D2430" />
+        <TouchableOpacity
+          style={styles.iconBtn}
+          activeOpacity={0.8}
+          onPress={() => router.push("/wishlist")}
+          accessibilityRole="button"
+          accessibilityLabel="Wishlist"
+        >
+          <View style={styles.sweetsHeaderBadgeWrap}>
+            <Ionicons name="heart-outline" size={22} color="#1D2430" />
+            {sweetsWishlistIds.size > 0 ? (
+              <View style={styles.sweetsHeaderBadge}>
+                <Text style={styles.sweetsHeaderBadgeText}>
+                  {sweetsWishlistIds.size > 99 ? "99+" : String(sweetsWishlistIds.size)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-          <Ionicons name="bag-outline" size={22} color="#1D2430" />
+        <TouchableOpacity
+          style={styles.iconBtn}
+          activeOpacity={0.8}
+          onPress={() => router.push("/cart")}
+          accessibilityRole="button"
+          accessibilityLabel="Cart"
+        >
+          <View style={styles.sweetsHeaderBadgeWrap}>
+            <Ionicons name="bag-outline" size={22} color="#1D2430" />
+            {sweetsCartCount > 0 ? (
+              <View style={styles.sweetsHeaderBadge}>
+                <Text style={styles.sweetsHeaderBadgeText}>
+                  {sweetsCartCount > 99 ? "99+" : String(sweetsCartCount)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -909,6 +1179,116 @@ export default function Sweets() {
           </View>
         </View>
 
+        <View style={styles.sweetsPtbWrap}>
+          <View style={styles.sweetsPtbHeaderRow}>
+            <Text style={styles.sweetsPtbHeading}>Products to buy</Text>
+            <TouchableOpacity onPress={goSweetsPtbShop} activeOpacity={0.85}>
+              <Text style={styles.sweetsPtbSeeAll}>See all</Text>
+            </TouchableOpacity>
+          </View>
+          {routeSweetsMainCategoryId == null && resolvingSweetsMainCategoryId ? (
+            <Text style={styles.sweetsPtbStatus}>Matching store category…</Text>
+          ) : null}
+          {sweetsPtbLoading && sweetsPtbApi.length === 0 ? (
+            <Text style={styles.sweetsPtbStatus}>Loading products...</Text>
+          ) : sweetsPtbUiRows.length === 0 ? (
+            <Text style={styles.sweetsPtbStatus}>No products found.</Text>
+          ) : (
+            <View style={styles.sweetsPtbGrid}>
+              {sweetsPtbUiRows.map((product) => (
+                <View key={product.id} style={[styles.sweetsPtbCard, { width: sweetsPtbColW }]}>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: String(product.id) },
+                      } as any)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`${product.name}, view details`}
+                  >
+                    <View style={styles.sweetsPtbCardInner}>
+                      <Image
+                        source={product.imageSource}
+                        style={styles.sweetsPtbImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.sweetsPtbMeta}>
+                        <Text style={styles.sweetsPtbName} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                        <View style={styles.sweetsPtbRatingRow}>
+                          <View style={styles.sweetsPtbRatingPill}>
+                            <Ionicons name="star" size={12} color="#ef7b1a" />
+                            <Text style={styles.sweetsPtbRatingText}>{product.ratingLabel}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.sweetsPtbPriceRow}>
+                          {product.sellingLabel ? (
+                            <Text style={styles.sweetsPtbPrice}>{product.sellingLabel}</Text>
+                          ) : null}
+                          {product.showMrp && product.mrpLabel ? (
+                            <Text style={styles.sweetsPtbMrp}>{product.mrpLabel}</Text>
+                          ) : null}
+                          {product.discountLabel ? (
+                            <View style={styles.sweetsPtbDiscountPill}>
+                              <Text style={styles.sweetsPtbDiscountText}>{product.discountLabel}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <View style={styles.sweetsPtbBottomRow}>
+                          <View style={styles.sweetsPtbActionsRow}>
+                            <TouchableOpacity
+                              style={styles.sweetsPtbWishBtn}
+                              activeOpacity={0.85}
+                              onPress={() =>
+                                void handleToggleSweetsPtbWishlist({
+                                  id: product.id,
+                                  name: product.name,
+                                  sellingNum: product.sellingNum,
+                                  mrpNum: product.mrpNum,
+                                })
+                              }
+                              accessibilityRole="button"
+                              accessibilityLabel={`${
+                                sweetsWishlistIds.has(product.id) ? "Remove from" : "Add to"
+                              } wishlist: ${product.name}`}
+                            >
+                              <Ionicons
+                                name={sweetsWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                size={16}
+                                color={sweetsWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.sweetsPtbCartBtn}
+                              activeOpacity={0.85}
+                              onPress={() =>
+                                void handleAddSweetsPtbCart({
+                                  id: product.id,
+                                  name: product.name,
+                                  sellingNum: product.sellingNum,
+                                  mrpNum: product.mrpNum,
+                                })
+                              }
+                              accessibilityRole="button"
+                              accessibilityLabel={`Add to cart: ${product.name}`}
+                            >
+                              <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                              <Text style={styles.sweetsPtbCartBtnText}>Add to Cart</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
         <View style={styles.footerSpace} />
       </ScrollView>
 
@@ -953,6 +1333,28 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     marginLeft: 12,
+  },
+  sweetsHeaderBadgeWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sweetsHeaderBadge: {
+    position: "absolute",
+    top: -5,
+    right: -6,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ef4444",
+  },
+  sweetsHeaderBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#ffffff",
   },
   searchBar: {
     flex: 1,
@@ -1455,6 +1857,159 @@ const styles = StyleSheet.create({
   sweetsVideo: {
     width: "100%",
     height: "100%",
+  },
+  sweetsPtbWrap: {
+    marginTop: 18,
+    paddingBottom: 16,
+  },
+  sweetsPtbHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  sweetsPtbHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  sweetsPtbSeeAll: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#ea580c",
+  },
+  sweetsPtbStatus: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  sweetsPtbGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: SWEETS_PTB_GRID_GAP,
+  },
+  sweetsPtbCard: {
+    borderRadius: 12,
+    backgroundColor: "#ef7b1a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.85)",
+    padding: 1,
+    marginBottom: 12,
+    overflow: "visible",
+  },
+  sweetsPtbCardInner: {
+    flex: 1,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: "#FFFDF9",
+    margin: 1,
+  },
+  sweetsPtbImage: {
+    width: "100%",
+    height: 130,
+    resizeMode: "cover",
+    backgroundColor: "#FFFFFF",
+  },
+  sweetsPtbMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  sweetsPtbName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1D2430",
+    minHeight: 30,
+  },
+  sweetsPtbRatingRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sweetsPtbRatingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(239,123,26,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  sweetsPtbRatingText: {
+    marginLeft: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A4E17",
+  },
+  sweetsPtbPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    gap: 6,
+  },
+  sweetsPtbPrice: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d324e",
+  },
+  sweetsPtbMrp: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  sweetsPtbDiscountPill: {
+    backgroundColor: "rgba(239,123,26,0.14)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  sweetsPtbDiscountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#b45309",
+  },
+  sweetsPtbBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sweetsPtbActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 4,
+  },
+  sweetsPtbWishBtn: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29,50,78,0.25)",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+  },
+  sweetsPtbCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#1d324e",
+  },
+  sweetsPtbCartBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
 });
 
