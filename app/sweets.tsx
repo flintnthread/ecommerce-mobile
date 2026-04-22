@@ -749,7 +749,7 @@ export default function Sweets() {
       variantId?: number;
     }) => {
       const r = await togglePtbWishlistWithServer(product, reloadSweetsWishlistIds);
-      if (!r.ok) Alert.alert("Wishlist", r.message);
+      if (!r.ok) Alert.alert("Wishlist", "message" in r ? r.message : "Could not update wishlist.");
       else Alert.alert(r.title, r.body);
     },
     [reloadSweetsWishlistIds]
@@ -776,7 +776,7 @@ export default function Sweets() {
         },
       });
       if (!r.ok) {
-        Alert.alert("Cart", r.message);
+        Alert.alert("Cart", "message" in r ? r.message : "Could not add to cart.");
         return;
       }
       setSweetsCartCount(await getCartUnitCount());

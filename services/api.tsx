@@ -25,6 +25,8 @@ function getHostFromExpo(): string | null {
     if (!hostUri) return null;
     const host = hostUri.split(":")[0]?.trim();
     if (!host) return null;
+    // Ignore localhost because devices cannot reach phone-localhost for your PC server.
+    // Keep LAN IPs (e.g. 192.168.x.x) so Expo Go/dev build can call backend on same Wi‑Fi.
     if (host === "localhost" || host === "127.0.0.1") return null;
     return host;
   } catch (error) {

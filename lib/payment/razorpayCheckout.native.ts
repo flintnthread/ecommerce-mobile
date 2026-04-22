@@ -1,6 +1,5 @@
 import Constants from "expo-constants";
 import { NativeModules } from "react-native";
-import RazorpayCheckout from "react-native-razorpay";
 
 function nativeUnavailableMessage(): string {
   // Expo Go: appOwnership is "expo". A real dev build uses the "MyLoginApp" icon, not Expo Go.
@@ -40,12 +39,10 @@ export type RazorpaySheetOptions = {
   theme?: { color: string };
 };
 
-export function openRazorpaySheet(
-  options: RazorpaySheetOptions
-): Promise<RazorpaySheetSuccess> {
-  const mod = NativeModules.RNRazorpayCheckout as { open?: (o: RazorpaySheetOptions) => void } | null;
+export function openRazorpaySheet(options: RazorpaySheetOptions): Promise<RazorpaySheetSuccess> {
+  const mod = (NativeModules as { RNRazorpayCheckout?: { open?: unknown } }).RNRazorpayCheckout;
   if (!mod || typeof mod.open !== "function") {
     return Promise.reject(new Error(nativeUnavailableMessage()));
   }
-  return RazorpayCheckout.open(options) as Promise<RazorpaySheetSuccess>;
+  return (mod.open as (opts: RazorpaySheetOptions) => Promise<RazorpaySheetSuccess>)(options);
 }
