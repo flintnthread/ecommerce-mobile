@@ -98,6 +98,25 @@ type HeroPromoCard = {
   tag: string;
   footer: string;
   image: ImageSourcePropType;
+  targetUrl?: string;
+};
+
+type HeroBannerApi = {
+  id?: number | string | null;
+  name?: string | null;
+  title?: string | null;
+  description?: string | null;
+  textContent?: string | null;
+  desktopImage?: string | null;
+  mobileImage?: string | null;
+  image?: string | null;
+  targetUrl?: string | null;
+  buttonText?: string | null;
+  textAlign?: string | null;
+  bannerType?: string | null;
+  status?: number | string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 type HomeWishlistCandidate = {
@@ -956,6 +975,110 @@ const HERO_PROMO_CARDS: HeroPromoCard[] = [
   },
 ];
 
+function heroBannerByIdPath(id: number): string {
+  const n = Math.floor(Number(id));
+  if (!Number.isFinite(n) || n <= 0) return "/api/banners/0";
+  return `/api/banners/${n}`;
+}
+
+const HERO_BANNERS_PATH = "/api/banners";
+const HERO_BANNERS_ACTIVE_PATH = "/api/banners/active";
+/** Home hero banners by explicit backend ids (`GET /api/banners/{id}`). */
+const HOME_HERO_BANNER_IDS = [81, 82, 83, 84, 85, 86];
+
+function normalizeHeroBannerRows(payload: unknown): HeroBannerApi[] {
+  if (Array.isArray(payload)) return payload as HeroBannerApi[];
+  if (payload && typeof payload === "object") {
+    const o = payload as Record<string, unknown>;
+    if (Array.isArray(o.data)) return o.data as HeroBannerApi[];
+    if (Array.isArray(o.content)) return o.content as HeroBannerApi[];
+    if (Array.isArray(o.items)) return o.items as HeroBannerApi[];
+    if (Array.isArray(o.results)) return o.results as HeroBannerApi[];
+  }
+  return [];
+}
+
+function extractSingleHeroBanner(payload: unknown): HeroBannerApi | null {
+  if (typeof payload === "string") {
+    const text = payload.trim();
+    if (!text) return null;
+    try {
+      return extractSingleHeroBanner(JSON.parse(text));
+    } catch {
+      return null;
+    }
+  }
+  if (!payload || typeof payload !== "object") return null;
+  const o = payload as Record<string, unknown>;
+
+  // Common API wrapper: { success, message, data: { ...banner } }
+  if (o.data && typeof o.data === "object" && !Array.isArray(o.data)) {
+    return o.data as HeroBannerApi;
+  }
+  if (o.result && typeof o.result === "object" && !Array.isArray(o.result)) {
+    return o.result as HeroBannerApi;
+  }
+  if (o.banner && typeof o.banner === "object" && !Array.isArray(o.banner)) {
+    return o.banner as HeroBannerApi;
+  }
+
+  // Raw banner object response
+  if (
+    typeof o.id !== "undefined" ||
+    typeof o.desktopImage !== "undefined" ||
+    typeof o.mobileImage !== "undefined"
+  ) {
+    return o as HeroBannerApi;
+  }
+  return null;
+}
+
+function heroBannerStatusIsActive(status: unknown): boolean {
+  if (status == null) return true;
+  if (typeof status === "number") return status === 1;
+  const s = String(status).trim().toLowerCase();
+  return s === "1" || s === "true" || s === "active";
+}
+
+function mapHeroBannersFromApi(
+  rows: HeroBannerApi[],
+  apiOrigin: string,
+  options?: { requireActive?: boolean }
+): HeroPromoCard[] {
+  const requireActive = options?.requireActive ?? true;
+  const root = String(apiOrigin ?? "").trim().replace(/\/+$/, "");
+  const resolveMedia = (pathOrUrl: unknown): string => {
+    const s = String(pathOrUrl ?? "").trim();
+    if (!s) return "";
+    if (/^https?:\/\//i.test(s)) return s;
+    if (!root) return s;
+    if (s.startsWith("/")) return `${root}${s}`;
+    if (/^(uploads\/)/i.test(s)) return `${root}/${s}`;
+    return `${root}/uploads/${s}`;
+  };
+
+  const out: HeroPromoCard[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    if (requireActive && !heroBannerStatusIsActive(row.status)) continue;
+    const sourcePath = String(row.mobileImage ?? "").trim();
+    const uri = resolveMedia(sourcePath);
+    if (!uri) continue;
+    const theme = HERO_PROMO_CARDS[i % HERO_PROMO_CARDS.length] ?? HERO_PROMO_CARDS[0]!;
+    const name = String(row.name ?? row.title ?? "").trim();
+    const desc = String(row.description ?? row.textContent ?? "").trim();
+    out.push({
+      ...theme,
+      id: String(row.id ?? `api-hero-${i}`),
+      title: name || theme.title,
+      subtitle: desc || theme.subtitle,
+      image: { uri },
+      targetUrl: String(row.targetUrl ?? "").trim() || undefined,
+    });
+  }
+  return out;
+}
+
 /** Below header: page + scroll base (clean white) */
 const HOME_PAGE_BG = "#FFFFFF";
 
@@ -1534,6 +1657,7 @@ export default function Home() {
   const [suggestedProducts, setSuggestedProducts] = useState<SuggestedForYouGridItem[]>(
     SUGGESTED_FOR_YOU_FALLBACK
   );
+  const [heroPromoCards, setHeroPromoCards] = useState<HeroPromoCard[]>([]);
 
   const categoryNameToHref = useCallback((name: string): Href => {
     const normalized = String(name ?? "").trim().toLowerCase();
@@ -1613,6 +1737,101 @@ export default function Home() {
       cancelled = true;
     };
   }, [categoryNameToHref]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const apiOrigin = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const targetIds = HOME_HERO_BANNER_IDS.map((id) => String(id));
+        const rowsByIdMap = new Map<string, HeroBannerApi>();
+        const backendOrderIds: string[] = [];
+
+        // Primary source: full banners list from `/api/banners`, then pick configured IDs.
+        try {
+          const { data: bannersData } = await api.get<unknown>(HERO_BANNERS_PATH);
+          if (cancelled) return;
+          const rows = normalizeHeroBannerRows(bannersData);
+          for (const row of rows) {
+            const key = String(row.id ?? "").trim();
+            if (!key || !targetIds.includes(key) || rowsByIdMap.has(key)) continue;
+            rowsByIdMap.set(key, row);
+            backendOrderIds.push(key);
+          }
+        } catch {
+          // We'll try `/api/banners/active` + direct id endpoints below.
+        }
+
+        // Secondary source: active list (handles deployments where `/api/banners` differs).
+        if (rowsByIdMap.size < targetIds.length) {
+          try {
+            const { data: activeData } = await api.get<unknown>(HERO_BANNERS_ACTIVE_PATH);
+            if (cancelled) return;
+            const activeRows = normalizeHeroBannerRows(activeData);
+            for (const row of activeRows) {
+              const key = String(row.id ?? "").trim();
+              if (!key || !targetIds.includes(key) || rowsByIdMap.has(key)) continue;
+              rowsByIdMap.set(key, row);
+              backendOrderIds.push(key);
+            }
+          } catch {
+            // We'll try direct id endpoints below.
+          }
+        }
+
+        // Fallback source: direct /api/banners/{id} for any missing IDs.
+        const missingIds = targetIds.filter((id) => !rowsByIdMap.has(id));
+        if (missingIds.length > 0) {
+          const idResults = await Promise.allSettled(
+            missingIds.map((id) => api.get<unknown>(heroBannerByIdPath(Number(id))))
+          );
+          if (cancelled) return;
+          for (const r of idResults) {
+            if (r.status !== "fulfilled") continue;
+            const payload = r.value.data;
+            if (Array.isArray(payload)) {
+              for (const row of payload as HeroBannerApi[]) {
+                const key = String(row.id ?? "").trim();
+                if (!key || !targetIds.includes(key) || rowsByIdMap.has(key)) continue;
+                rowsByIdMap.set(key, row);
+                backendOrderIds.push(key);
+              }
+            } else {
+              const one = extractSingleHeroBanner(payload);
+              const key = String(one?.id ?? "").trim();
+              if (one && key && targetIds.includes(key) && !rowsByIdMap.has(key)) {
+                rowsByIdMap.set(key, one);
+                backendOrderIds.push(key);
+              }
+            }
+          }
+        }
+
+        const idsInRenderOrder =
+          backendOrderIds.length > 0
+            ? backendOrderIds
+            : targetIds;
+
+        const orderedRows: HeroBannerApi[] = idsInRenderOrder
+          .map((id) => rowsByIdMap.get(id))
+          .filter((x): x is HeroBannerApi => x != null);
+
+        const mappedById = mapHeroBannersFromApi(orderedRows, apiOrigin, {
+          requireActive: false,
+        });
+        if (mappedById.length > 0) {
+          setHeroPromoCards(mappedById);
+          return;
+        }
+        setHeroPromoCards(HERO_PROMO_CARDS);
+      } catch {
+        if (!cancelled) setHeroPromoCards(HERO_PROMO_CARDS);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2217,9 +2436,11 @@ const banners2 = [
   }, []);
 
   useEffect(() => {
+    const n = heroPromoCards.length;
+    if (n <= 1) return undefined;
     const interval = setInterval(() => {
       setBannerIndex((prev) => {
-        const next = (prev + 1) % HERO_PROMO_CARDS.length;
+        const next = (prev + 1) % n;
         bannerCarouselRef.current?.scrollToOffset({
           offset: next * HERO_PROMO_SNAP_STRIDE,
           animated: true,
@@ -2229,7 +2450,7 @@ const banners2 = [
     }, 3500);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [heroPromoCards.length]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -2672,9 +2893,9 @@ const categoryData = [
 // megabanners
 
   const activeHeroHeader =
-    HERO_PROMO_CARDS[
-      Math.min(Math.max(0, bannerIndex), HERO_PROMO_CARDS.length - 1)
-    ] ?? HERO_PROMO_CARDS[0]!;
+    heroPromoCards[Math.min(Math.max(0, bannerIndex), Math.max(0, heroPromoCards.length - 1))] ??
+    heroPromoCards[0] ??
+    HERO_PROMO_CARDS[0]!;
 
   return (
     <View style={styles.container}>
@@ -2997,7 +3218,7 @@ const categoryData = [
         <View style={styles.homeMediaPanel}>
           <FlatList
             ref={bannerCarouselRef}
-            data={HERO_PROMO_CARDS}
+            data={heroPromoCards}
             horizontal
             pagingEnabled={false}
             showsHorizontalScrollIndicator={false}
@@ -3013,7 +3234,7 @@ const categoryData = [
               );
               const clamped = Math.min(
                 Math.max(0, idx),
-                HERO_PROMO_CARDS.length - 1
+                Math.max(0, heroPromoCards.length - 1)
               );
               setBannerIndex(clamped);
             }}
@@ -3049,7 +3270,7 @@ const categoryData = [
           />
 
           <View style={styles.bannerDotsRow}>
-            {HERO_PROMO_CARDS.map((_, index) => (
+            {heroPromoCards.map((_, index) => (
               <View
                 key={`banner-dot-${index}`}
                 style={[
