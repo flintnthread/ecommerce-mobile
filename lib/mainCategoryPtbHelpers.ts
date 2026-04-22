@@ -115,13 +115,13 @@ export function safePtbText(raw: string): string {
   return out.length > 0 ? out : "Product";
 }
 
-export function pickPtbProductRating(p: unknown): string {
+export function pickPtbProductRating(p: unknown): number | null {
   const o = p as Record<string, any>;
   const r = o?.rating ?? o?.averageRating ?? o?.average_rating ?? o?.reviewRating ?? o?.review_rating;
-  if (typeof r === "number" && Number.isFinite(r)) return r.toFixed(1);
+  if (typeof r === "number" && Number.isFinite(r)) return r;
   if (typeof r === "string") {
     const n = parseFloat(r);
-    return Number.isFinite(n) ? n.toFixed(1) : "-";
+    return Number.isFinite(n) ? n : null;
   }
-  return "-";
+  return null;
 }
