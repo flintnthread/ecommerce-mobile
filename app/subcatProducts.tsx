@@ -1,4 +1,4 @@
- import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,10 @@ import {
   TextInput,
   Modal,
   Dimensions,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api, {
@@ -17,7 +20,22 @@ import api, {
   productsSearchPath,
   searchProductsPath,
   searchSuggestionsPath,
+  WISHLIST_ADD_PATH,
+  WISHLIST_REMOVE_PATH,
+  WISHLIST_USER_PATH,
 } from "../services/api";
+import {
+  addWishlistProductIfAbsent,
+  removeWishlistLine,
+} from "../lib/shopStorage";
+import { useLanguage } from "../lib/language";
+import {
+  firstWishlistRowImageUri,
+  normalizeWishlistApiRows,
+  numLike,
+  type ApiWishlistRow,
+} from "../lib/wishlistApi";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 /** Top Picks for You API endpoint - same as home.tsx */
@@ -109,6 +127,8 @@ type ProductItem = {
   rating: string;
   ratingCount: string;
   image: any;
+  /** Backend variant id for POST `/api/wishlist/add` when from API. */
+  variantId?: number;
   /** Filter / facet metadata (synthetic, stable per product id) */
   catalogCategory?: string;
   gender?: string;
@@ -116,6 +136,40 @@ type ProductItem = {
   fabric?: string;
   size?: string;
 };
+
+type SubcatWishlistApiEntry = {
+  productId: number;
+  variantId: number;
+  title: string;
+  image: any;
+  price: number;
+  mrp: number;
+};
+
+function mapWishlistRowToSubcatEntry(
+  row: ApiWishlistRow,
+  placeholderImage: any
+): SubcatWishlistApiEntry | null {
+  const productId = Math.floor(Number(row.productId));
+  const variantId = Math.floor(Number(row.variantId));
+  if (!Number.isFinite(productId) || productId <= 0) return null;
+  if (!Number.isFinite(variantId) || variantId <= 0) return null;
+  const uri = firstWishlistRowImageUri(row);
+  const selling = numLike(row.sellingPrice);
+  const mrp = numLike(row.mrpPrice);
+  const price = selling > 0 ? Math.round(selling) : Math.round(mrp) || 0;
+  const mrpRounded = mrp > 0 ? Math.round(mrp) : price;
+  const title =
+    String(row.productName ?? "").trim() || `Product ${productId}`;
+  return {
+    productId,
+    variantId,
+    title,
+    image: uri ? { uri } : placeholderImage,
+    price,
+    mrp: mrpRounded,
+  };
+}
 
 const PRODUCTS: ProductItem[] = [
   {
@@ -498,6 +552,7 @@ function runProductPipeline(
 
 export default function SubcategoriesScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const params = useLocalSearchParams<{
     mainCat?: string | string[];
     subCategory?: string | string[];
@@ -544,7 +599,7 @@ export default function SubcategoriesScreen() {
     ? params.productsSearchGender[0]
     : params.productsSearchGender;
   const routedProductsSearchGender = String(productsSearchGenderRaw ?? "").trim();
-  const pageTitle = (selectedSubCategory || "Products").toUpperCase();
+  const pageTitle = tr(selectedSubCategory || "Products").toUpperCase();
 
   useEffect(() => {
     const norm = String(selectedSubCategory ?? "")
@@ -577,8 +632,12 @@ export default function SubcategoriesScreen() {
   >({});
   const [bannerIndex, setBannerIndex] = useState(0);
   const bannerScrollRef = useRef<ScrollView | null>(null);
-  const [cartItems, setCartItems] = useState<string[]>([]);
+  const [cartBadgeCount, setCartBadgeCount] = useState(0);
+  /** Local-only wishlist ids when not signed in, or non-API catalog rows. */
   const [wishlistItems, setWishlistItems] = useState<string[]>([]);
+  /** Signed-in user wishlist from GET `/api/wishlist/user`. */
+  const [wishlistApiEntries, setWishlistApiEntries] = useState<SubcatWishlistApiEntry[]>([]);
+  const [hasAuthToken, setHasAuthToken] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [similarModalVisible, setSimilarModalVisible] = useState(false);
@@ -833,6 +892,16 @@ export default function SubcategoriesScreen() {
         discount = `${Math.round(p.discountPercentage)}%`;
       }
 
+      const rawVariantId = v?.id ?? v?.variantId;
+      const variantIdNum =
+        typeof rawVariantId === "string"
+          ? Number.parseInt(rawVariantId, 10)
+          : Number(rawVariantId);
+      const variantId =
+        Number.isFinite(variantIdNum) && variantIdNum > 0
+          ? Math.floor(variantIdNum)
+          : undefined;
+
       out.push({
         id: String(idNum),
         title: name,
@@ -844,6 +913,7 @@ export default function SubcategoriesScreen() {
         rating: "0.0",
         ratingCount: "0",
         image: uri ? { uri } : placeholderImage,
+        ...(variantId != null ? { variantId } : {}),
       });
     }
 
@@ -878,6 +948,7 @@ export default function SubcategoriesScreen() {
     selling: number;
     mrp: number;
     discountPct: number | null;
+    variantId?: number;
   } => {
     const num = (x: unknown): number | null => {
       if (typeof x === "number" && Number.isFinite(x)) return x;
@@ -901,10 +972,16 @@ export default function SubcategoriesScreen() {
     const mrpRaw = num(v?.mrpPrice);
     const mrp = mrpRaw != null && mrpRaw > 0 ? mrpRaw : selling;
     const discountPct = num(v?.discountPercentage);
+    const rawVid = v?.id ?? v?.variantId;
+    const vidNum =
+      typeof rawVid === "string" ? Number.parseInt(rawVid, 10) : Number(rawVid);
+    const variantId =
+      Number.isFinite(vidNum) && vidNum > 0 ? Math.floor(vidNum) : undefined;
     return {
       selling: Math.max(0, Math.round(selling)),
       mrp: Math.max(Math.round(selling), Math.round(mrp)),
       discountPct,
+      variantId,
     };
   };
 
@@ -933,7 +1010,7 @@ export default function SubcategoriesScreen() {
     if (st && hiddenStatuses.has(st)) return null;
     const imageUri = pickProductImageUri(p);
     if (!imageUri) return null;
-    const { selling, mrp, discountPct } = pickVariantNumbers(p);
+    const { selling, mrp, discountPct, variantId } = pickVariantNumbers(p);
     const discountLabel =
       discountPct != null && Number.isFinite(discountPct)
         ? `${Number(discountPct).toFixed(1).replace(/\.0$/, "")}% off`
@@ -949,6 +1026,7 @@ export default function SubcategoriesScreen() {
       rating: pickRatingLabel(p),
       ratingCount: "•",
       image: { uri: imageUri },
+      ...(variantId != null ? { variantId } : {}),
     };
     return withFilterTraits(
       base,
@@ -1488,6 +1566,13 @@ const productCatalogById = React.useMemo(() => {
   const m = new Map<string, ProductItem>();
   for (const p of PRODUCTS) m.set(p.id, p);
   for (const p of categoryProducts) m.set(p.id, p);
+  for (const p of apiRoutedProducts) m.set(p.id, p);
+  for (const p of mainCategoryApiProducts) m.set(p.id, p);
+  for (const p of productsSearchApiProducts) m.set(p.id, p);
+  for (const p of topPicksProducts) m.set(p.id, p);
+  for (const p of megaDiscountProducts) m.set(p.id, p);
+  for (const p of premiumFindsProducts) m.set(p.id, p);
+  for (const p of freshFindsProducts) m.set(p.id, p);
   for (const cat of categoryOptions) {
     for (const p of buildProductsForCategory(
       cat,
@@ -1498,13 +1583,194 @@ const productCatalogById = React.useMemo(() => {
     }
   }
   return m;
-}, [categoryProducts, mainCat, selectedGender]);
+}, [
+  categoryProducts,
+  mainCat,
+  selectedGender,
+  apiRoutedProducts,
+  mainCategoryApiProducts,
+  productsSearchApiProducts,
+  topPicksProducts,
+  megaDiscountProducts,
+  premiumFindsProducts,
+  freshFindsProducts,
+]);
 
 const wishlistedProducts = React.useMemo(() => {
   return wishlistItems
     .map((id) => productCatalogById.get(id))
     .filter((p): p is ProductItem => p !== null);
 }, [wishlistItems, productCatalogById]);
+
+  const wishlistApiKeys = useMemo(
+    () =>
+      new Set(
+        wishlistApiEntries.map((e) => `${e.productId}-${e.variantId}`)
+      ),
+    [wishlistApiEntries]
+  );
+
+  const wishlistBadgeCount = hasAuthToken
+    ? wishlistApiEntries.length
+    : wishlistItems.length;
+
+  const loadWishlistFromApi = useCallback(async () => {
+    const t = (await AsyncStorage.getItem("token"))?.trim();
+    setHasAuthToken(!!t);
+    if (!t) {
+      setWishlistApiEntries([]);
+      return;
+    }
+    try {
+      const { data } = await api.get<unknown>(WISHLIST_USER_PATH);
+      const rows = normalizeWishlistApiRows(data);
+      const ph = require("../assets/images/product1.png");
+      const entries = rows
+        .map((r) => mapWishlistRowToSubcatEntry(r, ph))
+        .filter((x): x is SubcatWishlistApiEntry => x != null);
+      setWishlistApiEntries(entries);
+    } catch {
+      setWishlistApiEntries([]);
+    }
+  }, []);
+
+  const reloadCartBadge = useCallback(async () => {
+    setCartBadgeCount(await getCartUnitCount());
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadWishlistFromApi();
+      void reloadCartBadge();
+    }, [loadWishlistFromApi, reloadCartBadge])
+  );
+
+  const isProductInWishlist = useCallback(
+    (product: ProductItem) => {
+      const idStr = String(product.id ?? "").trim();
+      if (hasAuthToken && /^\d+$/.test(idStr) && product.variantId) {
+        return wishlistApiKeys.has(
+          `${Math.floor(Number(idStr))}-${product.variantId}`
+        );
+      }
+      return wishlistItems.includes(product.id);
+    },
+    [hasAuthToken, wishlistApiKeys, wishlistItems]
+  );
+
+  const handleWishlistPress = useCallback(
+    async (product: ProductItem) => {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      const idStr = String(product.id ?? "").trim();
+      const pidNum = Math.floor(Number(product.id));
+
+      if (
+        token &&
+        /^\d+$/.test(idStr) &&
+        Number.isFinite(pidNum) &&
+        pidNum > 0
+      ) {
+        const vid = product.variantId;
+        if (!vid || vid <= 0) {
+          Alert.alert(
+            tr("Choose options"),
+            tr("Open the product page, pick size and color, then add to wishlist.")
+          );
+          return;
+        }
+        const key = `${pidNum}-${vid}`;
+        try {
+          if (wishlistApiKeys.has(key)) {
+            await api.delete(WISHLIST_REMOVE_PATH, {
+              params: { productId: pidNum, variantId: vid },
+            });
+            await removeWishlistLine(String(pidNum));
+            await loadWishlistFromApi();
+            Alert.alert(
+              tr("Removed"),
+              `"${tr(product.title)}" ${tr("was removed from your wishlist.")}`
+            );
+          } else {
+            await api.post(WISHLIST_ADD_PATH, {
+              productId: pidNum,
+              variantId: vid,
+            });
+            await addWishlistProductIfAbsent({
+              id: String(pidNum),
+              name: product.title,
+              price: product.price,
+              mrp: product.mrp,
+            });
+            await loadWishlistFromApi();
+            Alert.alert(tr("Added to wishlist"), tr(product.title));
+          }
+        } catch (e: unknown) {
+          const ax = e as { response?: { data?: unknown } };
+          let msg = tr("Wishlist could not be updated. Please try again.");
+          const d = ax.response?.data;
+          if (typeof d === "string" && d.trim()) msg = d.trim();
+          else if (d && typeof d === "object") {
+            const m = (d as { message?: unknown }).message;
+            if (typeof m === "string" && m.trim()) msg = m.trim();
+          }
+          Alert.alert(tr("Wishlist"), tr(msg));
+        }
+        return;
+      }
+
+      setWishlistItems((prev) =>
+        prev.includes(product.id)
+          ? prev.filter((id) => id !== product.id)
+          : [...prev, product.id]
+      );
+    },
+    [wishlistApiKeys, loadWishlistFromApi]
+  );
+
+  const confirmRemoveApiWishlistEntry = useCallback(
+    (entry: SubcatWishlistApiEntry) => {
+      Alert.alert(
+        tr("Remove item"),
+        `${tr("Remove")} "${tr(entry.title)}" ${tr("from your wishlist?")}`,
+        [
+          { text: tr("Cancel"), style: "cancel" },
+          {
+            text: tr("Remove"),
+            style: "destructive",
+            onPress: () => {
+              void (async () => {
+                try {
+                  await api.delete(WISHLIST_REMOVE_PATH, {
+                    params: {
+                      productId: entry.productId,
+                      variantId: entry.variantId,
+                    },
+                  });
+                  await removeWishlistLine(String(entry.productId));
+                  await loadWishlistFromApi();
+                  Alert.alert(
+                    tr("Removed"),
+                    tr("Item has been removed from your wishlist.")
+                  );
+                } catch (e: unknown) {
+                  const ax = e as { response?: { data?: unknown } };
+                  let msg = tr("Could not remove this item.");
+                  const d = ax.response?.data;
+                  if (typeof d === "string" && d.trim()) msg = d.trim();
+                  else if (d && typeof d === "object") {
+                    const m = (d as { message?: unknown }).message;
+                    if (typeof m === "string" && m.trim()) msg = m.trim();
+                  }
+                  Alert.alert(tr("Wishlist"), tr(msg));
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [loadWishlistFromApi]
+  );
 
 const handleBannerScroll = (event: any) => {
   const slideIndex = Math.round(
@@ -1534,19 +1800,27 @@ const handleBannerScroll = (event: any) => {
     setExpandedCategory(null);
   }, [selectedSubCategory]);
 
-  const toggleWishlist = (productId: string) => {
-    setWishlistItems((prev) =>
-      prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId]
-    );
-  };
-
-  const addToCart = (productId: string) => {
-    // Only add if not already in cart (no remove)
-    setCartItems((prev) =>
-      prev.includes(productId) ? prev : [...prev, productId]
-    );
+  const addToCart = (product: ProductItem) => {
+    void (async () => {
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.title,
+          price: product.price,
+          mrp: product.mrp,
+        },
+      });
+      if (r.ok === false) {
+        Alert.alert(tr("Cart"), tr(r.message));
+        return;
+      }
+      setCartBadgeCount(await getCartUnitCount());
+      Alert.alert(tr("Added to cart"), tr(product.title));
+    })();
   };
 
   const openSimilarProducts = (currentProduct: ProductItem) => {
@@ -1585,16 +1859,16 @@ const handleBannerScroll = (event: any) => {
           activeOpacity={0.85}
           onPress={(event) => {
             event.stopPropagation();
-            toggleWishlist(product.id);
+            void handleWishlistPress(product);
           }}
         >
           <Ionicons
             name={
-              wishlistItems.includes(product.id) ? "heart" : "heart-outline"
+              isProductInWishlist(product) ? "heart" : "heart-outline"
             }
             size={20}
             color={
-              wishlistItems.includes(product.id) ? "#EF4444" : "#374151"
+              isProductInWishlist(product) ? "#EF4444" : "#374151"
             }
           />
         </TouchableOpacity>
@@ -1602,10 +1876,10 @@ const handleBannerScroll = (event: any) => {
 
       <View style={styles.productInfoPanel}>
         <Text style={styles.productTitle} numberOfLines={2}>
-          {product.title}
+          {tr(product.title)}
         </Text>
         <Text style={styles.productSubtitle} numberOfLines={1}>
-          {product.benefitText}
+          {tr(product.benefitText)}
         </Text>
 
         <View style={styles.priceRow}>
@@ -1639,7 +1913,7 @@ const handleBannerScroll = (event: any) => {
         <View style={styles.productActionsRow}>
           <TouchableOpacity
             style={styles.addToCartButton}
-            onPress={() => addToCart(product.id)}
+            onPress={() => addToCart(product)}
           >
             <Ionicons
               name="cart-outline"
@@ -1736,30 +2010,35 @@ const handleBannerScroll = (event: any) => {
           </View>
           <TouchableOpacity
             style={styles.headerIconWrapper}
-            onPress={() => setWishlistModalVisible(true)}
+            onPress={() => {
+              void loadWishlistFromApi();
+              setWishlistModalVisible(true);
+            }}
             activeOpacity={0.7}
           >
             <Ionicons
               name={
-                wishlistItems.length > 0 ? "heart" : "heart-outline"
+                wishlistBadgeCount > 0 ? "heart" : "heart-outline"
               }
               size={20}
-              color={wishlistItems.length > 0 ? "#EF4444" : "#1d324e"}
+              color={wishlistBadgeCount > 0 ? "#EF4444" : "#1d324e"}
               style={styles.headerRightIcon}
             />
-            {wishlistItems.length > 0 && (
+            {wishlistBadgeCount > 0 && (
               <View style={styles.headerBadge} pointerEvents="none">
                 <Text style={styles.headerBadgeText}>
-                  {wishlistItems.length}
+                  {wishlistBadgeCount}
                 </Text>
               </View>
             )}
           </TouchableOpacity>
           <View style={styles.headerIconWrapper}>
             <Ionicons name="bag-outline" size={20} color="#1d324e" />
-            {cartItems.length > 0 && (
+            {cartBadgeCount > 0 && (
               <View style={styles.headerBadge}>
-                <Text style={styles.headerBadgeText}>{cartItems.length}</Text>
+                <Text style={styles.headerBadgeText}>
+                  {cartBadgeCount > 99 ? "99+" : String(cartBadgeCount)}
+                </Text>
               </View>
             )}
           </View>
@@ -1934,16 +2213,16 @@ const handleBannerScroll = (event: any) => {
           <>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                ALL <Text style={styles.sectionTitleAccent}>PRODUCTS</Text>
+                {tr("ALL")} <Text style={styles.sectionTitleAccent}>{tr("PRODUCTS")}</Text>
               </Text>
               <Text style={styles.categoryProductCount}>
-                {filteredRoutedProducts.length} items
+                {filteredRoutedProducts.length} {tr("items")}
               </Text>
             </View>
             {(routedFromSubcategoryId && !apiRoutedFromIdReady) ||
             (routedFromMainCategoryId && !mainCategoryApiReady) ||
             (routedFromProductsSearch && !productsSearchApiReady) ? (
-              <Text style={styles.apiRoutedLoadingHint}>Loading products…</Text>
+              <Text style={styles.apiRoutedLoadingHint}>{tr("Loading products…")}</Text>
             ) : null}
             <View style={styles.productGrid}>
               {filteredRoutedProducts.map((product) => (
@@ -1955,10 +2234,10 @@ const handleBannerScroll = (event: any) => {
           <>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                ALL <Text style={styles.sectionTitleAccent}>PRODUCTS</Text>
+                {tr("ALL")} <Text style={styles.sectionTitleAccent}>{tr("PRODUCTS")}</Text>
               </Text>
               <Text style={styles.categoryProductCount}>
-                {expandedCategoryProducts.length} items
+                {expandedCategoryProducts.length} {tr("items")}
               </Text>
             </View>
             <View style={styles.productGrid}>
@@ -1971,8 +2250,8 @@ const handleBannerScroll = (event: any) => {
           <>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                SHOP BY{" "}
-                <Text style={styles.sectionTitleAccent}>CATEGORY</Text>
+                {tr("SHOP BY")}{" "}
+                <Text style={styles.sectionTitleAccent}>{tr("CATEGORY")}</Text>
               </Text>
             </View>
             {browseCategoryOptions.map((cat) => {
@@ -1997,9 +2276,9 @@ const handleBannerScroll = (event: any) => {
                     activeOpacity={0.75}
                     onPress={() => setExpandedCategory(cat)}
                   >
-                    <Text style={styles.categorySectionTitle}>{cat}</Text>
+                    <Text style={styles.categorySectionTitle}>{tr(cat)}</Text>
                     <View style={styles.categoryViewAllRow}>
-                      <Text style={styles.categoryViewAllText}>View all</Text>
+                      <Text style={styles.categoryViewAllText}>{tr("View all")}</Text>
                       <Ionicons
                         name="chevron-forward"
                         size={16}
@@ -2023,7 +2302,7 @@ const handleBannerScroll = (event: any) => {
 
         {/* BEST OF DRESSES SECTION */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>BEST OF DRESS</Text>
+          <Text style={styles.sectionTitle}>{tr("BEST OF DRESS")}</Text>
         </View>
 
         <ScrollView
@@ -2051,10 +2330,10 @@ const handleBannerScroll = (event: any) => {
                 )}
               </View>
               <Text style={styles.bestTitle} numberOfLines={1}>
-                {item.title}
+                {tr(item.title)}
               </Text>
               <Text style={styles.bestSubtitle} numberOfLines={1}>
-                {item.subtitle}
+                {tr(item.subtitle)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -2062,7 +2341,7 @@ const handleBannerScroll = (event: any) => {
 
         {/* TRENDING DRESSES BANNER */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>TRENDING DRESSES</Text>
+          <Text style={styles.sectionTitle}>{tr("TRENDING DRESSES")}</Text>
         </View>
 
         <View style={styles.bannerCarouselWrapper}>
@@ -2096,7 +2375,7 @@ const handleBannerScroll = (event: any) => {
 
         {/* LATEST PRODUCTS SECTION */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>LATEST PRODUCTS</Text>
+          <Text style={styles.sectionTitle}>{tr("LATEST PRODUCTS")}</Text>
         </View>
         <ScrollView
           horizontal
@@ -2116,7 +2395,7 @@ const handleBannerScroll = (event: any) => {
                 resizeMode="cover"
               />
               <Text style={styles.latestTitle} numberOfLines={1}>
-                {product.title}
+                {tr(product.title)}
               </Text>
               <Text style={styles.latestPrice}>₹{product.price}</Text>
             </TouchableOpacity>
@@ -2134,7 +2413,7 @@ const handleBannerScroll = (event: any) => {
         <View style={styles.similarModalOverlay}>
           <View style={styles.similarModalCard}>
             <View style={styles.similarModalHeader}>
-              <Text style={styles.similarModalTitle}>SIMILAR PRODUCTS</Text>
+              <Text style={styles.similarModalTitle}>{tr("SIMILAR PRODUCTS")}</Text>
               <TouchableOpacity onPress={() => setSimilarModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#374151" />
               </TouchableOpacity>
@@ -2162,10 +2441,10 @@ const handleBannerScroll = (event: any) => {
                   />
                   <View style={styles.similarInfoPanel}>
                     <Text style={styles.similarProductTitle} numberOfLines={2}>
-                      {product.title}
+                      {tr(product.title)}
                     </Text>
                     <Text style={styles.similarProductSubtitle} numberOfLines={1}>
-                      {product.benefitText}
+                      {tr(product.benefitText)}
                     </Text>
                     <View style={styles.similarPriceRow}>
                       <Text style={styles.similarProductPrice}>₹{product.price}</Text>
@@ -2197,7 +2476,7 @@ const handleBannerScroll = (event: any) => {
           <View style={styles.wishlistModalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                WISHLIST ({wishlistItems.length})
+                {tr("WISHLIST")} ({wishlistBadgeCount})
               </Text>
               <TouchableOpacity onPress={() => setWishlistModalVisible(false)}>
                 <Ionicons name="close" size={30} color="#555" />
@@ -2209,7 +2488,7 @@ const handleBannerScroll = (event: any) => {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.wishlistScrollContent}
             >
-              {wishlistedProducts.length === 0 ? (
+              {wishlistBadgeCount === 0 ? (
                 <View style={styles.wishlistEmpty}>
                   <Ionicons
                     name="heart-outline"
@@ -2217,12 +2496,56 @@ const handleBannerScroll = (event: any) => {
                     color="#D1D5DB"
                   />
                   <Text style={styles.wishlistEmptyTitle}>
-                    Your wishlist is empty
+                    {tr("Your wishlist is empty")}
                   </Text>
                   <Text style={styles.wishlistEmptySub}>
-                    Tap the heart on a product to save it here
+                    {tr("Tap the heart on a product to save it here")}
                   </Text>
                 </View>
+              ) : hasAuthToken ? (
+                wishlistApiEntries.map((entry) => (
+                  <View
+                    key={`${entry.productId}-${entry.variantId}`}
+                    style={styles.wishlistRow}
+                  >
+                    <TouchableOpacity
+                      style={styles.wishlistRowMain}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        setWishlistModalVisible(false);
+                        router.push({
+                          pathname: "/productdetail",
+                          params: { id: String(entry.productId) },
+                        } as any);
+                      }}
+                    >
+                      <Image
+                        source={entry.image}
+                        style={styles.wishlistRowImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.wishlistRowBody}>
+                        <Text
+                          style={styles.wishlistRowTitle}
+                          numberOfLines={2}
+                        >
+                          {tr(entry.title)}
+                        </Text>
+                        <Text style={styles.wishlistRowPrice}>
+                          ₹{entry.price}
+                        </Text>
+                        <Text style={styles.wishlistRowMrp}>₹{entry.mrp}</Text>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.wishlistRemoveButton}
+                      onPress={() => confirmRemoveApiWishlistEntry(entry)}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
+                      <Ionicons name="heart" size={22} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                ))
               ) : (
                 wishlistedProducts.map((product) => (
                   <View key={product.id} style={styles.wishlistRow}>
@@ -2244,7 +2567,7 @@ const handleBannerScroll = (event: any) => {
                           style={styles.wishlistRowTitle}
                           numberOfLines={2}
                         >
-                          {product.title}
+                          {tr(product.title)}
                         </Text>
                         <Text style={styles.wishlistRowPrice}>
                           ₹{product.price}
@@ -2254,7 +2577,11 @@ const handleBannerScroll = (event: any) => {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.wishlistRemoveButton}
-                      onPress={() => toggleWishlist(product.id)}
+                      onPress={() =>
+                        setWishlistItems((prev) =>
+                          prev.filter((id) => id !== product.id)
+                        )
+                      }
                       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                     >
                       <Ionicons name="heart" size={22} color="#EF4444" />

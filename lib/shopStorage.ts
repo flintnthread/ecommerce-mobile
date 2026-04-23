@@ -118,6 +118,16 @@ export async function saveWishlist(lines: PersistedWishlistLine[]): Promise<void
   await AsyncStorage.setItem(WISHLIST_KEY, JSON.stringify(lines));
 }
 
+/** Add to local wishlist if not already present (used after server add). */
+export async function addWishlistProductIfAbsent(
+  product: PersistedWishlistLine
+): Promise<void> {
+  const list = await loadWishlist();
+  if (list.some((x) => x.id === product.id)) return;
+  list.push(product);
+  await saveWishlist(list);
+}
+
 /** Returns true if product is now in the wishlist after toggle. */
 export async function toggleWishlistProduct(
   product: PersistedWishlistLine

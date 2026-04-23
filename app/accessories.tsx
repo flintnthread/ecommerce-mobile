@@ -21,6 +21,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { VideoView, useVideoPlayer } from "expo-video";
@@ -31,12 +32,14 @@ import api, {
 } from "../services/api";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useLanguage } from "@/lib/language";
+import { pickPtbVariantPricing } from "../lib/mainCategoryPtbHelpers";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
+import { getWishlistIds } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 import {
   GestureHandlerRootView,
   TouchableOpacity as GestureTouchableOpacity,
@@ -1246,20 +1249,27 @@ export default function Accessories() {
       mrpPrice: number | null;
       discountPercentage: number | null;
       rating: number | null;
+      variantId?: number;
     }>
   >([]);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [wishlistServerKeys, setWishlistServerKeys] = useState<Set<string>>(new Set());
+  const [wishlistHasAuth, setWishlistHasAuth] = useState(false);
   const [cartCount, setCartCount] = useState(0);
 
   const reloadWishlistIds = useCallback(async () => {
-    const ids = await getWishlistIds();
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
     setWishlistIds(ids);
+    setWishlistServerKeys(keys);
   }, []);
 
   const reloadCartCount = useCallback(async () => {
-    const cart = await loadCart();
-    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
-    setCartCount(count);
+    setCartCount(await getCartUnitCount());
   }, []);
 
   useEffect(() => {
@@ -1312,42 +1322,67 @@ export default function Accessories() {
   }, [routeAccessoriesMainCategoryId]);
 
   const handleToggleWishlistForUniquePick = useCallback(
-    async (product: { id: string; name: string; sellingPrice: number | null; mrpPrice: number | null }) => {
-      const selling = product.sellingPrice != null && Number.isFinite(product.sellingPrice)
-        ? Number(product.sellingPrice)
-        : 0;
-      const mrp = product.mrpPrice != null && Number.isFinite(product.mrpPrice)
-        ? Number(product.mrpPrice)
-        : selling;
-      const nowInWishlist = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: selling,
-        mrp,
-      });
-      await reloadWishlistIds();
-      Alert.alert(
-        nowInWishlist ? "Added to wishlist" : "Removed from wishlist",
-        product.name
+    async (product: {
+      id: string;
+      name: string;
+      sellingPrice: number | null;
+      mrpPrice: number | null;
+      variantId?: number;
+    }) => {
+      const sellingNum =
+        product.sellingPrice != null && Number.isFinite(product.sellingPrice)
+          ? Number(product.sellingPrice)
+          : 0;
+      const mrpNum =
+        product.mrpPrice != null && Number.isFinite(product.mrpPrice)
+          ? Number(product.mrpPrice)
+          : sellingNum;
+      const r = await togglePtbWishlistWithServer(
+        {
+          id: product.id,
+          name: product.name,
+          sellingNum,
+          mrpNum,
+          variantId: product.variantId,
+        },
+        reloadWishlistIds
       );
+      if (r.ok === false) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
   );
 
   const handleAddToCartForUniquePick = useCallback(
-    async (product: { id: string; name: string; sellingPrice: number | null; mrpPrice: number | null }) => {
+    async (product: {
+      id: string;
+      name: string;
+      sellingPrice: number | null;
+      mrpPrice: number | null;
+      variantId?: number;
+    }) => {
       const selling = product.sellingPrice != null && Number.isFinite(product.sellingPrice)
         ? Number(product.sellingPrice)
         : 0;
       const mrp = product.mrpPrice != null && Number.isFinite(product.mrpPrice)
         ? Number(product.mrpPrice)
         : selling;
-      await addProductToCart({
-        id: product.id,
-        name: product.name,
-        price: selling,
-        mrp,
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.name,
+          price: selling,
+          mrp,
+        },
       });
+      if (r.ok === false) {
+        Alert.alert("Cart", r.message);
+        return;
+      }
       await reloadCartCount();
       Alert.alert("Added to cart", product.name);
     },
@@ -1932,7 +1967,8 @@ export default function Accessories() {
                 : getSubcategoryTableImageUri(imageRaw)
               : "";
 
-            const firstVariant = Array.isArray(p.variants) ? p.variants[0] : null;
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickPtbVariantPricing(p);
             const ratingRaw =
               p.rating ?? p.averageRating ?? p.average_rating ?? p.reviewRating ?? p.review_rating;
             const rating = toNum(ratingRaw);
@@ -1940,10 +1976,12 @@ export default function Accessories() {
               id: String(p.id),
               name: String(p.name ?? "").trim(),
               imageUri,
-              sellingPrice: toNum(firstVariant?.sellingPrice),
-              mrpPrice: toNum(firstVariant?.mrpPrice),
-              discountPercentage: toNum(firstVariant?.discountPercentage),
+              sellingPrice: sellingPrice > 0 ? sellingPrice : null,
+              mrpPrice: mrpPrice > 0 ? mrpPrice : null,
+              discountPercentage:
+                discountPercentage > 0 ? discountPercentage : null,
               rating,
+              ...(variantId != null ? { variantId } : {}),
             };
           })
           .filter((p) => p.imageUri && p.name);
@@ -2375,10 +2413,14 @@ export default function Accessories() {
               onPress={() => router.push("/wishlist")}
             >
               <Ionicons name="heart-outline" size={23} color="#1d324e" />
-              {wishlistIds.size > 0 ? (
+              {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 0 ? (
                 <View style={styles.headerIconBadge}>
                   <Text style={styles.headerIconBadgeText}>
-                    {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+                    {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 99
+                      ? "99+"
+                      : String(
+                          wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size
+                        )}
                   </Text>
                 </View>
               ) : null}
@@ -2472,7 +2514,7 @@ export default function Accessories() {
                       activeTopCategory === item.id && styles.topCategoryTextActive,
                     ]}
                   >
-                    {item.label}
+                    {tr(item.label)}
                   </Text>
                   <View
                     style={[
@@ -2942,9 +2984,11 @@ export default function Accessories() {
           <View style={styles.womenRelatedTitleRow}>
             <Ionicons name="sparkles" size={14} color="#ef7b1a" />
             <Text style={styles.womenRelatedTitle}>
-              Related categories for{" "}
-              {womenAccessoriesItems.find((item) => item.id === selectedWomenItemId)?.title ??
-                "Bags"}
+              {tr("Related categories for")}{" "}
+              {tr(
+                womenAccessoriesItems.find((item) => item.id === selectedWomenItemId)?.title ??
+                  "Bags"
+              )}
             </Text>
           </View>
           <View style={styles.womenRelatedTitleUnderline} />
@@ -2971,7 +3015,7 @@ export default function Accessories() {
                     resizeMode="cover"
                   />
                 </View>
-                <Text style={styles.womenRelatedChipText}>{chip.label}</Text>
+                <Text style={styles.womenRelatedChipText}>{tr(chip.label)}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -3118,9 +3162,11 @@ export default function Accessories() {
           <View style={styles.menRelatedTitleRow}>
             <Ionicons name="sparkles" size={14} color="#ef7b1a" />
             <Text style={styles.menRelatedTitle}>
-              Related categories for{" "}
-              {menAccessoriesItems.find((item) => item.id === selectedMenItemId)?.title ??
-                "Belts & Caps"}
+              {tr("Related categories for")}{" "}
+              {tr(
+                menAccessoriesItems.find((item) => item.id === selectedMenItemId)?.title ??
+                  "Belts & Caps"
+              )}
             </Text>
           </View>
           <View style={styles.menRelatedTitleUnderline} />
@@ -3139,7 +3185,7 @@ export default function Accessories() {
                 <View style={styles.menRelatedImageWrap}>
                   <Image source={chip.source} style={styles.menRelatedImage} resizeMode="cover" />
                 </View>
-                <Text style={styles.menRelatedChipText}>{chip.label}</Text>
+                <Text style={styles.menRelatedChipText}>{tr(chip.label)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -3211,7 +3257,7 @@ export default function Accessories() {
 
                       <View style={styles.splitProductCopyBlock}>
                         <Text style={styles.splitProductTitle} numberOfLines={2}>
-                          {product.title}
+                          {tr(product.title)}
                         </Text>
 
                         <View style={styles.splitProductRatingPill}>
@@ -3655,8 +3701,8 @@ export default function Accessories() {
               <Ionicons name="pricetags" size={16} color="#1d324e" />
             </View>
             <Text style={styles.kidsRelatedTitle} numberOfLines={3}>
-              Jewellery subcategories for{" "}
-              {womanYouAreCardFooters[selectedJewelleryCarouselIndex] ?? "Jewellery"}
+              {tr("Jewellery subcategories for")}{" "}
+              {tr(womanYouAreCardFooters[selectedJewelleryCarouselIndex] ?? "Jewellery")}
             </Text>
           </View>
           <View style={styles.kidsRelatedTitleUnderline} />
@@ -3682,7 +3728,7 @@ export default function Accessories() {
                   <Image source={chip.source} style={styles.kidsRelatedPillImage} resizeMode="cover" />
                 </View>
                 <Text style={styles.kidsRelatedPillText} numberOfLines={2}>
-                  {chip.label}
+                  {tr(chip.label)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -3808,9 +3854,11 @@ export default function Accessories() {
             <View style={styles.accessoriesReplicaRelatedTitleRow}>
               <Ionicons name="sparkles" size={14} color="#ef7b1a" />
               <Text style={styles.accessoriesReplicaRelatedTitle}>
-                Related categories for{" "}
-                {accessoriesHeroDeals.find((deal) => deal.id === selectedAccessoriesDealId)?.title ??
-                  "Accessories"}
+                {tr("Related categories for")}{" "}
+                {tr(
+                  accessoriesHeroDeals.find((deal) => deal.id === selectedAccessoriesDealId)?.title ??
+                    "Accessories"
+                )}
               </Text>
             </View>
             <View style={styles.accessoriesReplicaRelatedTitleUnderline} />
@@ -3833,7 +3881,7 @@ export default function Accessories() {
                   <View style={styles.accessoriesReplicaRelatedImageWrap}>
                     <Image source={chip.source} style={styles.accessoriesReplicaRelatedImage} resizeMode="cover" />
                   </View>
-                  <Text style={styles.accessoriesReplicaRelatedChipText}>{chip.label}</Text>
+                  <Text style={styles.accessoriesReplicaRelatedChipText}>{tr(chip.label)}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -4181,6 +4229,12 @@ export default function Accessories() {
               ) : (
                 <View style={styles.uniquePicksExpandedGrid}>
                   {uniquePicksExpandedRows.map((product) => {
+                    const wishlisted = categoryPtbRowWishlisted(
+                      product,
+                      wishlistHasAuth,
+                      wishlistServerKeys,
+                      wishlistIds
+                    );
                     const selling =
                       product.sellingPrice != null ? `Rs ${Math.round(product.sellingPrice)}` : "";
                     const mrp =
@@ -4218,7 +4272,7 @@ export default function Accessories() {
                           />
                           <View style={styles.uniquePicksExpandedMeta}>
                             <Text style={styles.uniquePicksExpandedName} numberOfLines={2}>
-                              {product.name}
+                              {tr(product.name)}
                             </Text>
                             <View style={styles.uniquePicksExpandedCategory}>
                               <View style={styles.uniquePicksExpandedRatingPill}>
@@ -4249,13 +4303,13 @@ export default function Accessories() {
                                   onPress={() => void handleToggleWishlistForUniquePick(product)}
                                   accessibilityRole="button"
                                   accessibilityLabel={`${
-                                    wishlistIds.has(product.id) ? "Remove from" : "Add to"
-                                  } wishlist: ${product.name}`}
+                                    wishlisted ? tr("Remove from") : tr("Add to")
+                                  } ${tr("wishlist")}: ${tr(product.name)}`}
                                 >
                                   <Ionicons
-                                    name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                    name={wishlisted ? "heart" : "heart-outline"}
                                     size={16}
-                                    color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                    color={wishlisted ? "#E11D48" : "#1d324e"}
                                   />
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -4263,11 +4317,11 @@ export default function Accessories() {
                                   activeOpacity={0.85}
                                   onPress={() => void handleAddToCartForUniquePick(product)}
                                   accessibilityRole="button"
-                                  accessibilityLabel={`Add to cart: ${product.name}`}
+                                  accessibilityLabel={`${tr("Add to cart")}: ${tr(product.name)}`}
                                 >
                                   <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
                                   <Text style={styles.uniquePicksExpandedCartBtnText}>
-                                    Add to Cart
+                                    {tr("Add to Cart")}
                                   </Text>
                                 </TouchableOpacity>
                               </View>

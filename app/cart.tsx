@@ -14,6 +14,7 @@ import {
   Easing,
   type LayoutChangeEvent,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
@@ -24,11 +25,22 @@ import {
   resolveProductImage,
   type PersistedCartLine,
 } from "../lib/shopStorage";
+import type { ApiCartItem, ApiCartPriceSummary } from "../lib/cartServerApi";
+import {
+  deleteCartClearServer,
+  deleteCartLineServer,
+  fetchServerCartBundle,
+  parseCartApiError,
+  putCartItemQuantityDelta,
+} from "../lib/cartServerApi";
+import { useLanguage } from "../lib/language";
 
 const { width, height } = Dimensions.get("window");
 const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
 const RUNNER_W = 170;
 const RUNNER_H = 64;
+
+type CartItemSource = "local" | "server";
 
 interface CartItem {
   id: string;
@@ -39,6 +51,8 @@ interface CartItem {
   quantity: number;
   size?: string;
   color?: string;
+  source: CartItemSource;
+  serverItemId?: number;
 }
 
 interface SimilarProduct {
@@ -59,12 +73,41 @@ function persistedToCartItem(line: PersistedCartLine): CartItem {
     price: line.price,
     originalPrice: line.mrp > line.price ? line.mrp : undefined,
     quantity: line.quantity,
+    source: "local",
+  };
+}
+
+function serverRowToCartItem(row: ApiCartItem): CartItem {
+  const uri = String(row.imageUrl ?? "").trim();
+  const image =
+    uri && /^https?:\/\//i.test(uri)
+      ? { uri }
+      : resolveProductImage(String(row.productId));
+  const price = row.sellingPrice ?? row.price;
+  const mrp = row.mrpPrice ?? row.originalPrice;
+  const orig = mrp > price + 0.009 ? mrp : undefined;
+  return {
+    id: String(row.itemId),
+    name: row.name,
+    image,
+    price,
+    originalPrice: orig,
+    quantity: Math.max(1, row.quantity),
+    size: row.size ?? undefined,
+    color: row.color ?? undefined,
+    source: "server",
+    serverItemId: row.itemId,
   };
 }
 
 export default function CartScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartSource, setCartSource] = useState<CartItemSource>("local");
+  const [serverPriceSummary, setServerPriceSummary] = useState<ApiCartPriceSummary | null>(
+    null
+  );
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [headerSearchQuery, setHeaderSearchQuery] = useState("");
   const [logoLayout, setLogoLayout] = useState<{ x: number; y: number; w: number; h: number } | null>(
@@ -178,6 +221,22 @@ export default function CartScreen() {
   };
 
   const reloadCartFromStorage = useCallback(async () => {
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    if (token) {
+      try {
+        const bundle = await fetchServerCartBundle();
+        if (bundle) {
+          setServerPriceSummary(bundle.priceSummary);
+          setCartItems(bundle.items.map(serverRowToCartItem));
+          setCartSource("server");
+          return;
+        }
+      } catch {
+        /* fall back to local */
+      }
+    }
+    setCartSource("local");
+    setServerPriceSummary(null);
     const lines = await loadCart();
     setCartItems(lines.map(persistedToCartItem));
   }, []);
@@ -250,23 +309,64 @@ export default function CartScreen() {
     },
   ];
 
-  // Calculate totals
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
-  const discount = cartItems.reduce(
-    (sum, item) =>
-      sum + (item.originalPrice ? item.originalPrice - item.price : 0) * item.quantity,
-    0
-  );
+  // Calculate totals (server cart uses API priceSummary when available)
+  const subtotal = useMemo(() => {
+    if (cartSource === "server" && serverPriceSummary) {
+      return serverPriceSummary.subtotal;
+    }
+    return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [cartSource, serverPriceSummary, cartItems]);
+
+  const discount = useMemo(() => {
+    if (cartSource === "server" && serverPriceSummary) {
+      return serverPriceSummary.discount;
+    }
+    return cartItems.reduce(
+      (sum, item) =>
+        sum + (item.originalPrice ? item.originalPrice - item.price : 0) * item.quantity,
+      0
+    );
+  }, [cartSource, serverPriceSummary, cartItems]);
+
   const totalDiscount = discount + couponDiscount;
-  const deliveryCharge = subtotal > 2000 ? 0 : 99;
-  const total = subtotal - totalDiscount + deliveryCharge;
+
+  const deliveryCharge = useMemo(() => {
+    if (cartSource === "server" && serverPriceSummary) {
+      return serverPriceSummary.deliveryCharge;
+    }
+    return subtotal > 2000 ? 0 : 99;
+  }, [cartSource, serverPriceSummary, subtotal]);
+
+  const orderTotal = useMemo(() => {
+    if (cartSource === "server" && serverPriceSummary) {
+      return serverPriceSummary.finalTotal;
+    }
+    return subtotal - totalDiscount + deliveryCharge;
+  }, [
+    cartSource,
+    serverPriceSummary,
+    subtotal,
+    totalDiscount,
+    deliveryCharge,
+  ]);
 
   // Update quantity
   const updateQuantity = (id: string, change: number) => {
     void (async () => {
+      const item = cartItems.find((x) => x.id === id);
+      if (item?.serverItemId != null) {
+        try {
+          if (change < 0 && item.quantity <= 1) {
+            await deleteCartLineServer(item.serverItemId);
+          } else if (change !== 0) {
+            await putCartItemQuantityDelta(item.serverItemId, change);
+          }
+          await reloadCartFromStorage();
+        } catch (e) {
+          Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not update quantity.")));
+        }
+        return;
+      }
       await adjustCartQuantity(id, change);
       await reloadCartFromStorage();
     })();
@@ -275,18 +375,51 @@ export default function CartScreen() {
   // Remove product
   const removeProduct = (id: string) => {
     Alert.alert(
-      "Remove Item",
-      "Are you sure you want to remove this item from your cart?",
+      tr("Remove Item"),
+      tr("Are you sure you want to remove this item from your cart?"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: tr("Cancel"), style: "cancel" },
         {
-          text: "Remove",
+          text: tr("Remove"),
           style: "destructive",
           onPress: () => {
             void (async () => {
-              await removeCartLine(id);
-              await reloadCartFromStorage();
-              Alert.alert("Removed", "Item has been removed from your cart.");
+              const item = cartItems.find((x) => x.id === id);
+              try {
+                if (item?.serverItemId != null) {
+                  await deleteCartLineServer(item.serverItemId);
+                } else {
+                  await removeCartLine(id);
+                }
+                await reloadCartFromStorage();
+                Alert.alert(tr("Removed"), tr("Item has been removed from your cart."));
+              } catch (e) {
+                Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not remove item.")));
+              }
+            })();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearServerCart = () => {
+    Alert.alert(
+      tr("Clear cart"),
+      tr("Remove all items from your cart?"),
+      [
+        { text: tr("Cancel"), style: "cancel" },
+        {
+          text: tr("Clear all"),
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteCartClearServer();
+                await reloadCartFromStorage();
+              } catch (e) {
+                Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not clear cart.")));
+              }
             })();
           },
         },
@@ -297,7 +430,7 @@ export default function CartScreen() {
   // Apply coupon
   const handleApplyCoupon = () => {
     if (!couponCode.trim()) {
-      Alert.alert("Invalid Coupon", "Please enter a coupon code.");
+      Alert.alert(tr("Invalid Coupon"), tr("Please enter a coupon code."));
       return;
     }
 
@@ -313,9 +446,9 @@ export default function CartScreen() {
       const discountAmount = Math.min(validCoupons[coupon], subtotal * 0.1);
       setAppliedCoupon(coupon);
       setCouponDiscount(discountAmount);
-      Alert.alert("Success", `Coupon "${coupon}" applied successfully!`);
+      Alert.alert(tr("Success"), tr(`Coupon "${coupon}" applied successfully!`));
     } else {
-      Alert.alert("Invalid Coupon", "The coupon code you entered is invalid.");
+      Alert.alert(tr("Invalid Coupon"), tr("The coupon code you entered is invalid."));
     }
   };
 
@@ -324,7 +457,7 @@ export default function CartScreen() {
     setAppliedCoupon(null);
     setCouponDiscount(0);
     setCouponCode("");
-    Alert.alert("Coupon Removed", "Coupon has been removed.");
+    Alert.alert(tr("Coupon Removed"), tr("Coupon has been removed."));
   };
 
   // Add similar product to cart
@@ -337,14 +470,14 @@ export default function CartScreen() {
         mrp: product.originalPrice ?? product.price,
       });
       await reloadCartFromStorage();
-      Alert.alert("Added to Cart", `${product.name} has been added to your cart!`);
+      Alert.alert(tr("Added to Cart"), tr(`${product.name} has been added to your cart!`));
     })();
   };
 
   // Proceed to checkout
   const handleCheckout = () => {
     if (cartItems.length === 0) {
-      Alert.alert("Empty Cart", "Your cart is empty. Add some items first!");
+      Alert.alert(tr("Empty Cart"), tr("Your cart is empty. Add some items first!"));
       return;
     }
     router.push("/revieworders");
@@ -360,7 +493,7 @@ export default function CartScreen() {
             style={styles.backButton}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={tr("Go back")}
           >
             <Image
               source={require("../assets/MainCatImages/images/fntfav.png")}
@@ -410,7 +543,7 @@ export default function CartScreen() {
               style={styles.searchIcon}
             />
             <TextInput
-              placeholder="Search cart"
+              placeholder={tr("Search cart")}
               placeholderTextColor="#69798c"
               value={headerSearchQuery}
               onChangeText={setHeaderSearchQuery}
@@ -427,7 +560,7 @@ export default function CartScreen() {
             onPress={() => setIsSearchVisible((prev) => !prev)}
             style={styles.headerIcon}
             accessibilityRole="button"
-            accessibilityLabel="Toggle search"
+            accessibilityLabel={tr("Toggle search")}
             onLayout={onSearchIconLayout}
           >
             <Ionicons name="search-outline" size={20} color="#ef7b1a" />
@@ -438,7 +571,7 @@ export default function CartScreen() {
             style={styles.headerIcon}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Wishlist"
+            accessibilityLabel={tr("Wishlist")}
           >
             <Ionicons name="heart" size={20} color="red" />
           </TouchableOpacity>
@@ -457,22 +590,29 @@ export default function CartScreen() {
             <View style={styles.emptyIcon}>
               <Ionicons name="cart-outline" size={80} color="#E0E0E0" />
             </View>
-            <Text style={styles.emptyText}>Your cart is empty</Text>
+            <Text style={styles.emptyText}>{tr("Your cart is empty")}</Text>
             <Text style={styles.emptySubtext}>
-              Add some items to get started!
+              {tr("Add some items to get started!")}
             </Text>
             <TouchableOpacity
               style={styles.shopNowButton}
               onPress={() => router.push("/home")}
             >
-              <Text style={styles.shopNowButtonText}>Shop Now</Text>
+              <Text style={styles.shopNowButtonText}>{tr("Shop Now")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
             {/* Cart Items */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Cart Items</Text>
+              <View style={styles.cartSectionTitleRow}>
+                <Text style={styles.sectionTitle}>{tr("Cart Items")}</Text>
+                {cartSource === "server" && cartItems.length > 0 ? (
+                  <TouchableOpacity onPress={handleClearServerCart} hitSlop={12}>
+                    <Text style={styles.clearCartText}>{tr("Clear all")}</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
               {cartItems.map((item, index) => (
                 <View
                   key={item.id}
@@ -484,9 +624,11 @@ export default function CartScreen() {
                   <Image source={item.image} style={styles.cartItemImage} />
                   <View style={styles.cartItemInfo}>
                     <Text style={styles.cartItemName}>{item.name}</Text>
-                    {item.size && (
+                    {(item.size || item.color) && (
                       <Text style={styles.cartItemMeta}>
-                        Size: {item.size} {item.color && `• Color: ${item.color}`}
+                        {item.size ? `${tr("Size")}: ${item.size}` : ""}
+                        {item.size && item.color ? " • " : ""}
+                        {item.color ? `${tr("Color")}: ${item.color}` : ""}
                       </Text>
                     )}
                     <View style={styles.cartItemPriceRow}>
@@ -504,17 +646,23 @@ export default function CartScreen() {
 
                     {/* Quantity Controls */}
                     <View style={styles.quantityContainer}>
-                      <Text style={styles.quantityLabel}>Quantity:</Text>
+                      <Text style={styles.quantityLabel}>{tr("Quantity")}:</Text>
                       <View style={styles.quantityControls}>
                         <TouchableOpacity
                           style={styles.quantityButton}
                           onPress={() => updateQuantity(item.id, -1)}
-                          disabled={item.quantity <= 1}
+                          disabled={
+                            item.source === "local" && item.quantity <= 1
+                          }
                         >
                           <Ionicons
                             name="remove"
                             size={18}
-                            color={item.quantity <= 1 ? "#CCC" : "#E97A1F"}
+                            color={
+                              item.source === "local" && item.quantity <= 1
+                                ? "#CCC"
+                                : "#E97A1F"
+                            }
                           />
                         </TouchableOpacity>
                         <Text style={styles.quantityValue}>{item.quantity}</Text>
@@ -533,86 +681,88 @@ export default function CartScreen() {
                       onPress={() => removeProduct(item.id)}
                     >
                       <Ionicons name="trash-outline" size={16} color="#F44336" />
-                      <Text style={styles.removeButtonText}>Remove</Text>
+                      <Text style={styles.removeButtonText}>{tr("Remove")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               ))}
             </View>
 
-            {/* Apply Coupon Section */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Apply Coupon</Text>
-              <View style={styles.couponContainer}>
-                {appliedCoupon ? (
-                  <View style={styles.appliedCouponCard}>
-                    <View style={styles.appliedCouponInfo}>
-                      <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                      <Text style={styles.appliedCouponText}>
-                        {appliedCoupon} applied
-                      </Text>
-                      <Text style={styles.appliedCouponDiscount}>
-                        -₹{couponDiscount.toLocaleString()}
-                      </Text>
+            {/* Apply Coupon — local cart only (server totals from checkout API) */}
+            {cartSource === "local" ? (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{tr("Apply Coupon")}</Text>
+                <View style={styles.couponContainer}>
+                  {appliedCoupon ? (
+                    <View style={styles.appliedCouponCard}>
+                      <View style={styles.appliedCouponInfo}>
+                        <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                        <Text style={styles.appliedCouponText}>
+                          {tr(`${appliedCoupon} applied`)}
+                        </Text>
+                        <Text style={styles.appliedCouponDiscount}>
+                          -₹{couponDiscount.toLocaleString()}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.removeCouponButton}
+                        onPress={handleRemoveCoupon}
+                      >
+                        <Ionicons name="close-circle" size={20} color="#F44336" />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      style={styles.removeCouponButton}
-                      onPress={handleRemoveCoupon}
-                    >
-                      <Ionicons name="close-circle" size={20} color="#F44336" />
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.couponInputContainer}>
-                    <TextInput
-                      style={styles.couponInput}
-                      placeholder="Enter coupon code"
-                      value={couponCode}
-                      onChangeText={setCouponCode}
-                      autoCapitalize="characters"
-                    />
-                    <TouchableOpacity
-                      style={styles.applyCouponButton}
-                      onPress={handleApplyCoupon}
-                    >
-                      <Text style={styles.applyCouponButtonText}>Apply</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                  ) : (
+                    <View style={styles.couponInputContainer}>
+                      <TextInput
+                        style={styles.couponInput}
+                        placeholder={tr("Enter coupon code")}
+                        value={couponCode}
+                        onChangeText={setCouponCode}
+                        autoCapitalize="characters"
+                      />
+                      <TouchableOpacity
+                        style={styles.applyCouponButton}
+                        onPress={handleApplyCoupon}
+                      >
+                        <Text style={styles.applyCouponButtonText}>{tr("Apply")}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
+            ) : null}
 
             {/* Price Summary */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Price Summary</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{tr("Price Summary")}</Text>
               <View style={styles.priceSummaryCard}>
                 <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Subtotal</Text>
+                  <Text style={styles.priceLabel}>{tr("Subtotal")}</Text>
                   <Text style={styles.priceValue}>
                     ₹{subtotal.toLocaleString()}
                   </Text>
                 </View>
                 {discount > 0 && (
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Product Discount</Text>
+                    <Text style={styles.priceLabel}>{tr("Product Discount")}</Text>
                     <Text style={[styles.priceValue, styles.discountText]}>
                       -₹{discount.toLocaleString()}
                     </Text>
                   </View>
                 )}
-                {couponDiscount > 0 && (
+                {cartSource === "local" && couponDiscount > 0 ? (
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Coupon Discount</Text>
+                    <Text style={styles.priceLabel}>{tr("Coupon Discount")}</Text>
                     <Text style={[styles.priceValue, styles.discountText]}>
                       -₹{couponDiscount.toLocaleString()}
                     </Text>
                   </View>
-                )}
+                ) : null}
                 <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Delivery Charge</Text>
+                  <Text style={styles.priceLabel}>{tr("Delivery Charge")}</Text>
                   <Text style={styles.priceValue}>
                     {deliveryCharge === 0 ? (
-                      <Text style={styles.freeText}>FREE</Text>
+                      <Text style={styles.freeText}>{tr("FREE")}</Text>
                     ) : (
                       `₹${deliveryCharge}`
                     )}
@@ -620,8 +770,8 @@ export default function CartScreen() {
                 </View>
                 <View style={styles.priceDivider} />
                 <View style={styles.priceRow}>
-                  <Text style={styles.totalLabel}>Total</Text>
-                  <Text style={styles.totalValue}>₹{total.toLocaleString()}</Text>
+                  <Text style={styles.totalLabel}>{tr("Total")}</Text>
+                  <Text style={styles.totalValue}>₹{orderTotal.toLocaleString()}</Text>
                 </View>
               </View>
             </View>
@@ -629,9 +779,9 @@ export default function CartScreen() {
             {/* Similar Products Section */}
             <View style={styles.section}>
               <View style={styles.similarProductsHeader}>
-                <Text style={styles.sectionTitle}>You May Also Like</Text>
+                <Text style={styles.sectionTitle}>{tr("You May Also Like")}</Text>
                 <Text style={styles.similarProductsSubtitle}>
-                  Similar products you might enjoy
+                  {tr("Similar products you might enjoy")}
                 </Text>
               </View>
               <ScrollView
@@ -697,7 +847,7 @@ export default function CartScreen() {
                       >
                         <Ionicons name="add" size={18} color="#FFFFFF" />
                         <Text style={styles.similarProductAddButtonText}>
-                          Add to Cart
+                          {tr("Add to Cart")}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -713,15 +863,15 @@ export default function CartScreen() {
       {cartItems.length > 0 && (
         <View style={styles.footer}>
           <View style={styles.footerTotal}>
-            <Text style={styles.footerTotalLabel}>Total:</Text>
-            <Text style={styles.footerTotalValue}>₹{total.toLocaleString()}</Text>
+            <Text style={styles.footerTotalLabel}>{tr("Total")}:</Text>
+            <Text style={styles.footerTotalValue}>₹{orderTotal.toLocaleString()}</Text>
           </View>
           <TouchableOpacity
             style={styles.checkoutButton}
             onPress={handleCheckout}
             activeOpacity={0.8}
           >
-            <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
+            <Text style={styles.checkoutButtonText}>{tr("Proceed to Checkout")}</Text>
             <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
@@ -840,7 +990,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#000",
+    marginBottom: 0,
+  },
+  cartSectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 16,
+  },
+  clearCartText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#E97A1F",
   },
   cartItemCard: {
     flexDirection: "row",

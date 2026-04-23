@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useLanguage } from "../lib/language";
 
 interface NotificationPermissionProps {
   visible: boolean;
@@ -13,6 +14,8 @@ const NotificationPermission: React.FC<NotificationPermissionProps> = ({
   onAllow,
   onDeny,
 }) => {
+  const { tr } = useLanguage();
+
   return (
     <Modal
       transparent={true}
@@ -32,19 +35,19 @@ const NotificationPermission: React.FC<NotificationPermissionProps> = ({
 
           {/* Permission Text */}
           <Text style={styles.title}>
-            Allow FlintnThread to send you notifications?
+            {tr("Allow FlintnThread to send you notifications?")}
           </Text>
 
           {/* Buttons */}
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.allowButton} onPress={onAllow}>
-              <Text style={styles.allowButtonText}>Allow</Text>
+              <Text style={styles.allowButtonText}>{tr("Allow")}</Text>
             </TouchableOpacity>
           </View>
           
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.denyButton} onPress={onDeny}>
-              <Text style={styles.denyButtonText}>Don&apos;t Allow</Text>
+              <Text style={styles.denyButtonText}>{tr("Don't Allow")}</Text>
             </TouchableOpacity>
           </View>
         </View>

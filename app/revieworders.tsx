@@ -10,10 +10,14 @@ import {
   TextInput,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
+import { payWithRazorpay } from "../lib/payment/razorpayFlow";
+import { useLanguage } from "../lib/language";
 
 type ReviewItem = {
   id: string;
@@ -28,6 +32,8 @@ type ReviewItem = {
 
 export default function ReviewOrdersScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
+  const [paying, setPaying] = useState(false);
 
   // NOTE: Cart in this project is local-state; until global cart is added,
   // we show realistic dummy items here.
@@ -85,8 +91,44 @@ export default function ReviewOrdersScreen() {
     [items]
   );
 
-  const handlePlaceOrder = () => {
-    router.push("/payment-selection" as any);
+  const handlePlaceOrder = async () => {
+    if (paying) return;
+    if (total <= 0) {
+      Alert.alert(tr("Checkout"), tr("Amount must be greater than zero."));
+      return;
+    }
+
+    setPaying(true);
+    try {
+      const result = await payWithRazorpay(total);
+      if (result.ok === false) {
+        if (result.reason === "use_web_checkout") {
+          router.push({
+            pathname: "/razorpay-web-checkout",
+            params: {
+              key: result.razorpayKeyId,
+              orderId: result.orderId,
+              amount: String(result.amountPaise),
+              currency: result.currency,
+            },
+          } as any);
+          return;
+        }
+        if (result.reason === "cancelled") {
+          return;
+        }
+        Alert.alert(tr("Payment"), tr(result.message));
+        return;
+      }
+      Alert.alert(tr("Payment successful"), tr(result.verify.message ?? "Your payment was verified."), [
+        { text: tr("OK"), onPress: () => router.replace("/orders" as any) },
+      ]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      Alert.alert(tr("Payment"), tr(msg));
+    } finally {
+      setPaying(false);
+    }
   };
 
   return (
@@ -99,17 +141,17 @@ export default function ReviewOrdersScreen() {
         >
           <Ionicons name="arrow-back" size={22} color="#1d324e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Review Order</Text>
+        <Text style={styles.headerTitle}>{tr("Review Order")}</Text>
         <View style={{ width: 36 }} />
       </View>
 
       <View style={styles.stepperWrap}>
         <View style={[styles.stepChip, styles.stepChipActive]}>
-          <Text style={[styles.stepText, styles.stepTextActive]}>1. Review</Text>
+          <Text style={[styles.stepText, styles.stepTextActive]}>1. {tr("Review")}</Text>
         </View>
         <View style={styles.stepConnector} />
         <View style={styles.stepChip}>
-          <Text style={styles.stepText}>2. Payment</Text>
+          <Text style={styles.stepText}>2. {tr("Payment")}</Text>
         </View>
       </View>
 
@@ -120,7 +162,7 @@ export default function ReviewOrdersScreen() {
       >
         {/* Delivery location (Home-style picker) */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Delivery location</Text>
+          <Text style={styles.cardTitle}>{tr("Delivery location")}</Text>
           <View style={{ marginTop: 10 }}>
             <DeliveryLocationSection enableFullAddressApi />
           </View>
@@ -128,7 +170,7 @@ export default function ReviewOrdersScreen() {
 
         {/* Items */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Products ({items.length})</Text>
+          <Text style={styles.cardTitle}>{tr("Products")} ({items.length})</Text>
 
           {items.map((it) => (
             <View key={it.id} style={styles.itemRow}>
@@ -160,7 +202,7 @@ export default function ReviewOrdersScreen() {
                 </View>
 
                 <View style={styles.qtyRow}>
-                  <Text style={styles.qtyLabel}>Qty</Text>
+                  <Text style={styles.qtyLabel}>{tr("Qty")}</Text>
                   <View style={styles.qtyControls}>
                     <TouchableOpacity
                       style={[styles.qtyBtn, it.quantity <= 1 && styles.qtyBtnDisabled]}
@@ -206,7 +248,7 @@ export default function ReviewOrdersScreen() {
           </View>
 
           <View style={styles.lineRow}>
-            <Text style={styles.lineLabel}>Delivery</Text>
+            <Text style={styles.lineLabel}>{tr("Delivery")}</Text>
             <Text style={styles.lineValue}>
               {deliveryCharge === 0 ? "FREE" : `₹${deliveryCharge}`}
             </Text>
@@ -215,7 +257,7 @@ export default function ReviewOrdersScreen() {
           <View style={styles.divider} />
 
           <View style={styles.lineRow}>
-            <Text style={styles.totalLabel}>Total amount</Text>
+            <Text style={styles.totalLabel}>{tr("Total amount")}</Text>
             <Text style={styles.totalValue}>₹{total.toLocaleString()}</Text>
           </View>
         </View>
@@ -233,17 +275,24 @@ export default function ReviewOrdersScreen() {
       {/* Bottom bar */}
       <View style={styles.bottomBar}>
         <View>
-          <Text style={styles.bottomTotalLabel}>Payable</Text>
+          <Text style={styles.bottomTotalLabel}>{tr("Payable")}</Text>
           <Text style={styles.bottomTotalValue}>₹{total.toLocaleString()}</Text>
           <Text style={styles.bottomItemsText}>{totalItems} item(s)</Text>
         </View>
         <TouchableOpacity
-          style={styles.placeOrderBtn}
+          style={[styles.placeOrderBtn, paying && styles.placeOrderBtnDisabled]}
           activeOpacity={0.9}
           onPress={handlePlaceOrder}
+          disabled={paying}
         >
-          <Text style={styles.placeOrderText}>Place order</Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+          {paying ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <>
+              <Text style={styles.placeOrderText}>{tr("Place order")}</Text>
+              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -590,6 +639,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
+  },
+  placeOrderBtnDisabled: {
+    opacity: 0.75,
   },
   placeOrderText: {
     fontSize: 13,

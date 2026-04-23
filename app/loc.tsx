@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { requestForegroundLocation } from "../lib/requestForegroundLocation";
+import { useLanguage } from "../lib/language";
 
 interface LocationPermissionProps {
   visible: boolean;
@@ -22,6 +23,8 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
   onOnlyThisTime,
   onDontAllow,
 }) => {
+  const { tr } = useLanguage();
+
   /** Triggers the real OS location permission dialog (expo-location), then the parent callback. */
   const runLocationThen = useCallback((onContinue: () => void) => {
     void (async () => {
@@ -56,7 +59,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
 
           {/* Title */}
           <Text style={styles.title}>
-            Allow Maps to access this device&apos;s precise location?
+            {tr("Allow Maps to access this device's precise location?")}
           </Text>
 
           {/* Location Options */}
@@ -68,7 +71,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
                   <Ionicons name="location" size={34} color="#FFFFFF" />
                 </View>
               </View>
-              <Text style={styles.optionText}>Precise</Text>
+              <Text style={styles.optionText}>{tr("Precise")}</Text>
             </View>
 
             {/* Approximate */}
@@ -78,7 +81,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
                   <Ionicons name="map" size={34} color="#FFFFFF" />
                 </View>
               </View>
-              <Text style={styles.optionText}>Approximate</Text>
+              <Text style={styles.optionText}>{tr("Approximate")}</Text>
             </View>
           </View>
 
@@ -89,7 +92,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
               onPress={handleWhileUsing}
             >
               <Text style={styles.primaryText}>
-                While using the app
+                {tr("While using the app")}
               </Text>
             </TouchableOpacity>
 
@@ -98,7 +101,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
               onPress={handleOnlyThisTime}
             >
               <Text style={styles.primaryText}>
-                Only this time
+                {tr("Only this time")}
               </Text>
             </TouchableOpacity>
 
@@ -107,7 +110,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
               onPress={handleDontAllow}
             >
               <Text style={styles.dontAllowText}>
-                Don’t allow
+                {tr("Don't allow")}
               </Text>
             </TouchableOpacity>
           </View>

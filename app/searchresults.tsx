@@ -20,6 +20,7 @@ import api, {
   searchSuggestionsPath,
 } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import { useLanguage } from "../lib/language";
 
 type SearchSuggestionsResponse = {
   success?: boolean;
@@ -130,6 +131,7 @@ function extractSubcategoryIdsFromSearchPayload(payload: unknown): number[] {
 
 export default function SearchResults() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const params = useLocalSearchParams<{ q?: string }>();
   const paramQ = (params.q || "").toString();
 
@@ -303,8 +305,8 @@ export default function SearchResults() {
 
   const titleText = useMemo(() => {
     const s = inputQ.trim();
-    return s ? `Results for “${s}”` : "Search products";
-  }, [inputQ]);
+    return s ? `${tr("Results for")} “${s}”` : tr("Search products");
+  }, [inputQ, tr]);
 
   const openProductDetail = (id: string) => {
     router.push({ pathname: "/productdetail", params: { id } });
@@ -327,7 +329,7 @@ export default function SearchResults() {
           style={styles.iconBtn}
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={tr("Go back")}
         >
           <Ionicons name="arrow-back" size={22} color="#111" />
         </TouchableOpacity>
@@ -345,12 +347,12 @@ export default function SearchResults() {
               void runSearch(inputQ);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Run search"
+            accessibilityLabel={tr("Run search")}
           >
             <Ionicons name="search-outline" size={20} color="#64748B" />
           </TouchableOpacity>
           <TextInput
-            placeholder="Search products"
+            placeholder={tr("Search products")}
             placeholderTextColor="#94a3b8"
             style={styles.searchField}
             value={inputQ}

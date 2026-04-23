@@ -12,11 +12,13 @@ import {
 } from "react-native";
 
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLanguage } from "../lib/language";
 
 export default function OTP() {
 
   const params = useLocalSearchParams();
   const router = useRouter();
+  const { tr } = useLanguage();
 
   const userInput =
     typeof params.input === "string"
@@ -129,7 +131,7 @@ export default function OTP() {
     const enteredOtp = otp.join("");
 
     if (enteredOtp.length !== 6) {
-      Alert.alert("Error", "Please enter complete OTP");
+      Alert.alert(tr("Error"), tr("Please enter complete OTP"));
       return;
     }
 
@@ -149,13 +151,13 @@ export default function OTP() {
 
         await AsyncStorage.setItem("token", data.token);
 
-        Alert.alert("Success", "Login Successful");
+        Alert.alert(tr("Success"), tr("Login Successful"));
 
         router.replace("/home");
 
       } else {
 
-        Alert.alert("Error", data.message || "Invalid OTP");
+        Alert.alert(tr("Error"), tr(data.message || "Invalid OTP"));
       }
 
     } catch (error) {
@@ -164,11 +166,11 @@ export default function OTP() {
 
       if (error?.response?.data?.message) {
 
-        Alert.alert("Error", error.response.data.message);
+        Alert.alert(tr("Error"), tr(error.response.data.message));
 
       } else {
 
-        Alert.alert("Error", "OTP verification failed");
+        Alert.alert(tr("Error"), tr("OTP verification failed"));
       }
 
     } finally {
@@ -192,7 +194,7 @@ export default function OTP() {
 
       if (response.data) {
 
-        Alert.alert("Success", "OTP resent successfully");
+        Alert.alert(tr("Success"), tr("OTP resent successfully"));
 
         setOtp(["", "", "", "", "", ""]);
 
@@ -206,7 +208,7 @@ export default function OTP() {
 
       console.log("Resend Error:", error);
 
-      Alert.alert("Error", "Failed to resend OTP");
+      Alert.alert(tr("Error"), tr("Failed to resend OTP"));
 
     }
 
@@ -216,10 +218,11 @@ export default function OTP() {
 
     <View style={styles.container}>
 
-      <Text style={styles.title}>Enter Verification Code</Text>
+      <Text style={styles.title}>{tr("Enter Verification Code")}</Text>
 
       <Text style={styles.subtitle}>
-        We sent a code to{"\n"}
+        {tr("We sent a code to")}
+        {"\n"}
         <Text style={styles.boldText}>{maskValue(userInput)}</Text>
       </Text>
 
@@ -265,15 +268,15 @@ export default function OTP() {
       >
 
         <Text style={styles.verifyText}>
-          {isVerifying ? "Verifying..." : "Verify"}
+          {isVerifying ? tr("Verifying...") : tr("Verify")}
         </Text>
 
       </TouchableOpacity>
 
-      <Text style={styles.resendText}>Didn’t receive code?</Text>
+      <Text style={styles.resendText}>{tr("Didn’t receive code?")}</Text>
 
       <TouchableOpacity onPress={handleResend}>
-        <Text style={styles.resendLink}>Resend</Text>
+        <Text style={styles.resendLink}>{tr("Resend")}</Text>
       </TouchableOpacity>
 
     </View>

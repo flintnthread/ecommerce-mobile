@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
@@ -11,24 +12,37 @@ import {
   Alert,
   TextInput,
   Animated,
+  ActivityIndicator,
+  type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import api, { WISHLIST_REMOVE_PATH, WISHLIST_USER_PATH } from "../services/api";
+import {
+  getCartUnitCount,
+  parseCartApiError,
+  postCartAdd,
+} from "../lib/cartServerApi";
 import {
   addProductToCart,
-  loadCart,
   loadWishlist,
   removeWishlistLine,
   resolveProductImage,
   type PersistedWishlistLine,
 } from "../lib/shopStorage";
+import { useLanguage } from "../lib/language";
 
 const { width, height } = Dimensions.get("window");
 
 interface WishlistItem {
+  /** Row key: server `wishlistId`, or local storage line id. */
   id: string;
+  productId: number;
+  variantId: number;
+  /** When true, row came from API and can be removed with DELETE `/api/wishlist/remove`. */
+  serverBacked: boolean;
   name: string;
-  image: any;
+  image: ImageSourcePropType;
   price: number;
   originalPrice?: number;
   addedDate: string;
@@ -37,9 +51,114 @@ interface WishlistItem {
   color?: string;
 }
 
+type ApiWishlistImage = {
+  imageUrl?: string | null;
+  imagePath?: string | null;
+};
+
+type ApiWishlistRow = {
+  wishlistId?: number | string | null;
+  productId?: number | string | null;
+  variantId?: number | string | null;
+  productName?: string | null;
+  image?: string | null;
+  imageUrl?: string | null;
+  images?: ApiWishlistImage[] | null;
+  sellingPrice?: number | string | null;
+  mrpPrice?: number | string | null;
+  addedAt?: string | null;
+  inStock?: boolean | null;
+  size?: string | null;
+  color?: string | null;
+};
+
+function numLike(v: unknown): number {
+  const n = typeof v === "string" ? Number.parseFloat(v) : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Spring returns a JSON array; some gateways wrap the body. */
+function normalizeWishlistApiRows(payload: unknown): ApiWishlistRow[] {
+  if (Array.isArray(payload)) return payload as ApiWishlistRow[];
+  if (payload == null || typeof payload !== "object") return [];
+  const o = payload as Record<string, unknown>;
+  for (const key of ["data", "items", "content", "wishlist", "wishlistItems"] as const) {
+    const v = o[key];
+    if (Array.isArray(v)) return v as ApiWishlistRow[];
+  }
+  const inner = o.data;
+  if (inner != null && typeof inner === "object" && !Array.isArray(inner)) {
+    return normalizeWishlistApiRows(inner);
+  }
+  return [];
+}
+
+function firstWishlistRowImageUri(row: ApiWishlistRow): string {
+  const imgs = Array.isArray(row.images) ? row.images : [];
+  for (const im of imgs) {
+    if (!im || typeof im !== "object") continue;
+    const u = String(im.imageUrl ?? im.imagePath ?? "").trim();
+    if (u) return u;
+  }
+  return String(row.imageUrl ?? row.image ?? "").trim();
+}
+
+function formatWishlistDate(iso?: string | null): string {
+  const s = String(iso ?? "").trim();
+  if (!s) return "Recently";
+  try {
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return "Recently";
+    return d.toLocaleDateString(undefined, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "Recently";
+  }
+}
+
+function apiRowToWishlistItem(row: ApiWishlistRow): WishlistItem | null {
+  const productId = Math.floor(Number(row.productId));
+  const variantId = Math.floor(Number(row.variantId));
+  const wishlistId = Math.floor(Number(row.wishlistId));
+  if (!Number.isFinite(productId) || productId <= 0) return null;
+  if (!Number.isFinite(variantId) || variantId <= 0) return null;
+
+  const uri = firstWishlistRowImageUri(row);
+  const selling = numLike(row.sellingPrice);
+  const mrp = numLike(row.mrpPrice);
+  const price = selling > 0 ? Math.round(selling) : Math.round(mrp) || 0;
+  const mrpRounded = mrp > 0 ? Math.round(mrp) : price;
+
+  const name =
+    String(row.productName ?? "").trim() || `Product ${productId}`;
+
+  return {
+    id: String(Number.isFinite(wishlistId) && wishlistId > 0 ? wishlistId : `${productId}-${variantId}`),
+    productId,
+    variantId,
+    serverBacked: true,
+    name,
+    image: uri ? { uri } : resolveProductImage(String(productId)),
+    price,
+    originalPrice: mrpRounded > price ? mrpRounded : undefined,
+    addedDate: formatWishlistDate(row.addedAt),
+    inStock: row.inStock !== false,
+    size: row.size ? String(row.size) : undefined,
+    color: row.color ? String(row.color) : undefined,
+  };
+}
+
 function persistedToWishlistItem(line: PersistedWishlistLine): WishlistItem {
+  const pid = Math.floor(Number(line.id));
+  const numericId = Number.isFinite(pid) && pid > 0;
   return {
     id: line.id,
+    productId: numericId ? pid : 0,
+    variantId: 0,
+    serverBacked: false,
     name: line.name,
     image: resolveProductImage(line.id),
     price: line.price,
@@ -51,7 +170,9 @@ function persistedToWishlistItem(line: PersistedWishlistLine): WishlistItem {
 
 export default function WishlistScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [wishlistLoading, setWishlistLoading] = useState(true);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [headerSearchQuery, setHeaderSearchQuery] = useState("");
   const [cartCount, setCartCount] = useState(0);
@@ -78,14 +199,31 @@ export default function WishlistScreen() {
   }, []);
 
   const reloadCartCount = useCallback(async () => {
-    const lines = await loadCart();
-    const count = lines.reduce((sum, l) => sum + (l.quantity || 0), 0);
-    setCartCount(count);
+    setCartCount(await getCartUnitCount());
   }, []);
 
   const loadWishlistScreen = useCallback(async () => {
     await reloadCartCount();
-    await reloadWishlistFromStorage();
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    if (!token) {
+      await reloadWishlistFromStorage();
+      setWishlistLoading(false);
+      return;
+    }
+
+    setWishlistLoading(true);
+    try {
+      const { data } = await api.get<unknown>(WISHLIST_USER_PATH);
+      const rows = normalizeWishlistApiRows(data);
+      const apiItems = rows
+        .map((r) => apiRowToWishlistItem(r))
+        .filter((x): x is WishlistItem => x != null);
+      setWishlistItems(apiItems);
+    } catch {
+      await reloadWishlistFromStorage();
+    } finally {
+      setWishlistLoading(false);
+    }
   }, [reloadWishlistFromStorage, reloadCartCount]);
 
   useFocusEffect(
@@ -128,29 +266,85 @@ export default function WishlistScreen() {
 
   const handleMoveToCart = (item: WishlistItem) => {
     void (async () => {
-      const cart = await addProductToCart({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        mrp: item.originalPrice ?? item.price,
-      });
-      await removeWishlistLine(item.id);
+      const cartProductId =
+        item.serverBacked && item.productId > 0
+          ? String(item.productId)
+          : item.id;
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (
+        token &&
+        item.serverBacked &&
+        item.productId > 0 &&
+        item.variantId > 0
+      ) {
+        try {
+          await postCartAdd(item.productId, item.variantId, 1);
+        } catch (e: unknown) {
+          Alert.alert(
+            "Cart",
+            parseCartApiError(e, "Could not add to cart. Please try again.")
+          );
+          return;
+        }
+      } else {
+        await addProductToCart({
+          id: cartProductId,
+          name: item.name,
+          price: item.price,
+          mrp: item.originalPrice ?? item.price,
+        });
+      }
+      if (item.serverBacked && item.productId > 0 && item.variantId > 0) {
+        try {
+          await api.delete(WISHLIST_REMOVE_PATH, {
+            params: {
+              productId: item.productId,
+              variantId: item.variantId,
+            },
+          });
+        } catch {
+          /* wishlist refresh on next focus */
+        }
+      }
+      await removeWishlistLine(cartProductId);
       setWishlistItems((prev) => prev.filter((x) => x.id !== item.id));
-      const count = cart.reduce((sum, l) => sum + (l.quantity || 0), 0);
-      setCartCount(count);
+      setCartCount(await getCartUnitCount());
     })();
   };
 
-  const handleRemoveItem = (id: string, name: string) => {
-    Alert.alert("Remove Item", `Remove "${name}" from your wishlist?`, [
+  const handleRemoveItem = (item: WishlistItem) => {
+    Alert.alert("Remove Item", `Remove "${item.name}" from your wishlist?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
         style: "destructive",
         onPress: () => {
           void (async () => {
-            await removeWishlistLine(id);
-            setWishlistItems((prev) => prev.filter((x) => x.id !== id));
+            if (item.serverBacked && item.productId > 0 && item.variantId > 0) {
+              try {
+                await api.delete(WISHLIST_REMOVE_PATH, {
+                  params: {
+                    productId: item.productId,
+                    variantId: item.variantId,
+                  },
+                });
+              } catch (e: unknown) {
+                const ax = e as { response?: { data?: unknown } };
+                let msg = "Could not remove this item.";
+                const d = ax.response?.data;
+                if (typeof d === "string" && d.trim()) msg = d.trim();
+                else if (d && typeof d === "object") {
+                  const m = (d as { message?: unknown }).message;
+                  if (typeof m === "string" && m.trim()) msg = m.trim();
+                }
+                Alert.alert("Wishlist", msg);
+                return;
+              }
+              await removeWishlistLine(String(item.productId));
+            } else {
+              await removeWishlistLine(item.id);
+            }
+            setWishlistItems((prev) => prev.filter((x) => x.id !== item.id));
             Alert.alert("Removed", "Item has been removed from your wishlist.");
           })();
         },
@@ -200,7 +394,7 @@ export default function WishlistScreen() {
           style={styles.backButton}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={tr("Go back")}
         >
           <Image
             source={require("../assets/MainCatImages/images/fntfav.png")}
@@ -227,7 +421,7 @@ export default function WishlistScreen() {
             />
           </View>
         ) : (
-          <Text style={styles.headerTitle}>Wishlist</Text>
+          <Text style={styles.headerTitle}>{tr("WISHLIST")}</Text>
         )}
 
         <View style={styles.headerIcons}>
@@ -266,12 +460,17 @@ export default function WishlistScreen() {
       >
         {/* Wishlist Product List */}
         <View style={styles.section}>
-          {displayedWishlistItems.length === 0 ? (
+          {wishlistLoading ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="large" color="#ef7b1a" />
+              <Text style={styles.loadingText}>Loading your wishlist…</Text>
+            </View>
+          ) : displayedWishlistItems.length === 0 ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIcon}>
                 <Ionicons name="heart-outline" size={80} color="#E0E0E0" />
               </View>
-              <Text style={styles.emptyText}>Your wishlist is empty</Text>
+              <Text style={styles.emptyText}>{tr("Your wishlist is empty")}</Text>
               <Text style={styles.emptySubtext}>
                 Add items you love to your wishlist!
               </Text>
@@ -301,7 +500,7 @@ export default function WishlistScreen() {
                     ) : null}
 
                     <TouchableOpacity
-                      onPress={() => handleRemoveItem(item.id, item.name)}
+                      onPress={() => handleRemoveItem(item)}
                       style={styles.wishlistRemoveFab}
                       accessibilityRole="button"
                       accessibilityLabel={`Remove ${item.name}`}
@@ -497,6 +696,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#000",
     marginBottom: 16,
+  },
+  loadingWrap: {
+    paddingVertical: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    fontSize: 15,
+    color: "#64748b",
+    marginTop: 8,
   },
   emptyContainer: {
     flex: 1,

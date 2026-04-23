@@ -19,6 +19,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
@@ -42,12 +43,14 @@ import {
   pickPtbVariantPricing,
   safePtbText,
 } from "../lib/mainCategoryPtbHelpers";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
+import { getWishlistIds } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
+import { useLanguage } from "../lib/language";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -707,6 +710,7 @@ const WOMEN_PTB_GRID_GAP = 12;
 
 export default function WomenScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -792,10 +796,15 @@ export default function WomenScreen() {
     mrpPrice: number | null;
     discountPercentage: number | null;
     rating: number | null;
+    variantId?: number;
   };
   const [womenPtbApi, setWomenPtbApi] = useState<WomenPtbApiRow[]>([]);
   const [womenPtbLoading, setWomenPtbLoading] = useState(false);
   const [womenWishlistIds, setWomenWishlistIds] = useState<Set<string>>(new Set());
+  const [womenWishlistServerKeys, setWomenWishlistServerKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [womenWishlistHasAuth, setWomenWishlistHasAuth] = useState(false);
   const [womenCartCount, setWomenCartCount] = useState(0);
 
   const womenPtbColW = useMemo(
@@ -804,12 +813,18 @@ export default function WomenScreen() {
   );
 
   const reloadWomenWishlistIds = useCallback(async () => {
-    setWomenWishlistIds(await getWishlistIds());
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setWomenWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
+    setWomenWishlistIds(ids);
+    setWomenWishlistServerKeys(keys);
   }, []);
 
   const reloadWomenCartCount = useCallback(async () => {
-    const cart = await loadCart();
-    setWomenCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+    setWomenCartCount(await getCartUnitCount());
   }, []);
 
   useEffect(() => {
@@ -882,7 +897,8 @@ export default function WomenScreen() {
           .map((p) => {
             const imageUri = pickPtbProductImageUri(p);
             if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickPtbVariantPricing(p);
             return {
               id: (p as any).id as number,
               name: safePtbText(String((p as any).name ?? "")),
@@ -891,6 +907,7 @@ export default function WomenScreen() {
               mrpPrice,
               discountPercentage,
               rating: pickPtbProductRating(p),
+              ...(variantId != null ? { variantId } : {}),
             } satisfies WomenPtbApiRow;
           })
           .filter(Boolean) as WomenPtbApiRow[];
@@ -905,28 +922,45 @@ export default function WomenScreen() {
   }, [womenMainCategoryIdForPtb]);
 
   const handleToggleWomenPtbWishlist = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const now = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
-      });
-      await reloadWomenWishlistIds();
-      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const r = await togglePtbWishlistWithServer(product, reloadWomenWishlistIds);
+      if (!r.ok) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadWomenWishlistIds]
   );
 
   const handleAddWomenPtbCart = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const cart = await addProductToCart({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.name,
+          price: product.sellingNum,
+          mrp: product.mrpNum,
+        },
       });
-      setWomenCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+      if (!r.ok) {
+        Alert.alert("Cart", r.message);
+        return;
+      }
+      setWomenCartCount(await getCartUnitCount());
       Alert.alert("Added to cart", product.name);
     },
     []
@@ -951,6 +985,7 @@ export default function WomenScreen() {
         ratingLabel: string;
         sellingNum: number;
         mrpNum: number;
+        variantId?: number;
       }[];
     }
     return womenPtbApi.map((p) => {
@@ -979,6 +1014,7 @@ export default function WomenScreen() {
             : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
             ? Number(p.sellingPrice)
             : 0,
+        ...(p.variantId != null ? { variantId: p.variantId } : {}),
       };
     });
   }, [womenPtbApi]);
@@ -1752,10 +1788,20 @@ export default function WomenScreen() {
             >
               <View style={styles.womenHeaderIconBadgeWrap}>
                 <Ionicons name="heart-outline" size={24} color="#c2410c" />
-                {womenWishlistIds.size > 0 ? (
+                {(womenWishlistHasAuth
+                  ? womenWishlistServerKeys.size
+                  : womenWishlistIds.size) > 0 ? (
                   <View style={styles.womenHeaderIconBadge}>
                     <Text style={styles.womenHeaderIconBadgeText}>
-                      {womenWishlistIds.size > 99 ? "99+" : String(womenWishlistIds.size)}
+                      {(womenWishlistHasAuth
+                        ? womenWishlistServerKeys.size
+                        : womenWishlistIds.size) > 99
+                        ? "99+"
+                        : String(
+                            womenWishlistHasAuth
+                              ? womenWishlistServerKeys.size
+                              : womenWishlistIds.size
+                          )}
                     </Text>
                   </View>
                 ) : null}
@@ -1944,7 +1990,7 @@ export default function WomenScreen() {
                       activeOpacity={0.88}
                       onPress={() => openWomenSubcategoryProducts(s.label, s.subcategoryId)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Shop ${s.label}`}
+                      accessibilityLabel={`${tr("Shop")} ${tr(s.label)}`}
                     >
                       <View style={styles.railCardArt}>
                         <Image
@@ -1967,7 +2013,7 @@ export default function WomenScreen() {
                       </View>
                       <View style={styles.railCardBody}>
                         <Text style={styles.railCardLabel} numberOfLines={2}>
-                          {s.label}
+                          {tr(s.label)}
                         </Text>
                         <Text style={styles.railCardHint}>Tap to shop</Text>
                       </View>
@@ -2290,7 +2336,7 @@ export default function WomenScreen() {
                       openWomenSubcategoryProducts(item.label, item.subcategoryId)
                     }
                     accessibilityRole="button"
-                    accessibilityLabel={`Shop ${item.label}`}
+                    accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                   >
                     <LinearGradient
                       colors={[item.deptColor, hexToRgba(item.deptColor, 0.75)]}
@@ -2336,7 +2382,7 @@ export default function WomenScreen() {
                             <View style={styles.fcShopAllListMeta}>
                               <View style={styles.fcShopAllListTextCol}>
                                 <Text style={styles.fcShopAllLabelList} numberOfLines={2}>
-                                  {item.label}
+                                  {tr(item.label)}
                                 </Text>
                                 <Text style={styles.fcShopAllHint}>Tap to see products</Text>
                               </View>
@@ -2373,7 +2419,7 @@ export default function WomenScreen() {
                           openWomenSubcategoryProducts(item.label, item.subcategoryId)
                         }
                         accessibilityRole="button"
-                        accessibilityLabel={`Shop ${item.label}`}
+                        accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                       >
                         <LinearGradient
                           colors={[item.deptColor, hexToRgba(item.deptColor, 0.7)]}
@@ -2422,7 +2468,7 @@ export default function WomenScreen() {
                               style={styles.shopAllGridBody}
                             >
                               <Text style={styles.shopAllGridLabel} numberOfLines={2}>
-                                {item.label}
+                                {tr(item.label)}
                               </Text>
                               <View style={styles.shopAllGridCtaRow}>
                                 <Text style={styles.shopAllGridCta}>View range</Text>
@@ -2796,7 +2842,7 @@ export default function WomenScreen() {
                         } as any)
                       }
                       accessibilityRole="button"
-                      accessibilityLabel={`${product.name}, view details`}
+                      accessibilityLabel={`${tr(product.name)}, ${tr("view details")}`}
                     >
                       <View style={styles.womenPtbCardInner}>
                         <Image
@@ -2806,7 +2852,7 @@ export default function WomenScreen() {
                         />
                         <View style={styles.womenPtbMeta}>
                           <Text style={styles.womenPtbName} numberOfLines={2}>
-                            {product.name}
+                            {tr(product.name)}
                           </Text>
                           <View style={styles.womenPtbRatingRow}>
                             <View style={styles.womenPtbRatingPill}>
@@ -2840,17 +2886,43 @@ export default function WomenScreen() {
                                     name: product.name,
                                     sellingNum: product.sellingNum,
                                     mrpNum: product.mrpNum,
+                                    variantId: product.variantId,
                                   })
                                 }
                                 accessibilityRole="button"
                                 accessibilityLabel={`${
-                                  womenWishlistIds.has(product.id) ? "Remove from" : "Add to"
-                                } wishlist: ${product.name}`}
+                                  categoryPtbRowWishlisted(
+                                    product,
+                                    womenWishlistHasAuth,
+                                    womenWishlistServerKeys,
+                                    womenWishlistIds
+                                  )
+                                    ? "Remove from"
+                                    : "Add to"
+                                } ${tr("wishlist")}: ${tr(product.name)}`}
                               >
                                 <Ionicons
-                                  name={womenWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                  name={
+                                    categoryPtbRowWishlisted(
+                                      product,
+                                      womenWishlistHasAuth,
+                                      womenWishlistServerKeys,
+                                      womenWishlistIds
+                                    )
+                                      ? "heart"
+                                      : "heart-outline"
+                                  }
                                   size={16}
-                                  color={womenWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                  color={
+                                    categoryPtbRowWishlisted(
+                                      product,
+                                      womenWishlistHasAuth,
+                                      womenWishlistServerKeys,
+                                      womenWishlistIds
+                                    )
+                                      ? "#E11D48"
+                                      : "#1d324e"
+                                  }
                                 />
                               </TouchableOpacity>
                               <TouchableOpacity
@@ -2862,10 +2934,11 @@ export default function WomenScreen() {
                                     name: product.name,
                                     sellingNum: product.sellingNum,
                                     mrpNum: product.mrpNum,
+                                    variantId: product.variantId,
                                   })
                                 }
                                 accessibilityRole="button"
-                                accessibilityLabel={`Add to cart: ${product.name}`}
+                                accessibilityLabel={`${tr("Add to cart")}: ${tr(product.name)}`}
                               >
                                 <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
                                 <Text style={styles.womenPtbCartBtnText}>Add to Cart</Text>

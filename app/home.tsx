@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
-import { VideoView, useVideoPlayer } from 'expo-video';
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 import {
@@ -32,12 +31,13 @@ import api, {
   searchProductsPath,
   searchSuggestionsPath,
 } from "../services/api";
+import { addToCartPtbOrLocal } from "../lib/cartServerApi";
+import { parseWishlistApiError, postWishlistAdd } from "../lib/wishlistServerApi";
 import {
-  addProductToCart,
+  addWishlistProductIfAbsent,
   getWishlistIds,
   loadWishlist,
   resolveProductImage,
-  toggleWishlistProduct,
   type PersistedWishlistLine,
 } from "../lib/shopStorage";
 import {
@@ -51,6 +51,7 @@ import {
   resolveProductPrimaryImageUri,
 } from "../lib/productImage";
 import * as ImagePicker from "expo-image-picker";
+import { useLanguage } from "../lib/language";
 
 const { width, height } = Dimensions.get("window");
 const HIDE_TOP_BAR_H = 66;
@@ -97,6 +98,25 @@ type HeroPromoCard = {
   tag: string;
   footer: string;
   image: ImageSourcePropType;
+  targetUrl?: string;
+};
+
+type HeroBannerApi = {
+  id?: number | string | null;
+  name?: string | null;
+  title?: string | null;
+  description?: string | null;
+  textContent?: string | null;
+  desktopImage?: string | null;
+  mobileImage?: string | null;
+  image?: string | null;
+  targetUrl?: string | null;
+  buttonText?: string | null;
+  textAlign?: string | null;
+  bannerType?: string | null;
+  status?: number | string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 type HomeWishlistCandidate = {
@@ -105,6 +125,8 @@ type HomeWishlistCandidate = {
   image: ImageSourcePropType;
   price: string;
   oldPrice?: string;
+  /** From API variant `id` — required for POST `/api/wishlist/add`. */
+  variantId?: number;
 };
 
 /** “More picks” grid row — API-mapped or fallback */
@@ -116,6 +138,8 @@ type MorePicksGridItem = {
   price: string;
   oldPrice?: string;
   discount?: string;
+  /** Backend `ProductVariantDTO.id` for wishlist add. */
+  variantId?: number;
 };
 
 type MorePicksApiImage = {
@@ -126,6 +150,8 @@ type MorePicksApiImage = {
 };
 
 type MorePicksApiVariant = {
+  id?: number | string | null;
+  variantId?: number | string | null;
   sellingPrice?: number | string | null;
   mrpPrice?: number | string | null;
   finalPrice?: number | string | null;
@@ -182,37 +208,6 @@ const FRESH_FINDS_RECENT_PATH = "/api/products/recent";
 const TOP_PICKS_POPULAR_PATH = "/api/products/popular";
 /** Preview strip vs expanded list (Spring `page` / `size` when supported). */
 const TOP_PICKS_PREVIEW_SIZE = 5;
-
-/**
- * Suggested for you — wishlist by user.
- * Use a path-only URL with the shared axios client (`services/api.tsx` `baseURL`); never concatenate a full `http://…` here.
- * Spring expects a numeric `Long` path segment — not a Swagger placeholder like `{id}`.
- */
-const ASYNC_USER_ID_KEYS = ["userId", "id"] as const;
-
-/** Only digits; rejects `{id}`, `{userId}`, empty, decimals, etc. */
-function extractSpringLongUserIdSegment(raw: string | null | undefined): string | null {
-  const s = String(raw ?? "").trim();
-  if (!s) return null;
-  if (/^\{[^}]+\}$/.test(s)) return null;
-  if (!/^\d+$/.test(s)) return null;
-  return s;
-}
-
-/** Path relative to `api.defaults.baseURL`, e.g. `/api/wishlist/user/42` */
-function wishlistUserPath(numericUserId: string): string {
-  return `/api/wishlist/user/${encodeURIComponent(numericUserId)}`;
-}
-
-async function readNumericUserIdFromStorage(): Promise<string | null> {
-  for (const key of ASYNC_USER_ID_KEYS) {
-    const seg = extractSpringLongUserIdSegment(
-      (await AsyncStorage.getItem(key)) ?? undefined
-    );
-    if (seg) return seg;
-  }
-  return null;
-}
 
 type ApiWishlistImage = {
   imagePath?: string | null;
@@ -302,6 +297,8 @@ type SuggestedForYouGridItem = {
   rating: string;
   priceNum: number;
   mrpNum: number;
+  /** API variant id for POST `/api/cart/add` when signed in. */
+  variantId?: number;
 };
 
 const SUGGESTED_FOR_YOU_FALLBACK: SuggestedForYouGridItem[] = [
@@ -468,6 +465,12 @@ function subcategoryApiProductToSuggestedForYouItem(
     Number.isFinite(sale) && sale > 0 ? Math.round(sale) : Math.round(mrp);
   const mrpNum = mrp > priceNum ? Math.round(mrp) : priceNum;
 
+  const rawVid = v?.id ?? v?.variantId;
+  const vidNum =
+    typeof rawVid === "string" ? Number.parseInt(rawVid, 10) : Number(rawVid);
+  const variantId =
+    Number.isFinite(vidNum) && vidNum > 0 ? Math.floor(vidNum) : undefined;
+
   return {
     cartId: String(productId),
     name,
@@ -477,6 +480,7 @@ function subcategoryApiProductToSuggestedForYouItem(
     rating: "4.5",
     priceNum: priceNum || mrpNum,
     mrpNum,
+    ...(variantId != null ? { variantId } : {}),
   };
 }
 
@@ -774,6 +778,16 @@ function mapMorePicksApiToGrid(
       discount = `${Math.round(p.discountPercentage)}%`;
     }
 
+    const rawVariantId = v?.id ?? v?.variantId;
+    const variantIdNum =
+      typeof rawVariantId === "string"
+        ? Number.parseInt(rawVariantId, 10)
+        : Number(rawVariantId);
+    const variantId =
+      Number.isFinite(variantIdNum) && variantIdNum > 0
+        ? Math.floor(variantIdNum)
+        : undefined;
+
     out.push({
       id: String(idNum),
       name,
@@ -782,6 +796,7 @@ function mapMorePicksApiToGrid(
       price: sale > 0 ? formatInrAmount(sale) : "—",
       oldPrice,
       discount,
+      variantId,
     });
   }
 
@@ -960,6 +975,110 @@ const HERO_PROMO_CARDS: HeroPromoCard[] = [
   },
 ];
 
+function heroBannerByIdPath(id: number): string {
+  const n = Math.floor(Number(id));
+  if (!Number.isFinite(n) || n <= 0) return "/api/banners/0";
+  return `/api/banners/${n}`;
+}
+
+const HERO_BANNERS_PATH = "/api/banners";
+const HERO_BANNERS_ACTIVE_PATH = "/api/banners/active";
+/** Home hero banners by explicit backend ids (`GET /api/banners/{id}`). */
+const HOME_HERO_BANNER_IDS = [81, 82, 83, 84, 85, 86];
+
+function normalizeHeroBannerRows(payload: unknown): HeroBannerApi[] {
+  if (Array.isArray(payload)) return payload as HeroBannerApi[];
+  if (payload && typeof payload === "object") {
+    const o = payload as Record<string, unknown>;
+    if (Array.isArray(o.data)) return o.data as HeroBannerApi[];
+    if (Array.isArray(o.content)) return o.content as HeroBannerApi[];
+    if (Array.isArray(o.items)) return o.items as HeroBannerApi[];
+    if (Array.isArray(o.results)) return o.results as HeroBannerApi[];
+  }
+  return [];
+}
+
+function extractSingleHeroBanner(payload: unknown): HeroBannerApi | null {
+  if (typeof payload === "string") {
+    const text = payload.trim();
+    if (!text) return null;
+    try {
+      return extractSingleHeroBanner(JSON.parse(text));
+    } catch {
+      return null;
+    }
+  }
+  if (!payload || typeof payload !== "object") return null;
+  const o = payload as Record<string, unknown>;
+
+  // Common API wrapper: { success, message, data: { ...banner } }
+  if (o.data && typeof o.data === "object" && !Array.isArray(o.data)) {
+    return o.data as HeroBannerApi;
+  }
+  if (o.result && typeof o.result === "object" && !Array.isArray(o.result)) {
+    return o.result as HeroBannerApi;
+  }
+  if (o.banner && typeof o.banner === "object" && !Array.isArray(o.banner)) {
+    return o.banner as HeroBannerApi;
+  }
+
+  // Raw banner object response
+  if (
+    typeof o.id !== "undefined" ||
+    typeof o.desktopImage !== "undefined" ||
+    typeof o.mobileImage !== "undefined"
+  ) {
+    return o as HeroBannerApi;
+  }
+  return null;
+}
+
+function heroBannerStatusIsActive(status: unknown): boolean {
+  if (status == null) return true;
+  if (typeof status === "number") return status === 1;
+  const s = String(status).trim().toLowerCase();
+  return s === "1" || s === "true" || s === "active";
+}
+
+function mapHeroBannersFromApi(
+  rows: HeroBannerApi[],
+  apiOrigin: string,
+  options?: { requireActive?: boolean }
+): HeroPromoCard[] {
+  const requireActive = options?.requireActive ?? true;
+  const root = String(apiOrigin ?? "").trim().replace(/\/+$/, "");
+  const resolveMedia = (pathOrUrl: unknown): string => {
+    const s = String(pathOrUrl ?? "").trim();
+    if (!s) return "";
+    if (/^https?:\/\//i.test(s)) return s;
+    if (!root) return s;
+    if (s.startsWith("/")) return `${root}${s}`;
+    if (/^(uploads\/)/i.test(s)) return `${root}/${s}`;
+    return `${root}/uploads/${s}`;
+  };
+
+  const out: HeroPromoCard[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    if (requireActive && !heroBannerStatusIsActive(row.status)) continue;
+    const sourcePath = String(row.mobileImage ?? "").trim();
+    const uri = resolveMedia(sourcePath);
+    if (!uri) continue;
+    const theme = HERO_PROMO_CARDS[i % HERO_PROMO_CARDS.length] ?? HERO_PROMO_CARDS[0]!;
+    const name = String(row.name ?? row.title ?? "").trim();
+    const desc = String(row.description ?? row.textContent ?? "").trim();
+    out.push({
+      ...theme,
+      id: String(row.id ?? `api-hero-${i}`),
+      title: name || theme.title,
+      subtitle: desc || theme.subtitle,
+      image: { uri },
+      targetUrl: String(row.targetUrl ?? "").trim() || undefined,
+    });
+  }
+  return out;
+}
+
 /** Below header: page + scroll base (clean white) */
 const HOME_PAGE_BG = "#FFFFFF";
 
@@ -1124,29 +1243,10 @@ const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
   },
 ];
 
-/** expo-video uses a native SharedObject; play/pause can throw or reject after it is released. */
-function safeVideoPlayback(
-  player: { play(): unknown; pause(): unknown },
-  action: "play" | "pause"
-): void {
-  try {
-    const result = action === "play" ? player.play() : player.pause();
-    if (
-      result != null &&
-      typeof result === "object" &&
-      "then" in result &&
-      typeof (result as PromiseLike<void>).then === "function"
-    ) {
-      void Promise.resolve(result as Promise<unknown>).then(undefined, () => undefined);
-    }
-  } catch {
-    /* ignored */
-  }
-}
-
 export default function Home() {
  const [activeIndex, setActiveIndex] = useState(0);
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const openSearchResults = useCallback(
     (rawQuery?: string) => {
@@ -1498,16 +1598,6 @@ export default function Home() {
     selectedSort,
   ]);
 
-  const videoBannerPlayer = useVideoPlayer(
-    require("../assets/images/videobanner.mp4"),
-    (p) => {
-      p.loop = true;
-      p.muted = true;
-    }
-  );
-
-  const isHomeFocused = useIsFocused();
-
   const [wishlistCount, setWishlistCount] = useState(0);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
@@ -1567,6 +1657,7 @@ export default function Home() {
   const [suggestedProducts, setSuggestedProducts] = useState<SuggestedForYouGridItem[]>(
     SUGGESTED_FOR_YOU_FALLBACK
   );
+  const [heroPromoCards, setHeroPromoCards] = useState<HeroPromoCard[]>([]);
 
   const categoryNameToHref = useCallback((name: string): Href => {
     const normalized = String(name ?? "").trim().toLowerCase();
@@ -1646,6 +1737,101 @@ export default function Home() {
       cancelled = true;
     };
   }, [categoryNameToHref]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const apiOrigin = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const targetIds = HOME_HERO_BANNER_IDS.map((id) => String(id));
+        const rowsByIdMap = new Map<string, HeroBannerApi>();
+        const backendOrderIds: string[] = [];
+
+        // Primary source: full banners list from `/api/banners`, then pick configured IDs.
+        try {
+          const { data: bannersData } = await api.get<unknown>(HERO_BANNERS_PATH);
+          if (cancelled) return;
+          const rows = normalizeHeroBannerRows(bannersData);
+          for (const row of rows) {
+            const key = String(row.id ?? "").trim();
+            if (!key || !targetIds.includes(key) || rowsByIdMap.has(key)) continue;
+            rowsByIdMap.set(key, row);
+            backendOrderIds.push(key);
+          }
+        } catch {
+          // We'll try `/api/banners/active` + direct id endpoints below.
+        }
+
+        // Secondary source: active list (handles deployments where `/api/banners` differs).
+        if (rowsByIdMap.size < targetIds.length) {
+          try {
+            const { data: activeData } = await api.get<unknown>(HERO_BANNERS_ACTIVE_PATH);
+            if (cancelled) return;
+            const activeRows = normalizeHeroBannerRows(activeData);
+            for (const row of activeRows) {
+              const key = String(row.id ?? "").trim();
+              if (!key || !targetIds.includes(key) || rowsByIdMap.has(key)) continue;
+              rowsByIdMap.set(key, row);
+              backendOrderIds.push(key);
+            }
+          } catch {
+            // We'll try direct id endpoints below.
+          }
+        }
+
+        // Fallback source: direct /api/banners/{id} for any missing IDs.
+        const missingIds = targetIds.filter((id) => !rowsByIdMap.has(id));
+        if (missingIds.length > 0) {
+          const idResults = await Promise.allSettled(
+            missingIds.map((id) => api.get<unknown>(heroBannerByIdPath(Number(id))))
+          );
+          if (cancelled) return;
+          for (const r of idResults) {
+            if (r.status !== "fulfilled") continue;
+            const payload = r.value.data;
+            if (Array.isArray(payload)) {
+              for (const row of payload as HeroBannerApi[]) {
+                const key = String(row.id ?? "").trim();
+                if (!key || !targetIds.includes(key) || rowsByIdMap.has(key)) continue;
+                rowsByIdMap.set(key, row);
+                backendOrderIds.push(key);
+              }
+            } else {
+              const one = extractSingleHeroBanner(payload);
+              const key = String(one?.id ?? "").trim();
+              if (one && key && targetIds.includes(key) && !rowsByIdMap.has(key)) {
+                rowsByIdMap.set(key, one);
+                backendOrderIds.push(key);
+              }
+            }
+          }
+        }
+
+        const idsInRenderOrder =
+          backendOrderIds.length > 0
+            ? backendOrderIds
+            : targetIds;
+
+        const orderedRows: HeroBannerApi[] = idsInRenderOrder
+          .map((id) => rowsByIdMap.get(id))
+          .filter((x): x is HeroBannerApi => x != null);
+
+        const mappedById = mapHeroBannersFromApi(orderedRows, apiOrigin, {
+          requireActive: false,
+        });
+        if (mappedById.length > 0) {
+          setHeroPromoCards(mappedById);
+          return;
+        }
+        setHeroPromoCards(HERO_PROMO_CARDS);
+      } catch {
+        if (!cancelled) setHeroPromoCards(HERO_PROMO_CARDS);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1944,15 +2130,6 @@ export default function Home() {
     }, [loadSuggestedForYouFromSubcategoryApi])
   );
 
-  /** Sync play/pause with screen focus. Do not use useFocusEffect cleanup to pause — it can run after expo-video's shared player is released (native crash / rejection). */
-  useEffect(() => {
-    if (!isHomeFocused) {
-      safeVideoPlayback(videoBannerPlayer, "pause");
-      return;
-    }
-    safeVideoPlayback(videoBannerPlayer, "play");
-  }, [isHomeFocused, videoBannerPlayer]);
-
   const openSaveToWishlistSheet = useCallback((p: HomeWishlistCandidate) => {
     setPendingWishlist(p);
     setSaveToWishlistChecked(true);
@@ -1993,6 +2170,7 @@ export default function Home() {
                     image: item.image,
                     price: item.price,
                     oldPrice: item.oldPrice,
+                    variantId: item.variantId,
                   })
                 }
               >
@@ -2144,6 +2322,34 @@ export default function Home() {
       return;
     }
 
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    if (!token) {
+      Alert.alert(
+        "Sign in required",
+        "Please log in to save items to your wishlist."
+      );
+      return;
+    }
+
+    const productId = Math.floor(Number(pendingWishlist.id));
+    if (!Number.isFinite(productId) || productId <= 0) {
+      Alert.alert("Cannot add", "Invalid product.");
+      return;
+    }
+
+    const variantId = pendingWishlist.variantId;
+    if (
+      variantId == null ||
+      !Number.isFinite(variantId) ||
+      Math.floor(variantId) <= 0
+    ) {
+      Alert.alert(
+        "Cannot add to wishlist",
+        "This listing does not include a variant id. Open the product page, choose size or color, then add to wishlist."
+      );
+      return;
+    }
+
     const line: PersistedWishlistLine = {
       id: pendingWishlist.id,
       name: pendingWishlist.name,
@@ -2154,10 +2360,30 @@ export default function Home() {
       ),
     };
 
-    await toggleWishlistProduct(line);
-    await reloadWishlistBadge();
-    setSaveToWishlistVisible(false);
-    setPendingWishlist(null);
+    try {
+      const { productName: nameFromServer } = await postWishlistAdd(
+        productId,
+        Math.floor(variantId)
+      );
+
+      await addWishlistProductIfAbsent(line);
+      await reloadWishlistBadge();
+      setSaveToWishlistVisible(false);
+      setPendingWishlist(null);
+
+      Alert.alert(
+        "Added to wishlist",
+        (nameFromServer && nameFromServer.trim()) || line.name
+      );
+    } catch (e: unknown) {
+      Alert.alert(
+        "Wishlist",
+        parseWishlistApiError(
+          e,
+          "We could not add this item to your wishlist. Please try again."
+        )
+      );
+    }
   }, [
     parseRupee,
     pendingWishlist,
@@ -2210,9 +2436,11 @@ const banners2 = [
   }, []);
 
   useEffect(() => {
+    const n = heroPromoCards.length;
+    if (n <= 1) return undefined;
     const interval = setInterval(() => {
       setBannerIndex((prev) => {
-        const next = (prev + 1) % HERO_PROMO_CARDS.length;
+        const next = (prev + 1) % n;
         bannerCarouselRef.current?.scrollToOffset({
           offset: next * HERO_PROMO_SNAP_STRIDE,
           animated: true,
@@ -2222,7 +2450,7 @@ const banners2 = [
     }, 3500);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [heroPromoCards.length]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -2665,9 +2893,9 @@ const categoryData = [
 // megabanners
 
   const activeHeroHeader =
-    HERO_PROMO_CARDS[
-      Math.min(Math.max(0, bannerIndex), HERO_PROMO_CARDS.length - 1)
-    ] ?? HERO_PROMO_CARDS[0]!;
+    heroPromoCards[Math.min(Math.max(0, bannerIndex), Math.max(0, heroPromoCards.length - 1))] ??
+    heroPromoCards[0] ??
+    HERO_PROMO_CARDS[0]!;
 
   return (
     <View style={styles.container}>
@@ -2704,7 +2932,7 @@ const categoryData = [
                 activeOpacity={0.88}
                 onPress={() => setPromoSpotlightModalVisible(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Open promotional offer"
+                accessibilityLabel={tr("Open promotional offer")}
               >
                 <LinearGradient
                   colors={[...GREETING_CHIP_COLORS]}
@@ -2714,11 +2942,11 @@ const categoryData = [
                   style={styles.greetingTextChip}
                 >
                   <Text style={styles.helloLine} numberOfLines={1}>
-                    <Text style={styles.helloMuted}>Hi, </Text>
+                    <Text style={styles.helloMuted}>{tr("Hi, ")}</Text>
                     <Text style={styles.helloName}>{userDisplayName}</Text>
                   </Text>
                   <Text style={styles.shopText} numberOfLines={1}>
-                    New finds await
+                    {tr("New finds await")}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -2990,7 +3218,7 @@ const categoryData = [
         <View style={styles.homeMediaPanel}>
           <FlatList
             ref={bannerCarouselRef}
-            data={HERO_PROMO_CARDS}
+            data={heroPromoCards}
             horizontal
             pagingEnabled={false}
             showsHorizontalScrollIndicator={false}
@@ -3006,7 +3234,7 @@ const categoryData = [
               );
               const clamped = Math.min(
                 Math.max(0, idx),
-                HERO_PROMO_CARDS.length - 1
+                Math.max(0, heroPromoCards.length - 1)
               );
               setBannerIndex(clamped);
             }}
@@ -3042,7 +3270,7 @@ const categoryData = [
           />
 
           <View style={styles.bannerDotsRow}>
-            {HERO_PROMO_CARDS.map((_, index) => (
+            {heroPromoCards.map((_, index) => (
               <View
                 key={`banner-dot-${index}`}
                 style={[
@@ -3063,14 +3291,14 @@ const categoryData = [
           style={styles.userSuggestionCard}
         >
           <View style={styles.userSuggestionHeaderRow}>
-            <Text style={styles.userSuggestionTitle}>Top Picks for You</Text>
+            <Text style={styles.userSuggestionTitle}>{tr("Top Picks for You")}</Text>
             {topPicksShowArrow ? (
               <TouchableOpacity
                 style={styles.userSuggestionArrow}
                 onPress={() => onTopPicksArrowPress()}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel="View all top picks"
+                accessibilityLabel={tr("View all top picks")}
               >
                 <Ionicons name="arrow-forward" size={20} color="#1E40AF" />
               </TouchableOpacity>
@@ -3297,9 +3525,9 @@ const categoryData = [
     <View style={styles.suggestedTitleWrap}>
       <View style={styles.suggestedTitleBadge}>
         <Ionicons name="sparkles" size={18} color="#FDE047" />
-        <Text style={styles.suggestedTitleBadgeText}>Suggested For You</Text>
+        <Text style={styles.suggestedTitleBadgeText}>{tr("Suggested For You")}</Text>
       </View>
-      <Text style={styles.suggestedTitleTagline}>Handpicked just for you</Text>
+      <Text style={styles.suggestedTitleTagline}>{tr("Handpicked just for you")}</Text>
     </View>
     <TouchableOpacity
       style={styles.productArrowButton}
@@ -3361,12 +3589,22 @@ const categoryData = [
                     style={styles.addCartButton}
                     onPress={() => {
                       void (async () => {
-                        await addProductToCart({
-                          id: item.cartId,
-                          name: item.name,
-                          price: item.priceNum,
-                          mrp: item.mrpNum,
+                        const pid = Math.floor(Number(item.cartId));
+                        const r = await addToCartPtbOrLocal({
+                          productId: pid,
+                          variantId: item.variantId,
+                          quantity: 1,
+                          localLine: {
+                            id: item.cartId,
+                            name: item.name,
+                            price: item.priceNum,
+                            mrp: item.mrpNum,
+                          },
                         });
+                        if (r.ok === false) {
+                          Alert.alert("Cart", r.message);
+                          return;
+                        }
                         Alert.alert(
                           "Added to cart",
                           `${item.name} is in your cart.`
@@ -3388,15 +3626,14 @@ const categoryData = [
   </View>
 </View>
 
-{/* Video Banner Section */}
+{/* Banner (static image — add assets/images/accessories.mp4 to restore video) */}
 <View style={styles.homeVideoShell}>
   <View style={styles.videoBannerContainer}>
-    <VideoView
-      player={videoBannerPlayer}
+    <Image
+      source={require("../assets/images/accessarieshomebanner.png")}
       style={styles.videoBanner}
-      contentFit="cover"
-      nativeControls={false}
-      fullscreenOptions={{ enable: false }}
+      resizeMode="cover"
+      accessibilityIgnoresInvertColors
     />
   </View>
 </View>
@@ -3472,7 +3709,7 @@ const categoryData = [
 
 {/* Rate your recent purchase — auto-scrolling card */}
 <View style={styles.rateSection}>
-  <Text style={styles.rateSectionTitle}>Rate Your Recent Purchase</Text>
+  <Text style={styles.rateSectionTitle}>{tr("Rate Your Recent Purchase")}</Text>
 
   <ScrollView
     ref={rateCarouselRef}
@@ -3787,10 +4024,10 @@ const categoryData = [
         <MaterialIcons name="local-offer" size={22} color="#C2410C" />
       </View>
       <View style={styles.latestHeaderTextCol}>
-        <Text style={styles.latestHeaderEyebrow}>Recommended for you</Text>
-        <Text style={styles.latestHeaderTitle}>More picks</Text>
+        <Text style={styles.latestHeaderEyebrow}>{tr("Recommended for you")}</Text>
+        <Text style={styles.latestHeaderTitle}>{tr("More picks")}</Text>
         <Text style={styles.latestHeaderSub} numberOfLines={1}>
-          Deals and essentials picked today
+          {tr("Deals and essentials picked today")}
         </Text>
       </View>
     </View>
@@ -3800,7 +4037,7 @@ const categoryData = [
       activeOpacity={0.9}
       onPress={() => openSubcatProducts("More picks")}
       accessibilityRole="button"
-      accessibilityLabel="See all recommended products"
+      accessibilityLabel={tr("See all recommended products")}
     >
       <Ionicons name="arrow-forward" size={20} color="#7C2D12" />
     </TouchableOpacity>
@@ -3824,12 +4061,12 @@ const categoryData = [
         disabled={morePicksLoadingMore}
         onPress={() => void loadMoreMorePicks()}
         accessibilityRole="button"
-        accessibilityLabel="Load more recommended products"
+        accessibilityLabel={tr("Load more recommended products")}
       >
         {morePicksLoadingMore ? (
           <ActivityIndicator color="#C2410C" />
         ) : (
-          <Text style={styles.latestLoadMoreBtnText}>Load more</Text>
+          <Text style={styles.latestLoadMoreBtnText}>{tr("Load more")}</Text>
         )}
       </TouchableOpacity>
     ) : null}
@@ -4066,7 +4303,7 @@ const categoryData = [
                   <View style={styles.deliverySearchBox}>
                     <Ionicons name="search-outline" size={20} color="#999" />
                     <TextInput
-                      placeholder="Search by area, street name, pin code"
+                      placeholder={tr("Search by area, street name, pin code")}
                       placeholderTextColor="#999"
                       style={styles.deliverySearchInput}
                       value={deliveryAddressSearchQuery}
@@ -4079,17 +4316,17 @@ const categoryData = [
                     activeOpacity={0.75}
                     onPress={() => void handleUseCurrentLocation()}
                     accessibilityRole="button"
-                    accessibilityLabel="Use my current location"
+                    accessibilityLabel={tr("Use my current location")}
                   >
                     <View style={styles.deliveryUseCurrentIconWrap}>
                       <Ionicons name="locate" size={22} color="#1976D2" />
                     </View>
                     <View style={styles.deliveryUseCurrentTextCol}>
                       <Text style={styles.deliveryUseCurrentTitle}>
-                        Use my current location
+                        {tr("Use my current location")}
                       </Text>
                       <Text style={styles.deliveryUseCurrentSub}>
-                        Allow access to location
+                        {tr("Allow access to location")}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -4097,12 +4334,12 @@ const categoryData = [
                   <View style={styles.deliveryDividerDashed} />
 
                   <View style={styles.deliverySavedHeaderRow}>
-                    <Text style={styles.deliverySavedTitle}>Saved addresses</Text>
+                    <Text style={styles.deliverySavedTitle}>{tr("Saved addresses")}</Text>
                     <TouchableOpacity
                       onPress={openAddNewAddressForm}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.deliveryAddNewText}>+ Add New</Text>
+                      <Text style={styles.deliveryAddNewText}>{tr("+ Add New")}</Text>
                     </TouchableOpacity>
                   </View>
 

@@ -10,9 +10,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
+import { useLanguage } from "../lib/language";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,16 +81,16 @@ export default function LoginScreen() {
             style={styles.logo}
           />
 
-          <Text style={styles.title}>Seller Login</Text>
+          <Text style={styles.title}>{tr("Seller Login")}</Text>
           <View style={styles.underline} />
 
           <Text style={styles.subtitle}>
-            Enter your email address and password to access your seller dashboard.
+            {tr("Enter your email address and password to access your seller dashboard.")}
           </Text>
 
-          <Text style={styles.label}>EMAIL *</Text>
+          <Text style={styles.label}>{tr("EMAIL")} *</Text>
           <TextInput
-            placeholder="Enter your email"
+            placeholder={tr("Enter your email")}
             style={[styles.input, emailError ? styles.errorInput : null]}
             value={email}
             onChangeText={(text) => {
@@ -101,10 +103,10 @@ export default function LoginScreen() {
 
           {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
-          <Text style={styles.label}>PASSWORD *</Text>
+          <Text style={styles.label}>{tr("PASSWORD")} *</Text>
           <View style={[styles.passwordBox, passwordError ? styles.errorInput : null]}>
             <TextInput
-              placeholder="Enter your password"
+              placeholder={tr("Enter your password")}
               secureTextEntry={!passwordVisible}
               style={{ flex: 1 }}
               value={password}
@@ -132,11 +134,11 @@ export default function LoginScreen() {
               <View style={[styles.checkbox, remember && styles.checkboxActive]}>
                 {remember && <Ionicons name="checkmark" size={14} color="#fff" />}
               </View>
-              <Text style={styles.remember}>Remember me</Text>
+              <Text style={styles.remember}>{tr("Remember me")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => router.push("/forgotpassword" as Href)}>
-              <Text style={styles.forgot}>Forgot password?</Text>
+              <Text style={styles.forgot}>{tr("Forgot password?")}</Text>
             </TouchableOpacity>
           </View>
 

@@ -16,6 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import api, { productsByMainCategoryPath, searchProductsPath, searchSuggestionsPath } from "../services/api";
@@ -28,13 +29,15 @@ import {
   pickPtbVariantPricing,
   safePtbText,
 } from "../lib/mainCategoryPtbHelpers";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
+import { getWishlistIds } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import { useLanguage } from "../lib/language";
 
 /** Dry sweets — Dry fruit laddu (and siblings under same API subcategory). */
 const DRY_DRYFRUIT_LADDU_SUBCATEGORY_ID = 142;
@@ -171,6 +174,7 @@ const RELATED_SWEETS_PRODUCTS: SweetsHubProduct[] = [
 
 export default function Sweets() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const { width } = Dimensions.get("window");
   const scrollRef = useRef<ScrollView>(null);
   const bannerListRef = useRef<any>(null);
@@ -612,10 +616,15 @@ export default function Sweets() {
     mrpPrice: number | null;
     discountPercentage: number | null;
     rating: number | null;
+    variantId?: number;
   };
   const [sweetsPtbApi, setSweetsPtbApi] = useState<SweetsPtbApiRow[]>([]);
   const [sweetsPtbLoading, setSweetsPtbLoading] = useState(false);
   const [sweetsWishlistIds, setSweetsWishlistIds] = useState<Set<string>>(new Set());
+  const [sweetsWishlistServerKeys, setSweetsWishlistServerKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [sweetsWishlistHasAuth, setSweetsWishlistHasAuth] = useState(false);
   const [sweetsCartCount, setSweetsCartCount] = useState(0);
 
   const sweetsPtbColW = useMemo(
@@ -624,12 +633,18 @@ export default function Sweets() {
   );
 
   const reloadSweetsWishlistIds = useCallback(async () => {
-    setSweetsWishlistIds(await getWishlistIds());
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setSweetsWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
+    setSweetsWishlistIds(ids);
+    setSweetsWishlistServerKeys(keys);
   }, []);
 
   const reloadSweetsCartCount = useCallback(async () => {
-    const cart = await loadCart();
-    setSweetsCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+    setSweetsCartCount(await getCartUnitCount());
   }, []);
 
   useEffect(() => {
@@ -701,7 +716,8 @@ export default function Sweets() {
           .map((p) => {
             const imageUri = pickPtbProductImageUri(p);
             if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickPtbVariantPricing(p);
             return {
               id: (p as any).id as number,
               name: safePtbText(String((p as any).name ?? "")),
@@ -710,6 +726,7 @@ export default function Sweets() {
               mrpPrice,
               discountPercentage,
               rating: pickPtbProductRating(p),
+              ...(variantId != null ? { variantId } : {}),
             } satisfies SweetsPtbApiRow;
           })
           .filter(Boolean) as SweetsPtbApiRow[];
@@ -724,28 +741,45 @@ export default function Sweets() {
   }, [sweetsMainCategoryIdForPtb]);
 
   const handleToggleSweetsPtbWishlist = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const now = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
-      });
-      await reloadSweetsWishlistIds();
-      Alert.alert(now ? "Added to wishlist" : "Removed from wishlist", product.name);
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const r = await togglePtbWishlistWithServer(product, reloadSweetsWishlistIds);
+      if (!r.ok) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadSweetsWishlistIds]
   );
 
   const handleAddSweetsPtbCart = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const cart = await addProductToCart({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.name,
+          price: product.sellingNum,
+          mrp: product.mrpNum,
+        },
       });
-      setSweetsCartCount(cart.reduce((sum, line) => sum + (line.quantity || 0), 0));
+      if (!r.ok) {
+        Alert.alert("Cart", r.message);
+        return;
+      }
+      setSweetsCartCount(await getCartUnitCount());
       Alert.alert("Added to cart", product.name);
     },
     []
@@ -770,6 +804,7 @@ export default function Sweets() {
         ratingLabel: string;
         sellingNum: number;
         mrpNum: number;
+        variantId?: number;
       }[];
     }
     return sweetsPtbApi.map((p) => {
@@ -798,6 +833,7 @@ export default function Sweets() {
             : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
             ? Number(p.sellingPrice)
             : 0,
+        ...(p.variantId != null ? { variantId: p.variantId } : {}),
       };
     });
   }, [sweetsPtbApi]);
@@ -902,7 +938,7 @@ export default function Sweets() {
           <Ionicons name="search-outline" size={16} color="#1d324e" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search.."
+            placeholder={tr("Search..")}
             placeholderTextColor="#8D97AA"
             value={query}
             onChangeText={setQuery}
@@ -924,10 +960,18 @@ export default function Sweets() {
         >
           <View style={styles.sweetsHeaderBadgeWrap}>
             <Ionicons name="heart-outline" size={22} color="#1D2430" />
-            {sweetsWishlistIds.size > 0 ? (
+            {(sweetsWishlistHasAuth ? sweetsWishlistServerKeys.size : sweetsWishlistIds.size) >
+            0 ? (
               <View style={styles.sweetsHeaderBadge}>
                 <Text style={styles.sweetsHeaderBadgeText}>
-                  {sweetsWishlistIds.size > 99 ? "99+" : String(sweetsWishlistIds.size)}
+                  {(sweetsWishlistHasAuth ? sweetsWishlistServerKeys.size : sweetsWishlistIds.size) >
+                  99
+                    ? "99+"
+                    : String(
+                        sweetsWishlistHasAuth
+                          ? sweetsWishlistServerKeys.size
+                          : sweetsWishlistIds.size
+                      )}
                 </Text>
               </View>
             ) : null}
@@ -1195,7 +1239,14 @@ export default function Sweets() {
             <Text style={styles.sweetsPtbStatus}>No products found.</Text>
           ) : (
             <View style={styles.sweetsPtbGrid}>
-              {sweetsPtbUiRows.map((product) => (
+              {sweetsPtbUiRows.map((product) => {
+                const wishlisted = categoryPtbRowWishlisted(
+                  product,
+                  sweetsWishlistHasAuth,
+                  sweetsWishlistServerKeys,
+                  sweetsWishlistIds
+                );
+                return (
                 <View key={product.id} style={[styles.sweetsPtbCard, { width: sweetsPtbColW }]}>
                   <TouchableOpacity
                     activeOpacity={0.9}
@@ -1248,17 +1299,18 @@ export default function Sweets() {
                                   name: product.name,
                                   sellingNum: product.sellingNum,
                                   mrpNum: product.mrpNum,
+                                  variantId: product.variantId,
                                 })
                               }
                               accessibilityRole="button"
                               accessibilityLabel={`${
-                                sweetsWishlistIds.has(product.id) ? "Remove from" : "Add to"
+                                wishlisted ? "Remove from" : "Add to"
                               } wishlist: ${product.name}`}
                             >
                               <Ionicons
-                                name={sweetsWishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                name={wishlisted ? "heart" : "heart-outline"}
                                 size={16}
-                                color={sweetsWishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                color={wishlisted ? "#E11D48" : "#1d324e"}
                               />
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -1270,6 +1322,7 @@ export default function Sweets() {
                                   name: product.name,
                                   sellingNum: product.sellingNum,
                                   mrpNum: product.mrpNum,
+                                  variantId: product.variantId,
                                 })
                               }
                               accessibilityRole="button"
@@ -1284,7 +1337,8 @@ export default function Sweets() {
                     </View>
                   </TouchableOpacity>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>

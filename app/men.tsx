@@ -19,6 +19,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
@@ -36,12 +37,14 @@ import api, {
   searchSuggestionsPath,
 } from "../services/api";
 import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
+import { getWishlistIds } from "../lib/shopStorage";
 import {
-  addProductToCart,
-  getWishlistIds,
-  loadCart,
-  toggleWishlistProduct,
-} from "../lib/shopStorage";
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
+import { useLanguage } from "../lib/language";
 
 /** Flat-top regular hexagon: compact width, moderate height (√3/2 × width). */
 const HEX_W = 82;
@@ -956,6 +959,7 @@ function pickMenPtbVariantPricing(p: any): {
   sellingPrice: number | null;
   mrpPrice: number | null;
   discountPercentage: number | null;
+  variantId?: number;
 } {
   const variants = Array.isArray(p?.variants) ? p.variants : [];
   const v =
@@ -976,10 +980,16 @@ function pickMenPtbVariantPricing(p: any): {
     }
     return null;
   };
+  const rawVid = v.id ?? v.variantId;
+  const vidNum =
+    typeof rawVid === "string" ? Number.parseInt(rawVid, 10) : Number(rawVid);
+  const variantId =
+    Number.isFinite(vidNum) && vidNum > 0 ? Math.floor(vidNum) : undefined;
   return {
     sellingPrice: num(v.sellingPrice),
     mrpPrice: num(v.mrpPrice),
     discountPercentage: num(v.discountPercentage),
+    ...(variantId != null ? { variantId } : {}),
   };
 }
 
@@ -996,6 +1006,7 @@ function pickMenPtbProductRating(p: any): number | null {
 
 export default function MenScreen() {
   const router = useRouter();
+  const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -1080,11 +1091,14 @@ export default function MenScreen() {
     mrpPrice: number | null;
     discountPercentage: number | null;
     rating: number | null;
+    variantId?: number;
   };
 
   const [menProductsToBuyApi, setMenProductsToBuyApi] = useState<MenProductsToBuyApiRow[]>([]);
   const [menProductsToBuyLoading, setMenProductsToBuyLoading] = useState(false);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [wishlistServerKeys, setWishlistServerKeys] = useState<Set<string>>(new Set());
+  const [wishlistHasAuth, setWishlistHasAuth] = useState(false);
   const [cartCount, setCartCount] = useState(0);
 
   const menPtbColW = useMemo(
@@ -1093,14 +1107,18 @@ export default function MenScreen() {
   );
 
   const reloadWishlistIds = useCallback(async () => {
-    const ids = await getWishlistIds();
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    setWishlistHasAuth(!!token);
+    const [ids, keys] = await Promise.all([
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
     setWishlistIds(ids);
+    setWishlistServerKeys(keys);
   }, []);
 
   const reloadCartCount = useCallback(async () => {
-    const cart = await loadCart();
-    const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
-    setCartCount(count);
+    setCartCount(await getCartUnitCount());
   }, []);
 
   useEffect(() => {
@@ -1179,7 +1197,8 @@ export default function MenScreen() {
           .map((p) => {
             const imageUri = pickMenPtbProductImageUri(p);
             if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage } = pickMenPtbVariantPricing(p);
+            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
+              pickMenPtbVariantPricing(p);
             return {
               id: p.id as number,
               name: safeTextMen(String(p.name ?? "")),
@@ -1188,6 +1207,7 @@ export default function MenScreen() {
               mrpPrice,
               discountPercentage,
               rating: pickMenPtbProductRating(p),
+              ...(variantId != null ? { variantId } : {}),
             } satisfies MenProductsToBuyApiRow;
           })
           .filter(Boolean) as MenProductsToBuyApiRow[];
@@ -1204,29 +1224,45 @@ export default function MenScreen() {
   }, [menMainCategoryIdForPtb]);
 
   const handleToggleWishlistMenPtb = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const nowInWishlist = await toggleWishlistProduct({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
-      });
-      await reloadWishlistIds();
-      Alert.alert(nowInWishlist ? "Added to wishlist" : "Removed from wishlist", product.name);
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const r = await togglePtbWishlistWithServer(product, reloadWishlistIds);
+      if (r.ok === false) Alert.alert("Wishlist", r.message);
+      else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
   );
 
   const handleAddToCartMenPtb = useCallback(
-    async (product: { id: string; name: string; sellingNum: number; mrpNum: number }) => {
-      const cart = await addProductToCart({
-        id: product.id,
-        name: product.name,
-        price: product.sellingNum,
-        mrp: product.mrpNum,
+    async (product: {
+      id: string;
+      name: string;
+      sellingNum: number;
+      mrpNum: number;
+      variantId?: number;
+    }) => {
+      const pid = Math.floor(Number(product.id));
+      const r = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId,
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.name,
+          price: product.sellingNum,
+          mrp: product.mrpNum,
+        },
       });
-      const count = cart.reduce((sum, line) => sum + (line.quantity || 0), 0);
-      setCartCount(count);
+      if (r.ok === false) {
+        Alert.alert("Cart", r.message);
+        return;
+      }
+      setCartCount(await getCartUnitCount());
       Alert.alert("Added to cart", product.name);
     },
     []
@@ -1252,6 +1288,7 @@ export default function MenScreen() {
         ratingLabel: string;
         sellingNum: number;
         mrpNum: number;
+        variantId?: number;
       }[];
     }
 
@@ -1281,6 +1318,7 @@ export default function MenScreen() {
             : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
             ? Number(p.sellingPrice)
             : 0,
+        ...(p.variantId != null ? { variantId: p.variantId } : {}),
       };
     });
   }, [menProductsToBuyApi]);
@@ -2007,10 +2045,14 @@ export default function MenScreen() {
             >
               <View style={styles.menHeaderIconBadgeWrap}>
                 <Ionicons name="heart-outline" size={24} color="#c2410c" />
-                {wishlistIds.size > 0 ? (
+                {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 0 ? (
                   <View style={styles.menHeaderIconBadge}>
                     <Text style={styles.menHeaderIconBadgeText}>
-                      {wishlistIds.size > 99 ? "99+" : String(wishlistIds.size)}
+                      {(wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size) > 99
+                        ? "99+"
+                        : String(
+                            wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size
+                          )}
                     </Text>
                   </View>
                 ) : null}
@@ -2182,7 +2224,7 @@ export default function MenScreen() {
                       activeOpacity={0.88}
                       onPress={() => openMenSubcategoryProducts(s.label, s.subcategoryId)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Shop ${s.label}`}
+                      accessibilityLabel={`${tr("Shop")} ${tr(s.label)}`}
                     >
                       <View style={styles.railCardArt}>
                         <Image
@@ -2205,7 +2247,7 @@ export default function MenScreen() {
                       </View>
                       <View style={styles.railCardBody}>
                         <Text style={styles.railCardLabel} numberOfLines={2}>
-                          {s.label}
+                          {tr(s.label)}
                         </Text>
                         <Text style={styles.railCardHint}>Tap to shop</Text>
                       </View>
@@ -2248,7 +2290,7 @@ export default function MenScreen() {
                             } as any)
                           }
                           accessibilityRole="button"
-                          accessibilityLabel={`${product.name}, view details`}
+                          accessibilityLabel={`${tr(product.name)}, ${tr("view details")}`}
                         >
                           <View style={styles.menEthnicKurtaSpotlightInner}>
                             <Image
@@ -2257,7 +2299,7 @@ export default function MenScreen() {
                             />
                             <View style={styles.menEthnicKurtaSpotlightMeta}>
                               <Text style={styles.menEthnicKurtaSpotlightName} numberOfLines={2}>
-                                {product.name}
+                                {tr(product.name)}
                               </Text>
                               <View style={styles.menEthnicKurtaSpotlightPriceRow}>
                                 <Text style={styles.menEthnicKurtaSpotlightPrice}>
@@ -2707,7 +2749,7 @@ export default function MenScreen() {
                     activeOpacity={0.92}
                     onPress={() => openMenSubcategoryProducts(item.label)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Shop ${item.label}`}
+                    accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                   >
                     <LinearGradient
                       colors={[item.deptColor, hexToRgba(item.deptColor, 0.75)]}
@@ -2753,7 +2795,7 @@ export default function MenScreen() {
                             <View style={styles.fcShopAllListMeta}>
                               <View style={styles.fcShopAllListTextCol}>
                                 <Text style={styles.fcShopAllLabelList} numberOfLines={2}>
-                                  {item.label}
+                                  {tr(item.label)}
                                 </Text>
                                 <Text style={styles.fcShopAllHint}>Tap to see products</Text>
                               </View>
@@ -2788,7 +2830,7 @@ export default function MenScreen() {
                         activeOpacity={0.93}
                         onPress={() => openMenSubcategoryProducts(item.label)}
                         accessibilityRole="button"
-                        accessibilityLabel={`Shop ${item.label}`}
+                        accessibilityLabel={`${tr("Shop")} ${tr(item.label)}`}
                       >
                         <LinearGradient
                           colors={[item.deptColor, hexToRgba(item.deptColor, 0.7)]}
@@ -2837,7 +2879,7 @@ export default function MenScreen() {
                               style={styles.shopAllGridBody}
                             >
                               <Text style={styles.shopAllGridLabel} numberOfLines={2}>
-                                {item.label}
+                                {tr(item.label)}
                               </Text>
                               <View style={styles.shopAllGridCtaRow}>
                                 <Text style={styles.shopAllGridCta}>View range</Text>
@@ -3217,7 +3259,7 @@ export default function MenScreen() {
                           } as any)
                         }
                         accessibilityRole="button"
-                        accessibilityLabel={`${product.name}, view details`}
+                        accessibilityLabel={`${tr(product.name)}, ${tr("view details")}`}
                       >
                         <View style={styles.menPtbCardInner}>
                           <Image
@@ -3227,7 +3269,7 @@ export default function MenScreen() {
                           />
                           <View style={styles.menPtbMeta}>
                             <Text style={styles.menPtbName} numberOfLines={2}>
-                              {product.name}
+                              {tr(product.name)}
                             </Text>
                             <View style={styles.menPtbCategoryRow}>
                               <View style={styles.menPtbRatingPill}>
@@ -3261,17 +3303,43 @@ export default function MenScreen() {
                                       name: product.name,
                                       sellingNum: product.sellingNum,
                                       mrpNum: product.mrpNum,
+                                      variantId: product.variantId,
                                     })
                                   }
                                   accessibilityRole="button"
                                   accessibilityLabel={`${
-                                    wishlistIds.has(product.id) ? "Remove from" : "Add to"
-                                  } wishlist: ${product.name}`}
+                                    categoryPtbRowWishlisted(
+                                      product,
+                                      wishlistHasAuth,
+                                      wishlistServerKeys,
+                                      wishlistIds
+                                    )
+                                      ? "Remove from"
+                                      : "Add to"
+                                  } ${tr("wishlist")}: ${tr(product.name)}`}
                                 >
                                   <Ionicons
-                                    name={wishlistIds.has(product.id) ? "heart" : "heart-outline"}
+                                    name={
+                                      categoryPtbRowWishlisted(
+                                        product,
+                                        wishlistHasAuth,
+                                        wishlistServerKeys,
+                                        wishlistIds
+                                      )
+                                        ? "heart"
+                                        : "heart-outline"
+                                    }
                                     size={16}
-                                    color={wishlistIds.has(product.id) ? "#E11D48" : "#1d324e"}
+                                    color={
+                                      categoryPtbRowWishlisted(
+                                        product,
+                                        wishlistHasAuth,
+                                        wishlistServerKeys,
+                                        wishlistIds
+                                      )
+                                        ? "#E11D48"
+                                        : "#1d324e"
+                                    }
                                   />
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -3283,10 +3351,11 @@ export default function MenScreen() {
                                       name: product.name,
                                       sellingNum: product.sellingNum,
                                       mrpNum: product.mrpNum,
+                                      variantId: product.variantId,
                                     })
                                   }
                                   accessibilityRole="button"
-                                  accessibilityLabel={`Add to cart: ${product.name}`}
+                                  accessibilityLabel={`${tr("Add to cart")}: ${tr(product.name)}`}
                                 >
                                   <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
                                   <Text style={styles.menPtbCartBtnText}>Add to Cart</Text>
