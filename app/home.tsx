@@ -1618,6 +1618,7 @@ export default function Home() {
   const [morePicksPage, setMorePicksPage] = useState(0);
   const [morePicksHasMore, setMorePicksHasMore] = useState(false);
   const [morePicksLoadingMore, setMorePicksLoadingMore] = useState(false);
+  const morePicksLoadInFlightRef = useRef(false);
 
   const [megaDiscountCards, setMegaDiscountCards] = useState<MegaDiscountHomeCard[]>(
     MEGA_DISCOUNT_HOME_FALLBACK
@@ -1867,7 +1868,10 @@ export default function Home() {
   }, []);
 
   const loadMoreMorePicks = useCallback(async () => {
-    if (!morePicksHasMore || morePicksLoadingMore) return;
+    if (!morePicksHasMore || morePicksLoadingMore || morePicksLoadInFlightRef.current) {
+      return;
+    }
+    morePicksLoadInFlightRef.current = true;
     setMorePicksLoadingMore(true);
     const nextPage = morePicksPage + 1;
     try {
@@ -1898,6 +1902,7 @@ export default function Home() {
       setMorePicksHasMore(false);
     } finally {
       setMorePicksLoadingMore(false);
+      morePicksLoadInFlightRef.current = false;
     }
   }, [morePicksHasMore, morePicksLoadingMore, morePicksPage]);
 
@@ -2800,17 +2805,27 @@ const focusBanners = [
     });
   }, []);
 
+  const launchHomeGallery = useCallback(async () => {
+    const libraryStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (libraryStatus.status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "Gallery permission is required to upload an image."
+      );
+      return;
+    }
+    await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 1,
+    });
+  }, []);
+
   const openCamera = () => {
-    Alert.alert("Camera access", "Allow camera access to take photos?", [
-      { text: "Don't allow", style: "cancel" },
-      {
-        text: "Allow",
-        onPress: () => {
-          Alert.alert("Camera", "Camera option opened.", [
-            { text: "OK", onPress: () => void launchHomeCamera() },
-          ]);
-        },
-      },
+    Alert.alert("Choose image source", "Search products using a photo.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Camera", onPress: () => void launchHomeCamera() },
+      { text: "Gallery", onPress: () => void launchHomeGallery() },
     ]);
   };
 
@@ -3071,6 +3086,14 @@ const categoryData = [
         nestedScrollEnabled
         scrollEventThrottle={16}
         onScroll={(e) => {
+          const viewportHeight = e.nativeEvent.layoutMeasurement.height ?? 0;
+          const contentHeight = e.nativeEvent.contentSize.height ?? 0;
+          const offsetY = e.nativeEvent.contentOffset.y ?? 0;
+          const distanceToBottom = contentHeight - (offsetY + viewportHeight);
+          if (distanceToBottom <= 460 && morePicksHasMore && !morePicksLoadingMore) {
+            void loadMoreMorePicks();
+          }
+
           const y = e.nativeEvent.contentOffset.y ?? 0;
           const prev = lastMainScrollY.current;
           lastMainScrollY.current = y;
@@ -4054,21 +4077,10 @@ const categoryData = [
         )}
       </View>
     ))}
-    {morePicksHasMore ? (
-      <TouchableOpacity
-        style={styles.latestLoadMoreBtn}
-        activeOpacity={0.88}
-        disabled={morePicksLoadingMore}
-        onPress={() => void loadMoreMorePicks()}
-        accessibilityRole="button"
-        accessibilityLabel={tr("Load more recommended products")}
-      >
-        {morePicksLoadingMore ? (
-          <ActivityIndicator color="#C2410C" />
-        ) : (
-          <Text style={styles.latestLoadMoreBtnText}>{tr("Load more")}</Text>
-        )}
-      </TouchableOpacity>
+    {morePicksLoadingMore ? (
+      <View style={styles.latestLoadMoreBtn} accessibilityLabel={tr("Loading more products")}>
+        <ActivityIndicator color="#C2410C" />
+      </View>
     ) : null}
   </View>
 </View>
@@ -7424,12 +7436,12 @@ latestSection: {
     position: "absolute",
     left: 10,
     bottom: 10,
-    backgroundColor: "rgba(239,68,68,0.92)",
+    backgroundColor: "rgba(249,115,22,0.92)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.65)",
+    borderColor: "rgba(254,215,170,0.95)",
   },
 
   latestGridDiscountPillText: {
