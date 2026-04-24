@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Switch,
@@ -31,9 +32,25 @@ import {
   type AddressType,
   type CreateAddressPayload,
 } from "../services/addresses";
+import {
+  type ApiCountryRow,
+  type ApiStateRow,
+  fetchCities,
+  fetchCountries,
+  fetchPincodes,
+  fetchStates,
+  toUniqueCityNames,
+  toUniqueCountryNames,
+  toUniquePincodes,
+  toUniqueStateNames,
+} from "../services/location";
 
 /** Must match `home.tsx` so the same saved list and selection apply app-wide. */
 export const DELIVERY_ADDRESSES_STORAGE_KEY = "home_savedDeliveryAddresses_v1";
+const DELIVERY_SELECTED_ADDRESS_ID_STORAGE_KEY =
+  "home_selectedDeliveryAddressId_v1";
+const DELIVERY_SELECTED_ADDRESS_LINE_STORAGE_KEY =
+  "home_selectedDeliveryAddressLine_v1";
 
 export interface SavedDeliveryAddress {
   id: string;
@@ -69,6 +86,12 @@ const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
 /** Same default preview line as `home.tsx` header pill. */
 const INITIAL_DISPLAY_LINE =
   "Kphb colony ,road no 3 ,phase 1,near shi...";
+const DEFAULT_COUNTRY_ID = 1;
+const INDIA_COUNTRY_NAME = "India";
+
+function normalizePincodeValue(value: string): string {
+  return value.replace(/\D/g, "");
+}
 
 function mapApiToSavedDelivery(a: ApiAddress): SavedDeliveryAddress {
   const street = [a.addressLine1, a.addressLine2].filter(Boolean).join(", ");
@@ -104,6 +127,8 @@ export type DeliveryLocationSectionProps = {
    * (same pattern as `app/account.tsx`); no host in this file.
    */
   enableFullAddressApi?: boolean;
+  /** Optional city API filter: `/api/location/cities?stateId=...` */
+  cityFilterStateId?: number;
 };
 
 /**
@@ -112,6 +137,7 @@ export type DeliveryLocationSectionProps = {
  */
 export default function DeliveryLocationSection({
   enableFullAddressApi = false,
+  cityFilterStateId,
 }: DeliveryLocationSectionProps) {
   const insets = useSafeAreaInsets();
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
@@ -140,14 +166,102 @@ export default function DeliveryLocationSection({
   const [newAddressPincode, setNewAddressPincode] = useState("");
   const [newAddressUsername, setNewAddressUsername] = useState("");
   const [newAddressLandmark, setNewAddressLandmark] = useState("");
-  const [newAddressCountry, setNewAddressCountry] = useState("India");
+  const [newAddressCountry, setNewAddressCountry] = useState(INDIA_COUNTRY_NAME);
   const [newAddressType, setNewAddressType] = useState<AddressType>("home");
   const [newAddressIsDefault, setNewAddressIsDefault] = useState(false);
+  const [cityOptions, setCityOptions] = useState<string[]>([]);
+  const [stateOptions, setStateOptions] = useState<string[]>([]);
+  const [countryOptions, setCountryOptions] = useState<string[]>([]);
+  const [pincodeOptions, setPincodeOptions] = useState<string[]>([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
+  const [statesLoading, setStatesLoading] = useState(false);
+  const [countriesLoading, setCountriesLoading] = useState(false);
+  const [pincodesLoading, setPincodesLoading] = useState(false);
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  const [showStateSuggestions, setShowStateSuggestions] = useState(false);
+  const [showCountrySuggestions, setShowCountrySuggestions] = useState(false);
+  const [showPincodeSuggestions, setShowPincodeSuggestions] = useState(false);
+  const [stateRows, setStateRows] = useState<ApiStateRow[]>([]);
+  const [countryRows, setCountryRows] = useState<ApiCountryRow[]>([]);
   const [addressesListLoading, setAddressesListLoading] = useState(false);
+  const citySuggestionTapInProgressRef = useRef(false);
+  const stateSuggestionTapInProgressRef = useRef(false);
+  const countrySuggestionTapInProgressRef = useRef(false);
+  const pincodeSuggestionTapInProgressRef = useRef(false);
+  const addFormScrollInProgressRef = useRef(false);
+  const prevCountrySelectionRef = useRef<string>("");
+  const prevStateSelectionRef = useRef<string>("");
+  const latestCityValueRef = useRef("");
+  const latestStateValueRef = useRef("");
   const selectedDeliveryAddressIdRef = useRef<string | null>(null);
   useEffect(() => {
     selectedDeliveryAddressIdRef.current = selectedDeliveryAddressId;
   }, [selectedDeliveryAddressId]);
+  useEffect(() => {
+    latestCityValueRef.current = newAddressCity;
+  }, [newAddressCity]);
+  useEffect(() => {
+    latestStateValueRef.current = newAddressState;
+  }, [newAddressState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [savedSelectedId, savedSelectedLine] = await Promise.all([
+          AsyncStorage.getItem(DELIVERY_SELECTED_ADDRESS_ID_STORAGE_KEY),
+          AsyncStorage.getItem(DELIVERY_SELECTED_ADDRESS_LINE_STORAGE_KEY),
+        ]);
+        if (cancelled) return;
+        if (savedSelectedId) {
+          setSelectedDeliveryAddressId(savedSelectedId);
+        }
+        if (savedSelectedLine) {
+          setDisplayDeliveryLine(savedSelectedLine);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        if (selectedDeliveryAddressId) {
+          await AsyncStorage.setItem(
+            DELIVERY_SELECTED_ADDRESS_ID_STORAGE_KEY,
+            selectedDeliveryAddressId
+          );
+        } else {
+          await AsyncStorage.removeItem(DELIVERY_SELECTED_ADDRESS_ID_STORAGE_KEY);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [selectedDeliveryAddressId]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const line = displayDeliveryLine.trim();
+        if (line) {
+          await AsyncStorage.setItem(
+            DELIVERY_SELECTED_ADDRESS_LINE_STORAGE_KEY,
+            line
+          );
+        } else {
+          await AsyncStorage.removeItem(DELIVERY_SELECTED_ADDRESS_LINE_STORAGE_KEY);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [displayDeliveryLine]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +309,16 @@ export default function DeliveryLocationSection({
         if (parsed.length === 0) {
           setSelectedDeliveryAddressId(null);
           setDisplayDeliveryLine("Use current location");
+        } else {
+          const prevSel = selectedDeliveryAddressIdRef.current;
+          const nextSel =
+            (prevSel && parsed.some((a) => a.id === prevSel) ? prevSel : null) ||
+            parsed[0].id;
+          setSelectedDeliveryAddressId(nextSel);
+          const row = parsed.find((a) => a.id === nextSel);
+          if (row) {
+            setDisplayDeliveryLine(row.line);
+          }
         }
       } catch {
         /* ignore */
@@ -204,6 +328,36 @@ export default function DeliveryLocationSection({
       cancelled = true;
     };
   }, [enableFullAddressApi]);
+
+  useEffect(() => {
+    if (!enableFullAddressApi || !isLoggedIn) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await fetchAddresses();
+        if (cancelled) return;
+        const mapped = rows.map(mapApiToSavedDelivery);
+        setSavedDeliveryAddresses(mapped);
+        const prevSel = selectedDeliveryAddressIdRef.current;
+        let nextSel = prevSel;
+        if (!nextSel || !mapped.some((m) => m.id === nextSel)) {
+          nextSel = mapped.find((m) => m.isDefault)?.id ?? mapped[0]?.id ?? null;
+        }
+        setSelectedDeliveryAddressId(nextSel);
+        if (nextSel) {
+          const row = mapped.find((m) => m.id === nextSel);
+          if (row) setDisplayDeliveryLine(row.line);
+        } else {
+          setDisplayDeliveryLine("Tap to choose delivery address");
+        }
+      } catch {
+        // ignore initial sync failures; modal fetch still works
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enableFullAddressApi, isLoggedIn]);
 
   useEffect(() => {
     if (!enableFullAddressApi || !deliveryAddressModalVisible) return;
@@ -244,6 +398,426 @@ export default function DeliveryLocationSection({
     };
   }, [deliveryAddressModalVisible, enableFullAddressApi]);
 
+  useEffect(() => {
+    if (!enableFullAddressApi || deliveryAddMode !== "add") return;
+    if (countryOptions.length > 0 || countriesLoading) return;
+    let cancelled = false;
+    void (async () => {
+      setCountriesLoading(true);
+      setStatesLoading(true);
+      setCitiesLoading(true);
+      setPincodesLoading(true);
+      try {
+        const countries = await fetchCountries({ status: true }).catch(
+          () => [] as ApiCountryRow[]
+        );
+        const selectedCountryName =
+          (newAddressCountry || INDIA_COUNTRY_NAME).trim().toLowerCase();
+        const matchedCountry =
+          countries.find(
+            (c) => c.countryName.trim().toLowerCase() === selectedCountryName
+          ) || countries.find((c) => c.id === DEFAULT_COUNTRY_ID);
+        const activeCountryId = matchedCountry?.id ?? DEFAULT_COUNTRY_ID;
+
+        const states = await fetchStates({
+          countryId: activeCountryId,
+          status: true,
+        }).catch(() => [] as ApiStateRow[]);
+        const pickedStateId =
+          typeof cityFilterStateId === "number" && Number.isFinite(cityFilterStateId)
+            ? cityFilterStateId
+            : undefined;
+        const cities = await fetchCities({
+          stateId: pickedStateId,
+          countryId: activeCountryId,
+        }).catch(() => []);
+        const pincodes = await fetchPincodes({
+          countryId: activeCountryId,
+          stateId: pickedStateId,
+        }).catch(() => []);
+        if (cancelled) return;
+        const fallbackCountries: ApiCountryRow[] = Array.from(
+          new Set(cities.map((c) => c.countryId))
+        ).map((countryId) => ({
+          id: countryId,
+          countryName:
+            countryId === DEFAULT_COUNTRY_ID
+              ? INDIA_COUNTRY_NAME
+              : `Country ${countryId}`,
+          status: true,
+        }));
+        const resolvedCountries =
+          countries.length > 0 ? countries : fallbackCountries;
+        const resolvedStates = states;
+        setCountryRows(resolvedCountries);
+        setStateRows(resolvedStates);
+        const countryNames = toUniqueCountryNames(resolvedCountries);
+        setCountryOptions(
+          countryNames.length > 0 ? countryNames : [INDIA_COUNTRY_NAME]
+        );
+        setStateOptions(toUniqueStateNames(resolvedStates));
+        setCityOptions(toUniqueCityNames(cities));
+        setPincodeOptions(toUniquePincodes(pincodes));
+      } catch {
+        // Keep the form usable even if city lookup fails.
+        if (!cancelled) {
+          setCountryRows([
+            { id: DEFAULT_COUNTRY_ID, countryName: INDIA_COUNTRY_NAME, status: true },
+          ]);
+          setCountryOptions([INDIA_COUNTRY_NAME]);
+          setPincodeOptions([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setCountriesLoading(false);
+          setStatesLoading(false);
+          setCitiesLoading(false);
+          setPincodesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    enableFullAddressApi,
+    deliveryAddMode,
+    countryOptions.length,
+    countriesLoading,
+    citiesLoading,
+    cityFilterStateId,
+    newAddressCountry,
+  ]);
+
+  // Ensure city dropdown is always populated from `/api/location/cities`.
+  useEffect(() => {
+    if (!enableFullAddressApi || deliveryAddMode !== "add") return;
+    let cancelled = false;
+    void (async () => {
+      setCitiesLoading(true);
+      try {
+        const cities = await fetchCities({ countryId: DEFAULT_COUNTRY_ID });
+        if (cancelled) return;
+        setCityOptions(toUniqueCityNames(cities));
+      } catch {
+        // keep form usable
+      } finally {
+        if (!cancelled) setCitiesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enableFullAddressApi, deliveryAddMode]);
+
+  // Ensure state dropdown is populated from `/api/location/states`.
+  useEffect(() => {
+    if (!enableFullAddressApi || deliveryAddMode !== "add") return;
+    let cancelled = false;
+    void (async () => {
+      setStatesLoading(true);
+      try {
+        const states = await fetchStates({
+          countryId: DEFAULT_COUNTRY_ID,
+          status: true,
+        });
+        if (cancelled) return;
+        setStateRows(states);
+        setStateOptions(toUniqueStateNames(states));
+      } catch {
+        // Keep current options on failure.
+      } finally {
+        if (!cancelled) setStatesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enableFullAddressApi, deliveryAddMode]);
+
+  useEffect(() => {
+    if (!enableFullAddressApi || deliveryAddMode !== "add") return;
+    const selectedCountryName = newAddressCountry.trim().toLowerCase();
+    const selectedCountry =
+      countryRows.find(
+        (c) => c.countryName.trim().toLowerCase() === selectedCountryName
+      ) || countryRows.find((c) => c.id === DEFAULT_COUNTRY_ID);
+    if (!selectedCountry) return;
+
+    let cancelled = false;
+    void (async () => {
+      const previousCountrySelection = prevCountrySelectionRef.current;
+      const countryChanged =
+        previousCountrySelection.length > 0 &&
+        previousCountrySelection !== selectedCountryName;
+      setStatesLoading(true);
+      setCitiesLoading(true);
+      setPincodesLoading(true);
+      try {
+        const [states, cities, pincodes] = await Promise.all([
+          fetchStates({
+            countryId: selectedCountry.id,
+            status: true,
+          }).catch(() => []),
+          fetchCities({
+            countryId: selectedCountry.id,
+          }).catch(() => []),
+          fetchPincodes({
+            countryId: selectedCountry.id,
+          }).catch(() => []),
+        ]);
+        if (cancelled) return;
+        const resolvedStates = states;
+        setStateRows(resolvedStates);
+        setStateOptions(toUniqueStateNames(resolvedStates));
+        // Keep cities available by default; state selection narrows them later.
+        setCityOptions(toUniqueCityNames(cities));
+        setPincodeOptions(toUniquePincodes(pincodes));
+        if (countryChanged) {
+          setNewAddressState("");
+          setNewAddressCity("");
+          setNewAddressPincode("");
+        }
+        prevCountrySelectionRef.current = selectedCountryName;
+      } catch {
+        // keep form usable
+      } finally {
+        if (!cancelled) {
+          setStatesLoading(false);
+          setCitiesLoading(false);
+          setPincodesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enableFullAddressApi, deliveryAddMode, newAddressCountry, countryRows]);
+
+  useEffect(() => {
+    if (!enableFullAddressApi || deliveryAddMode !== "add") return;
+    const normalizedState = newAddressState.trim().toLowerCase();
+    const selectedState = stateRows.find(
+      (s) => s.stateName.trim().toLowerCase() === normalizedState
+    );
+    if (!selectedState) return;
+    const selectedCountryName = newAddressCountry.trim().toLowerCase();
+    const selectedCountry =
+      countryRows.find(
+        (c) => c.countryName.trim().toLowerCase() === selectedCountryName
+      ) || countryRows.find((c) => c.id === DEFAULT_COUNTRY_ID);
+    if (!selectedCountry) return;
+
+    let cancelled = false;
+    void (async () => {
+      const previousStateSelection = prevStateSelectionRef.current;
+      const stateChanged =
+        previousStateSelection.length > 0 &&
+        previousStateSelection !== normalizedState;
+      setCitiesLoading(true);
+      setPincodesLoading(true);
+      try {
+        const [cities, pincodes] = await Promise.all([
+          fetchCities({
+            countryId: selectedCountry.id,
+            stateId: selectedState.id,
+          }),
+          fetchPincodes({
+            countryId: selectedCountry.id,
+            stateId: selectedState.id,
+          }),
+        ]);
+        if (cancelled) return;
+        setCityOptions(toUniqueCityNames(cities));
+        setPincodeOptions(toUniquePincodes(pincodes));
+        if (stateChanged) {
+          setNewAddressCity("");
+          setNewAddressPincode("");
+        }
+        prevStateSelectionRef.current = normalizedState;
+      } catch {
+        // keep form usable
+      } finally {
+        if (!cancelled) {
+          setCitiesLoading(false);
+          setPincodesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    enableFullAddressApi,
+    deliveryAddMode,
+    newAddressCountry,
+    newAddressState,
+    stateRows,
+    countryRows,
+  ]);
+
+  useEffect(() => {
+    if (!enableFullAddressApi || deliveryAddMode !== "add") return;
+    const normalizedCity = newAddressCity.trim().toLowerCase();
+    if (!normalizedCity) return;
+    const selectedCity = cityOptions.find(
+      (city) => city.trim().toLowerCase() === normalizedCity
+    );
+    if (!selectedCity) return;
+
+    const selectedCountryName = newAddressCountry.trim().toLowerCase();
+    const selectedCountry =
+      countryRows.find(
+        (c) => c.countryName.trim().toLowerCase() === selectedCountryName
+      ) || countryRows.find((c) => c.id === DEFAULT_COUNTRY_ID);
+    if (!selectedCountry) return;
+
+    const normalizedState = newAddressState.trim().toLowerCase();
+    const selectedState = stateRows.find(
+      (s) => s.stateName.trim().toLowerCase() === normalizedState
+    );
+    if (!selectedState) return;
+
+    let cancelled = false;
+    void (async () => {
+      setPincodesLoading(true);
+      try {
+        const cityRows = await fetchCities({
+          countryId: selectedCountry.id,
+          stateId: selectedState.id,
+        });
+        const selectedCityRow = cityRows.find(
+          (row) => row.cityName.trim().toLowerCase() === normalizedCity
+        );
+        if (!selectedCityRow) return;
+        const pincodeAttempts = [
+          {
+            countryId: selectedCountry.id,
+            stateId: selectedState.id,
+            cityId: selectedCityRow.id,
+          },
+          {
+            countryId: selectedCountry.id,
+            stateId: selectedState.id,
+          },
+          {
+            countryId: selectedCountry.id,
+          },
+          {},
+        ];
+        let nextPincodes: string[] = [];
+        for (const params of pincodeAttempts) {
+          const rows = await fetchPincodes(params);
+          const uniquePincodes = toUniquePincodes(rows);
+          if (uniquePincodes.length > 0) {
+            nextPincodes = uniquePincodes;
+            break;
+          }
+        }
+        if (cancelled) return;
+        setPincodeOptions(nextPincodes);
+      } catch {
+        // keep form usable
+      } finally {
+        if (!cancelled) setPincodesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    enableFullAddressApi,
+    deliveryAddMode,
+    newAddressCountry,
+    newAddressState,
+    newAddressCity,
+    cityOptions,
+    stateRows,
+    countryRows,
+  ]);
+
+  useEffect(() => {
+    if (!enableFullAddressApi || deliveryAddMode !== "add") return;
+    if (!showPincodeSuggestions || pincodeOptions.length > 0) return;
+
+    const selectedCountryName = newAddressCountry.trim().toLowerCase();
+    const selectedCountry =
+      countryRows.find(
+        (c) => c.countryName.trim().toLowerCase() === selectedCountryName
+      ) || countryRows.find((c) => c.id === DEFAULT_COUNTRY_ID);
+    if (!selectedCountry) return;
+
+    let cancelled = false;
+    void (async () => {
+      setPincodesLoading(true);
+      try {
+        const normalizedState = newAddressState.trim().toLowerCase();
+        const selectedState = stateRows.find(
+          (s) => s.stateName.trim().toLowerCase() === normalizedState
+        );
+
+        let cityId: number | undefined;
+        const normalizedCity = newAddressCity.trim().toLowerCase();
+        if (selectedState && normalizedCity) {
+          const cityRows = await fetchCities({
+            countryId: selectedCountry.id,
+            stateId: selectedState.id,
+          });
+          const selectedCityRow = cityRows.find(
+            (row) => row.cityName.trim().toLowerCase() === normalizedCity
+          );
+          cityId = selectedCityRow?.id;
+        }
+
+        const pincodeAttempts = [
+          {
+            countryId: selectedCountry.id,
+            stateId: selectedState?.id,
+            cityId,
+          },
+          {
+            countryId: selectedCountry.id,
+            stateId: selectedState?.id,
+          },
+          {
+            countryId: selectedCountry.id,
+          },
+          {},
+        ];
+        let nextPincodes: string[] = [];
+        for (const params of pincodeAttempts) {
+          const rows = await fetchPincodes(params);
+          const uniquePincodes = toUniquePincodes(rows);
+          if (uniquePincodes.length > 0) {
+            nextPincodes = uniquePincodes;
+            break;
+          }
+        }
+        if (cancelled) return;
+        setPincodeOptions(nextPincodes);
+      } catch {
+        // keep form usable
+      } finally {
+        if (!cancelled) setPincodesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    enableFullAddressApi,
+    deliveryAddMode,
+    showPincodeSuggestions,
+    pincodeOptions.length,
+    newAddressCountry,
+    newAddressState,
+    newAddressCity,
+    countryRows,
+    stateRows,
+  ]);
+
   const persistSavedDeliveryAddresses = useCallback(
     async (next: SavedDeliveryAddress[]) => {
       setSavedDeliveryAddresses(next);
@@ -270,7 +844,7 @@ export default function DeliveryLocationSection({
     setNewAddressPincode("");
     setNewAddressUsername("");
     setNewAddressLandmark("");
-    setNewAddressCountry("India");
+    setNewAddressCountry(INDIA_COUNTRY_NAME);
     setNewAddressType("home");
     setNewAddressIsDefault(false);
   }, []);
@@ -279,16 +853,28 @@ export default function DeliveryLocationSection({
     setDeliveryAddressModalVisible(false);
     setDeliveryAddressSearchQuery("");
     setDeliveryAddMode("list");
+    setShowCountrySuggestions(false);
+    setShowStateSuggestions(false);
+    setShowCitySuggestions(false);
+    setShowPincodeSuggestions(false);
     resetAddAddressFields();
   }, [resetAddAddressFields]);
 
   const openAddNewAddressForm = useCallback(() => {
     resetAddAddressFields();
     setDeliveryAddMode("add");
+    setShowCountrySuggestions(false);
+    setShowStateSuggestions(false);
+    setShowCitySuggestions(false);
+    setShowPincodeSuggestions(false);
   }, [resetAddAddressFields]);
 
   const goBackAddAddressForm = useCallback(() => {
     setDeliveryAddMode("list");
+    setShowCountrySuggestions(false);
+    setShowStateSuggestions(false);
+    setShowCitySuggestions(false);
+    setShowPincodeSuggestions(false);
     resetAddAddressFields();
   }, [resetAddAddressFields]);
 
@@ -315,6 +901,105 @@ export default function DeliveryLocationSection({
       return hay.includes(q);
     });
   }, [savedDeliveryAddresses, deliveryAddressSearchQuery]);
+
+  const filteredCitySuggestions = useMemo(() => {
+    if (!showCitySuggestions) return [];
+    if (cityOptions.length === 0) return [];
+    const q = newAddressCity.trim().toLowerCase();
+    if (!q) return cityOptions.slice(0, 20);
+    return cityOptions
+      .filter((name) => name.toLowerCase().includes(q))
+      .slice(0, 20);
+  }, [showCitySuggestions, cityOptions, newAddressCity]);
+
+  const filteredStateSuggestions = useMemo(() => {
+    if (!showStateSuggestions || stateOptions.length === 0) return [];
+    const q = newAddressState.trim().toLowerCase();
+    if (!q) return stateOptions.slice(0, 8);
+    return stateOptions
+      .filter((name) => name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [showStateSuggestions, stateOptions, newAddressState]);
+
+  const filteredCountrySuggestions = useMemo(() => {
+    if (!showCountrySuggestions || countryOptions.length === 0) return [];
+    const q = newAddressCountry.trim().toLowerCase();
+    if (!q) return countryOptions.slice(0, 8);
+    return countryOptions
+      .filter((name) => name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [showCountrySuggestions, countryOptions, newAddressCountry]);
+
+  const filteredPincodeSuggestions = useMemo(() => {
+    if (!showPincodeSuggestions || pincodeOptions.length === 0) return [];
+    const q = newAddressPincode.trim().toLowerCase();
+    if (!q) return pincodeOptions.slice(0, 12);
+    return pincodeOptions.filter((code) => code.toLowerCase().includes(q)).slice(0, 12);
+  }, [showPincodeSuggestions, pincodeOptions, newAddressPincode]);
+
+  const cityFoundFromApi = useMemo(() => {
+    const city = newAddressCity.trim().toLowerCase();
+    if (!city || cityOptions.length === 0) return null;
+    return cityOptions.some((name) => name.trim().toLowerCase() === city);
+  }, [newAddressCity, cityOptions]);
+
+  const pincodeFoundFromApi = useMemo(() => {
+    const code = normalizePincodeValue(newAddressPincode.trim());
+    if (!code || pincodeOptions.length === 0) return null;
+    return pincodeOptions.some((p) => normalizePincodeValue(p) === code);
+  }, [newAddressPincode, pincodeOptions]);
+
+  const applyCitySuggestion = useCallback((city: string) => {
+    citySuggestionTapInProgressRef.current = true;
+    Keyboard.dismiss();
+    setNewAddressCity(city);
+    setShowCitySuggestions(false);
+  }, []);
+
+  const applyStateSuggestion = useCallback((state: string) => {
+    stateSuggestionTapInProgressRef.current = true;
+    Keyboard.dismiss();
+    prevStateSelectionRef.current = state.trim().toLowerCase();
+    setNewAddressState(state);
+    setNewAddressCity("");
+    setNewAddressPincode("");
+    setShowStateSuggestions(false);
+  }, []);
+
+  const applyPincodeSuggestion = useCallback((pincode: string) => {
+    pincodeSuggestionTapInProgressRef.current = true;
+    Keyboard.dismiss();
+    setNewAddressPincode(pincode);
+    setShowPincodeSuggestions(false);
+  }, []);
+
+  const applyCountrySuggestion = useCallback((country: string) => {
+    countrySuggestionTapInProgressRef.current = true;
+    Keyboard.dismiss();
+    prevCountrySelectionRef.current = country.trim().toLowerCase();
+    setNewAddressCountry(country);
+    setNewAddressState("");
+    setNewAddressCity("");
+    setNewAddressPincode("");
+    setShowCountrySuggestions(false);
+  }, []);
+
+  const resolveFullNameFromOptions = useCallback(
+    (input: string, options: string[]): string => {
+      const normalizedInput = input.trim().toLowerCase();
+      if (!normalizedInput) return "";
+      const exact = options.find(
+        (name) => name.trim().toLowerCase() === normalizedInput
+      );
+      if (exact) return exact;
+      const startsWith = options.filter((name) =>
+        name.trim().toLowerCase().startsWith(normalizedInput)
+      );
+      if (startsWith.length === 1) return startsWith[0];
+      return input.trim();
+    },
+    []
+  );
 
   const selectDeliveryAddress = useCallback(
     (addr: SavedDeliveryAddress) => {
@@ -361,9 +1046,10 @@ export default function DeliveryLocationSection({
     const landmark = newAddressLandmark.trim();
     const city = newAddressCity.trim();
     const state = newAddressState.trim();
-    const pincode = newAddressPincode.trim();
+    const pincode = normalizePincodeValue(newAddressPincode.trim());
     const username = newAddressUsername.trim();
-    const country = (newAddressCountry || "India").trim();
+    const country = (newAddressCountry || INDIA_COUNTRY_NAME).trim();
+    const isIndiaCountry = country.toLowerCase() === INDIA_COUNTRY_NAME.toLowerCase();
 
     if (!name) {
       Alert.alert("Missing details", "Please enter your full name.");
@@ -389,12 +1075,38 @@ export default function DeliveryLocationSection({
       Alert.alert("Missing details", "Please enter city and state.");
       return;
     }
+    if (
+      enableFullAddressApi &&
+      cityOptions.length > 0 &&
+      !cityOptions.some((name) => name.trim().toLowerCase() === city.toLowerCase())
+    ) {
+      Alert.alert("City not found", "Please select a valid city from the dropdown.");
+      return;
+    }
     if (!/^[0-9]{6}$/.test(pincode)) {
       Alert.alert("Invalid pincode", "Enter a valid 6-digit pincode.");
       return;
     }
+    if (
+      enableFullAddressApi &&
+      pincodeOptions.length > 0 &&
+      !pincodeOptions.some((p) => normalizePincodeValue(p) === pincode)
+    ) {
+      Alert.alert(
+        "Pincode not found",
+        "Please select a valid pincode from the dropdown."
+      );
+      return;
+    }
     if (enableFullAddressApi && !country) {
       Alert.alert("Missing details", "Please enter country.");
+      return;
+    }
+    if (enableFullAddressApi && !isIndiaCountry) {
+      Alert.alert(
+        "Only India supported",
+        "For now, we accept delivery locations only in India."
+      );
       return;
     }
 
@@ -407,7 +1119,7 @@ export default function DeliveryLocationSection({
         addressLine2: landmark,
         city,
         state,
-        country,
+        country: INDIA_COUNTRY_NAME,
         pincode,
         addressType: newAddressType,
         isDefault: newAddressIsDefault,
@@ -929,12 +1641,23 @@ export default function DeliveryLocationSection({
 
                 <ScrollView
                   style={styles.deliverySheetBodyScroll}
-                  keyboardShouldPersistTaps="handled"
+                  keyboardShouldPersistTaps="always"
                   showsVerticalScrollIndicator={false}
-                  keyboardDismissMode="on-drag"
+                  keyboardDismissMode="none"
+                  onScrollBeginDrag={() => {
+                    addFormScrollInProgressRef.current = true;
+                  }}
+                  onScrollEndDrag={() => {
+                    addFormScrollInProgressRef.current = false;
+                  }}
+                  onMomentumScrollEnd={() => {
+                    addFormScrollInProgressRef.current = false;
+                  }}
                   contentContainerStyle={styles.deliverySheetScrollAdd}
                 >
-                  <Text style={styles.deliveryFormLabelRef}>Full Name</Text>
+                  <Text style={styles.deliveryFormLabelRef}>
+                    Full Name <Text style={styles.deliveryRequiredMark}>*</Text>
+                  </Text>
                   <TextInput
                     style={styles.deliveryFormInputRef}
                     placeholder="Enter full name"
@@ -943,7 +1666,9 @@ export default function DeliveryLocationSection({
                     onChangeText={setNewAddressName}
                   />
 
-                  <Text style={styles.deliveryFormLabelRef}>Email Address</Text>
+                  <Text style={styles.deliveryFormLabelRef}>
+                    Email Address <Text style={styles.deliveryRequiredMark}>*</Text>
+                  </Text>
                   <TextInput
                     style={styles.deliveryFormInputRef}
                     placeholder="Enter email address"
@@ -955,7 +1680,9 @@ export default function DeliveryLocationSection({
                     onChangeText={setNewAddressEmail}
                   />
 
-                  <Text style={styles.deliveryFormLabelRef}>Mobile Number</Text>
+                  <Text style={styles.deliveryFormLabelRef}>
+                    Mobile Number <Text style={styles.deliveryRequiredMark}>*</Text>
+                  </Text>
                   <TextInput
                     style={styles.deliveryFormInputRef}
                     placeholder="10-digit mobile number"
@@ -966,7 +1693,9 @@ export default function DeliveryLocationSection({
                     onChangeText={setNewAddressPhone}
                   />
 
-                  <Text style={styles.deliveryFormLabelRef}>Area</Text>
+                  <Text style={styles.deliveryFormLabelRef}>
+                    Area <Text style={styles.deliveryRequiredMark}>*</Text>
+                  </Text>
                   <TextInput
                     style={styles.deliveryFormInputRef}
                     placeholder="H.no/Area Name"
@@ -987,25 +1716,130 @@ export default function DeliveryLocationSection({
                     onChangeText={setNewAddressLandmark}
                   />
 
-                  <Text style={styles.deliveryFormLabelRef}>City</Text>
+                  <Text style={styles.deliveryFormLabelRef}>
+                    City <Text style={styles.deliveryRequiredMark}>*</Text>
+                  </Text>
                   <TextInput
                     style={styles.deliveryFormInputRef}
                     placeholder="Enter city"
                     placeholderTextColor="#9CA3AF"
                     value={newAddressCity}
                     onChangeText={setNewAddressCity}
+                    onFocus={() => setShowCitySuggestions(true)}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        if (addFormScrollInProgressRef.current) return;
+                        if (citySuggestionTapInProgressRef.current) {
+                          citySuggestionTapInProgressRef.current = false;
+                          return;
+                        }
+                        const currentCityValue = latestCityValueRef.current;
+                        const resolvedCity = resolveFullNameFromOptions(
+                          currentCityValue,
+                          cityOptions
+                        );
+                        if (resolvedCity && resolvedCity !== currentCityValue.trim()) {
+                          setNewAddressCity(resolvedCity);
+                        }
+                        setShowCitySuggestions(false);
+                      }, 220);
+                    }}
                   />
+                  {enableFullAddressApi ? (
+                    filteredCitySuggestions.length > 0 ? (
+                      <View style={styles.deliveryCitySuggestionBox}>
+                        {filteredCitySuggestions.map((city) => (
+                          <TouchableOpacity
+                            key={city}
+                            style={styles.deliveryCitySuggestionItem}
+                            activeOpacity={0.75}
+                            onPressIn={() => {
+                              applyCitySuggestion(city);
+                            }}
+                            onPress={() => {
+                              applyCitySuggestion(city);
+                            }}
+                          >
+                            <Text style={styles.deliveryCitySuggestionText}>
+                              {city}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : cityFoundFromApi === false ? (
+                      <Text style={styles.deliveryCityHint}>
+                        City not found.
+                      </Text>
+                    ) : cityFoundFromApi === true ? (
+                      <Text style={styles.deliveryCityHint}>
+                        City found.
+                      </Text>
+                    ) : null
+                  ) : null}
 
-                  <Text style={styles.deliveryFormLabelRef}>State</Text>
+                  <Text style={styles.deliveryFormLabelRef}>
+                    State <Text style={styles.deliveryRequiredMark}>*</Text>
+                  </Text>
                   <TextInput
                     style={styles.deliveryFormInputRef}
                     placeholder="Enter state"
                     placeholderTextColor="#9CA3AF"
                     value={newAddressState}
                     onChangeText={setNewAddressState}
+                    onFocus={() => setShowStateSuggestions(true)}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        if (addFormScrollInProgressRef.current) return;
+                        if (stateSuggestionTapInProgressRef.current) {
+                          stateSuggestionTapInProgressRef.current = false;
+                          return;
+                        }
+                        const currentStateValue = latestStateValueRef.current;
+                        const resolvedState = resolveFullNameFromOptions(
+                          currentStateValue,
+                          stateOptions
+                        );
+                        if (resolvedState && resolvedState !== currentStateValue.trim()) {
+                          prevStateSelectionRef.current = resolvedState
+                            .trim()
+                            .toLowerCase();
+                          setNewAddressState(resolvedState);
+                        }
+                        setShowStateSuggestions(false);
+                      }, 220);
+                    }}
                   />
+                  {enableFullAddressApi ? (
+                    statesLoading ? (
+                      <Text style={styles.deliveryCityHint}>
+                        Loading states...
+                      </Text>
+                    ) : filteredStateSuggestions.length > 0 ? (
+                      <View style={styles.deliveryCitySuggestionBox}>
+                        {filteredStateSuggestions.map((state) => (
+                          <TouchableOpacity
+                            key={state}
+                            style={styles.deliveryCitySuggestionItem}
+                            activeOpacity={0.75}
+                            onPressIn={() => {
+                              applyStateSuggestion(state);
+                            }}
+                            onPress={() => {
+                              applyStateSuggestion(state);
+                            }}
+                          >
+                            <Text style={styles.deliveryCitySuggestionText}>
+                              {state}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null
+                  ) : null}
 
-                  <Text style={styles.deliveryFormLabelRef}>Pincode</Text>
+                  <Text style={styles.deliveryFormLabelRef}>
+                    Pincode <Text style={styles.deliveryRequiredMark}>*</Text>
+                  </Text>
                   <TextInput
                     style={styles.deliveryFormInputRef}
                     placeholder="6-digit pincode"
@@ -1014,18 +1848,96 @@ export default function DeliveryLocationSection({
                     maxLength={6}
                     value={newAddressPincode}
                     onChangeText={setNewAddressPincode}
+                    onFocus={() => setShowPincodeSuggestions(true)}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        if (pincodeSuggestionTapInProgressRef.current) {
+                          pincodeSuggestionTapInProgressRef.current = false;
+                          return;
+                        }
+                        setShowPincodeSuggestions(false);
+                      }, 220);
+                    }}
                   />
+                  {enableFullAddressApi ? (
+                    filteredPincodeSuggestions.length > 0 ? (
+                      <View style={styles.deliveryCitySuggestionBox}>
+                        {filteredPincodeSuggestions.map((pincode) => (
+                          <TouchableOpacity
+                            key={pincode}
+                            style={styles.deliveryCitySuggestionItem}
+                            activeOpacity={0.75}
+                            onPressIn={() => {
+                              applyPincodeSuggestion(pincode);
+                            }}
+                            onPress={() => {
+                              applyPincodeSuggestion(pincode);
+                            }}
+                          >
+                            <Text style={styles.deliveryCitySuggestionText}>
+                              {pincode}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : pincodeFoundFromApi === false ? (
+                      <Text style={styles.deliveryCityHint}>
+                        Pincode not found.
+                      </Text>
+                    ) : pincodeFoundFromApi === true ? (
+                      <Text style={styles.deliveryCityHint}>
+                        Pincode found.
+                      </Text>
+                    ) : null
+                  ) : null}
 
                   {enableFullAddressApi ? (
                     <>
-                      <Text style={styles.deliveryFormLabelRef}>Country</Text>
+                      <Text style={styles.deliveryFormLabelRef}>
+                        Country <Text style={styles.deliveryRequiredMark}>*</Text>
+                      </Text>
                       <TextInput
                         style={styles.deliveryFormInputRef}
-                        placeholder="e.g. India"
+                        placeholder="Select country"
                         placeholderTextColor="#9CA3AF"
                         value={newAddressCountry}
                         onChangeText={setNewAddressCountry}
+                        onFocus={() => setShowCountrySuggestions(true)}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            if (countrySuggestionTapInProgressRef.current) {
+                              countrySuggestionTapInProgressRef.current = false;
+                              return;
+                            }
+                            setShowCountrySuggestions(false);
+                          }, 220);
+                        }}
                       />
+                      {countriesLoading ? (
+                        <Text style={styles.deliveryCityHint}>
+                          Loading countries...
+                        </Text>
+                      ) : filteredCountrySuggestions.length > 0 ? (
+                        <View style={styles.deliveryCitySuggestionBox}>
+                          {filteredCountrySuggestions.map((country) => (
+                            <TouchableOpacity
+                              key={country}
+                              style={styles.deliveryCitySuggestionItem}
+                              activeOpacity={0.75}
+                              onPressIn={() => {
+                                applyCountrySuggestion(country);
+                              }}
+                              onPress={() => {
+                                applyCountrySuggestion(country);
+                              }}
+                            >
+                              <Text style={styles.deliveryCitySuggestionText}>
+                                {country}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      ) : null}
 
                       <Text style={styles.deliveryFormLabelRef}>Address type</Text>
                       <View style={styles.deliveryTypeRow}>
@@ -1285,6 +2197,10 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontSize: 13,
   },
+  deliveryRequiredMark: {
+    color: "#DC2626",
+    fontWeight: "700",
+  },
   deliveryFormInputRef: {
     backgroundColor: "#FFFFFF",
     borderRadius: 10,
@@ -1443,6 +2359,31 @@ const styles = StyleSheet.create({
   deliveryAddressMenuBtn: {
     padding: 4,
     marginTop: -2,
+  },
+  deliveryCityHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: -6,
+    marginBottom: 12,
+  },
+  deliveryCitySuggestionBox: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    marginTop: -6,
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  deliveryCitySuggestionItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E5E7EB",
+  },
+  deliveryCitySuggestionText: {
+    fontSize: 14,
+    color: "#1F2937",
   },
   deliveryTypeRow: {
     flexDirection: "row",

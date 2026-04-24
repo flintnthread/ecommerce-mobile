@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -13,6 +14,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { buildRazorpayCheckoutHtml } from "../lib/payment/razorpayWebHtml";
 import { verifyRazorpayPayment } from "../lib/payment/razorpayFlow";
+import { deleteCartClearServer } from "../lib/cartServerApi";
+import { saveCart } from "../lib/shopStorage";
 
 function oneParam(v: string | string[] | undefined): string {
   if (v == null) return "";
@@ -55,6 +58,16 @@ export default function RazorpayWebCheckoutScreen() {
             signature: data.razorpay_signature,
           });
           if (verify.success) {
+            // Keep cart in sync after successful payment on web checkout path.
+            await saveCart([]);
+            const token = (await AsyncStorage.getItem("token"))?.trim();
+            if (token) {
+              try {
+                await deleteCartClearServer();
+              } catch {
+                // Do not block success UX if cart clear API fails.
+              }
+            }
             Alert.alert("Payment successful", verify.message ?? "Your payment was verified.", [
               { text: "OK", onPress: () => router.replace("/orders" as any) },
             ]);

@@ -9,7 +9,6 @@ import {
   Image,
   TextInput,
   Alert,
-  Dimensions,
   Animated,
   Easing,
   type LayoutChangeEvent,
@@ -18,7 +17,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
-  addProductToCart,
   adjustCartQuantity,
   loadCart,
   removeCartLine,
@@ -33,9 +31,13 @@ import {
   parseCartApiError,
   putCartItemQuantityDelta,
 } from "../lib/cartServerApi";
+import {
+  estimateCartWeightKgFromItemCount,
+  fetchDeliveryChargeByWeight,
+  pickPreferredCharge,
+} from "../lib/deliveryChargesApi";
 import { useLanguage } from "../lib/language";
 
-const { width, height } = Dimensions.get("window");
 const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
 const RUNNER_W = 170;
 const RUNNER_H = 64;
@@ -53,16 +55,6 @@ interface CartItem {
   color?: string;
   source: CartItemSource;
   serverItemId?: number;
-}
-
-interface SimilarProduct {
-  id: string;
-  name: string;
-  image: any;
-  price: number;
-  originalPrice?: number;
-  rating?: number;
-  reviews?: number;
 }
 
 function persistedToCartItem(line: PersistedCartLine): CartItem {
@@ -250,64 +242,7 @@ export default function CartScreen() {
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
-
-  // Similar Products Data
-  const similarProducts: SimilarProduct[] = [
-    {
-      id: "sim1",
-      name: "Classic White Shirt",
-      image: require("../assets/images/age5.png"),
-      price: 999,
-      originalPrice: 1499,
-      rating: 4.5,
-      reviews: 128,
-    },
-    {
-      id: "sim2",
-      name: "Slim Fit Chinos",
-      image: require("../assets/images/age6.png"),
-      price: 1899,
-      originalPrice: 2499,
-      rating: 4.3,
-      reviews: 89,
-    },
-    {
-      id: "sim3",
-      name: "Casual Polo T-Shirt",
-      image: require("../assets/images/age5.png"),
-      price: 799,
-      originalPrice: 1199,
-      rating: 4.7,
-      reviews: 256,
-    },
-    {
-      id: "sim4",
-      name: "Formal Dress Pants",
-      image: require("../assets/images/age6.png"),
-      price: 2199,
-      originalPrice: 2999,
-      rating: 4.4,
-      reviews: 142,
-    },
-    {
-      id: "sim5",
-      name: "Cotton Hoodie",
-      image: require("../assets/images/age5.png"),
-      price: 1599,
-      originalPrice: 2199,
-      rating: 4.6,
-      reviews: 203,
-    },
-    {
-      id: "sim6",
-      name: "Sports T-Shirt",
-      image: require("../assets/images/age6.png"),
-      price: 699,
-      originalPrice: 999,
-      rating: 4.2,
-      reviews: 167,
-    },
-  ];
+  const [apiWeightDeliveryCharge, setApiWeightDeliveryCharge] = useState<number | null>(null);
 
   // Calculate totals (server cart uses API priceSummary when available)
   const subtotal = useMemo(() => {
@@ -329,13 +264,37 @@ export default function CartScreen() {
   }, [cartSource, serverPriceSummary, cartItems]);
 
   const totalDiscount = discount + couponDiscount;
+  const totalUnits = useMemo(
+    () => cartItems.reduce((sum, item) => sum + Math.max(0, item.quantity), 0),
+    [cartItems]
+  );
+
+  useEffect(() => {
+    if (cartSource === "server" && serverPriceSummary) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const weightKg = estimateCartWeightKgFromItemCount(totalUnits);
+        const slab = await fetchDeliveryChargeByWeight(weightKg);
+        if (alive) setApiWeightDeliveryCharge(pickPreferredCharge(slab));
+      } catch {
+        if (alive) setApiWeightDeliveryCharge(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [cartSource, serverPriceSummary, totalUnits]);
 
   const deliveryCharge = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
       return serverPriceSummary.deliveryCharge;
     }
-    return subtotal > 2000 ? 0 : 99;
-  }, [cartSource, serverPriceSummary, subtotal]);
+    if (apiWeightDeliveryCharge != null) {
+      return apiWeightDeliveryCharge;
+    }
+    return 99;
+  }, [cartSource, serverPriceSummary, apiWeightDeliveryCharge]);
 
   const orderTotal = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
@@ -458,20 +417,6 @@ export default function CartScreen() {
     setCouponDiscount(0);
     setCouponCode("");
     Alert.alert(tr("Coupon Removed"), tr("Coupon has been removed."));
-  };
-
-  // Add similar product to cart
-  const addSimilarProductToCart = (product: SimilarProduct) => {
-    void (async () => {
-      await addProductToCart({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        mrp: product.originalPrice ?? product.price,
-      });
-      await reloadCartFromStorage();
-      Alert.alert(tr("Added to Cart"), tr(`${product.name} has been added to your cart!`));
-    })();
   };
 
   // Proceed to checkout
@@ -733,7 +678,7 @@ export default function CartScreen() {
             ) : null}
 
             {/* Price Summary */}
-            <View style={styles.section}>
+            <View style={[styles.section, styles.priceSummarySection]}>
               <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{tr("Price Summary")}</Text>
               <View style={styles.priceSummaryCard}>
                 <View style={styles.priceRow}>
@@ -761,11 +706,7 @@ export default function CartScreen() {
                 <View style={styles.priceRow}>
                   <Text style={styles.priceLabel}>{tr("Delivery Charge")}</Text>
                   <Text style={styles.priceValue}>
-                    {deliveryCharge === 0 ? (
-                      <Text style={styles.freeText}>{tr("FREE")}</Text>
-                    ) : (
-                      `₹${deliveryCharge}`
-                    )}
+                    {deliveryCharge <= 0 ? tr("FREE") : `₹${deliveryCharge.toLocaleString()}`}
                   </Text>
                 </View>
                 <View style={styles.priceDivider} />
@@ -776,85 +717,6 @@ export default function CartScreen() {
               </View>
             </View>
 
-            {/* Similar Products Section */}
-            <View style={styles.section}>
-              <View style={styles.similarProductsHeader}>
-                <Text style={styles.sectionTitle}>{tr("You May Also Like")}</Text>
-                <Text style={styles.similarProductsSubtitle}>
-                  {tr("Similar products you might enjoy")}
-                </Text>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.similarProductsScroll}
-                style={styles.similarProductsContainer}
-              >
-                {similarProducts.map((product) => (
-                  <TouchableOpacity
-                    key={product.id}
-                    style={styles.similarProductCard}
-                    onPress={() => addSimilarProductToCart(product)}
-                    activeOpacity={0.8}
-                  >
-                    <Image
-                      source={product.image}
-                      style={styles.similarProductImage}
-                    />
-                    {product.originalPrice && (
-                      <View style={styles.similarProductBadge}>
-                        <Text style={styles.similarProductBadgeText}>
-                          {Math.round(
-                            ((product.originalPrice - product.price) /
-                              product.originalPrice) *
-                              100
-                          )}
-                          % OFF
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.similarProductInfo}>
-                      <Text style={styles.similarProductName} numberOfLines={2}>
-                        {product.name}
-                      </Text>
-                      {product.rating && (
-                        <View style={styles.similarProductRating}>
-                          <Ionicons name="star" size={12} color="#FFB800" />
-                          <Text style={styles.similarProductRatingText}>
-                            {product.rating}
-                          </Text>
-                          {product.reviews && (
-                            <Text style={styles.similarProductReviewsText}>
-                              ({product.reviews})
-                            </Text>
-                          )}
-                        </View>
-                      )}
-                      <View style={styles.similarProductPriceRow}>
-                        <Text style={styles.similarProductPrice}>
-                          ₹{product.price.toLocaleString()}
-                        </Text>
-                        {product.originalPrice && (
-                          <Text style={styles.similarProductOriginalPrice}>
-                            ₹{product.originalPrice.toLocaleString()}
-                          </Text>
-                        )}
-                      </View>
-                      <TouchableOpacity
-                        style={styles.similarProductAddButton}
-                        onPress={() => addSimilarProductToCart(product)}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="add" size={18} color="#FFFFFF" />
-                        <Text style={styles.similarProductAddButtonText}>
-                          {tr("Add to Cart")}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
           </>
         )}
       </ScrollView>
@@ -950,7 +812,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    paddingBottom: 100,
+    paddingBottom: 180,
   },
   emptyContainer: {
     flex: 1,
@@ -1171,6 +1033,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E5E5",
   },
+  priceSummarySection: {
+    marginBottom: 36,
+  },
   priceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1188,10 +1053,6 @@ const styles = StyleSheet.create({
   },
   discountText: {
     color: "#4CAF50",
-  },
-  freeText: {
-    color: "#4CAF50",
-    fontWeight: "700",
   },
   priceDivider: {
     height: 1,
@@ -1254,111 +1115,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "700",
-  },
-  similarProductsHeader: {
-    marginBottom: 16,
-  },
-  similarProductsSubtitle: {
-    fontSize: 13,
-    color: "#666",
-    marginTop: 4,
-  },
-  similarProductsContainer: {
-    marginHorizontal: -20,
-  },
-  similarProductsScroll: {
-    paddingHorizontal: 20,
-    paddingRight: 20,
-  },
-  similarProductCard: {
-    width: width * 0.45,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    marginRight: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: "#F0F0F0",
-    overflow: "hidden",
-  },
-  similarProductImage: {
-    width: "100%",
-    height: 180,
-    backgroundColor: "#F5F5F5",
-    resizeMode: "cover",
-  },
-  similarProductBadge: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "#E97A1F",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  similarProductBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  similarProductInfo: {
-    padding: 12,
-  },
-  similarProductName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#000",
-    marginBottom: 6,
-    minHeight: 36,
-  },
-  similarProductRating: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  similarProductRatingText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#333",
-    marginLeft: 4,
-  },
-  similarProductReviewsText: {
-    fontSize: 11,
-    color: "#666",
-    marginLeft: 4,
-  },
-  similarProductPriceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  similarProductPrice: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#E97A1F",
-  },
-  similarProductOriginalPrice: {
-    fontSize: 12,
-    color: "#999",
-    textDecorationLine: "line-through",
-    marginLeft: 8,
-  },
-  similarProductAddButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E97A1F",
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  similarProductAddButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
   },
 });
 
