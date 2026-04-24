@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import {
   View,
@@ -39,11 +39,12 @@ export default function SettingsScreen() {
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
   // Account Information State
-  const [fullName, setFullName] = useState("Sankar P");
-  const [email, setEmail] = useState("sankarp036@gmail.com");
-  const [phone, setPhone] = useState("9876543210");
-  const [dateOfBirth, setDateOfBirth] = useState("15/05/1995");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "other">("male");
+  const hasHydratedAccountRef = useRef(false);
 
   // Notification Settings State
   const [orderNotifications, setOrderNotifications] = useState(true);
@@ -78,6 +79,28 @@ export default function SettingsScreen() {
       void loadAddressesFromApi();
     }
   }, [activeTab, loadAddressesFromApi]);
+
+  useEffect(() => {
+    if (hasHydratedAccountRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await fetchAddresses();
+        if (cancelled || rows.length === 0) return;
+        const source = rows.find((r) => r.isDefault) ?? rows[0];
+        if (!source) return;
+        hasHydratedAccountRef.current = true;
+        setFullName((prev) => prev || source.name?.trim() || "");
+        setEmail((prev) => prev || source.email?.trim() || "");
+        setPhone((prev) => prev || String(source.phone ?? "").trim());
+      } catch {
+        // Keep fields editable even when profile bootstrap fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // New Address Form State
   const [newAddressType, setNewAddressType] = useState<"home" | "work" | "other">("home");

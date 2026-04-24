@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -17,7 +19,29 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import { payWithRazorpay } from "../lib/payment/razorpayFlow";
+import type { ApiCartItem, ApiCartPriceSummary } from "../lib/cartServerApi";
+import {
+  deleteCartClearServer,
+  deleteCartLineServer,
+  fetchServerCartBundle,
+  parseCartApiError,
+  putCartItemQuantityDelta,
+} from "../lib/cartServerApi";
+import {
+  estimateCartWeightKgFromItemCount,
+  fetchDeliveryChargeByWeight,
+  pickPreferredCharge,
+} from "../lib/deliveryChargesApi";
+import {
+  adjustCartQuantity,
+  loadCart,
+  resolveProductImage,
+  saveCart,
+  type PersistedCartLine,
+} from "../lib/shopStorage";
 import { useLanguage } from "../lib/language";
+
+type ReviewItemSource = "local" | "server";
 
 type ReviewItem = {
   id: string;
@@ -28,68 +52,166 @@ type ReviewItem = {
   quantity: number;
   size?: string;
   color?: string;
+  source: ReviewItemSource;
+  serverItemId?: number;
 };
+
+function persistedToReviewItem(line: PersistedCartLine): ReviewItem {
+  return {
+    id: line.id,
+    name: line.name,
+    image: resolveProductImage(line.id),
+    price: line.price,
+    originalPrice: line.mrp > line.price ? line.mrp : undefined,
+    quantity: line.quantity,
+    source: "local",
+  };
+}
+
+function serverRowToReviewItem(row: ApiCartItem): ReviewItem {
+  const uri = String(row.imageUrl ?? "").trim();
+  const image =
+    uri && /^https?:\/\//i.test(uri)
+      ? { uri }
+      : resolveProductImage(String(row.productId));
+  const price = row.sellingPrice ?? row.price;
+  const mrp = row.mrpPrice ?? row.originalPrice;
+  return {
+    id: String(row.itemId),
+    name: row.name,
+    image,
+    price,
+    originalPrice: mrp > price + 0.009 ? mrp : undefined,
+    quantity: Math.max(1, row.quantity),
+    size: row.size ?? undefined,
+    color: row.color ?? undefined,
+    source: "server",
+    serverItemId: row.itemId,
+  };
+}
 
 export default function ReviewOrdersScreen() {
   const router = useRouter();
   const { tr } = useLanguage();
   const [paying, setPaying] = useState(false);
+  const [apiWeightDeliveryCharge, setApiWeightDeliveryCharge] = useState<number | null>(null);
+  const [items, setItems] = useState<ReviewItem[]>([]);
+  const [cartSource, setCartSource] = useState<ReviewItemSource>("local");
+  const [serverPriceSummary, setServerPriceSummary] = useState<ApiCartPriceSummary | null>(null);
 
-  // NOTE: Cart in this project is local-state; until global cart is added,
-  // we show realistic dummy items here.
-  const [items, setItems] = useState<ReviewItem[]>([
-    {
-      id: "1",
-      name: "Premium Cotton T-Shirt",
-      image: require("../assets/images/age5.png"),
-      price: 1299,
-      originalPrice: 1999,
-      quantity: 2,
-      size: "M",
-      color: "Blue",
-    },
-    {
-      id: "2",
-      name: "Designer Denim Jeans",
-      image: require("../assets/images/age6.png"),
-      price: 2499,
-      quantity: 1,
-      size: "L",
-      color: "Dark Blue",
-    },
-  ]);
-
-  // Delivery location is handled via the shared `DeliveryLocationSection`
-  // (same behaviour as Home/Subcategory screens).
-
-  const updateQty = (id: string, delta: number) => {
-    setItems((prev) =>
-      prev.map((it) => {
-        if (it.id !== id) return it;
-        const nextQty = Math.max(1, it.quantity + delta);
-        return { ...it, quantity: nextQty };
-      })
-    );
+  const reloadReviewCart = async () => {
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    if (token) {
+      try {
+        const bundle = await fetchServerCartBundle();
+        if (bundle) {
+          setItems(bundle.items.map(serverRowToReviewItem));
+          setCartSource("server");
+          setServerPriceSummary(bundle.priceSummary);
+          return;
+        }
+      } catch {
+        /* fall back to local */
+      }
+    }
+    setCartSource("local");
+    setServerPriceSummary(null);
+    const lines = await loadCart();
+    setItems(lines.map(persistedToReviewItem));
   };
 
+  useFocusEffect(
+    React.useCallback(() => {
+      void reloadReviewCart();
+    }, [])
+  );
+
   const subtotal = useMemo(
-    () => items.reduce((sum, it) => sum + it.price * it.quantity, 0),
-    [items]
+    () =>
+      cartSource === "server" && serverPriceSummary
+        ? serverPriceSummary.subtotal
+        : items.reduce((sum, it) => sum + it.price * it.quantity, 0),
+    [cartSource, items, serverPriceSummary]
   );
   const productDiscount = useMemo(
-    () =>
-      items.reduce((sum, it) => {
+    () => {
+      if (cartSource === "server" && serverPriceSummary) {
+        return serverPriceSummary.discount;
+      }
+      return items.reduce((sum, it) => {
         if (!it.originalPrice) return sum;
         return sum + (it.originalPrice - it.price) * it.quantity;
-      }, 0),
-    [items]
+      }, 0);
+    },
+    [cartSource, items, serverPriceSummary]
   );
-  const deliveryCharge = subtotal > 2000 ? 0 : 99;
-  const total = Math.max(0, subtotal - productDiscount + deliveryCharge);
   const totalItems = useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
     [items]
   );
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const weightKg = estimateCartWeightKgFromItemCount(totalItems);
+        const slab = await fetchDeliveryChargeByWeight(weightKg);
+        if (alive) setApiWeightDeliveryCharge(pickPreferredCharge(slab));
+      } catch {
+        if (alive) setApiWeightDeliveryCharge(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [totalItems]);
+
+  const deliveryCharge = useMemo(() => {
+    if (cartSource === "server" && serverPriceSummary) {
+      return serverPriceSummary.deliveryCharge;
+    }
+    if (apiWeightDeliveryCharge != null) return apiWeightDeliveryCharge;
+    return 99;
+  }, [apiWeightDeliveryCharge, cartSource, serverPriceSummary]);
+  const total = useMemo(() => {
+    if (cartSource === "server" && serverPriceSummary) {
+      return serverPriceSummary.finalTotal;
+    }
+    return Math.max(0, subtotal - productDiscount + deliveryCharge);
+  }, [cartSource, deliveryCharge, productDiscount, serverPriceSummary, subtotal]);
+
+  const updateQty = (id: string, delta: number) => {
+    void (async () => {
+      const item = items.find((x) => x.id === id);
+      if (item?.serverItemId != null) {
+        try {
+          if (delta < 0 && item.quantity <= 1) {
+            await deleteCartLineServer(item.serverItemId);
+          } else if (delta !== 0) {
+            await putCartItemQuantityDelta(item.serverItemId, delta);
+          }
+          await reloadReviewCart();
+        } catch (e) {
+          Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not update quantity.")));
+        }
+        return;
+      }
+      await adjustCartQuantity(id, delta);
+      await reloadReviewCart();
+    })();
+  };
+
+  const clearCartAfterSuccessfulOrder = async () => {
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    // Always clear local cache to avoid stale cart lines after payment success.
+    await saveCart([]);
+    if (!token) return;
+    try {
+      await deleteCartClearServer();
+    } catch {
+      // If server clear fails, we still keep payment success flow uninterrupted.
+    }
+  };
 
   const handlePlaceOrder = async () => {
     if (paying) return;
@@ -120,6 +242,7 @@ export default function ReviewOrdersScreen() {
         Alert.alert(tr("Payment"), tr(result.message));
         return;
       }
+      await clearCartAfterSuccessfulOrder();
       Alert.alert(tr("Payment successful"), tr(result.verify.message ?? "Your payment was verified."), [
         { text: tr("OK"), onPress: () => router.replace("/orders" as any) },
       ]);
@@ -171,6 +294,10 @@ export default function ReviewOrdersScreen() {
         {/* Items */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{tr("Products")} ({items.length})</Text>
+
+          {items.length === 0 ? (
+            <Text style={styles.itemMeta}>{tr("Your cart is empty.")}</Text>
+          ) : null}
 
           {items.map((it) => (
             <View key={it.id} style={styles.itemRow}>
@@ -250,7 +377,7 @@ export default function ReviewOrdersScreen() {
           <View style={styles.lineRow}>
             <Text style={styles.lineLabel}>{tr("Delivery")}</Text>
             <Text style={styles.lineValue}>
-              {deliveryCharge === 0 ? "FREE" : `₹${deliveryCharge}`}
+              {deliveryCharge <= 0 ? tr("FREE") : `₹${deliveryCharge.toLocaleString()}`}
             </Text>
           </View>
 
