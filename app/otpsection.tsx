@@ -11,7 +11,10 @@ import {
   Alert,
 } from "react-native";
 
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+
+/** After OTP success + OK on alert, home reads this and opens the welcome promo sheet once. */
+export const SHOW_POST_LOGIN_PROMO_KEY = "app:showPostLoginPromo";
 import { useLanguage } from "../lib/language";
 
 export default function OTP() {
@@ -150,10 +153,16 @@ export default function OTP() {
       if (data && data.success) {
 
         await AsyncStorage.setItem("token", data.token);
+        await AsyncStorage.setItem(SHOW_POST_LOGIN_PROMO_KEY, "1");
 
-        Alert.alert(tr("Success"), tr("Login Successful"));
-
-        router.replace("/home");
+        Alert.alert(tr("Success"), tr("Login Successful"), [
+          {
+            text: tr("OK"),
+            onPress: () => {
+              router.replace("/home" as Href);
+            },
+          },
+        ]);
 
       } else {
 

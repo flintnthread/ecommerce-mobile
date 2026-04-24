@@ -52,6 +52,7 @@ import {
 } from "../lib/productImage";
 import * as ImagePicker from "expo-image-picker";
 import { useLanguage } from "../lib/language";
+import { SHOW_POST_LOGIN_PROMO_KEY } from "./otpsection";
 
 const { width, height } = Dimensions.get("window");
 const HIDE_TOP_BAR_H = 66;
@@ -1210,9 +1211,32 @@ const PROMO_BOKEH = [
   { top: "22%", left: "42%", size: 72, opacity: 0.12 },
 ] as const;
 
-const PROMO_HERO_IMAGE = require("../assets/images/getpromoting1.png");
-const PROMO_CHAR_LEFT = require("../assets/images/getpromoting2.png");
-const PROMO_CHAR_RIGHT = require("../assets/images/getpromoting3.png");
+const PROMO_HERO_IMAGE = require("../assets/images/middle.png");
+const PROMO_CHAR_LEFT = require("../assets/images/left.png");
+const PROMO_CHAR_RIGHT = require("../assets/images/left.png");
+const PROMO_MODAL_STARS = [
+  { top: "8%", left: "10%", size: 12, color: "#FFFFFF", dx: -4, dy: -5 },
+  { top: "10%", left: "34%", size: 10, color: "#FFF7AE", dx: 3, dy: -4 },
+  { top: "12%", left: "62%", size: 14, color: "#FFFFFF", dx: 4, dy: -6 },
+  { top: "9%", left: "84%", size: 11, color: "#FDE68A", dx: -3, dy: -5 },
+  { top: "24%", left: "18%", size: 13, color: "#FFF7AE", dx: -5, dy: 4 },
+  { top: "28%", left: "46%", size: 12, color: "#FFFFFF", dx: 4, dy: 3 },
+  { top: "30%", left: "76%", size: 10, color: "#FDE68A", dx: 5, dy: 4 },
+  { top: "46%", left: "8%", size: 12, color: "#FFFFFF", dx: -4, dy: 5 },
+  { top: "48%", left: "88%", size: 11, color: "#FFF7AE", dx: 5, dy: 4 },
+  { top: "62%", left: "20%", size: 12, color: "#FDE68A", dx: -4, dy: 6 },
+  { top: "66%", left: "50%", size: 14, color: "#FFFFFF", dx: 4, dy: 5 },
+  { top: "70%", left: "80%", size: 12, color: "#FFF7AE", dx: 3, dy: 6 },
+] as const;
+const PROMO_STAR_BURST = [
+  { x: -58, y: -42, size: 14, color: "#FFF7AE" },
+  { x: 0, y: -64, size: 16, color: "#FFFFFF" },
+  { x: 58, y: -38, size: 13, color: "#FDE68A" },
+  { x: -72, y: 6, size: 12, color: "#FFFFFF" },
+  { x: 74, y: 8, size: 12, color: "#FFF7AE" },
+  { x: -42, y: 56, size: 13, color: "#FDE68A" },
+  { x: 44, y: 58, size: 14, color: "#FFFFFF" },
+] as const;
 
 interface FilterItemProps {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -1291,6 +1315,9 @@ export default function Home() {
     useState(false);
   const [promoSpotlightModalVisible, setPromoSpotlightModalVisible] =
     useState(false);
+  const promoCtaPulseAnim = useRef(new Animated.Value(1)).current;
+  const promoMascotFloatAnim = useRef(new Animated.Value(0)).current;
+  const promoBlastAnim = useRef(new Animated.Value(0)).current;
   const [deliveryAddressSearchQuery, setDeliveryAddressSearchQuery] =
     useState("");
   const [displayDeliveryLine, setDisplayDeliveryLine] = useState(
@@ -1322,8 +1349,91 @@ export default function Home() {
   useFocusEffect(
     useCallback(() => {
       void loadUserDisplayName();
+      void (async () => {
+        try {
+          const showPromo = await AsyncStorage.getItem(SHOW_POST_LOGIN_PROMO_KEY);
+          if (showPromo === "1") {
+            await AsyncStorage.removeItem(SHOW_POST_LOGIN_PROMO_KEY);
+            setPromoSpotlightModalVisible(true);
+          }
+        } catch {
+          /* ignore */
+        }
+      })();
     }, [loadUserDisplayName])
   );
+
+  useEffect(() => {
+    if (!promoSpotlightModalVisible) {
+      promoCtaPulseAnim.stopAnimation();
+      promoMascotFloatAnim.stopAnimation();
+      promoBlastAnim.stopAnimation();
+      promoCtaPulseAnim.setValue(1);
+      promoMascotFloatAnim.setValue(0);
+      promoBlastAnim.setValue(0);
+      return;
+    }
+
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(promoCtaPulseAnim, {
+          toValue: 1.06,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(promoCtaPulseAnim, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(promoMascotFloatAnim, {
+          toValue: -8,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(promoMascotFloatAnim, {
+          toValue: 0,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const blastLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(promoBlastAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(promoBlastAnim, {
+          toValue: 0,
+          duration: 350,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    pulseLoop.start();
+    floatLoop.start();
+    blastLoop.start();
+
+    return () => {
+      pulseLoop.stop();
+      floatLoop.stop();
+      blastLoop.stop();
+    };
+  }, [
+    promoBlastAnim,
+    promoCtaPulseAnim,
+    promoMascotFloatAnim,
+    promoSpotlightModalVisible,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4521,6 +4631,51 @@ const categoryData = [
                 />
               ))}
             </View>
+            <View style={styles.promoStarsLayer} pointerEvents="none">
+              {PROMO_MODAL_STARS.map((star, i) => {
+                const t0 = (i % 6) * 0.12;
+                const t1 = Math.min(1, t0 + 0.2);
+                const t2 = Math.min(1, t0 + 0.45);
+                return (
+                  <Animated.View
+                    key={`promo-modal-star-${i}`}
+                    style={[
+                      styles.promoModalStar,
+                      {
+                        top: star.top,
+                        left: star.left,
+                        opacity: promoBlastAnim.interpolate({
+                          inputRange: [0, t0, t1, t2, 1],
+                          outputRange: [0.2, 0.2, 0.95, 0.2, 0.2],
+                        }),
+                        transform: [
+                          {
+                            translateX: promoBlastAnim.interpolate({
+                              inputRange: [0, 0.5, 1],
+                              outputRange: [0, star.dx, 0],
+                            }),
+                          },
+                          {
+                            translateY: promoBlastAnim.interpolate({
+                              inputRange: [0, 0.5, 1],
+                              outputRange: [0, star.dy, 0],
+                            }),
+                          },
+                          {
+                            scale: promoBlastAnim.interpolate({
+                              inputRange: [0, t1, t2, 1],
+                              outputRange: [0.75, 1.15, 0.85, 0.75],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    <Ionicons name="star" size={star.size} color={star.color} />
+                  </Animated.View>
+                );
+              })}
+            </View>
 
             <TouchableOpacity
               style={styles.promoCloseBtn}
@@ -4540,29 +4695,117 @@ const categoryData = [
               bounces={false}
             >
               <Text style={styles.promoTitleScript}>
-                Daily deals magic!
+              Spread & Save
               </Text>
               <Text style={styles.promoTitleSub}>
                 Extra rewards for you today
               </Text>
 
               <View style={styles.promoHeroRow}>
-                <View style={styles.promoCharWrap}>
+                <Animated.View
+                  style={[
+                    styles.promoCharWrap,
+                    { transform: [{ translateY: promoMascotFloatAnim }] },
+                  ]}
+                >
                   <Image
                     source={PROMO_CHAR_LEFT}
                     style={styles.promoCharImage}
                     resizeMode="contain"
                   />
-                </View>
+                </Animated.View>
                 <View style={styles.promoAdCard}>
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.promoBlastRing,
+                      {
+                        opacity: promoBlastAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.26, 0],
+                        }),
+                        transform: [
+                          {
+                            scale: promoBlastAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.88, 1.24],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.promoBlastRingSecondary,
+                      {
+                        opacity: promoBlastAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.2, 0],
+                        }),
+                        transform: [
+                          {
+                            scale: promoBlastAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.72, 1.06],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                  {PROMO_STAR_BURST.map((star, i) => (
+                    <Animated.View
+                      key={`promo-star-blast-${i}`}
+                      pointerEvents="none"
+                      style={[
+                        styles.promoStarBlast,
+                        {
+                          opacity: promoBlastAnim.interpolate({
+                            inputRange: [0, 0.18, 1],
+                            outputRange: [0, 1, 0],
+                          }),
+                          transform: [
+                            {
+                              translateX: promoBlastAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, star.x],
+                              }),
+                            },
+                            {
+                              translateY: promoBlastAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, star.y],
+                              }),
+                            },
+                            {
+                              scale: promoBlastAnim.interpolate({
+                                inputRange: [0, 0.35, 1],
+                                outputRange: [0.2, 1, 1.15],
+                              }),
+                            },
+                            {
+                              rotate: promoBlastAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ["0deg", i % 2 === 0 ? "70deg" : "-70deg"],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                    >
+                      <Ionicons name="star" size={star.size} color={star.color} />
+                    </Animated.View>
+                  ))}
                   <LinearGradient
-                    colors={["#FFF7ED", "#FFEDD5", "#FEF3C7"]}
+                    colors={["#feda75", "#feda75"]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.promoAdCardInner}
                   >
                     <View style={styles.promoAdBadge}>
-                      <Text style={styles.promoAdBadgeText}>SALE</Text>
+                      <Text style={styles.promoAdBadgeText}>Offer</Text>
                     </View>
                     <Image
                       source={PROMO_HERO_IMAGE}
@@ -4571,40 +4814,54 @@ const categoryData = [
                     />
                   </LinearGradient>
                 </View>
-                <View style={styles.promoCharWrap}>
+                <Animated.View
+                  style={[
+                    styles.promoCharWrap,
+                    {
+                      transform: [
+                        {
+                          translateY: promoMascotFloatAnim.interpolate({
+                            inputRange: [-8, 0],
+                            outputRange: [0, -8],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
                   <Image
                     source={PROMO_CHAR_RIGHT}
                     style={styles.promoCharImage}
                     resizeMode="contain"
                   />
-                </View>
+                </Animated.View>
               </View>
 
               <Text style={styles.promoBodyBold}>
-                Shop today and unlock exclusive offers — save up to ₹2000 on top
-                picks!
+              Refer 5 friends using your code and get **10% OFF on your first order** 🎉
               </Text>
               <Text style={styles.promoBodyMuted}>
-                ✨ Visit your Account tab for more rewards & flash deals 🎉
+                ✨ Invite your friends and enjoy exciting discounts! 🎉
               </Text>
 
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => {
-                  setPromoSpotlightModalVisible(false);
-                  router.push("/account");
-                }}
-                style={styles.promoCtaOuter}
-              >
-                <LinearGradient
-                  colors={["#EC4899", "#DB2777", "#BE185D"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.promoCtaGradient}
+              <Animated.View style={[styles.promoCtaOuter, { transform: [{ scale: promoCtaPulseAnim }] }]}>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    setPromoSpotlightModalVisible(false);
+                    router.push("/account");
+                  }}
                 >
-                  <Text style={styles.promoCtaText}>CLAIM NOW</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                  <LinearGradient
+                    colors={["#1d324e", "#1d324e", "#1d324e"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.promoCtaGradient}
+                  >
+                    <Text style={styles.promoCtaText}>START NOW</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </Animated.View>
             </ScrollView>
           </View>
         </View>
@@ -8027,6 +8284,13 @@ shopStoreImage: {
     ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
   },
+  promoStarsLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  promoModalStar: {
+    position: "absolute",
+    zIndex: 4,
+  },
   promoBokehDot: {
     position: "absolute",
     backgroundColor: "#FEF08A",
@@ -8092,9 +8356,10 @@ shopStoreImage: {
   },
   promoCharImage: {
     width: 68,
-    height: 96,
+    height: 96,borderRadius: 10,
   },
   promoAdCard: {
+    position: "relative",
     flex: 1,
     maxWidth: width * 0.52,
     borderRadius: 20,
@@ -8112,6 +8377,34 @@ shopStoreImage: {
     borderRadius: 16,
     overflow: "hidden",
     minHeight: 168,
+  },
+  promoBlastRing: {
+    position: "absolute",
+    left: -10,
+    right: -10,
+    top: -10,
+    bottom: -10,
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.75)",
+  },
+  promoBlastRingSecondary: {
+    position: "absolute",
+    left: -18,
+    right: -18,
+    top: -18,
+    bottom: -18,
+    borderRadius: 34,
+    borderWidth: 2,
+    borderColor: "rgba(255,238,170,0.65)",
+  },
+  promoStarBlast: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginLeft: -8,
+    marginTop: -8,
+    zIndex: 8,
   },
   promoAdBadge: {
     position: "absolute",

@@ -7,9 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '../hooks/use-color-scheme';
-import { installRuntimeTranslationPatch, LanguageProvider, setRuntimeTranslationConfig, useLanguage } from "../lib/language";
-
-installRuntimeTranslationPatch();
+import { LanguageProvider, setRuntimeTranslationConfig, useLanguage } from "../lib/language";
 
 function RuntimeTranslationBridge() {
   const pathname = usePathname();
