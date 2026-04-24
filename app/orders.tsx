@@ -149,13 +149,12 @@ const sampleOrders: Order[] = [
 export default function OrdersScreen() {
   const router = useRouter();
   const { tr } = useLanguage();
+  const [orders, setOrders] = useState<Order[]>(sampleOrders);
   const [activeTab, setActiveTab] = useState<OrderStatus>("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [showReturnModal, setShowReturnModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const [returnReason, setReturnReason] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -167,10 +166,6 @@ export default function OrdersScreen() {
     const onHardwareBackPress = () => {
       if (showCancelModal) {
         setShowCancelModal(false);
-        return true;
-      }
-      if (showReturnModal) {
-        setShowReturnModal(false);
         return true;
       }
       if (showSearch) {
@@ -188,7 +183,7 @@ export default function OrdersScreen() {
 
     const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBackPress);
     return () => sub.remove();
-  }, [showCancelModal, showReturnModal, showSearch, showDetails]);
+  }, [showCancelModal, showSearch, showDetails]);
 
   useEffect(() => {
     if (showSearch && searchInputRef.current) {
@@ -200,8 +195,8 @@ export default function OrdersScreen() {
 
   const getFilteredOrders = () => {
     let filtered = activeTab === "all" 
-      ? sampleOrders 
-      : sampleOrders.filter((order) => order.status === activeTab);
+      ? orders 
+      : orders.filter((order) => order.status === activeTab);
     
     // Apply search filter
     if (searchQuery.trim()) {
@@ -260,19 +255,37 @@ export default function OrdersScreen() {
       Alert.alert(tr("Required"), tr("Please provide a reason"));
       return;
     }
+    if (!selectedOrder || selectedOrder.status !== "processing") {
+      Alert.alert(tr("Not allowed"), tr("Only processing orders can be cancelled"));
+      return;
+    }
+
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === selectedOrder.id
+          ? { ...order, status: "cancelled", estimatedDelivery: tr("Order cancelled") }
+          : order
+      )
+    );
+    setSelectedOrder((prev) =>
+      prev ? { ...prev, status: "cancelled", estimatedDelivery: tr("Order cancelled") } : prev
+    );
     Alert.alert(tr("Success"), tr("Order cancelled successfully"));
     setShowCancelModal(false);
     setCancelReason("");
   };
 
-  const handleReturn = () => {
-    if (!returnReason) {
-      Alert.alert(tr("Required"), tr("Please select a reason"));
-      return;
-    }
-    Alert.alert(tr("Success"), tr("Return request submitted"));
-    setShowReturnModal(false);
-    setReturnReason("");
+  const openReturnExchange = (mode: "return" | "exchange") => {
+    if (!selectedOrder) return;
+    router.push({
+      pathname: "/return-exchange" as any,
+      params: {
+        mode,
+        orderNumber: selectedOrder.orderNumber,
+        productName: selectedOrder.products?.[0]?.name ?? "Product",
+        productPrice: selectedOrder.products?.[0]?.price ?? selectedOrder.total,
+      },
+    });
   };
 
   const filteredOrders = getFilteredOrders();
@@ -391,7 +404,8 @@ export default function OrdersScreen() {
         <OrderDetailsView
           order={selectedOrder}
           onCancel={() => setShowCancelModal(true)}
-          onReturn={() => setShowReturnModal(true)}
+          onReturn={() => openReturnExchange("return")}
+          onExchange={() => openReturnExchange("exchange")}
           getStatusConfig={getStatusConfig}
         />
       ) : (
@@ -498,16 +512,6 @@ export default function OrdersScreen() {
         onConfirm={handleCancel}
       />
 
-      {/* Return Modal */}
-      <ReturnModal
-        visible={showReturnModal}
-        order={selectedOrder}
-        reason={returnReason}
-        onReasonChange={setReturnReason}
-        onCancel={() => setShowReturnModal(false)}
-        onConfirm={handleReturn}
-      />
-
       <HomeBottomTabBar />
     </View>
   );
@@ -518,11 +522,13 @@ function OrderDetailsView({
   order,
   onCancel,
   onReturn,
+  onExchange,
   getStatusConfig,
 }: {
   order: Order;
   onCancel: () => void;
   onReturn: () => void;
+  onExchange: () => void;
   getStatusConfig: (status: OrderStatus) => any;
 }) {
   const { tr } = useLanguage();
@@ -659,14 +665,14 @@ function OrderDetailsView({
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryBtn} onPress={onReturn}>
               <Ionicons name="return-down-back" size={20} color="#2196F3" />
-              <Text style={styles.secondaryBtnText}>{tr("Return / Replace")}</Text>
+              <Text style={styles.secondaryBtnText}>{tr("Return / Exchange")}</Text>
             </TouchableOpacity>
           </>
         )}
         {order.status === "returns" && (
           <TouchableOpacity style={styles.secondaryBtn} onPress={onReturn}>
             <Ionicons name="refresh" size={20} color="#8B5CF6" />
-            <Text style={[styles.secondaryBtnText, { color: "#8B5CF6" }]}>{tr("View Return Status")}</Text>
+            <Text style={[styles.secondaryBtnText, { color: "#8B5CF6" }]}>{tr("Return/Exchange")}</Text>
           </TouchableOpacity>
         )}
       </View>
