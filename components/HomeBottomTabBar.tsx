@@ -11,14 +11,16 @@ type TabItemProps = {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   label: string;
   onPress: () => void;
+  badgeCount?: number;
 };
 
 export type HomeBottomTabBarProps = {
   /** overlay: floats above scroll (home). inline: row in flex layout — use on Animated.ScrollView screens. */
   variant?: "overlay" | "inline";
+  cartBadgeCount?: number;
 };
 
-function TabItem({ icon, label, onPress }: TabItemProps) {
+function TabItem({ icon, label, onPress, badgeCount }: TabItemProps) {
   return (
     <TouchableOpacity
       style={styles.tabItem}
@@ -27,7 +29,16 @@ function TabItem({ icon, label, onPress }: TabItemProps) {
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Ionicons name={icon} size={TAB_ICON_SIZE} color={TAB_ICON_COLOR} />
+      <View style={styles.tabIconWrap}>
+        <Ionicons name={icon} size={TAB_ICON_SIZE} color={TAB_ICON_COLOR} />
+        {badgeCount && badgeCount > 0 ? (
+          <View style={styles.tabBadge}>
+            <Text style={styles.tabBadgeText}>
+              {badgeCount > 99 ? "99+" : String(badgeCount)}
+            </Text>
+          </View>
+        ) : null}
+      </View>
       <Text style={styles.tabLabel}>{label}</Text>
     </TouchableOpacity>
   );
@@ -35,6 +46,7 @@ function TabItem({ icon, label, onPress }: TabItemProps) {
 
 export default function HomeBottomTabBar({
   variant = "overlay",
+  cartBadgeCount = 0,
 }: HomeBottomTabBarProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -71,6 +83,7 @@ export default function HomeBottomTabBar({
       <TabItem
         icon="bag-handle-outline"
         label="Cart"
+        badgeCount={cartBadgeCount}
         onPress={() => router.push("/cart")}
       />
     </View>
@@ -105,6 +118,31 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 4,
     minWidth: 56,
+  },
+  tabIconWrap: {
+    position: "relative",
+    width: 26,
+    height: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabBadge: {
+    position: "absolute",
+    top: -7,
+    right: -10,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: "#E11D48",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "800",
+    lineHeight: 11,
   },
   tabLabel: {
     marginTop: 5,

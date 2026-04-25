@@ -30,6 +30,16 @@ export default function OTP() {
       ? params.input[0]
       : "";
 
+  /** When set from Google sign-in flow, after OTP success navigate to rewards instead of home. */
+  const afterLoginRaw =
+    typeof params.afterLogin === "string"
+      ? params.afterLogin
+      : Array.isArray(params.afterLogin)
+      ? params.afterLogin[0]
+      : "";
+  const postOtpRoute: Href =
+    afterLoginRaw === "rewards" ? ("/rewards" as Href) : ("/home" as Href);
+
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -159,7 +169,7 @@ export default function OTP() {
           {
             text: tr("OK"),
             onPress: () => {
-              router.replace("/home" as Href);
+              router.replace(postOtpRoute);
             },
           },
         ]);
