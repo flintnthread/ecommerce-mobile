@@ -396,10 +396,6 @@ export default function AccountScreen() {
         sessionId: sessionIdParam,
       },
     });
-
-  const handleMyActivityPress = () => {
-    router.push("/my-activity");
-
   };
 
   const handleBecomeSellerPress = () => {
@@ -2623,5 +2619,4 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 });
-}
 
