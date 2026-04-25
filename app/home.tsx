@@ -32,6 +32,7 @@ import api, {
   productsBySubcategoryPath,
   searchProductsPath,
   searchSuggestionsPath,
+  WISHLIST_USER_PATH,
 } from "../services/api";
 import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
 import { parseWishlistApiError, postWishlistAdd } from "../lib/wishlistServerApi";
@@ -52,6 +53,7 @@ import {
   pickPrimaryProductImage,
   resolveProductPrimaryImageUri,
 } from "../lib/productImage";
+import { normalizeWishlistApiRows } from "../lib/wishlistApi";
 import * as ImagePicker from "expo-image-picker";
 import { useLanguage } from "../lib/language";
 import { SHOW_POST_LOGIN_PROMO_KEY } from "./otpsection";
@@ -1820,6 +1822,25 @@ export default function Home() {
   }, []);
 
   const reloadWishlistBadge = useCallback(async () => {
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    if (token) {
+      try {
+        const { data } = await api.get<unknown>(WISHLIST_USER_PATH);
+        const rows = normalizeWishlistApiRows(data);
+        const ids = new Set<string>();
+        for (const row of rows) {
+          const pid = Math.floor(Number(row.productId));
+          if (Number.isFinite(pid) && pid > 0) {
+            ids.add(String(pid));
+          }
+        }
+        setWishlistCount(rows.length);
+        setWishlistIds(ids);
+        return;
+      } catch {
+        // Fall back to local state when API fails.
+      }
+    }
     const list = await loadWishlist();
     const ids = await getWishlistIds();
     setWishlistCount(list.length);

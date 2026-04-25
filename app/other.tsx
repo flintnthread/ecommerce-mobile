@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import axios from "axios";
 import {
   View,
   Text,
@@ -13,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { type SupportedLanguage, useLanguage } from "../lib/language";
+import { fetchCookiesPolicy } from "../services/cookiesPolicy";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -25,6 +27,7 @@ export default function OtherScreen() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
+  const [isLoadingPrivacyPolicy, setIsLoadingPrivacyPolicy] = useState(false);
 
   const languages = [
     { code: "en", name: "English", nativeName: "English" },
@@ -42,11 +45,34 @@ export default function OtherScreen() {
     Alert.alert(tr("Language Changed"), `${tr("App language changed to")} ${language}`);
   };
 
-  const handlePrivacyPolicy = () => {
-    Alert.alert(
-      "Privacy Policy",
-      "Our Privacy Policy explains how we collect, use, and protect your personal information. Would you like to view the full policy?",
-      [
+  const handlePrivacyPolicy = async () => {
+    if (isLoadingPrivacyPolicy) return;
+    setIsLoadingPrivacyPolicy(true);
+    try {
+      const policy = await fetchCookiesPolicy();
+      const content = policy.content.trim();
+      Alert.alert(
+        "Privacy & Cookies Policy",
+        content ||
+          "Privacy & cookies policy content is currently unavailable.",
+        [{ text: "OK" }]
+      );
+    } catch (error) {
+      let message =
+        "Could not load privacy policy from server. Please try again.";
+      if (axios.isAxiosError(error)) {
+        const serverData = error.response?.data as
+          | { message?: string; error?: string }
+          | undefined;
+        message =
+          (typeof serverData?.message === "string" && serverData.message) ||
+          (typeof serverData?.error === "string" && serverData.error) ||
+          error.message ||
+          message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      Alert.alert("Privacy Policy", message, [
         { text: "Cancel", style: "cancel" },
         {
           text: "View Online",
@@ -54,8 +80,10 @@ export default function OtherScreen() {
             Linking.openURL(LEGAL_INFO_URL);
           },
         },
-      ]
-    );
+      ]);
+    } finally {
+      setIsLoadingPrivacyPolicy(false);
+    }
   };
 
   const handleTermsConditions = () => {
@@ -210,14 +238,14 @@ export default function OtherScreen() {
               <View key={lang.code}>
                 <TouchableOpacity
                   style={styles.languageItem}
-                  onPress={() => handleLanguageSelect(lang.name)}
+                  onPress={() => handleLanguageSelect(lang.code as SupportedLanguage)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.languageItemLeft}>
                     <Text style={styles.languageName}>{lang.name}</Text>
                     <Text style={styles.languageNative}>{lang.nativeName}</Text>
                   </View>
-                  {selectedLanguage === lang.name && (
+                  {selectedLanguage === (lang.code as SupportedLanguage) && (
                     <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
                   )}
                 </TouchableOpacity>
@@ -240,7 +268,11 @@ export default function OtherScreen() {
           >
             <View style={styles.infoItem}>
               <View style={styles.infoItemLeft}>
-                <Text style={styles.infoLabel}>View Privacy Policy</Text>
+                <Text style={styles.infoLabel}>
+                  {isLoadingPrivacyPolicy
+                    ? "Loading Privacy Policy..."
+                    : "View Privacy Policy"}
+                </Text>
                 <Text style={styles.infoDescription}>
                   Learn how we protect your data
                 </Text>

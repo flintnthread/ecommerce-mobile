@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -6,21 +6,31 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Dimensions,
   Alert,
+  type ImageSourcePropType,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import api, {
+  recentlyViewedProductsPath,
+  searchHistoryPath,
+  WISHLIST_REMOVE_PATH,
+  WISHLIST_USER_PATH,
+} from "../services/api";
+import { firstWishlistRowImageUri, normalizeWishlistApiRows, numLike } from "../lib/wishlistApi";
+import { loadWishlist, removeWishlistLine, resolveProductImage } from "../lib/shopStorage";
+import { addToCartPtbOrLocal } from "../lib/cartServerApi";
 
 type ActivityTab = "recently_viewed" | "search_history" | "wishlist" | "reviews";
+const RECENT_VIEW_SESSION_KEY = "ft_recent_view_session_id";
 
 interface RecentlyViewedProduct {
   id: string;
   name: string;
   price: string;
-  image: any;
+  imageUri: string;
   viewedDate: string;
   category: string;
 }
@@ -29,7 +39,6 @@ interface SearchHistory {
   id: string;
   query: string;
   date: string;
-  resultsCount: number;
 }
 
 interface WishlistItem {
@@ -38,7 +47,10 @@ interface WishlistItem {
   price: string;
   originalPrice: string;
   discount: string;
-  image: any;
+  image: ImageSourcePropType;
+  productId: number;
+  variantId: number;
+  serverBacked: boolean;
   addedDate: string;
   inStock: boolean;
 }
@@ -55,109 +67,225 @@ interface Review {
 
 export default function MyActivityScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ userId?: string; sessionId?: string }>();
   const [activeTab, setActiveTab] = useState<ActivityTab>("recently_viewed");
+  const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
+  const [recentlyViewedLoading, setRecentlyViewedLoading] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
+  const [searchHistoryLoading, setSearchHistoryLoading] = useState(false);
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
-  // Sample data
-  const recentlyViewed: RecentlyViewedProduct[] = [
-    {
-      id: "1",
-      name: "Classic White T-Shirt",
-      price: "₹599",
-      image: require("../assets/images/age5.png"),
-      viewedDate: "2 hours ago",
-      category: "T-Shirts",
-    },
-    {
-      id: "2",
-      name: "Denim Jacket",
-      price: "₹2,499",
-      image: require("../assets/images/age6.png"),
-      viewedDate: "1 day ago",
-      category: "Jackets",
-    },
-    {
-      id: "3",
-      name: "Slim Fit Jeans",
-      price: "₹1,299",
-      image: require("../assets/images/age5.png"),
-      viewedDate: "2 days ago",
-      category: "Jeans",
-    },
-    {
-      id: "4",
-      name: "Casual Sneakers",
-      price: "₹3,999",
-      image: require("../assets/images/age6.png"),
-      viewedDate: "3 days ago",
-      category: "Footwear",
-    },
-  ];
+  const formatRupees = (value: unknown): string => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return "₹0";
+    return `₹${Math.round(n).toLocaleString("en-IN")}`;
+  };
 
-  const searchHistory: SearchHistory[] = [
-    {
-      id: "1",
-      query: "men's t-shirts",
-      date: "Today, 10:30 AM",
-      resultsCount: 245,
-    },
-    {
-      id: "2",
-      query: "denim jackets",
-      date: "Yesterday, 3:45 PM",
-      resultsCount: 89,
-    },
-    {
-      id: "3",
-      query: "sneakers",
-      date: "2 days ago",
-      resultsCount: 156,
-    },
-    {
-      id: "4",
-      query: "winter wear",
-      date: "3 days ago",
-      resultsCount: 312,
-    },
-    {
-      id: "5",
-      query: "formal shirts",
-      date: "5 days ago",
-      resultsCount: 178,
-    },
-  ];
+  const parseRupeesText = (value: string): number => {
+    const raw = String(value ?? "").replace(/[^\d.]/g, "");
+    const n = Number.parseFloat(raw);
+    return Number.isFinite(n) ? Math.round(n) : 0;
+  };
 
-  const wishlistItems: WishlistItem[] = [
-    {
-      id: "1",
-      name: "Premium Leather Jacket",
-      price: "₹4,999",
-      originalPrice: "₹7,999",
-      discount: "37% OFF",
-      image: require("../assets/images/age5.png"),
-      addedDate: "Added 2 days ago",
-      inStock: true,
-    },
-    {
-      id: "2",
-      name: "Designer Sunglasses",
-      price: "₹1,799",
-      originalPrice: "₹2,499",
-      discount: "28% OFF",
-      image: require("../assets/images/age6.png"),
-      addedDate: "Added 5 days ago",
-      inStock: true,
-    },
-    {
-      id: "3",
-      name: "Sports Running Shoes",
-      price: "₹3,499",
-      originalPrice: "₹4,999",
-      discount: "30% OFF",
-      image: require("../assets/images/age5.png"),
-      addedDate: "Added 1 week ago",
-      inStock: false,
-    },
-  ];
+  const resolveImageUri = (raw: unknown): string => {
+    const value = String(raw ?? "").trim();
+    if (!value) return "";
+    if (/^https?:\/\//i.test(value)) return value;
+    const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+    if (!apiBase) return value;
+    if (value.startsWith("/")) return `${apiBase}${value}`;
+    if (value.includes("/")) return `${apiBase}/${value.replace(/^\/+/, "")}`;
+    return `${apiBase}/uploads/${value}`;
+  };
+
+  const formatWishlistDate = (iso?: string | null): string => {
+    const s = String(iso ?? "").trim();
+    if (!s) return "Recently";
+    try {
+      const d = new Date(s);
+      if (Number.isNaN(d.getTime())) return "Recently";
+      return d.toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "Recently";
+    }
+  };
+
+  const resolveActivityIdentity = useCallback(async () => {
+    const rawUserId = Number(params.userId);
+    const userId =
+      Number.isFinite(rawUserId) && rawUserId > 0 ? Math.floor(rawUserId) : undefined;
+    const routeSessionId = String(params.sessionId ?? "").trim();
+    const storedSessionId =
+      (await AsyncStorage.getItem(RECENT_VIEW_SESSION_KEY))?.trim() || "";
+    const sessionId = routeSessionId || storedSessionId || undefined;
+    return { userId, sessionId };
+  }, [params.userId, params.sessionId]);
+
+  const loadRecentlyViewed = useCallback(async () => {
+    const { userId, sessionId } = await resolveActivityIdentity();
+
+    if (!userId && !sessionId) {
+      setRecentlyViewed([]);
+      return;
+    }
+
+    setRecentlyViewedLoading(true);
+    try {
+      const path = recentlyViewedProductsPath({ userId, sessionId });
+      const { data } = await api.get<unknown>(path);
+      const rows = Array.isArray(data) ? data : [];
+      const mapped = rows
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+        .map((item) => {
+          const variants = Array.isArray(item.variants) ? item.variants : [];
+          const firstVariant =
+            variants.find((v) => v && typeof v === "object") ?? ({} as Record<string, unknown>);
+          const images = Array.isArray(item.images) ? item.images : [];
+          const firstImage =
+            images.find((img) => img && typeof img === "object") ?? ({} as Record<string, unknown>);
+
+          return {
+            id: String(item.id ?? ""),
+            name: String(item.name ?? "Product"),
+            price: formatRupees(
+              (firstVariant as Record<string, unknown>).sellingPrice ??
+                (firstVariant as Record<string, unknown>).finalPrice ??
+                (firstVariant as Record<string, unknown>).mrpPrice
+            ),
+            imageUri: resolveImageUri(
+              (firstImage as Record<string, unknown>).imageUrl ??
+                (firstImage as Record<string, unknown>).imagePath
+            ),
+            viewedDate: "Recently viewed",
+            category: `Category ${String(item.categoryId ?? "-")}`,
+          } satisfies RecentlyViewedProduct;
+        })
+        .filter((item) => item.id);
+      setRecentlyViewed(mapped);
+    } catch {
+      setRecentlyViewed([]);
+    } finally {
+      setRecentlyViewedLoading(false);
+    }
+  }, [resolveActivityIdentity]);
+
+  const loadSearchHistory = useCallback(async () => {
+    const { userId, sessionId } = await resolveActivityIdentity();
+    if (!userId && !sessionId) {
+      setSearchHistory([]);
+      return;
+    }
+
+    setSearchHistoryLoading(true);
+    try {
+      const path = searchHistoryPath({ userId, sessionId });
+      const { data } = await api.get<{ data?: unknown }>(path);
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      const mapped = rows
+        .map((item, index) => String(item ?? "").trim())
+        .filter(Boolean)
+        .map((query, index) => ({
+          id: `${index + 1}`,
+          query,
+          date: index === 0 ? "Most recent" : "Recent",
+        }));
+      setSearchHistory(mapped);
+    } catch {
+      setSearchHistory([]);
+    } finally {
+      setSearchHistoryLoading(false);
+    }
+  }, [resolveActivityIdentity]);
+
+  const loadWishlistItems = useCallback(async () => {
+    setWishlistLoading(true);
+    try {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (token) {
+        try {
+          const { data } = await api.get<unknown>(WISHLIST_USER_PATH);
+          const rows = normalizeWishlistApiRows(data);
+          const mapped = rows
+            .map((row): WishlistItem | null => {
+              const productId = Math.floor(Number(row.productId));
+              const variantId = Math.floor(Number(row.variantId));
+              if (!Number.isFinite(productId) || productId <= 0) return null;
+              if (!Number.isFinite(variantId) || variantId <= 0) return null;
+              const selling = numLike(row.sellingPrice);
+              const mrp = numLike(row.mrpPrice);
+              const priceNum = Math.round(selling > 0 ? selling : mrp || 0);
+              const mrpNum = Math.round(mrp > 0 ? mrp : priceNum);
+              const discountPct =
+                mrpNum > priceNum && mrpNum > 0
+                  ? Math.round(((mrpNum - priceNum) / mrpNum) * 100)
+                  : 0;
+              const imageUri = firstWishlistRowImageUri(row);
+              return {
+                id: String(row.wishlistId ?? `${productId}-${variantId}`),
+                name: String(row.productName ?? "").trim() || `Product ${productId}`,
+                price: `₹${priceNum.toLocaleString("en-IN")}`,
+                originalPrice: mrpNum > priceNum ? `₹${mrpNum.toLocaleString("en-IN")}` : "",
+                discount: discountPct > 0 ? `${discountPct}% OFF` : "",
+                image: imageUri
+                  ? ({ uri: imageUri } as ImageSourcePropType)
+                  : resolveProductImage(String(productId)),
+                productId,
+                variantId,
+                serverBacked: true,
+                addedDate: `Added ${formatWishlistDate(row.addedAt)}`,
+                inStock: row.inStock !== false,
+              };
+            })
+            .filter((x): x is WishlistItem => x != null);
+          setWishlistItems(mapped);
+          return;
+        } catch {
+          // fall back to local list
+        }
+      }
+
+      const local = await loadWishlist();
+      setWishlistItems(
+        local.map((line) => {
+          const priceNum = Math.round(Number(line.price) || 0);
+          const mrpNum = Math.round(Number(line.mrp) || priceNum);
+          const discountPct =
+            mrpNum > priceNum && mrpNum > 0
+              ? Math.round(((mrpNum - priceNum) / mrpNum) * 100)
+              : 0;
+          const productId = Math.floor(Number(line.id));
+          return {
+            id: line.id,
+            name: line.name,
+            price: `₹${priceNum.toLocaleString("en-IN")}`,
+            originalPrice: mrpNum > priceNum ? `₹${mrpNum.toLocaleString("en-IN")}` : "",
+            discount: discountPct > 0 ? `${discountPct}% OFF` : "",
+            image: resolveProductImage(line.id),
+            productId: Number.isFinite(productId) ? productId : 0,
+            variantId: 0,
+            serverBacked: false,
+            addedDate: "Added Recently",
+            inStock: true,
+          };
+        })
+      );
+    } finally {
+      setWishlistLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadRecentlyViewed();
+      void loadSearchHistory();
+      void loadWishlistItems();
+    }, [loadRecentlyViewed, loadSearchHistory, loadWishlistItems])
+  );
 
   const reviews: Review[] = [
     {
@@ -216,15 +344,27 @@ export default function MyActivityScreen() {
         {
           text: "Clear",
           style: "destructive",
-          onPress: () => {
-            Alert.alert("Cleared", "Search history has been cleared.");
+          onPress: async () => {
+            const { userId, sessionId } = await resolveActivityIdentity();
+            if (!userId && !sessionId) {
+              Alert.alert("Unable to clear", "No user or session context found.");
+              return;
+            }
+            try {
+              const path = searchHistoryPath({ userId, sessionId });
+              await api.delete(path);
+              setSearchHistory([]);
+              Alert.alert("Cleared", "Search history has been cleared.");
+            } catch {
+              Alert.alert("Failed", "Could not clear search history. Please try again.");
+            }
           },
         },
       ]
     );
   };
 
-  const handleRemoveFromWishlist = (id: string) => {
+  const handleRemoveFromWishlist = (item: WishlistItem) => {
     Alert.alert(
       "Remove from Wishlist",
       "Are you sure you want to remove this item?",
@@ -233,7 +373,24 @@ export default function MyActivityScreen() {
         {
           text: "Remove",
           style: "destructive",
-          onPress: () => {
+          onPress: async () => {
+            if (item.serverBacked && item.productId > 0 && item.variantId > 0) {
+              try {
+                await api.delete(WISHLIST_REMOVE_PATH, {
+                  params: {
+                    productId: item.productId,
+                    variantId: item.variantId,
+                  },
+                });
+              } catch {
+                Alert.alert("Wishlist", "Could not remove this item. Please try again.");
+                return;
+              }
+              await removeWishlistLine(String(item.productId));
+            } else {
+              await removeWishlistLine(item.id);
+            }
+            setWishlistItems((prev) => prev.filter((x) => x.id !== item.id));
             Alert.alert("Removed", "Item removed from wishlist.");
           },
         },
@@ -257,6 +414,31 @@ export default function MyActivityScreen() {
       ]
     );
   };
+
+  const handleWishlistBuyNow = useCallback(
+    async (item: WishlistItem) => {
+      const addResult = await addToCartPtbOrLocal({
+        productId: item.productId,
+        variantId: item.variantId > 0 ? item.variantId : undefined,
+        quantity: 1,
+        localLine: {
+          id: item.productId > 0 ? String(item.productId) : item.id,
+          name: item.name,
+          price: parseRupeesText(item.price),
+          mrp: Math.max(parseRupeesText(item.originalPrice), parseRupeesText(item.price)),
+        },
+      });
+      if (addResult.ok === false) {
+        Alert.alert("Cart", addResult.message);
+        return;
+      }
+      Alert.alert("Added to cart", `${item.name} added to your cart.`, [
+        { text: "Continue", style: "cancel" },
+        { text: "Go to cart", onPress: () => router.push("/cart") },
+      ]);
+    },
+    [router]
+  );
 
   return (
     <View style={styles.container}>
@@ -328,7 +510,12 @@ export default function MyActivityScreen() {
         {/* Recently Viewed Tab */}
         {activeTab === "recently_viewed" && (
           <View style={styles.recentlyViewedContainer}>
-            {recentlyViewed.length === 0 ? (
+            {recentlyViewedLoading ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="hourglass-outline" size={64} color="#E0E0E0" />
+                <Text style={styles.emptyText}>Loading activity...</Text>
+              </View>
+            ) : recentlyViewed.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="eye-outline" size={80} color="#E0E0E0" />
                 <Text style={styles.emptyText}>No recently viewed products</Text>
@@ -344,12 +531,21 @@ export default function MyActivityScreen() {
                     styles.productCard,
                     index === recentlyViewed.length - 1 && styles.productCardLast,
                   ]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/productdetail",
+                      params: { id: product.id },
+                    } as any)
+                  }
                   activeOpacity={0.7}
                 >
-                  <Image
-                    source={product.image}
-                    style={styles.productImage}
-                  />
+                  {product.imageUri ? (
+                    <Image source={{ uri: product.imageUri }} style={styles.productImage} />
+                  ) : (
+                    <View style={[styles.productImage, styles.productImagePlaceholder]}>
+                      <Ionicons name="image-outline" size={30} color="#94A3B8" />
+                    </View>
+                  )}
                   <View style={styles.productInfo}>
                     <Text style={styles.productCategory}>{product.category}</Text>
                     <Text style={styles.productName}>{product.name}</Text>
@@ -358,7 +554,15 @@ export default function MyActivityScreen() {
                       <Text style={styles.viewedDate}>{product.viewedDate}</Text>
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.productActionBtn}>
+                  <TouchableOpacity
+                    style={styles.productActionBtn}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: product.id },
+                      } as any)
+                    }
+                  >
                     <Ionicons name="chevron-forward" size={20} color="#CCCCCC" />
                   </TouchableOpacity>
                 </TouchableOpacity>
@@ -370,7 +574,12 @@ export default function MyActivityScreen() {
         {/* Search History Tab */}
         {activeTab === "search_history" && (
           <View style={styles.searchHistoryContainer}>
-            {searchHistory.length === 0 ? (
+            {searchHistoryLoading ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="hourglass-outline" size={64} color="#E0E0E0" />
+                <Text style={styles.emptyText}>Loading history...</Text>
+              </View>
+            ) : searchHistory.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="search-outline" size={80} color="#E0E0E0" />
                 <Text style={styles.emptyText}>No search history</Text>
@@ -407,7 +616,7 @@ export default function MyActivityScreen() {
                       <View style={styles.searchInfo}>
                         <Text style={styles.searchQuery}>{search.query}</Text>
                         <Text style={styles.searchMeta}>
-                          {search.resultsCount} results • {search.date}
+                          {search.date}
                         </Text>
                       </View>
                     </View>
@@ -424,7 +633,12 @@ export default function MyActivityScreen() {
         {/* Wishlist Tab */}
         {activeTab === "wishlist" && (
           <View style={styles.wishlistContainer}>
-            {wishlistItems.length === 0 ? (
+            {wishlistLoading ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="hourglass-outline" size={64} color="#E0E0E0" />
+                <Text style={styles.emptyText}>Loading wishlist...</Text>
+              </View>
+            ) : wishlistItems.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="heart-outline" size={80} color="#E0E0E0" />
                 <Text style={styles.emptyText}>Your wishlist is empty</Text>
@@ -455,12 +669,16 @@ export default function MyActivityScreen() {
                       <Text style={styles.wishlistName}>{item.name}</Text>
                       <View style={styles.wishlistPriceRow}>
                         <Text style={styles.wishlistPrice}>{item.price}</Text>
-                        <Text style={styles.wishlistOriginalPrice}>
-                          {item.originalPrice}
-                        </Text>
-                        <View style={styles.discountBadge}>
-                          <Text style={styles.discountText}>{item.discount}</Text>
-                        </View>
+                        {item.originalPrice ? (
+                          <Text style={styles.wishlistOriginalPrice}>
+                            {item.originalPrice}
+                          </Text>
+                        ) : null}
+                        {item.discount ? (
+                          <View style={styles.discountBadge}>
+                            <Text style={styles.discountText}>{item.discount}</Text>
+                          </View>
+                        ) : null}
                       </View>
                       <Text style={styles.wishlistDate}>{item.addedDate}</Text>
                     </View>
@@ -468,12 +686,15 @@ export default function MyActivityScreen() {
                   <View style={styles.wishlistCardRight}>
                     <TouchableOpacity
                       style={styles.wishlistRemoveBtn}
-                      onPress={() => handleRemoveFromWishlist(item.id)}
+                      onPress={() => void handleRemoveFromWishlist(item)}
                     >
                       <Ionicons name="trash-outline" size={18} color="#F44336" />
                     </TouchableOpacity>
                     {item.inStock && (
-                      <TouchableOpacity style={styles.wishlistBuyBtn}>
+                      <TouchableOpacity
+                        style={styles.wishlistBuyBtn}
+                        onPress={() => void handleWishlistBuyNow(item)}
+                      >
                         <Text style={styles.wishlistBuyBtnText}>Buy Now</Text>
                       </TouchableOpacity>
                     )}
@@ -665,6 +886,11 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 12,
     marginRight: 14,
+  },
+  productImagePlaceholder: {
+    backgroundColor: "#F1F5F9",
+    justifyContent: "center",
+    alignItems: "center",
   },
   productInfo: {
     flex: 1,

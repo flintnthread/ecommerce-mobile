@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
@@ -18,7 +19,12 @@ import {
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getWishlistIds, loadWishlist, toggleWishlistProduct } from "../lib/shopStorage";
+import { getWishlistIds, loadWishlist } from "../lib/shopStorage";
+import {
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 import { useLanguage } from "../lib/language";
 
 type SellerProduct = {
@@ -104,6 +110,10 @@ export default function SellerStoreScreen() {
 
   const data = useMemo(() => SELLER_PRODUCTS, []);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [serverWishlistKeys, setServerWishlistKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [hasAuthToken, setHasAuthToken] = useState(false);
   const [wishlistCount, setWishlistCount] = useState(0);
   const shareMessage = useMemo(
     () => `${tr("Check out this shop on our app")} - ${sellerName}`,
@@ -111,9 +121,15 @@ export default function SellerStoreScreen() {
   );
 
   const reloadWishlist = useCallback(async () => {
-    const ids = await getWishlistIds();
-    const list = await loadWishlist();
+    const [token, ids, list, serverKeys] = await Promise.all([
+      AsyncStorage.getItem("token"),
+      getWishlistIds(),
+      loadWishlist(),
+      fetchWishlistServerKeySet(),
+    ]);
+    setHasAuthToken(Boolean(token?.trim()));
     setWishlistIds(ids);
+    setServerWishlistKeys(serverKeys);
     setWishlistCount(list.length);
   }, []);
 
@@ -131,19 +147,22 @@ export default function SellerStoreScreen() {
 
   const handleToggleWishlist = useCallback(
     async (p: SellerProduct) => {
-      const nowInWishlist = await toggleWishlistProduct({
-        id: p.id,
-        name: p.title,
-        price: parseRupee(p.price),
-        mrp: Math.max(parseRupee(p.mrp), parseRupee(p.price)),
-      });
-      await reloadWishlist();
-      Alert.alert(
-        tr("WISHLIST"),
-        nowInWishlist ? tr("Added to wishlist") : tr("Removed from wishlist")
+      const result = await togglePtbWishlistWithServer(
+        {
+          id: p.id,
+          name: p.title,
+          sellingNum: parseRupee(p.price),
+          mrpNum: Math.max(parseRupee(p.mrp), parseRupee(p.price)),
+        },
+        reloadWishlist
       );
+      if (!result.ok) {
+        Alert.alert(tr("WISHLIST"), result.message);
+        return;
+      }
+      Alert.alert(tr("WISHLIST"), tr(result.title));
     },
-    [reloadWishlist]
+    [parseRupee, reloadWishlist, tr]
   );
 
   const handleFilterPress = (label: string) => {
@@ -352,9 +371,27 @@ export default function SellerStoreScreen() {
                       accessibilityLabel="Add to wishlist"
                     >
                       <Ionicons
-                        name={wishlistIds.has(item.id) ? "heart" : "heart-outline"}
+                        name={
+                          categoryPtbRowWishlisted(
+                            item,
+                            hasAuthToken,
+                            serverWishlistKeys,
+                            wishlistIds
+                          )
+                            ? "heart"
+                            : "heart-outline"
+                        }
                         size={18}
-                        color={wishlistIds.has(item.id) ? "#E11D48" : "#0F172A"}
+                        color={
+                          categoryPtbRowWishlisted(
+                            item,
+                            hasAuthToken,
+                            serverWishlistKeys,
+                            wishlistIds
+                          )
+                            ? "#E11D48"
+                            : "#0F172A"
+                        }
                       />
                     </TouchableOpacity>
                   </View>

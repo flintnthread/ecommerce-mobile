@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import {
   View,
   Text,
@@ -12,7 +13,8 @@ import {
   Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import api from "../services/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -35,12 +37,30 @@ interface SupportTicket {
 
 export default function HelpCenterScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    name?: string | string[];
+    email?: string | string[];
+    phone?: string | string[];
+  }>();
   const [activeTab, setActiveTab] = useState<HelpTab>("faqs");
   const [expandedFAQ, setExpandedFAQ] = useState<string | null>(null);
   const [showSupportTicketModal, setShowSupportTicketModal] = useState(false);
+  const [ticketName, setTicketName] = useState("");
+  const [ticketEmail, setTicketEmail] = useState("");
+  const [ticketPhone, setTicketPhone] = useState("");
   const [ticketSubject, setTicketSubject] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
   const [ticketCategory, setTicketCategory] = useState("order");
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
+
+  useEffect(() => {
+    const asString = (value: string | string[] | undefined): string =>
+      Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+
+    setTicketName(asString(params.name).trim());
+    setTicketEmail(asString(params.email).trim());
+    setTicketPhone(asString(params.phone).trim());
+  }, [params.name, params.email, params.phone]);
 
   const tabs: { key: HelpTab; label: string; icon: string }[] = [
     { key: "faqs", label: "FAQs", icon: "help-circle" },
@@ -235,16 +255,48 @@ export default function HelpCenterScreen() {
     },
   ];
 
-  const handleSubmitTicket = () => {
-    if (!ticketSubject || !ticketDescription) {
-      Alert.alert("Missing Info", "Please fill in all required fields.");
+  const handleSubmitTicket = async () => {
+    const name = ticketName.trim();
+    const email = ticketEmail.trim();
+    const phoneDigits = ticketPhone.replace(/\D/g, "");
+    const subject = ticketSubject.trim();
+    const message = ticketDescription.trim();
+
+    if (!name || !email || !message) {
+      Alert.alert("Missing Info", "Please enter name, email, and description.");
       return;
     }
-    Alert.alert(
-      "Ticket Submitted",
-      "Your support ticket has been submitted successfully. Ticket ID: #TKT-2024-" +
-        Math.floor(Math.random() * 1000),
-      [
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+    if (phoneDigits && (phoneDigits.length < 10 || phoneDigits.length > 20)) {
+      Alert.alert(
+        "Invalid Phone",
+        "Phone number must be between 10 and 20 digits."
+      );
+      return;
+    }
+
+    try {
+      setIsSubmittingTicket(true);
+      const response = await api.post("/api/contact/submit", {
+        name,
+        email,
+        phone: phoneDigits || undefined,
+        subject: subject || `${ticketCategory} support request`,
+        message,
+      });
+
+      const successMessage =
+        typeof response?.data?.message === "string" && response.data.message.trim()
+          ? response.data.message.trim()
+          : "Your support request has been submitted successfully.";
+
+      Alert.alert("Ticket Submitted", successMessage, [
         {
           text: "OK",
           onPress: () => {
@@ -254,8 +306,25 @@ export default function HelpCenterScreen() {
             setTicketCategory("order");
           },
         },
-      ]
-    );
+      ]);
+    } catch (error) {
+      let messageText = "Failed to submit support ticket. Please try again.";
+      if (axios.isAxiosError(error)) {
+        const serverData = error.response?.data as
+          | { message?: string; error?: string }
+          | undefined;
+        messageText =
+          (typeof serverData?.message === "string" && serverData.message) ||
+          (typeof serverData?.error === "string" && serverData.error) ||
+          error.message ||
+          messageText;
+      } else if (error instanceof Error) {
+        messageText = error.message;
+      }
+      Alert.alert("Submission Failed", messageText);
+    } finally {
+      setIsSubmittingTicket(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -300,7 +369,7 @@ export default function HelpCenterScreen() {
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Help Center</Text>
           <Text style={styles.headerSubtitle}>
-            We're here to help you
+            We&apos;re here to help you
           </Text>
         </View>
 
@@ -595,6 +664,36 @@ export default function HelpCenterScreen() {
             </View>
             <ScrollView style={styles.modalBody}>
               <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Name</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter your full name"
+                  value={ticketName}
+                  onChangeText={setTicketName}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Email</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter your email address"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={ticketEmail}
+                  onChangeText={setTicketEmail}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Phone (optional)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter phone number"
+                  keyboardType="phone-pad"
+                  value={ticketPhone}
+                  onChangeText={setTicketPhone}
+                />
+              </View>
+              <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Category</Text>
                 <View style={styles.categorySelector}>
                   {["order", "delivery", "payment", "returns", "other"].map(
@@ -643,10 +742,16 @@ export default function HelpCenterScreen() {
                 />
               </View>
               <TouchableOpacity
-                style={styles.modalSubmitBtn}
+                style={[
+                  styles.modalSubmitBtn,
+                  isSubmittingTicket && styles.modalSubmitBtnDisabled,
+                ]}
                 onPress={handleSubmitTicket}
+                disabled={isSubmittingTicket}
               >
-                <Text style={styles.modalSubmitBtnText}>Submit Ticket</Text>
+                <Text style={styles.modalSubmitBtnText}>
+                  {isSubmittingTicket ? "Submitting..." : "Submit Ticket"}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -1160,6 +1265,9 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: "center",
     marginTop: 8,
+  },
+  modalSubmitBtnDisabled: {
+    opacity: 0.7,
   },
   modalSubmitBtnText: {
     fontSize: 16,
