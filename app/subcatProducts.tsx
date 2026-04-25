@@ -28,6 +28,7 @@ import {
   addWishlistProductIfAbsent,
   removeWishlistLine,
 } from "../lib/shopStorage";
+import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import { useLanguage } from "../lib/language";
 import {
   firstWishlistRowImageUri,
@@ -40,6 +41,8 @@ import { pickProductImageUriFromApi } from "../lib/pickProductImageUri";
 
 /** Top Picks for You API endpoint - same as home.tsx */
 const TOP_PICKS_POPULAR_PATH = "/api/products/popular";
+/** Best of Dress section API endpoint (uses api.tsx base URL) */
+const BEST_OF_DRESSES_PATH = "/api/products/popular";
 
 /** Mega Discounts API endpoint - same as home.tsx */
 const DISCOUNT_TOP_PRODUCTS_PATH = "/api/products/discount/top";
@@ -86,6 +89,7 @@ type BestDressItem = {
   subtitle: string;
   image: any;
   isVideo?: boolean;
+  sourceProduct?: ProductItem;
 };
 
 const BEST_OF_DRESSES: BestDressItem[] = [
@@ -558,6 +562,8 @@ export default function SubcategoriesScreen() {
     subCategory?: string | string[];
     subcategoryId?: string | string[];
     mainCategoryId?: string | string[];
+    discountMin?: string | string[];
+    discountMax?: string | string[];
     productsSearchQ?: string | string[];
     productsSearchCategoryId?: string | string[];
     productsSearchSort?: string | string[];
@@ -580,6 +586,18 @@ export default function SubcategoriesScreen() {
     : params.mainCategoryId;
   const routedMainCategoryId = routedMainCategoryIdRaw
     ? Number.parseInt(String(routedMainCategoryIdRaw), 10)
+    : NaN;
+  const routedDiscountMinRaw = Array.isArray(params.discountMin)
+    ? params.discountMin[0]
+    : params.discountMin;
+  const routedDiscountMin = routedDiscountMinRaw
+    ? Number.parseFloat(String(routedDiscountMinRaw))
+    : NaN;
+  const routedDiscountMaxRaw = Array.isArray(params.discountMax)
+    ? params.discountMax[0]
+    : params.discountMax;
+  const routedDiscountMax = routedDiscountMaxRaw
+    ? Number.parseFloat(String(routedDiscountMaxRaw))
     : NaN;
   const productsSearchQRaw = Array.isArray(params.productsSearchQ)
     ? params.productsSearchQ[0]
@@ -659,6 +677,9 @@ export default function SubcategoriesScreen() {
   /** Top Picks for You products state */
   const [topPicksProducts, setTopPicksProducts] = useState<ProductItem[]>([]);
   const [topPicksReady, setTopPicksReady] = useState(false);
+  /** Best of Dress section products state */
+  const [bestDressProducts, setBestDressProducts] = useState<ProductItem[]>([]);
+  const [bestDressReady, setBestDressReady] = useState(false);
 
   /** Mega Discounts products state */
   const [megaDiscountProducts, setMegaDiscountProducts] = useState<ProductItem[]>([]);
@@ -1105,8 +1126,17 @@ export default function SubcategoriesScreen() {
     const controller = new AbortController();
     (async () => {
       try {
+        const hasDiscountMin = Number.isFinite(routedDiscountMin);
+        const hasDiscountMax = Number.isFinite(routedDiscountMax);
+        const query = new URLSearchParams();
+        if (hasDiscountMin) query.set("discountMin", String(routedDiscountMin));
+        if (hasDiscountMax) query.set("discountMax", String(routedDiscountMax));
+        const path = productsByMainCategoryPath(routedMainCategoryId);
+        const mainCategoryPath = query.toString()
+          ? `${path}?${query.toString()}`
+          : path;
         const { data } = await api.get<unknown>(
-          productsByMainCategoryPath(routedMainCategoryId),
+          mainCategoryPath,
           { signal: controller.signal }
         );
         if (controller.signal.aborted) return;
@@ -1125,7 +1155,14 @@ export default function SubcategoriesScreen() {
     })();
 
     return () => controller.abort();
-  }, [routedMainCategoryId, routedFromMainCategoryId, selectedSubCategory, mainCat]);
+  }, [
+    routedMainCategoryId,
+    routedFromMainCategoryId,
+    routedDiscountMin,
+    routedDiscountMax,
+    selectedSubCategory,
+    mainCat,
+  ]);
 
   useEffect(() => {
     if (!routedFromSubcategoryId) {
@@ -1240,6 +1277,44 @@ export default function SubcategoriesScreen() {
       clearTimeout(timeoutId);
     };
   }, [selectedSubCategory]);
+
+  useEffect(() => {
+    setBestDressReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(BEST_OF_DRESSES_PATH, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        const rows = normalizeProductListPayload(data);
+        const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
+        const mapped = mapMorePicksApiToGrid(
+          rows,
+          base,
+          require("../assets/images/look1.png"),
+          { requireProductActive: false }
+        );
+        setBestDressProducts(mapped);
+      } catch {
+        setBestDressProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setBestDressReady(true);
+      }
+    })();
+    return () => controller.abort();
+  }, []);
+
+  const bestOfDressCards = useMemo<BestDressItem[]>(() => {
+    if (!bestDressReady || bestDressProducts.length === 0) return BEST_OF_DRESSES;
+    return bestDressProducts.map((p) => ({
+      id: p.id,
+      title: p.title,
+      subtitle: p.price > 0 ? `Starts at ₹${p.price}` : p.discount || "Best picks",
+      image: p.image,
+      sourceProduct: p,
+    }));
+  }, [bestDressProducts, bestDressReady]);
 
   useEffect(() => {
     const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
@@ -2046,12 +2121,8 @@ const handleBannerScroll = (event: any) => {
       </View>
 
       {/* LOCATION BAR */}
-      <View style={styles.locationBar}>
-        <Ionicons name="location-outline" size={16} color="#ef7b1a" />
-        <Text style={styles.locationText} numberOfLines={1}>
-          Villa-113 - PRAVEENS PRIDE, Road No. 11, Pat...
-        </Text>
-        <Ionicons name="chevron-down" size={16} color="#79411c" />
+      <View style={styles.locationBarWrapper}>
+        <DeliveryLocationSection enableFullAddressApi />
       </View>
 
       {/* STICKY SORT / CATEGORY / GENDER / FILTERS ROW */}
@@ -2310,12 +2381,12 @@ const handleBannerScroll = (event: any) => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.bestRow}
         >
-          {BEST_OF_DRESSES.map((item) => (
+          {bestOfDressCards.map((item) => (
             <TouchableOpacity
               key={item.id}
               style={styles.bestCard}
               activeOpacity={0.9}
-              onPress={() => openProductDetail()}
+              onPress={() => openProductDetail(item.sourceProduct)}
             >
               <View style={styles.bestImageWrapper}>
                 <Image
@@ -2969,18 +3040,10 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "700",
   },
-  locationBar: {
-    flexDirection: "row",
-    alignItems: "center",
+  locationBarWrapper: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: "#F3F4F6",
-  },
-  locationText: {
-    flex: 1,
-    marginHorizontal: 6,
-    fontSize: 12,
-    color: "#1d324e",
   },
   scroll: {
     flex: 1,
