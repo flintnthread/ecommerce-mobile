@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import {
   View,
   Text,
@@ -20,6 +22,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useLanguage } from "../lib/language";
+
+import { cancelOrderById, fetchUserOrdersList, type ApiOrderRow } from "../lib/ordersListApi";
+import { fetchShiprocketTracking } from "../lib/shiprocketApi";
+
 import api from "../services/api";
 
 /** Path only — base URL comes from `services/api.tsx`. */
@@ -292,6 +298,8 @@ interface Order {
   image: any;
   trackingNumber?: string;
   paymentMethod?: string;
+  /** From API: pending | paid | … */
+  paymentStatus?: string;
   deliveryAddress?: string;
   estimatedDelivery?: string;
   /** Optional UI stage for return orders (1–4). */
@@ -404,6 +412,56 @@ const sampleOrders: Order[] = [
   },
 ];
 
+function mapBackendOrderStatus(s?: string): OrderStatus {
+  const x = (s || "").toLowerCase();
+  if (x === "completed" || x === "delivered") return "delivered";
+  if (x === "cancelled") return "cancelled";
+  if (x === "returns" || x === "return") return "returns";
+  if (x === "shipped") return "shipped";
+  return "processing";
+}
+
+function mapApiOrderToUiOrder(row: ApiOrderRow): Order {
+  const amt = row.finalAmount ?? row.totalAmount ?? 0;
+  const totalStr = `₹${Math.round(amt).toLocaleString("en-IN")}`;
+  const img =
+    row.firstProductImage && /^https?:\/\//i.test(row.firstProductImage)
+      ? { uri: row.firstProductImage }
+      : require("../assets/images/age5.png");
+  const n = Math.max(0, row.totalItems ?? 0);
+  const num = row.orderNumber?.trim() || "";
+  const displayNum = num.startsWith("#") ? num : `#${num}`;
+  return {
+    id: String(row.orderId),
+    orderNumber: displayNum,
+    date: row.createdDate || "",
+    status: mapBackendOrderStatus(row.orderStatus),
+    items: n > 0 ? n : 1,
+    total: totalStr,
+    image: img,
+    trackingNumber: row.shiprocketAwbCode?.trim() || undefined,
+    paymentMethod: row.paymentMethod,
+    paymentStatus: row.paymentStatus,
+    deliveryAddress: row.shippingAddress,
+    estimatedDelivery: row.shiprocketStatus
+      ? String(row.shiprocketStatus) +
+        (row.shiprocketCourierName ? ` · ${row.shiprocketCourierName}` : "")
+      : undefined,
+    products:
+      n > 0
+        ? [
+            {
+              id: "api-line",
+              name: n > 1 ? `Order items (${n})` : "Order items",
+              image: img,
+              quantity: n,
+              price: totalStr,
+            },
+          ]
+        : undefined,
+  };
+}
+
 export default function OrdersScreen() {
   const router = useRouter();
   const { tr } = useLanguage();
@@ -474,6 +532,40 @@ export default function OrdersScreen() {
       }, 100);
     }
   }, [showSearch]);
+
+
+  const loadOrdersFromApi = useCallback(async () => {
+    try {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (!token) {
+        setOrders(sampleOrders);
+        return;
+      }
+      const rows = await fetchUserOrdersList();
+      setOrders(rows.length > 0 ? rows.map(mapApiOrderToUiOrder) : []);
+    } catch {
+      setOrders([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadOrdersFromApi();
+  }, [loadOrdersFromApi]);
+
+  const handleTrackOrder = async (order: Order | null) => {
+    if (!order?.trackingNumber?.trim()) {
+      Alert.alert(tr("Tracking"), tr("No tracking number for this order yet."));
+      return;
+    }
+    try {
+      const raw = await fetchShiprocketTracking(order.trackingNumber.trim());
+      const text = raw.length > 3200 ? `${raw.slice(0, 3200)}…` : raw;
+      Alert.alert(tr("Shipment tracking"), text);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert(tr("Tracking"), msg);
+    }
+  };
 
   const fetchReturnOrders = useCallback(async () => {
     setReturnOrdersLoading(true);
@@ -667,6 +759,7 @@ export default function OrdersScreen() {
     }
   }, [activeTab, fetchProcessingOrders]);
 
+
   const getFilteredOrders = () => {
     let filtered: Order[] =
       activeTab === "returns"
@@ -732,6 +825,9 @@ export default function OrdersScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
+
+      await loadOrdersFromApi();
+
       if (activeTab === "returns") {
         await fetchReturnOrders();
       } else if (activeTab === "all") {
@@ -745,12 +841,13 @@ export default function OrdersScreen() {
       } else if (activeTab === "processing") {
         await fetchProcessingOrders();
       }
+
     } finally {
       setRefreshing(false);
     }
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     if (!cancelReason.trim()) {
       Alert.alert(tr("Required"), tr("Please provide a reason"));
       return;
@@ -759,20 +856,23 @@ export default function OrdersScreen() {
       Alert.alert(tr("Not allowed"), tr("Only processing orders can be cancelled"));
       return;
     }
-
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === selectedOrder.id
-          ? { ...order, status: "cancelled", estimatedDelivery: tr("Order cancelled") }
-          : order
-      )
-    );
-    setSelectedOrder((prev) =>
-      prev ? { ...prev, status: "cancelled", estimatedDelivery: tr("Order cancelled") } : prev
-    );
-    Alert.alert(tr("Success"), tr("Order cancelled successfully"));
-    setShowCancelModal(false);
-    setCancelReason("");
+    try {
+      const result = await cancelOrderById(Number(selectedOrder.id));
+      if (!result.success) {
+        Alert.alert(tr("Cancel failed"), tr(result.message));
+        return;
+      }
+      await loadOrdersFromApi();
+      setSelectedOrder((prev) =>
+        prev ? { ...prev, status: "cancelled", estimatedDelivery: tr("Order cancelled") } : prev
+      );
+      Alert.alert(tr("Success"), tr(result.message));
+      setShowCancelModal(false);
+      setCancelReason("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not cancel order.";
+      Alert.alert(tr("Cancel failed"), tr(msg));
+    }
   };
 
   const openReturnExchange = (mode: "return" | "exchange") => {
@@ -906,6 +1006,7 @@ export default function OrdersScreen() {
           onCancel={() => setShowCancelModal(true)}
           onReturn={() => openReturnExchange("return")}
           onExchange={() => openReturnExchange("exchange")}
+          onTrackPackage={() => void handleTrackOrder(selectedOrder)}
           getStatusConfig={getStatusConfig}
         />
       ) : (
@@ -1057,12 +1158,14 @@ function OrderDetailsView({
   onCancel,
   onReturn,
   onExchange,
+  onTrackPackage,
   getStatusConfig,
 }: {
   order: Order;
   onCancel: () => void;
   onReturn: () => void;
   onExchange: () => void;
+  onTrackPackage: () => void;
   getStatusConfig: (status: OrderStatus) => any;
 }) {
   const { tr } = useLanguage();
@@ -1126,6 +1229,9 @@ function OrderDetailsView({
       <View style={styles.infoCard}>
         <InfoRow label={tr("Order Number")} value={order.orderNumber} />
         <InfoRow label={tr("Order Date")} value={order.date} />
+        {order.paymentStatus && (
+          <InfoRow label={tr("Payment")} value={order.paymentStatus} />
+        )}
         {order.trackingNumber && (
           <InfoRow label={tr("Tracking Number")} value={order.trackingNumber} highlight />
         )}
@@ -1182,8 +1288,8 @@ function OrderDetailsView({
             <Text style={styles.cancelBtnText}>{tr("Cancel Order")}</Text>
           </TouchableOpacity>
         )}
-        {order.status === "shipped" && (
-          <TouchableOpacity style={styles.trackBtn}>
+        {order.trackingNumber && order.status !== "cancelled" && (
+          <TouchableOpacity style={styles.trackBtn} onPress={onTrackPackage} activeOpacity={0.9}>
             <Ionicons name="location" size={20} color="#FFFFFF" />
             <Text style={styles.trackBtnText}>{tr("Track Package")}</Text>
           </TouchableOpacity>
