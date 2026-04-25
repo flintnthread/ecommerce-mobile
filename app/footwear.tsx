@@ -83,10 +83,30 @@ const CATEGORY_TILES = [
 
 /** “Top-tier Kicks” section only — swap PNGs in assets/footwearimages/ if you replace art */
 const TOP_TIER_KICKS_CARDS = [
-  { id: "sandals", image: require("../assets/footwearimages/top-tier-sandals.png") },
-  { id: "wedges", image: require("../assets/footwearimages/top-tier-wedges.png") },
-  { id: "sneakers", image: require("../assets/footwearimages/top-tier-sneakers.png") },
-  { id: "boots", image: require("../assets/footwearimages/top-tier-boots.png") },
+  {
+    id: "sandals",
+    image: require("../assets/footwearimages/top-tier-sandals.png"),
+    discount: 20,
+    discountMax: 29.99,
+  },
+  {
+    id: "wedges",
+    image: require("../assets/footwearimages/top-tier-wedges.png"),
+    discount: 30,
+    discountMax: 39.99,
+  },
+  {
+    id: "sneakers",
+    image: require("../assets/footwearimages/top-tier-sneakers.png"),
+    discount: 40,
+    discountMax: 49.99,
+  },
+  {
+    id: "boots",
+    image: require("../assets/footwearimages/top-tier-boots.png"),
+    discount: 50,
+    discountMax: 59.99,
+  },
 ];
 
 /** “Move With Your Mood” — Active & Sporty / Travel & Explore */
@@ -454,7 +474,7 @@ export default function FootwearScreen() {
         },
         reloadWishlistIds
       );
-      if (!r.ok) Alert.alert("Wishlist", r.message);
+      if (r.ok === false) Alert.alert("Wishlist", r.message);
       else Alert.alert(r.title, r.body);
     },
     [reloadWishlistIds]
@@ -480,7 +500,7 @@ export default function FootwearScreen() {
           mrp: product.mrpPriceNum,
         },
       });
-      if (!r.ok) {
+      if (r.ok === false) {
         Alert.alert("Cart", r.message);
         return;
       }
@@ -1038,11 +1058,27 @@ export default function FootwearScreen() {
           <View style={styles.topTierSection}>
             <Text style={styles.sectionTitle}>Top-tier Kicks</Text>
             <View style={styles.grid2}>
-              {TOP_TIER_KICKS_CARDS.map((card, idx) => (
-                <TouchableOpacity key={card.id} style={styles.promoCard} activeOpacity={0.9}>
+              {TOP_TIER_KICKS_CARDS.map((card) => (
+                <TouchableOpacity
+                  key={card.id}
+                  style={styles.promoCard}
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        mainCat: "footwear",
+                        subCategory: `Top-tier Kicks ${card.discount}% OFF`,
+                        mainCategoryId: "29",
+                        discountMin: String(card.discount),
+                        discountMax: String(card.discountMax),
+                      },
+                    })
+                  }
+                >
                   <Image source={card.image} style={styles.promoImage} />
                   <View style={styles.promoBadge}>
-                    <Text style={styles.promoBadgeText}>Min {30 + idx * 10}% OFF*</Text>
+                    <Text style={styles.promoBadgeText}>Min {card.discount}% OFF*</Text>
                   </View>
                 </TouchableOpacity>
               ))}
