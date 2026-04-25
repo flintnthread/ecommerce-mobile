@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import axios from "axios";
+import { isAxiosError } from "axios";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
@@ -149,7 +149,7 @@ export default function AccountScreen() {
       Alert.alert("Success", "Profile photo updated.");
     } catch (e) {
       let msg = "Could not upload profile photo. Please try again.";
-      if (axios.isAxiosError(e)) {
+      if (isAxiosError(e)) {
         const status = e.response?.status;
         const d = e.response?.data as
           | { message?: string; error?: string }
@@ -251,10 +251,6 @@ export default function AccountScreen() {
 
   const handleRewardsPress = () => {
     router.push("/rewards");
-  };
-
-  const handlePaymentMethodsPress = () => {
-    router.push("/payment-methods");
   };
 
   const handleMyActivityPress = () => {
@@ -461,7 +457,7 @@ export default function AccountScreen() {
         responseBody = await createAddress(payload);
       } catch (e) {
         let msg = "Could not save address. Please try again.";
-        if (axios.isAxiosError(e)) {
+        if (isAxiosError(e)) {
           const status = e.response?.status;
           const d = e.response?.data as
             | { message?: string; error?: string }
@@ -532,7 +528,7 @@ export default function AccountScreen() {
                 await loadSavedProfilesFromApi();
               } catch (e) {
                 let msg = "Could not remove this address. Please try again.";
-                if (axios.isAxiosError(e)) {
+                if (isAxiosError(e)) {
                   const status = e.response?.status;
                   const d = e.response?.data as
                     | { message?: string; error?: string }
@@ -917,7 +913,6 @@ export default function AccountScreen() {
         <View style={styles.menuSection}>
           <MenuItem label="My Orders" onPress={handleMyOrdersPress} />
           <MenuItem label="Your Rewards" onPress={handleRewardsPress} />
-          <MenuItem label="Payment Methods" onPress={handlePaymentMethodsPress} />
           <MenuItem label="My Activity" onPress={handleMyActivityPress} />
           <MenuItem label="Become a Seller" onPress={handleBecomeSellerPress} />
           <MenuItem label="Promote with Us" onPress={handlePromoteWithUsPress} />
@@ -1442,7 +1437,6 @@ const MenuItem: React.FC<MenuItemProps> = ({ label, onPress, icon, iconColor = "
     const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
       "My Orders": "receipt-outline",
       "Your Rewards": "gift-outline",
-      "Payment Methods": "wallet-outline",
       "My Activity": "time-outline",
       "Become a Seller": "storefront-outline",
       "Promote with Us": "megaphone-outline",

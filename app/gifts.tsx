@@ -1190,11 +1190,6 @@ export default function GiftsScreen() {
   const [giftsWishlistHasAuth, setGiftsWishlistHasAuth] = React.useState(false);
   const [giftsCartCount, setGiftsCartCount] = React.useState(0);
 
-  const giftsPtbColW = React.useMemo(
-    () => Math.floor((giftWinW - 32 - GIFTS_PTB_GRID_GAP) / 2),
-    [giftWinW]
-  );
-
   const reloadGiftsWishlistIds = React.useCallback(async () => {
     const token = (await AsyncStorage.getItem("token"))?.trim();
     setGiftsWishlistHasAuth(!!token);
@@ -1279,6 +1274,11 @@ export default function GiftsScreen() {
             if (!imageUri) return null;
             const { sellingPrice, mrpPrice, discountPercentage, variantId } =
               pickPtbVariantPricing(p);
+            const ratingCandidate = pickPtbProductRating(p);
+            const ratingNum =
+              typeof ratingCandidate === "number"
+                ? ratingCandidate
+                : Number.parseFloat(String(ratingCandidate));
             return {
               id: (p as any).id as number,
               name: safePtbText(String((p as any).name ?? "")),
@@ -1286,11 +1286,11 @@ export default function GiftsScreen() {
               sellingPrice,
               mrpPrice,
               discountPercentage,
-              rating: pickPtbProductRating(p),
+              rating: Number.isFinite(ratingNum) ? ratingNum : null,
               ...(variantId != null ? { variantId } : {}),
             } satisfies GiftsPtbApiRow;
           })
-          .filter(Boolean) as GiftsPtbApiRow[];
+          .filter((row): row is GiftsPtbApiRow => row != null);
         setGiftsPtbApi(mapped);
       } catch {
         setGiftsPtbApi([]);
@@ -1310,7 +1310,7 @@ export default function GiftsScreen() {
       variantId?: number;
     }) => {
       const r = await togglePtbWishlistWithServer(product, reloadGiftsWishlistIds);
-      if (!r.ok) Alert.alert("Wishlist", r.message);
+      if (!r.ok) Alert.alert("Wishlist", "message" in r ? r.message : "Could not update wishlist.");
       else Alert.alert(r.title, r.body);
     },
     [reloadGiftsWishlistIds]
@@ -1337,7 +1337,7 @@ export default function GiftsScreen() {
         },
       });
       if (!r.ok) {
-        Alert.alert("Cart", r.message);
+        Alert.alert("Cart", "message" in r ? r.message : "Could not add to cart.");
         return;
       }
       setGiftsCartCount(await getCartUnitCount());
@@ -1347,8 +1347,14 @@ export default function GiftsScreen() {
   );
 
   const goGiftsPtbShop = React.useCallback(() => {
-    router.push("/subcatProducts");
-  }, [router]);
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        subCategory: "Products to buy",
+        mainCategoryId: String(giftsMainCategoryIdForPtb),
+      },
+    } as any);
+  }, [giftsMainCategoryIdForPtb, router]);
 
   const giftsPtbUiRows = React.useMemo(() => {
     const fmtRs = (n: number | null) =>
@@ -1398,6 +1404,19 @@ export default function GiftsScreen() {
       };
     });
   }, [giftsPtbApi]);
+
+  const giftsPtbUiRowPairs = React.useMemo(() => {
+    const rows: Array<
+      [
+        (typeof giftsPtbUiRows)[number],
+        ((typeof giftsPtbUiRows)[number] | undefined)
+      ]
+    > = [];
+    for (let i = 0; i < giftsPtbUiRows.length; i += 2) {
+      rows.push([giftsPtbUiRows[i], giftsPtbUiRows[i + 1]]);
+    }
+    return rows;
+  }, [giftsPtbUiRows]);
 
   const activeHero = React.useMemo(() => {
     if (selectedCategoryId && GIFT_CATEGORY_HERO[selectedCategoryId]) {
@@ -2918,7 +2937,11 @@ export default function GiftsScreen() {
             <Text style={styles.giftDiscoveryHeaderTitle}>More to explore</Text>
           </View>
 
-          <TouchableOpacity activeOpacity={0.92} style={styles.middlePromoOuter}>
+          <TouchableOpacity
+            activeOpacity={0.92}
+            style={styles.middlePromoOuter}
+            onPress={goGiftsPtbShop}
+          >
             <View style={styles.middlePromoFlashRibbon}>
               <Ionicons name="flash" size={13} color="#FFFFFF" />
               <Text style={styles.middlePromoFlashRibbonText}>FLASH DEAL</Text>
@@ -2964,106 +2987,124 @@ export default function GiftsScreen() {
             <Text style={styles.giftsPtbStatus}>No products found.</Text>
           ) : (
             <View style={styles.giftsPtbGrid}>
-              {giftsPtbUiRows.map((product) => {
-                const wishlisted = categoryPtbRowWishlisted(
-                  product,
-                  giftsWishlistHasAuth,
-                  giftsWishlistServerKeys,
-                  giftsWishlistIds
-                );
-                return (
-                <View key={product.id} style={[styles.giftsPtbCard, { width: giftsPtbColW }]}>
-                  <TouchableOpacity
-                    activeOpacity={0.9}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/productdetail",
-                        params: { id: String(product.id) },
-                      } as any)
+              {giftsPtbUiRowPairs.map(([left, right], rowIdx) => (
+                <View
+                  key={`gifts-ptb-row-${rowIdx}-${left.id}`}
+                  style={styles.giftsPtbGridRow}
+                >
+                  {[left, right].map((product, colIdx) => {
+                    if (!product) {
+                      return (
+                        <View
+                          key={`gifts-ptb-empty-${rowIdx}-${colIdx}`}
+                          style={[styles.giftsPtbCard, styles.giftsPtbCardHalf]}
+                        />
+                      );
                     }
-                    accessibilityRole="button"
-                    accessibilityLabel={`${product.name}, view details`}
-                  >
-                    <View style={styles.giftsPtbCardInner}>
-                      <Image
-                        source={product.imageSource}
-                        style={styles.giftsPtbImage}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.giftsPtbMeta}>
-                        <Text style={styles.giftsPtbName} numberOfLines={2}>
-                          {product.name}
-                        </Text>
-                        <View style={styles.giftsPtbRatingRow}>
-                          <View style={styles.giftsPtbRatingPill}>
-                            <Ionicons name="star" size={12} color="#ef7b1a" />
-                            <Text style={styles.giftsPtbRatingText}>{product.ratingLabel}</Text>
-                          </View>
-                        </View>
-                        <View style={styles.giftsPtbPriceRow}>
-                          {product.sellingLabel ? (
-                            <Text style={styles.giftsPtbPrice}>{product.sellingLabel}</Text>
-                          ) : null}
-                          {product.showMrp && product.mrpLabel ? (
-                            <Text style={styles.giftsPtbMrp}>{product.mrpLabel}</Text>
-                          ) : null}
-                          {product.discountLabel ? (
-                            <View style={styles.giftsPtbDiscountPill}>
-                              <Text style={styles.giftsPtbDiscountText}>{product.discountLabel}</Text>
+                    const wishlisted = categoryPtbRowWishlisted(
+                      product,
+                      giftsWishlistHasAuth,
+                      giftsWishlistServerKeys,
+                      giftsWishlistIds
+                    );
+                    return (
+                      <View
+                        key={product.id}
+                        style={[styles.giftsPtbCard, styles.giftsPtbCardHalf]}
+                      >
+                        <TouchableOpacity
+                          activeOpacity={0.9}
+                          onPress={() =>
+                            router.push({
+                              pathname: "/productdetail",
+                              params: { id: String(product.id) },
+                            } as any)
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`${product.name}, view details`}
+                        >
+                          <View style={styles.giftsPtbCardInner}>
+                            <Image
+                              source={product.imageSource}
+                              style={styles.giftsPtbImage}
+                              resizeMode="cover"
+                            />
+                            <View style={styles.giftsPtbMeta}>
+                              <Text style={styles.giftsPtbName} numberOfLines={2}>
+                                {product.name}
+                              </Text>
+                              <View style={styles.giftsPtbRatingRow}>
+                                <View style={styles.giftsPtbRatingPill}>
+                                  <Ionicons name="star" size={12} color="#ef7b1a" />
+                                  <Text style={styles.giftsPtbRatingText}>{product.ratingLabel}</Text>
+                                </View>
+                              </View>
+                              <View style={styles.giftsPtbPriceRow}>
+                                {product.sellingLabel ? (
+                                  <Text style={styles.giftsPtbPrice}>{product.sellingLabel}</Text>
+                                ) : null}
+                                {product.showMrp && product.mrpLabel ? (
+                                  <Text style={styles.giftsPtbMrp}>{product.mrpLabel}</Text>
+                                ) : null}
+                                {product.discountLabel ? (
+                                  <View style={styles.giftsPtbDiscountPill}>
+                                    <Text style={styles.giftsPtbDiscountText}>{product.discountLabel}</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                              <View style={styles.giftsPtbBottomRow}>
+                                <View style={styles.giftsPtbActionsRow}>
+                                  <TouchableOpacity
+                                    style={styles.giftsPtbWishBtn}
+                                    activeOpacity={0.85}
+                                    onPress={() =>
+                                      void handleToggleGiftsPtbWishlist({
+                                        id: product.id,
+                                        name: product.name,
+                                        sellingNum: product.sellingNum,
+                                        mrpNum: product.mrpNum,
+                                        variantId: product.variantId,
+                                      })
+                                    }
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`${
+                                      wishlisted ? "Remove from" : "Add to"
+                                    } wishlist: ${product.name}`}
+                                  >
+                                    <Ionicons
+                                      name={wishlisted ? "heart" : "heart-outline"}
+                                      size={16}
+                                      color={wishlisted ? "#E11D48" : "#1d324e"}
+                                    />
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={styles.giftsPtbCartBtn}
+                                    activeOpacity={0.85}
+                                    onPress={() =>
+                                      void handleAddGiftsPtbCart({
+                                        id: product.id,
+                                        name: product.name,
+                                        sellingNum: product.sellingNum,
+                                        mrpNum: product.mrpNum,
+                                        variantId: product.variantId,
+                                      })
+                                    }
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Add to cart: ${product.name}`}
+                                  >
+                                    <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
+                                    <Text style={styles.giftsPtbCartBtnText}>Add to Cart</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
                             </View>
-                          ) : null}
-                        </View>
-                        <View style={styles.giftsPtbBottomRow}>
-                          <View style={styles.giftsPtbActionsRow}>
-                            <TouchableOpacity
-                              style={styles.giftsPtbWishBtn}
-                              activeOpacity={0.85}
-                              onPress={() =>
-                                void handleToggleGiftsPtbWishlist({
-                                  id: product.id,
-                                  name: product.name,
-                                  sellingNum: product.sellingNum,
-                                  mrpNum: product.mrpNum,
-                                  variantId: product.variantId,
-                                })
-                              }
-                              accessibilityRole="button"
-                              accessibilityLabel={`${
-                                wishlisted ? "Remove from" : "Add to"
-                              } wishlist: ${product.name}`}
-                            >
-                              <Ionicons
-                                name={wishlisted ? "heart" : "heart-outline"}
-                                size={16}
-                                color={wishlisted ? "#E11D48" : "#1d324e"}
-                              />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.giftsPtbCartBtn}
-                              activeOpacity={0.85}
-                              onPress={() =>
-                                void handleAddGiftsPtbCart({
-                                  id: product.id,
-                                  name: product.name,
-                                  sellingNum: product.sellingNum,
-                                  mrpNum: product.mrpNum,
-                                  variantId: product.variantId,
-                                })
-                              }
-                              accessibilityRole="button"
-                              accessibilityLabel={`Add to cart: ${product.name}`}
-                            >
-                              <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
-                              <Text style={styles.giftsPtbCartBtnText}>Add to Cart</Text>
-                            </TouchableOpacity>
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       </View>
-                    </View>
-                  </TouchableOpacity>
+                    );
+                  })}
                 </View>
-                );
-              })}
+              ))}
             </View>
           )}
         </View>
@@ -3210,10 +3251,14 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   giftsPtbGrid: {
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  giftsPtbGridRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    paddingHorizontal: 16,
-    gap: GIFTS_PTB_GRID_GAP,
+    alignItems: "stretch",
+    justifyContent: "space-between",
+    gap: 8,
   },
   giftsPtbCard: {
     borderRadius: 12,
@@ -3223,6 +3268,10 @@ const styles = StyleSheet.create({
     padding: 1,
     marginBottom: 12,
     overflow: "visible",
+  },
+  giftsPtbCardHalf: {
+    flex: 1,
+    minWidth: 0,
   },
   giftsPtbCardInner: {
     flex: 1,
@@ -3301,14 +3350,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    width: "100%",
   },
   giftsPtbActionsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     flex: 1,
-    marginRight: 4,
+    justifyContent: "space-between",
   },
   giftsPtbWishBtn: {
     width: 30,
@@ -3323,11 +3372,13 @@ const styles = StyleSheet.create({
   giftsPtbCartBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 7,
     backgroundColor: "#1d324e",
+    flex: 1,
   },
   giftsPtbCartBtnText: {
     fontSize: 10,
