@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import axios from "axios";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -31,10 +32,37 @@ import {
   type CreateAddressPayload,
 } from "../services/addresses";
 import { uploadProfileImage } from "../services/userProfile";
+import { fetchEmailLogs } from "../services/emailLogs";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 const PROMOTE_WITH_US_URL = "https://flintnthread.in/ads-panel/index";
+const RECENT_VIEW_SESSION_KEY = "ft_recent_view_session_id";
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractUserIdFromToken(token: string): number | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+  const candidates = [payload.userId, payload.id, payload.uid, payload.sub];
+  for (const value of candidates) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  }
+  return null;
+}
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -71,6 +99,7 @@ export default function AccountScreen() {
   }
 
   const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
+  const [emailActivityCount, setEmailActivityCount] = useState(0);
 
   const loadSavedProfilesFromApi = useCallback(async () => {
     try {
@@ -83,10 +112,26 @@ export default function AccountScreen() {
     }
   }, []);
 
+  const loadEmailActivityFromApi = useCallback(async () => {
+    const email = (getCurrentProfileData().email || "").trim();
+    if (!email) {
+      setEmailActivityCount(0);
+      return;
+    }
+
+    try {
+      const rows = await fetchEmailLogs({ recipient: email });
+      setEmailActivityCount(rows.length);
+    } catch {
+      // Keep existing value when network/API fails.
+    }
+  }, [activeProfile, savedProfiles, newEmail]);
+
   useFocusEffect(
     useCallback(() => {
       void loadSavedProfilesFromApi();
-    }, [loadSavedProfilesFromApi])
+      void loadEmailActivityFromApi();
+    }, [loadSavedProfilesFromApi, loadEmailActivityFromApi])
   );
 
   const [showOrdersModal, setShowOrdersModal] = useState(false);
@@ -114,6 +159,30 @@ export default function AccountScreen() {
   };
 
   const currentProfile = getCurrentProfileData();
+
+  const getCurrentHelpContact = () => {
+    if (activeProfile === "new") {
+      return {
+        name: newName.trim(),
+        email: newEmail.trim(),
+        phone: newMobile.trim(),
+      };
+    }
+    if (activeProfile.startsWith("saved_")) {
+      const profileId = activeProfile.replace("saved_", "");
+      const savedProfile = savedProfiles.find((p) => p.id === profileId);
+      return {
+        name: savedProfile?.name?.trim() ?? "",
+        email: savedProfile?.email?.trim() ?? "",
+        phone: savedProfile?.mobile?.trim() ?? "",
+      };
+    }
+    return {
+      name: "",
+      email: currentProfile.email?.trim() ?? "",
+      phone: "",
+    };
+  };
 
   const accountAvatarUri = useMemo((): string | null => {
     if (activeProfile === "new" && newPhotoUri) {
@@ -237,7 +306,15 @@ export default function AccountScreen() {
   };
 
   const handleHelpPress = () => {
-    router.push("/help-center");
+    const contact = getCurrentHelpContact();
+    router.push({
+      pathname: "/help-center",
+      params: {
+        name: contact.name,
+        email: contact.email,
+        phone: contact.phone,
+      },
+    });
   };
 
   const handleLanguagePress = () => {
@@ -257,8 +334,54 @@ export default function AccountScreen() {
     router.push("/payment-methods");
   };
 
-  const handleMyActivityPress = () => {
-    router.push("/my-activity");
+  const handleMyActivityPress = async () => {
+    const email = (getCurrentProfileData().email || "").trim();
+    let userIdParam = "";
+    let sessionIdParam = "";
+    let latestCount = emailActivityCount;
+
+    try {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (token) {
+        const userId = extractUserIdFromToken(token);
+        if (userId) {
+          userIdParam = String(userId);
+        }
+      }
+    } catch {
+      // Keep navigation working if token read fails.
+    }
+
+    try {
+      let storedSessionId =
+        (await AsyncStorage.getItem(RECENT_VIEW_SESSION_KEY))?.trim() || "";
+      if (!storedSessionId) {
+        storedSessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        await AsyncStorage.setItem(RECENT_VIEW_SESSION_KEY, storedSessionId);
+      }
+      sessionIdParam = storedSessionId;
+    } catch {
+      // Keep navigation working if session id persistence fails.
+    }
+
+    try {
+      if (email) {
+        const rows = await fetchEmailLogs({ recipient: email });
+        latestCount = rows.length;
+        setEmailActivityCount(rows.length);
+      }
+    } catch {
+      // Open My Activity screen even if this background refresh fails.
+    }
+
+    router.push({
+      pathname: "/my-activity",
+      params: {
+        emailActivityCount: String(latestCount),
+        userId: userIdParam,
+        sessionId: sessionIdParam,
+      },
+    });
   };
 
   const handleBecomeSellerPress = () => {
@@ -596,9 +719,13 @@ export default function AccountScreen() {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="notifications" size={20} color="#E97A1F" />
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>3</Text>
-                  </View>
+                  {emailActivityCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {emailActivityCount > 99 ? "99+" : String(emailActivityCount)}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.circleIcon}

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, {
   mapSearchResultsToUi,
   productsBySubcategoryPath,
@@ -41,6 +42,7 @@ type GridProduct = {
 };
 
 const PLACEHOLDER = require("../assets/images/product1.png");
+const SEARCH_SESSION_KEY = "ft_recent_view_session_id";
 
 function formatInrAmount(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -165,7 +167,30 @@ export default function SearchResults() {
     setError(null);
 
     try {
-      const { data } = await api.get<unknown>(searchProductsPath(trimmed));
+      const token = (await AsyncStorage.getItem("token"))?.trim() || "";
+      const sessionId =
+        (await AsyncStorage.getItem(SEARCH_SESSION_KEY))?.trim() || "";
+      let userId: number | undefined;
+      if (token) {
+        try {
+          const part = token.split(".")[1] || "";
+          const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+          const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+          const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+          const candidate = Number(
+            payload.userId ?? payload.id ?? payload.uid ?? payload.sub
+          );
+          if (Number.isFinite(candidate) && candidate > 0) {
+            userId = Math.floor(candidate);
+          }
+        } catch {
+          // Continue with session-based history tracking.
+        }
+      }
+
+      const { data } = await api.get<unknown>(
+        searchProductsPath(trimmed, { userId, sessionId })
+      );
       if (reqId.current !== id) return;
       const rows = mapSearchResultsToUi(data);
       const mapped = mapApiToGrid(rows);
