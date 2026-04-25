@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import {
   View,
@@ -8,16 +8,216 @@ import {
   StyleSheet,
   Image,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Checkbox } from "expo-checkbox";
 import * as WebBrowser from "expo-web-browser";
+import { makeRedirectUri } from "expo-auth-session";
+import * as Google from "expo-auth-session/providers/google";
+import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useLanguage } from "../lib/language";
+import { SHOW_POST_LOGIN_PROMO_KEY } from "./otpsection";
+
+WebBrowser.maybeCompleteAuthSession();
+
+function resolveGoogleOAuthClientId(): string | undefined {
+  const fromEnv =
+    typeof process !== "undefined" &&
+    process.env?.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID;
+  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) {
+    return fromEnv.trim();
+  }
+  const extra = Constants.expoConfig?.extra as
+    | { googleOAuthClientId?: string }
+    | undefined;
+  const fromExtra = extra?.googleOAuthClientId?.trim();
+  if (fromExtra) return fromExtra;
+  return undefined;
+}
+
+async function fetchGoogleEmailFromAccessToken(
+  accessToken: string
+): Promise<string | null> {
+  try {
+    const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { email?: string };
+    return typeof j.email === "string" && j.email.trim()
+      ? j.email.trim().toLowerCase()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function readEmailFromGoogleIdToken(idToken: string): string | null {
+  try {
+    const payloadB64 = idToken.split(".")[1];
+    if (!payloadB64) return null;
+    const b64 = payloadB64.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "===".slice((b64.length + 3) % 4);
+    const json = decodeURIComponent(
+      atob(padded)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const o = JSON.parse(json) as { email?: string };
+    return typeof o.email === "string" && o.email.trim()
+      ? o.email.trim().toLowerCase()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveGoogleAccountEmail(
+  accessToken: string | undefined,
+  idToken: string | undefined
+): Promise<string | null> {
+  if (accessToken) {
+    const fromUserInfo = await fetchGoogleEmailFromAccessToken(accessToken);
+    if (fromUserInfo) return fromUserInfo;
+  }
+  if (idToken) return readEmailFromGoogleIdToken(idToken);
+  return null;
+}
+
+type GoogleAuthSessionPayload = {
+  email: string;
+  idToken?: string;
+  accessToken?: string;
+};
+
+type GoogleOAuthContinueRowProps = {
+  clientId: string;
+  tr: (key: string) => string;
+  submitLocked: boolean;
+  onGoogleAuthSuccess: (payload: GoogleAuthSessionPayload) => Promise<void>;
+};
+
+/** Opens Google OAuth with account picker, then passes tokens + email for direct session. */
+function GoogleOAuthContinueRow({
+  clientId,
+  tr,
+  submitLocked,
+  onGoogleAuthSuccess,
+}: GoogleOAuthContinueRowProps) {
+  const redirectUri = useMemo(() => {
+    const raw = Constants.expoConfig?.scheme;
+    const scheme =
+      typeof raw === "string"
+        ? raw
+        : Array.isArray(raw) && raw[0]
+        ? raw[0]
+        : "myloginapp";
+    return makeRedirectUri({ scheme, path: "oauthredirect" });
+  }, []);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId,
+    selectAccount: true,
+    redirectUri,
+  });
+  const processedTokenKey = useRef<string>("");
+
+  useEffect(() => {
+    if (__DEV__ && request?.redirectUri) {
+      console.log(
+        "[Google sign-in] Add this Authorized redirect URI in Google Cloud:",
+        request.redirectUri
+      );
+    }
+  }, [request?.redirectUri]);
+
+  useEffect(() => {
+    if (!response) return;
+    if (response.type === "cancel" || response.type === "dismiss") return;
+    if (response.type === "error") {
+      const err = response.error;
+      const msg =
+        typeof err === "string"
+          ? err
+          : err?.message ??
+            (err as { description?: string })?.description ??
+            tr("Sign-in could not complete.");
+      Alert.alert(tr("Google"), msg);
+      return;
+    }
+    if (response.type !== "success") return;
+
+    const accessToken = response.authentication?.accessToken;
+    const idToken = response.authentication?.idToken;
+    if (!accessToken && !idToken) return;
+
+    const dedupeKey = `${accessToken ?? ""}|${idToken ?? ""}`;
+    if (processedTokenKey.current === dedupeKey) return;
+    processedTokenKey.current = dedupeKey;
+
+    void (async () => {
+      const email = await resolveGoogleAccountEmail(
+        accessToken ?? undefined,
+        idToken ?? undefined
+      );
+      if (!email) {
+        Alert.alert(
+          tr("Google"),
+          tr("Could not read your email from this Google account.")
+        );
+        processedTokenKey.current = "";
+        return;
+      }
+      try {
+        await onGoogleAuthSuccess({
+          email,
+          idToken: idToken ?? undefined,
+          accessToken: accessToken ?? undefined,
+        });
+      } catch {
+        processedTokenKey.current = "";
+      }
+    })();
+  }, [response, tr, onGoogleAuthSuccess]);
+
+  const onPressGoogle = useCallback(async () => {
+    if (!request) return;
+    try {
+      await promptAsync();
+    } catch (e) {
+      Alert.alert(tr("Error"), String((e as Error)?.message ?? e));
+    }
+  }, [promptAsync, request, tr]);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.googleButton,
+        (!request || submitLocked) && { opacity: 0.65 },
+      ]}
+      onPress={onPressGoogle}
+      disabled={!request || submitLocked}
+    >
+      {!request ? (
+        <ActivityIndicator style={{ marginRight: 10 }} color="#555" />
+      ) : (
+        <Image
+          source={{
+            uri: "https://cdn-icons-png.flaticon.com/512/281/281764.png",
+          }}
+          style={styles.googleIcon}
+        />
+      )}
+      <Text style={styles.googleText}>{tr("Continue with Google")}</Text>
+    </TouchableOpacity>
+  );
+}
 
 export default function Login() {
-
   const router = useRouter();
   const { tr } = useLanguage();
 
@@ -25,11 +225,144 @@ export default function Login() {
   const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const googleClientId = resolveGoogleOAuthClientId();
+  const fallbackChooserReturnUri = useMemo(() => {
+    const raw = Constants.expoConfig?.scheme;
+    const scheme =
+      typeof raw === "string"
+        ? raw
+        : Array.isArray(raw) && raw[0]
+        ? raw[0]
+        : "myloginapp";
+    return makeRedirectUri({ scheme, path: "oauthredirect" });
+  }, []);
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const mobileRegex = /^[0-9]{10}$/;
 
-  const handleSignIn = async () => {
+  const sendOtpAndNavigateToOtp = useCallback(
+    async (value: string) => {
+      try {
+        setLoading(true);
+        const payload = emailRegex.test(value)
+          ? { email: value }
+          : { mobile: value };
+        const response = await api.post("/auth/send-otp", payload);
+        const data = response.data;
+        if (data) {
+          Alert.alert(
+            tr("OTP Sent"),
+            emailRegex.test(value)
+              ? tr("OTP sent to your email")
+              : tr("OTP sent to your mobile")
+          );
+          router.push({
+            pathname: "/otpsection",
+            params: { input: value },
+          });
+        } else {
+          Alert.alert(tr("Error"), tr("Failed to send OTP"));
+        }
+      } catch (error: any) {
+        console.log("API Error:", error?.response || error);
+        if (error?.response?.data?.message) {
+          Alert.alert(tr("Error"), tr(error.response.data.message));
+        } else {
+          Alert.alert(tr("Error"), tr("Server not reachable"));
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [tr, router]
+  );
 
+  const completeGoogleSignIn = useCallback(
+    async ({ email, idToken, accessToken }: GoogleAuthSessionPayload) => {
+      if (!isChecked) {
+        Alert.alert(tr("Error"), tr("Please accept terms & conditions"));
+        return;
+      }
+      const sessionSecret = idToken ?? accessToken;
+      if (!sessionSecret) {
+        Alert.alert(tr("Google"), tr("Could not read Google credentials. Try again."));
+        return;
+      }
+
+      setLoading(true);
+      try {
+        let appJwt: string | null = null;
+        try {
+          const res = await api.post("/auth/google", {
+            email,
+            idToken,
+            accessToken,
+          });
+          const d = res.data as {
+            success?: boolean;
+            token?: string;
+            message?: string;
+          };
+          if (d?.success === false && d.message) {
+            Alert.alert(tr("Error"), tr(d.message));
+            return;
+          }
+          if (typeof d?.token === "string" && d.token.length > 0) {
+            appJwt = d.token;
+          }
+        } catch {
+          /* Server may not expose POST /auth/google yet — fall back to Google token for local session. */
+        }
+
+        const tokenToStore = appJwt ?? sessionSecret;
+        await AsyncStorage.setItem("token", tokenToStore);
+        await AsyncStorage.setItem(
+          "userDisplayName",
+          email.includes("@") ? email.split("@")[0]! : email
+        );
+        await AsyncStorage.setItem(SHOW_POST_LOGIN_PROMO_KEY, "1");
+        /* Home reads this key on focus and opens the same promo modal as after OTP (Spread & Save). */
+        router.replace("/home");
+      } catch (error: any) {
+        if (error?.response?.data?.message) {
+          Alert.alert(tr("Error"), tr(error.response.data.message));
+        } else {
+          Alert.alert(tr("Error"), tr("Google sign-in failed"));
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isChecked, router, tr]
+  );
+
+  const openAccountChooserThenGoHome = useCallback(async () => {
+    if (!isChecked) {
+      Alert.alert(tr("Error"), tr("Please accept terms & conditions"));
+      return;
+    }
+    try {
+      setLoading(true);
+      const chooserUrl =
+        "https://accounts.google.com/v3/signin/accountchooser?continue=" +
+        encodeURIComponent(fallbackChooserReturnUri) +
+        "&flowName=WebLiteSignIn&flowEntry=AccountChooser";
+      const result = await WebBrowser.openAuthSessionAsync(
+        chooserUrl,
+        fallbackChooserReturnUri
+      );
+      if (result.type === "success") {
+        await AsyncStorage.setItem(SHOW_POST_LOGIN_PROMO_KEY, "1");
+        router.replace("/home");
+      }
+    } catch {
+      Alert.alert(tr("Error"), tr("Could not open Google sign-in."));
+    } finally {
+      setLoading(false);
+    }
+  }, [isChecked, tr, fallbackChooserReturnUri, router]);
+
+  const handleSignIn = async () => {
     if (loading) return;
 
     const value = inputValue.trim();
@@ -40,7 +373,10 @@ export default function Login() {
     }
 
     if (!emailRegex.test(value) && !mobileRegex.test(value)) {
-      Alert.alert(tr("Invalid Input"), tr("Enter valid Email or 10-digit Mobile Number"));
+      Alert.alert(
+        tr("Invalid Input"),
+        tr("Enter valid Email or 10-digit Mobile Number")
+      );
       return;
     }
 
@@ -49,62 +385,11 @@ export default function Login() {
       return;
     }
 
-    try {
-
-      setLoading(true);
-
-      const payload = emailRegex.test(value)
-        ? { email: value }
-        : { mobile: value };
-
-      const response = await api.post("/auth/send-otp", payload);
-
-      const data = response.data;
-
-      if (data) {
-
-        Alert.alert(
-          tr("OTP Sent"),
-          emailRegex.test(value)
-            ? tr("OTP sent to your email")
-            : tr("OTP sent to your mobile")
-        );
-
-        router.push({
-          pathname: "/otpsection",
-          params: {
-            input: value
-          }
-        });
-
-      } else {
-        Alert.alert(tr("Error"), tr("Failed to send OTP"));
-      }
-
-    } catch (error) {
-
-      console.log("API Error:", error?.response || error);
-
-      if (error?.response?.data?.message) {
-        Alert.alert(tr("Error"), tr(error.response.data.message));
-      } else {
-        Alert.alert(tr("Error"), tr("Server not reachable"));
-      }
-
-    } finally {
-      setLoading(false);
-    }
+    await sendOtpAndNavigateToOtp(value);
   };
-
-
-  const handleGoogleLogin = async () => {
-    await WebBrowser.openBrowserAsync("https://accounts.google.com");
-  };
-
 
   return (
     <View style={styles.container}>
-
       <Image
         source={require("../assets/images/fntfav.png")}
         style={styles.logo}
@@ -122,14 +407,15 @@ export default function Login() {
           value={inputValue}
           onChangeText={(text) => setInputValue(text.replace(/\s/g, ""))}
           style={styles.input}
-          keyboardType={mobileRegex.test(inputValue) ? "number-pad" : "email-address"}
+          keyboardType={
+            mobileRegex.test(inputValue) ? "number-pad" : "email-address"
+          }
           autoCapitalize="none"
           autoCorrect={false}
         />
       </View>
 
       <View style={styles.checkboxContainer}>
-
         <Checkbox
           value={isChecked}
           onValueChange={setChecked}
@@ -137,11 +423,9 @@ export default function Login() {
         />
 
         <Text style={styles.checkboxText}>
-          {tr("By continue you agree to flint & thread terms & conditions")}
-          {" "}
+          {tr("By continue you agree to flint & thread terms & conditions")}{" "}
           {tr("and along with privacy policy")}
         </Text>
-
       </View>
 
       <TouchableOpacity
@@ -149,12 +433,11 @@ export default function Login() {
         onPress={handleSignIn}
         disabled={loading}
       >
-
-        {loading
-          ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.signButtonText}>{tr("Sign in to continue")}</Text>
-        }
-
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.signButtonText}>{tr("Sign in to continue")}</Text>
+        )}
       </TouchableOpacity>
 
       <View style={styles.createAccountRow}>
@@ -163,25 +446,30 @@ export default function Login() {
         <TouchableOpacity onPress={() => router.push("/login")}>
           <Text style={styles.createText}> {tr("Create an account")}</Text>
         </TouchableOpacity>
-
       </View>
 
-      <TouchableOpacity
-        style={styles.googleButton}
-        onPress={handleGoogleLogin}
-      >
-
-        <Image
-          source={{
-            uri: "https://cdn-icons-png.flaticon.com/512/281/281764.png"
-          }}
-          style={styles.googleIcon}
+      {googleClientId ? (
+        <GoogleOAuthContinueRow
+          clientId={googleClientId}
+          tr={tr}
+          submitLocked={loading}
+          onGoogleAuthSuccess={completeGoogleSignIn}
         />
-
-        <Text style={styles.googleText}>{tr("Continue with Google")}</Text>
-
-      </TouchableOpacity>
-
+      ) : (
+        <TouchableOpacity
+          style={[styles.googleButton, loading && { opacity: 0.6 }]}
+          onPress={() => void openAccountChooserThenGoHome()}
+          disabled={loading}
+        >
+          <Image
+            source={{
+              uri: "https://cdn-icons-png.flaticon.com/512/281/281764.png",
+            }}
+            style={styles.googleIcon}
+          />
+          <Text style={styles.googleText}>{tr("Continue with Google")}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

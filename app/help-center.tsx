@@ -369,7 +369,7 @@ export default function HelpCenterScreen() {
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Help Center</Text>
           <Text style={styles.headerSubtitle}>
-            We're here to help you
+            We&apos;re here to help you
           </Text>
         </View>
 

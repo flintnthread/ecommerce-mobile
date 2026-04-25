@@ -869,7 +869,7 @@ export default function Products() {
                   },
                   refreshWishlistIds
                 );
-                if (!result.ok) {
+                if (result.ok === false) {
                   Alert.alert("Wishlist", result.message);
                   return;
                 }

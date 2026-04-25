@@ -119,7 +119,6 @@ export default function SettingsScreen() {
   const tabs: { key: SettingsTab; label: string; icon: string }[] = [
     { key: "account", label: tr("Account Info"), icon: "person" },
     { key: "address", label: tr("Addresses"), icon: "location" },
-    { key: "security", label: tr("Security"), icon: "lock-closed" },
     { key: "notifications", label: tr("Notifications"), icon: "notifications" },
   ];
 

@@ -154,7 +154,7 @@ export default function LoginScreen() {
 </TouchableOpacity>
 
           <View style={styles.bottomRow}>
-            <Text>Don't have a seller account? </Text>
+            <Text>Don&apos;t have a seller account? </Text>
             <TouchableOpacity onPress={() => router.push("/seller_register" as Href)}>
               <Text style={styles.register}>Register Now</Text>
             </TouchableOpacity>

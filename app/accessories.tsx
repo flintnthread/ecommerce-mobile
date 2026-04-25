@@ -119,9 +119,24 @@ type MainCategoryApiRow = {
   status?: number;
 };
 
+type AccessoriesLatestProductApi = {
+  id?: number | string | null;
+  name?: string | null;
+  subcategoryId?: number | string | null;
+  categoryId?: number | string | null;
+};
+
 const ACCESSORIES_PARENT_CATEGORY_ID = 28;
 const ACCESSORIES_CATEGORIES_ENDPOINT =
   "/api/categories/28/subcategories";
+const ACCESSORIES_NEW_DROP_LATEST_ENDPOINT =
+  "/api/products/main-category/28/latest";
+const ACCESSORIES_TOP_COLLECTIONS_ENDPOINT =
+  "/api/products/main-category/28/top-collections";
+const ACCESSORIES_TRENDING_COLLECTIONS_ENDPOINT =
+  "/api/products/main-category/28/trending";
+const ACCESSORIES_SPOTLIGHT_ENDPOINT =
+  "/api/products/main-category/28/spotlight";
 const JEWELLERY_SUBCATEGORIES_TABLE_ENDPOINT =
   "/api/categories/40/subcategories-table";
 const OTHER_ACCESSORIES_SUBCATEGORIES_TABLE_ENDPOINT =
@@ -437,13 +452,6 @@ const topCollectionItems: CollectionItem[] = [
     subtitle: "Premium timepieces",
     tag: "New Drop",
     image: require("../assets/images/menwatch.png"),
-  },
-  {
-    id: "c3",
-    title: "Festive Handbags",
-    subtitle: "Party-ready bags",
-    tag: "Limited",
-    image: require("../assets/images/handbag.png"),
   },
   {
     id: "c4",
@@ -1487,6 +1495,22 @@ export default function Accessories() {
   const leftShowcaseViewportHeightRef = useRef(0);
   const [selectedGadgetsQuickLinkId, setSelectedGadgetsQuickLinkId] = useState("gq1");
   const [selectedWatchesShowcaseCardId, setSelectedWatchesShowcaseCardId] = useState("wc1");
+  const [newDropRouteParams, setNewDropRouteParams] = useState<{
+    productsSearchQ?: string;
+    subcategoryId?: string;
+  }>({});
+  const [topCollectionRouteParams, setTopCollectionRouteParams] = useState<{
+    productsSearchQ?: string;
+    subcategoryId?: string;
+  }>({});
+  const [trendingRouteParams, setTrendingRouteParams] = useState<{
+    productsSearchQ?: string;
+    subcategoryId?: string;
+  }>({});
+  const [spotlightRouteParams, setSpotlightRouteParams] = useState<{
+    productsSearchQ?: string;
+    subcategoryId?: string;
+  }>({});
   const categoryIdsByTopId = useMemo(() => {
     const resolved = {
       bags: BAGS_CATEGORY_ID_FALLBACK,
@@ -1556,6 +1580,177 @@ export default function Accessories() {
     },
     []
   );
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(ACCESSORIES_NEW_DROP_LATEST_ENDPOINT, {
+          signal: c.signal,
+        });
+        const rows = Array.isArray(data) ? (data as AccessoriesLatestProductApi[]) : [];
+        const first = rows.find((row) => {
+          const id = Math.floor(Number(row?.id));
+          return Number.isFinite(id) && id > 0;
+        });
+        if (!first) {
+          setNewDropRouteParams({});
+          return;
+        }
+
+        const subNum = Math.floor(Number(first.subcategoryId));
+        const subcategoryId =
+          Number.isFinite(subNum) && subNum > 0 ? String(subNum) : undefined;
+        const productsSearchQ = String(first.name ?? "").trim() || undefined;
+
+        setNewDropRouteParams({
+          ...(productsSearchQ ? { productsSearchQ } : {}),
+          ...(subcategoryId ? { subcategoryId } : {}),
+        });
+      } catch {
+        setNewDropRouteParams({});
+      }
+    })();
+    return () => c.abort();
+  }, []);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(ACCESSORIES_SPOTLIGHT_ENDPOINT, {
+          signal: c.signal,
+        });
+        const rows = Array.isArray(data) ? (data as AccessoriesLatestProductApi[]) : [];
+        const first = rows.find((row) => {
+          const id = Math.floor(Number(row?.id));
+          return Number.isFinite(id) && id > 0;
+        });
+        if (!first) {
+          setSpotlightRouteParams({});
+          return;
+        }
+
+        const subNum = Math.floor(
+          Number(first.subcategoryId ?? first.categoryId)
+        );
+        const subcategoryId =
+          Number.isFinite(subNum) && subNum > 0 ? String(subNum) : undefined;
+        const productsSearchQ = String(first.name ?? "").trim() || undefined;
+
+        setSpotlightRouteParams({
+          ...(productsSearchQ ? { productsSearchQ } : {}),
+          ...(subcategoryId ? { subcategoryId } : {}),
+        });
+      } catch {
+        setSpotlightRouteParams({});
+      }
+    })();
+    return () => c.abort();
+  }, []);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(ACCESSORIES_TRENDING_COLLECTIONS_ENDPOINT, {
+          signal: c.signal,
+        });
+        const rows = Array.isArray(data) ? (data as AccessoriesLatestProductApi[]) : [];
+        const first = rows.find((row) => {
+          const id = Math.floor(Number(row?.id));
+          return Number.isFinite(id) && id > 0;
+        });
+        if (!first) {
+          setTrendingRouteParams({});
+          return;
+        }
+
+        const subNum = Math.floor(
+          Number(first.subcategoryId ?? first.categoryId)
+        );
+        const subcategoryId =
+          Number.isFinite(subNum) && subNum > 0 ? String(subNum) : undefined;
+        const productsSearchQ = String(first.name ?? "").trim() || undefined;
+
+        setTrendingRouteParams({
+          ...(productsSearchQ ? { productsSearchQ } : {}),
+          ...(subcategoryId ? { subcategoryId } : {}),
+        });
+      } catch {
+        setTrendingRouteParams({});
+      }
+    })();
+    return () => c.abort();
+  }, []);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(ACCESSORIES_TOP_COLLECTIONS_ENDPOINT, {
+          signal: c.signal,
+        });
+        const rows = Array.isArray(data) ? (data as AccessoriesLatestProductApi[]) : [];
+        const first = rows.find((row) => {
+          const id = Math.floor(Number(row?.id));
+          return Number.isFinite(id) && id > 0;
+        });
+        if (!first) {
+          setTopCollectionRouteParams({});
+          return;
+        }
+
+        const subNum = Math.floor(
+          Number(first.subcategoryId ?? first.categoryId)
+        );
+        const subcategoryId =
+          Number.isFinite(subNum) && subNum > 0 ? String(subNum) : undefined;
+        const productsSearchQ = String(first.name ?? "").trim() || undefined;
+
+        setTopCollectionRouteParams({
+          ...(productsSearchQ ? { productsSearchQ } : {}),
+          ...(subcategoryId ? { subcategoryId } : {}),
+        });
+      } catch {
+        setTopCollectionRouteParams({});
+      }
+    })();
+    return () => c.abort();
+  }, []);
+
+  const openTopCollectionsListing = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        ...accessoriesSubcatNavigatorParams(
+          "Top Collection",
+          topCollectionRouteParams.subcategoryId
+        ),
+        mainCategoryId: String(ACCESSORIES_PARENT_CATEGORY_ID),
+        ...(topCollectionRouteParams.productsSearchQ
+          ? { productsSearchQ: topCollectionRouteParams.productsSearchQ }
+          : {}),
+      },
+    } as any);
+  }, [router, topCollectionRouteParams.productsSearchQ, topCollectionRouteParams.subcategoryId]);
+
+  const openSpotlightListing = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        ...accessoriesSubcatNavigatorParams(
+          "Accessories Spotlight",
+          spotlightRouteParams.subcategoryId
+        ),
+        mainCategoryId: String(ACCESSORIES_PARENT_CATEGORY_ID),
+        mainCategoryFeed: "spotlight",
+        ...(spotlightRouteParams.productsSearchQ
+          ? { productsSearchQ: spotlightRouteParams.productsSearchQ }
+          : {}),
+      },
+    } as any);
+  }, [router, spotlightRouteParams.productsSearchQ, spotlightRouteParams.subcategoryId]);
 
   const gadgetsQuickLinkSubcategoriesResolved = useMemo<
     Record<string, { label: string; subcategoryId?: number }[]>
@@ -2729,12 +2924,7 @@ export default function Accessories() {
             <TouchableOpacity
               activeOpacity={0.85}
               style={styles.collectionViewAll}
-              onPress={() =>
-                router.push({
-                  pathname: "/subcatProducts",
-                  params: accessoriesSubcatNavigatorParams("Top Collection"),
-                })
-              }
+              onPress={openTopCollectionsListing}
             >
               <Text style={styles.collectionViewAllText}>{tr("View all")}</Text>
             </TouchableOpacity>
@@ -2742,7 +2932,7 @@ export default function Accessories() {
 
           <Pressable
             style={[styles.collectionFeaturedCard, { aspectRatio: topCollectionBannerAspectRatio }]}
-            onPress={() => router.push("/productdetail")}
+            onPress={openTopCollectionsListing}
           >
             {({ hovered, pressed }) => {
               const showOverlay = hovered || pressed;
@@ -2793,7 +2983,41 @@ export default function Accessories() {
                 key={item.id}
                 style={styles.collectionMiniCard}
                 activeOpacity={0.9}
-                onPress={() => router.push("/productdetail")}
+                onPress={() => {
+                  if (item.tag === "New Drop") {
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        ...accessoriesSubcatNavigatorParams(
+                          "New Drop",
+                          newDropRouteParams.subcategoryId
+                        ),
+                        mainCategoryId: String(ACCESSORIES_PARENT_CATEGORY_ID),
+                        ...(newDropRouteParams.productsSearchQ
+                          ? { productsSearchQ: newDropRouteParams.productsSearchQ }
+                          : {}),
+                      },
+                    } as any);
+                    return;
+                  }
+                  if (item.tag === "Trending") {
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        ...accessoriesSubcatNavigatorParams(
+                          "Trending",
+                          trendingRouteParams.subcategoryId
+                        ),
+                        mainCategoryId: String(ACCESSORIES_PARENT_CATEGORY_ID),
+                        ...(trendingRouteParams.productsSearchQ
+                          ? { productsSearchQ: trendingRouteParams.productsSearchQ }
+                          : {}),
+                      },
+                    } as any);
+                    return;
+                  }
+                  router.push("/productdetail");
+                }}
               >
                 <Image source={item.image} style={styles.collectionMiniImage} resizeMode="cover" />
                 <View style={styles.collectionMiniTag}>
@@ -2827,7 +3051,7 @@ export default function Accessories() {
               styles.videoAdCardSpotlight,
               { aspectRatio: spotlightBannerAspectRatio },
             ]}
-            onPress={() => router.push("/productdetail")}
+            onPress={openSpotlightListing}
           >
             {({ hovered, pressed }) => {
               const showOverlay = hovered || pressed;
@@ -2859,9 +3083,14 @@ export default function Accessories() {
                     <Text style={styles.videoAdOverlayTitle}>
                       Style the Season with Accessories
                     </Text>
-                    <View style={styles.videoAdButton} accessibilityRole="button">
+                    <TouchableOpacity
+                      style={styles.videoAdButton}
+                      activeOpacity={0.88}
+                      onPress={openSpotlightListing}
+                      accessibilityRole="button"
+                    >
                       <Text style={styles.videoAdButtonText}>{tr("Shop the look")}</Text>
-                    </View>
+                    </TouchableOpacity>
                   </View>
                 </>
               );
@@ -4893,7 +5122,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   collectionMiniCard: {
-    width: "31.6%",
+    width: "48.5%",
     height: 160,
     borderRadius: 12,
     overflow: "hidden",

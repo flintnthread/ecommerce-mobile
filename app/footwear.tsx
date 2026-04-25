@@ -1070,8 +1070,7 @@ export default function FootwearScreen() {
                         mainCat: "footwear",
                         subCategory: `Top-tier Kicks ${card.discount}% OFF`,
                         mainCategoryId: "29",
-                        discountMin: String(card.discount),
-                        discountMax: String(card.discountMax),
+                        mainCategoryPath: `/api/products/main-category/29/discount/upto/${card.discount}`,
                       },
                     })
                   }

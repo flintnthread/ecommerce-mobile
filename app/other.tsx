@@ -18,6 +18,8 @@ import { fetchCookiesPolicy } from "../services/cookiesPolicy";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
+const LEGAL_INFO_URL = "https://flintnthread.in/page-privacy-policy";
+
 export default function OtherScreen() {
   const router = useRouter();
   const { tr, selectedLanguage, setSelectedLanguage } = useLanguage();
@@ -75,7 +77,7 @@ export default function OtherScreen() {
         {
           text: "View Online",
           onPress: () => {
-            Linking.openURL("https://example.com/privacy-policy");
+            Linking.openURL(LEGAL_INFO_URL);
           },
         },
       ]);
@@ -93,25 +95,7 @@ export default function OtherScreen() {
         {
           text: "View Online",
           onPress: () => {
-            Linking.openURL("https://example.com/terms-conditions");
-          },
-        },
-      ]
-    );
-  };
-
-  const handleRateApp = () => {
-    Alert.alert(
-      "Rate Our App",
-      "Thank you for using our app! Would you like to rate us on the App Store?",
-      [
-        { text: "Maybe Later", style: "cancel" },
-        {
-          text: "Rate Now",
-          onPress: () => {
-            // In a real app, this would open the app store
-            Alert.alert("Thank You!", "Redirecting to App Store...");
-            // Linking.openURL("app-store-url");
+            Linking.openURL(LEGAL_INFO_URL);
           },
         },
       ]
@@ -254,14 +238,14 @@ export default function OtherScreen() {
               <View key={lang.code}>
                 <TouchableOpacity
                   style={styles.languageItem}
-                  onPress={() => handleLanguageSelect(lang.name)}
+                  onPress={() => handleLanguageSelect(lang.code as SupportedLanguage)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.languageItemLeft}>
                     <Text style={styles.languageName}>{lang.name}</Text>
                     <Text style={styles.languageNative}>{lang.nativeName}</Text>
                   </View>
-                  {selectedLanguage === lang.name && (
+                  {selectedLanguage === (lang.code as SupportedLanguage) && (
                     <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
                   )}
                 </TouchableOpacity>
@@ -319,59 +303,6 @@ export default function OtherScreen() {
               <Ionicons name="chevron-forward" size={20} color="#CCCCCC" />
             </View>
           </TouchableOpacity>
-        </View>
-
-        {/* Rate App Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="star" size={24} color="#E97A1F" />
-            <Text style={styles.sectionTitle}>Rate App</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.sectionCard}
-            onPress={handleRateApp}
-            activeOpacity={0.7}
-          >
-            <View style={styles.infoItem}>
-              <View style={styles.infoItemLeft}>
-                <Text style={styles.infoLabel}>Rate Us on App Store</Text>
-                <Text style={styles.infoDescription}>
-                  Help us improve by rating the app
-                </Text>
-              </View>
-              <View style={styles.ratingStars}>
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Ionicons
-                    key={index}
-                    name="star"
-                    size={20}
-                    color="#FFD700"
-                  />
-                ))}
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* App Version Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="information-circle" size={24} color="#E97A1F" />
-            <Text style={styles.sectionTitle}>App Version</Text>
-          </View>
-          <View style={styles.sectionCard}>
-            <View style={styles.infoItem}>
-              <View style={styles.infoItemLeft}>
-                <Text style={styles.infoLabel}>Current Version</Text>
-                <Text style={styles.infoDescription}>
-                  You're using the latest version
-                </Text>
-              </View>
-              <View style={styles.versionBadge}>
-                <Text style={styles.versionText}>{appVersion}</Text>
-              </View>
-            </View>
-          </View>
         </View>
 
         {/* Footer */}

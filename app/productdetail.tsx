@@ -1840,7 +1840,7 @@ export default function ProductDetail() {
               <View style={styles.highlightRow}>
                 <View style={styles.highlightBullet} />
                 <Text style={styles.highlightText}>
-                  Model is 5'6&quot; and wearing size M
+                  Model is 5&apos;6&quot; and wearing size M
                 </Text>
               </View>
               <View style={styles.highlightRow}>
@@ -1914,7 +1914,7 @@ export default function ProductDetail() {
         {/* YOU MAY ALSO LIKE */}
         <View style={styles.sectionBlock}>
           <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
-            You'll Love These
+            You&apos;ll Love These
           </Text>
           {relatedLoading ? (
             <View style={styles.relatedLoadingContainer}>

@@ -23,8 +23,10 @@ import {
 } from "react-native";
 import * as IntentLauncher from "expo-intent-launcher";
 import { LinearGradient } from "expo-linear-gradient";
+import { VideoView, useVideoPlayer } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import api, {
   productsByMainCategoryPath,
   productsBySubcategoryPath,
@@ -32,7 +34,7 @@ import api, {
   searchSuggestionsPath,
   WISHLIST_USER_PATH,
 } from "../services/api";
-import { addToCartPtbOrLocal } from "../lib/cartServerApi";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
 import { parseWishlistApiError, postWishlistAdd } from "../lib/wishlistServerApi";
 import {
   addWishlistProductIfAbsent,
@@ -135,6 +137,7 @@ type HomeWishlistCandidate = {
 /** “More picks” grid row — API-mapped or fallback */
 type MorePicksGridItem = {
   id: string;
+  cartId?: string;
   name: string;
   image: ImageSourcePropType;
   rating: string;
@@ -793,6 +796,7 @@ function mapMorePicksApiToGrid(
 
     out.push({
       id: String(idNum),
+      cartId: String(idNum),
       name,
       image: uri ? ({ uri } as const) : placeholderImage,
       rating: "0.0 (0)",
@@ -809,6 +813,7 @@ function mapMorePicksApiToGrid(
 const LATEST_PRODUCTS_FALLBACK: MorePicksGridItem[] = [
   {
     id: "1",
+    cartId: "1",
     name: "Golden Bangles Set",
     image: require("../assets/images/latest1.png"),
     rating: "0.0 (0)",
@@ -816,6 +821,7 @@ const LATEST_PRODUCTS_FALLBACK: MorePicksGridItem[] = [
   },
   {
     id: "2",
+    cartId: "2",
     name: "Traditional Meenakari P...",
     image: require("../assets/images/latest2.png"),
     rating: "0.0 (0)",
@@ -825,6 +831,7 @@ const LATEST_PRODUCTS_FALLBACK: MorePicksGridItem[] = [
   },
   {
     id: "3",
+    cartId: "3",
     name: "Bridal Bangles Set",
     image: require("../assets/images/latest3.png"),
     rating: "0.0 (0)",
@@ -832,6 +839,7 @@ const LATEST_PRODUCTS_FALLBACK: MorePicksGridItem[] = [
   },
   {
     id: "4",
+    cartId: "4",
     name: "Red Designer Bangles",
     image: require("../assets/images/latest4.png"),
     rating: "0.0 (0)",
@@ -1304,6 +1312,23 @@ export default function Home() {
     },
     [router]
   );
+
+  const homeBannerVideoPlayer = useVideoPlayer(
+    require("../assets/images/homevideobanner.mp4"),
+    (player) => {
+      player.loop = true;
+      player.muted = true;
+      player.play();
+    }
+  );
+
+  /** Explicit height so `VideoView` gets a non-zero layout (avoids black box with aspectRatio + absoluteFill). */
+  const homeVideoBannerInnerW = width - 40;
+  const homeVideoBannerHeight = Math.min(
+    220,
+    Math.max(160, Math.round((homeVideoBannerInnerW * 9) / 16))
+  );
+
   const placeholderTexts = [
     " Shoes",
     " Womens Wear",
@@ -1322,7 +1347,7 @@ export default function Home() {
   const promoBlastAnim = useRef(new Animated.Value(0)).current;
   const [deliveryAddressSearchQuery, setDeliveryAddressSearchQuery] =
     useState("");
-  const [displayDeliveryLine, setDisplayDeliveryLine] = useState(
+  const [_displayDeliveryLine, setDisplayDeliveryLine] = useState(
     "Kphb colony ,road no 3 ,phase 1,near shi..."
   );
   const [savedDeliveryAddresses, setSavedDeliveryAddresses] = useState<
@@ -1711,6 +1736,7 @@ export default function Home() {
   ]);
 
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [cartBadgeCount, setCartBadgeCount] = useState(0);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
   const [saveToWishlistChecked, setSaveToWishlistChecked] = useState(true);
@@ -1826,6 +1852,20 @@ export default function Home() {
       void reloadWishlistBadge();
     }, [reloadWishlistBadge])
   );
+
+  const reloadCartBadge = useCallback(async () => {
+    setCartBadgeCount(await getCartUnitCount());
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadCartBadge();
+    }, [reloadCartBadge])
+  );
+
+  const bumpCartBadgeAfterAdd = useCallback(() => {
+    setCartBadgeCount((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2348,12 +2388,44 @@ export default function Home() {
                   <Text style={styles.latestGridRatingText}>{ratingValue.toFixed(1)}</Text>
                 </View>
               </View>
+
+              <View style={styles.latestGridAddCartRow}>
+                <TouchableOpacity
+                  style={styles.latestGridAddCartButton}
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    void (async () => {
+                      const pid = Math.floor(Number(item.cartId ?? item.id));
+                      const r = await addToCartPtbOrLocal({
+                        productId: pid,
+                        variantId: item.variantId,
+                        quantity: 1,
+                        localLine: {
+                          id: item.cartId ?? item.id,
+                          name: item.name,
+                          price: parseRupee(item.price),
+                          mrp: parseRupee(item.oldPrice ?? item.price),
+                        },
+                      });
+                      if (r.ok === false) {
+                        Alert.alert("Cart", r.message);
+                        return;
+                      }
+                      bumpCartBadgeAfterAdd();
+                    })();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add ${item.name} to cart`}
+                >
+                  <Text style={styles.latestGridAddCartButtonText}>Add to Cart</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </TouchableOpacity>
         </View>
       );
     },
-    [openSaveToWishlistSheet, router, wishlistIds]
+    [bumpCartBadgeAfterAdd, openSaveToWishlistSheet, parseRupee, router, wishlistIds]
 
 
 
@@ -3181,31 +3253,7 @@ const categoryData = [
             </View>
           </View>
 
-          <TouchableOpacity
-            style={styles.locationPillOuter}
-            onPress={() => setDeliveryAddressModalVisible(true)}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Delivery address, tap to change"
-          >
-            <LinearGradient
-              colors={["rgba(255,255,255,0.96)", "rgba(255,255,255,0.9)"]}
-              locations={[0, 1]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0.85 }}
-              style={styles.locationPill}
-            >
-              <MaterialIcons name="place" size={17} color="#0F172A" />
-              <Text
-                style={styles.locationPillText}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {displayDeliveryLine}
-              </Text>
-              <Ionicons name="chevron-down" size={18} color="#0F172A" />
-            </LinearGradient>
-          </TouchableOpacity>
+          <DeliveryLocationSection enableFullAddressApi />
         </View>
         </LinearGradient>
       </View>
@@ -3759,6 +3807,7 @@ const categoryData = [
                           Alert.alert("Cart", r.message);
                           return;
                         }
+                        bumpCartBadgeAfterAdd();
                         Alert.alert(
                           "Added to cart",
                           `${item.name} is in your cart.`
@@ -3780,14 +3829,17 @@ const categoryData = [
   </View>
 </View>
 
-{/* Banner (static image — add assets/images/accessories.mp4 to restore video) */}
+{/* Home banner video — above Premium finds */}
 <View style={styles.homeVideoShell}>
-  <View style={styles.videoBannerContainer}>
-    <Image
-      source={require("../assets/images/accessarieshomebanner.png")}
+  <View
+    style={[styles.videoBannerContainer, { height: homeVideoBannerHeight }]}
+    collapsable={false}
+  >
+    <VideoView
+      player={homeBannerVideoPlayer}
       style={styles.videoBanner}
-      resizeMode="cover"
-      accessibilityIgnoresInvertColors
+      contentFit="cover"
+      nativeControls={false}
     />
   </View>
 </View>
@@ -5235,7 +5287,7 @@ const categoryData = [
 
       
 
-      <HomeBottomTabBar />
+      <HomeBottomTabBar cartBadgeCount={cartBadgeCount} />
     </View>
 
 
@@ -6957,17 +7009,16 @@ addCartText: {
 videoBannerContainer: {
   width: "100%",
   alignSelf: "stretch",
-  aspectRatio: 16 / 9,
-  maxHeight: 220,
   marginTop: 0,
   marginBottom: 0,
   borderRadius: 14,
   overflow: "hidden",
-  backgroundColor: "#000",
+  backgroundColor: "#0b0b0c",
 },
 
 videoBanner: {
-  ...StyleSheet.absoluteFillObject,
+  width: "100%",
+  height: "100%",
 },
 // premium — sapphire gradient (replaces flat orange)
 premiumSection: {
@@ -7798,6 +7849,22 @@ latestSection: {
     fontSize: 12,
     fontWeight: "900",
     color: "#FFFFFF",
+    letterSpacing: 0.2,
+  },
+  latestGridAddCartRow: {
+    marginTop: 2,
+  },
+  latestGridAddCartButton: {
+    borderRadius: 10,
+    backgroundColor: "#F97316",
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  latestGridAddCartButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12.5,
+    fontWeight: "800",
     letterSpacing: 0.2,
   },
 

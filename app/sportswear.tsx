@@ -1556,6 +1556,8 @@ export default function SportsWearSection() {
     });
   }, [productsToBuyApi, productsToBuyLoading, sportswearMainCategoryId]);
 
+  const powerPicksRows = useMemo(() => productsToBuyUiRows.slice(0, 4), [productsToBuyUiRows]);
+
   const [selectedColor, setSelectedColor] = useState("white");
   const [sportswearBrowseCards, setSportswearBrowseCards] = useState<SportswearBrowseCard[]>(
     SPORTSWEAR_DEAL_CARDS_FALLBACK
@@ -2804,49 +2806,33 @@ const rotate = rotateAnim.interpolate({
         </View>
 
         <View style={styles.powerGrid}>
-          {[
-            {
-              id: "pp1",
-              img: require("../assets/images/fntsportswear2.png"),
-              label: "NEW DROP",
-              offer: "UP TO 40% OFF",
-            },
-            {
-              id: "pp2",
-              img: require("../assets/images/fntsportswear4.png"),
-              label: "BEST DEALS",
-              offer: "EXTRA 10% OFF",
-            },
-            {
-              id: "pp3",
-              img: require("../assets/images/fntsportswear3.png"),
-              label: "TRENDING",
-              offer: "MIN 30% OFF",
-            },
-            {
-              id: "pp4",
-              img: require("../assets/images/fntsportswear1.png"),
-              label: "TOP RATED",
-              offer: "UNDER ₹999",
-            },
-          ].map((card) => (
+          {powerPicksRows.map((card) => (
             <TouchableOpacity
               key={card.id}
               style={styles.powerGridCard}
               activeOpacity={0.92}
-              onPress={goShop}
+              onPress={() =>
+                card.fromApi
+                  ? router.push({
+                      pathname: "/productdetail",
+                      params: { id: String(card.id) },
+                    } as any)
+                  : goShop()
+              }
               accessibilityRole="button"
-              accessibilityLabel={`${card.label}, ${card.offer}`}
+              accessibilityLabel={card.name}
             >
               <Image
-                source={card.img}
+                source={card.imageSource}
                 style={styles.powerGridImage}
                 resizeMode="cover"
               />
               <View style={styles.powerGridShade} />
 
               <View style={styles.powerGridFooter}>
-                <Text style={styles.powerGridOffer}>{card.offer}</Text>
+                <Text style={styles.powerGridOffer}>
+                  {card.discountLabel || card.sellingLabel || "Shop now"}
+                </Text>
                 <View style={styles.powerGridCta}>
                   <Text style={styles.powerGridCtaText}>Shop</Text>
                   <Ionicons name="arrow-forward" size={14} color="#fff" />
