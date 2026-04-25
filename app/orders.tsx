@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,11 +14,269 @@ import {
   RefreshControl,
   Animated,
   BackHandler,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useLanguage } from "../lib/language";
+import api from "../services/api";
+
+/** Path only — base URL comes from `services/api.tsx`. */
+const ORDERS_API_PATH = "/api/orders";
+
+const PLACEHOLDER_ORDER_IMAGE = require("../assets/images/age5.png");
+
+function resolveApiImageUri(pathOrUrl: string): string {
+  const s = String(pathOrUrl ?? "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  const base = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  if (!base) return s.startsWith("/") ? s : `/${s}`;
+  return s.startsWith("/") ? `${base}${s}` : `${base}/${s}`;
+}
+
+function formatInrFromNumber(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "₹0";
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+function parseApiNumber(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const x = parseFloat(v.replace(/,/g, ""));
+    return Number.isFinite(x) ? x : 0;
+  }
+  return 0;
+}
+
+function formatOrderDate(isoOrStr: string): string {
+  const d = new Date(isoOrStr);
+  if (Number.isNaN(d.getTime())) return isoOrStr.slice(0, 16);
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function pickLineItemsFromApiOrder(o: Record<string, unknown>): unknown[] {
+  const candidates = [
+    o.orderItems,
+    o.items,
+    o.products,
+    o.lineItems,
+    o.orderLines,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length > 0) return c;
+  }
+  return [];
+}
+
+function pickPrimaryImageFromLineItem(line: Record<string, unknown>): string {
+  const product = line.product as Record<string, unknown> | undefined;
+  const images = (product?.images ?? line.images) as unknown;
+  if (Array.isArray(images) && images.length > 0) {
+    const primary =
+      images.find((img: unknown) => {
+        const im = img as Record<string, unknown>;
+        return im?.isPrimary === true;
+      }) ?? images[0];
+    const im = primary as Record<string, unknown>;
+    const path = String(im?.imageUrl ?? im?.imagePath ?? im?.url ?? "").trim();
+    if (path) return resolveApiImageUri(path);
+  }
+  const direct = String(
+    line.imageUrl ?? line.productImage ?? line.thumbnailUrl ?? ""
+  ).trim();
+  return direct ? resolveApiImageUri(direct) : "";
+}
+
+function mapApiLineToProduct(
+  line: unknown,
+  idx: number,
+  placeholder: any
+): { id: string; name: string; image: any; quantity: number; price: string } | null {
+  if (!line || typeof line !== "object") return null;
+  const L = line as Record<string, unknown>;
+  const qty = Math.max(1, Math.floor(parseApiNumber(L.quantity ?? L.qty ?? 1)));
+  const priceNum = parseApiNumber(
+    L.sellingPrice ?? L.price ?? L.unitPrice ?? L.finalPrice ?? L.amount
+  );
+  const name = String(
+    (L.productName as string) ??
+      ((L.product as Record<string, unknown>)?.name as string) ??
+      L.name ??
+      "Product"
+  ).trim();
+  const id = String(L.id ?? L.lineId ?? L.orderItemId ?? `line-${idx}`);
+  const uri = pickPrimaryImageFromLineItem(L);
+  return {
+    id,
+    name: name || `Product ${idx + 1}`,
+    image: uri ? { uri } : placeholder,
+    quantity: qty,
+    price: priceNum > 0 ? formatInrFromNumber(priceNum) : "—",
+  };
+}
+
+type ApiOrdersTabStatus = "returns" | "cancelled" | "delivered" | "shipped" | "processing";
+type ApiMappedOrderStatus = Exclude<OrderStatus, "all">;
+
+function normalizeApiStatusToOrderStatus(statusRaw: unknown): ApiMappedOrderStatus {
+  const s = String(statusRaw ?? "").trim().toLowerCase();
+  if (s === "returned" || s === "returns" || s === "return") return "returns";
+  if (s === "cancelled" || s === "canceled" || s === "cancel") return "cancelled";
+  if (s === "delivered" || s === "complete" || s === "completed") return "delivered";
+  if (s === "shipped" || s === "dispatch" || s === "dispatched") return "shipped";
+  return "processing";
+}
+
+/**
+ * Maps one API order row to UI `Order` (Processing / Shipped / Delivered / Returns / Cancelled from `/api/orders`).
+ * Supports common Spring-style shapes; extend fields as backend stabilizes.
+ */
+function mapApiOrderRowToOrder(
+  row: unknown,
+  placeholderImage: any,
+  uiStatus?: ApiOrdersTabStatus
+): Order | null {
+  if (!row || typeof row !== "object") return null;
+  const o = row as Record<string, unknown>;
+  const idRaw = o.id ?? o.orderId ?? o.order_id;
+  const id = idRaw != null ? String(idRaw).trim() : "";
+  if (!id) return null;
+
+  const orderNumber = String(
+    o.orderNumber ?? o.orderNo ?? o.order_number ?? `#ORD-${id}`
+  ).trim();
+
+  const dateRaw = o.createdAt ?? o.orderDate ?? o.date ?? o.orderedAt ?? o.placedAt;
+  const date =
+    typeof dateRaw === "string" && dateRaw
+      ? formatOrderDate(dateRaw)
+      : String(o.orderDate ?? "—");
+
+  const lineItems = pickLineItemsFromApiOrder(o);
+  const products = lineItems
+    .map((line, i) => mapApiLineToProduct(line, i, placeholderImage))
+    .filter((p): p is NonNullable<typeof p> => p != null);
+
+  const itemCountFromApi = Math.floor(parseApiNumber(o.itemCount ?? o.totalItems));
+  const items =
+    itemCountFromApi > 0
+      ? itemCountFromApi
+      : products.length > 0
+        ? products.reduce((s, p) => s + p.quantity, 0)
+        : 1;
+
+  const totalNum = parseApiNumber(
+    o.totalAmount ?? o.grandTotal ?? o.total ?? o.payableAmount ?? o.amount
+  );
+  const total =
+    totalNum > 0
+      ? formatInrFromNumber(totalNum)
+      : String(o.totalDisplay ?? o.totalFormatted ?? formatInrFromNumber(0));
+
+  const firstLine = lineItems[0] as Record<string, unknown> | undefined;
+  const cardImageUri =
+    products[0]?.image && typeof products[0].image === "object" && "uri" in products[0].image
+      ? String((products[0].image as { uri: string }).uri)
+      : firstLine
+        ? pickPrimaryImageFromLineItem(firstLine)
+        : "";
+
+  const tracking = String(o.trackingNumber ?? o.trackingNo ?? o.awb ?? "").trim() || undefined;
+  const payment = String(o.paymentMethod ?? o.paymentType ?? o.paymentMode ?? "").trim() || undefined;
+  const deliveryAddress = String(
+    o.deliveryAddress ?? o.shippingAddress ?? o.address ?? o.fullAddress ?? ""
+  ).trim() || undefined;
+
+  let estimatedDelivery: string | undefined;
+  if (uiStatus === "returns") {
+    estimatedDelivery =
+      String(o.returnStatus ?? o.statusMessage ?? o.returnMessage ?? "").trim() || undefined;
+  } else if (uiStatus === "cancelled") {
+    estimatedDelivery =
+      String(
+        o.cancelReason ??
+          o.cancellationReason ??
+          o.cancelledReason ??
+          o.statusMessage ??
+          ""
+      ).trim() || undefined;
+  } else if (uiStatus === "shipped") {
+    const etaRaw =
+      o.estimatedDelivery ??
+      o.expectedDeliveryDate ??
+      o.edd ??
+      o.expectedDelivery ??
+      o.deliveryEta;
+    if (typeof etaRaw === "string" && etaRaw.trim()) {
+      estimatedDelivery = `Expected: ${formatOrderDate(etaRaw)}`;
+    }
+    const shipRaw = o.shippedAt ?? o.shippedOn ?? o.dispatchDate ?? o.shippedDate;
+    if (typeof shipRaw === "string" && shipRaw.trim()) {
+      const shippedLine = `Shipped ${formatOrderDate(shipRaw)}`;
+      estimatedDelivery = estimatedDelivery ? `${shippedLine} · ${estimatedDelivery}` : shippedLine;
+    }
+    if (!estimatedDelivery) {
+      estimatedDelivery =
+        String(o.statusMessage ?? o.shippingMessage ?? "").trim() || undefined;
+    }
+  } else if (uiStatus === "delivered") {
+    const delRaw =
+      o.deliveredAt ??
+      o.deliveredOn ??
+      o.deliveryDate ??
+      o.actualDeliveryDate ??
+      o.deliveredDate;
+    if (typeof delRaw === "string" && delRaw.trim()) {
+      estimatedDelivery = `Delivered on ${formatOrderDate(delRaw)}`;
+    } else {
+      estimatedDelivery =
+        String(o.estimatedDelivery ?? o.deliveryMessage ?? o.statusMessage ?? "").trim() ||
+        undefined;
+    }
+  } else {
+    const etaRaw =
+      o.estimatedDelivery ??
+      o.expectedDeliveryDate ??
+      o.expectedShipDate ??
+      o.edd ??
+      o.deliveryEta;
+    if (typeof etaRaw === "string" && etaRaw.trim()) {
+      estimatedDelivery = `Expected: ${formatOrderDate(etaRaw)}`;
+    }
+    estimatedDelivery =
+      estimatedDelivery ||
+      String(o.statusMessage ?? o.orderStatusMessage ?? "").trim() ||
+      undefined;
+  }
+
+  const mappedStatus: ApiMappedOrderStatus =
+    uiStatus ?? normalizeApiStatusToOrderStatus(o.status ?? o.orderStatus);
+  const base: Order = {
+    id,
+    orderNumber: orderNumber || `#ORD-${id}`,
+    date,
+    status: mappedStatus,
+    items,
+    total,
+    image: cardImageUri ? { uri: cardImageUri } : placeholderImage,
+    trackingNumber: tracking,
+    paymentMethod: payment,
+    deliveryAddress,
+    estimatedDelivery,
+    products: products.length > 0 ? products : undefined,
+  };
+
+  if (mappedStatus === "returns") {
+    return { ...base, returnStage: 2 };
+  }
+  return base;
+}
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -150,6 +408,30 @@ export default function OrdersScreen() {
   const router = useRouter();
   const { tr } = useLanguage();
   const [orders, setOrders] = useState<Order[]>(sampleOrders);
+  /** All orders from `GET /api/orders` (All tab only). */
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [allOrdersLoading, setAllOrdersLoading] = useState(false);
+  const [allOrdersError, setAllOrdersError] = useState<string | null>(null);
+  /** Returned orders from `GET /api/orders?status=returned` (Returns tab only). */
+  const [returnOrders, setReturnOrders] = useState<Order[]>([]);
+  const [returnOrdersLoading, setReturnOrdersLoading] = useState(false);
+  const [returnOrdersError, setReturnOrdersError] = useState<string | null>(null);
+  /** Cancelled orders from `GET /api/orders?status=cancelled` (Cancelled tab only). */
+  const [cancelledOrders, setCancelledOrders] = useState<Order[]>([]);
+  const [cancelledOrdersLoading, setCancelledOrdersLoading] = useState(false);
+  const [cancelledOrdersError, setCancelledOrdersError] = useState<string | null>(null);
+  /** Delivered orders from `GET /api/orders?status=delivered` (Delivered tab only). */
+  const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
+  const [deliveredOrdersLoading, setDeliveredOrdersLoading] = useState(false);
+  const [deliveredOrdersError, setDeliveredOrdersError] = useState<string | null>(null);
+  /** Shipped orders from `GET /api/orders?status=shipped` (Shipped tab only). */
+  const [shippedOrders, setShippedOrders] = useState<Order[]>([]);
+  const [shippedOrdersLoading, setShippedOrdersLoading] = useState(false);
+  const [shippedOrdersError, setShippedOrdersError] = useState<string | null>(null);
+  /** Processing orders from `GET /api/orders?status=processing` (Processing tab only). */
+  const [processingOrders, setProcessingOrders] = useState<Order[]>([]);
+  const [processingOrdersLoading, setProcessingOrdersLoading] = useState(false);
+  const [processingOrdersError, setProcessingOrdersError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<OrderStatus>("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -193,12 +475,214 @@ export default function OrdersScreen() {
     }
   }, [showSearch]);
 
+  const fetchReturnOrders = useCallback(async () => {
+    setReturnOrdersLoading(true);
+    setReturnOrdersError(null);
+    try {
+      const { data } = await api.get<{
+        success?: boolean;
+        message?: string;
+        data?: unknown;
+      }>(ORDERS_API_PATH, {
+        params: { status: "returned" },
+      });
+      const payload = data as Record<string, unknown>;
+      const listRaw = Array.isArray(payload.data) ? (payload.data as unknown[]) : [];
+      const mapped = listRaw
+        .map((row) => mapApiOrderRowToOrder(row, PLACEHOLDER_ORDER_IMAGE, "returns"))
+        .filter((x): x is Order => x != null);
+      setReturnOrders(mapped);
+    } catch {
+      setReturnOrders([]);
+      setReturnOrdersError(tr("Could not load returned orders. Pull to refresh or try again."));
+    } finally {
+      setReturnOrdersLoading(false);
+    }
+  }, [tr]);
+
+  const fetchAllOrders = useCallback(async () => {
+    setAllOrdersLoading(true);
+    setAllOrdersError(null);
+    try {
+      const { data } = await api.get<{
+        success?: boolean;
+        message?: string;
+        data?: unknown;
+      }>(ORDERS_API_PATH);
+      const payload = data as Record<string, unknown>;
+      const listRaw = Array.isArray(payload.data) ? (payload.data as unknown[]) : [];
+      const mapped = listRaw
+        .map((row) => mapApiOrderRowToOrder(row, PLACEHOLDER_ORDER_IMAGE))
+        .filter((x): x is Order => x != null);
+      setAllOrders(mapped);
+    } catch {
+      setAllOrders([]);
+      setAllOrdersError(tr("Could not load orders. Pull to refresh or try again."));
+    } finally {
+      setAllOrdersLoading(false);
+    }
+  }, [tr]);
+
+  const fetchCancelledOrders = useCallback(async () => {
+    setCancelledOrdersLoading(true);
+    setCancelledOrdersError(null);
+    try {
+      const { data } = await api.get<{
+        success?: boolean;
+        message?: string;
+        data?: unknown;
+      }>(ORDERS_API_PATH, {
+        params: { status: "cancelled" },
+      });
+      const payload = data as Record<string, unknown>;
+      const listRaw = Array.isArray(payload.data) ? (payload.data as unknown[]) : [];
+      const mapped = listRaw
+        .map((row) => mapApiOrderRowToOrder(row, PLACEHOLDER_ORDER_IMAGE, "cancelled"))
+        .filter((x): x is Order => x != null);
+      setCancelledOrders(mapped);
+    } catch {
+      setCancelledOrders([]);
+      setCancelledOrdersError(
+        tr("Could not load cancelled orders. Pull to refresh or try again.")
+      );
+    } finally {
+      setCancelledOrdersLoading(false);
+    }
+  }, [tr]);
+
+  const fetchDeliveredOrders = useCallback(async () => {
+    setDeliveredOrdersLoading(true);
+    setDeliveredOrdersError(null);
+    try {
+      const { data } = await api.get<{
+        success?: boolean;
+        message?: string;
+        data?: unknown;
+      }>(ORDERS_API_PATH, {
+        params: { status: "delivered" },
+      });
+      const payload = data as Record<string, unknown>;
+      const listRaw = Array.isArray(payload.data) ? (payload.data as unknown[]) : [];
+      const mapped = listRaw
+        .map((row) => mapApiOrderRowToOrder(row, PLACEHOLDER_ORDER_IMAGE, "delivered"))
+        .filter((x): x is Order => x != null);
+      setDeliveredOrders(mapped);
+    } catch {
+      setDeliveredOrders([]);
+      setDeliveredOrdersError(
+        tr("Could not load delivered orders. Pull to refresh or try again.")
+      );
+    } finally {
+      setDeliveredOrdersLoading(false);
+    }
+  }, [tr]);
+
+  const fetchShippedOrders = useCallback(async () => {
+    setShippedOrdersLoading(true);
+    setShippedOrdersError(null);
+    try {
+      const { data } = await api.get<{
+        success?: boolean;
+        message?: string;
+        data?: unknown;
+      }>(ORDERS_API_PATH, {
+        params: { status: "shipped" },
+      });
+      const payload = data as Record<string, unknown>;
+      const listRaw = Array.isArray(payload.data) ? (payload.data as unknown[]) : [];
+      const mapped = listRaw
+        .map((row) => mapApiOrderRowToOrder(row, PLACEHOLDER_ORDER_IMAGE, "shipped"))
+        .filter((x): x is Order => x != null);
+      setShippedOrders(mapped);
+    } catch {
+      setShippedOrders([]);
+      setShippedOrdersError(
+        tr("Could not load shipped orders. Pull to refresh or try again.")
+      );
+    } finally {
+      setShippedOrdersLoading(false);
+    }
+  }, [tr]);
+
+  const fetchProcessingOrders = useCallback(async () => {
+    setProcessingOrdersLoading(true);
+    setProcessingOrdersError(null);
+    try {
+      const { data } = await api.get<{
+        success?: boolean;
+        message?: string;
+        data?: unknown;
+      }>(ORDERS_API_PATH, {
+        params: { status: "processing" },
+      });
+      const payload = data as Record<string, unknown>;
+      const listRaw = Array.isArray(payload.data) ? (payload.data as unknown[]) : [];
+      const mapped = listRaw
+        .map((row) => mapApiOrderRowToOrder(row, PLACEHOLDER_ORDER_IMAGE, "processing"))
+        .filter((x): x is Order => x != null);
+      setProcessingOrders(mapped);
+    } catch {
+      setProcessingOrders([]);
+      setProcessingOrdersError(
+        tr("Could not load processing orders. Pull to refresh or try again.")
+      );
+    } finally {
+      setProcessingOrdersLoading(false);
+    }
+  }, [tr]);
+
+  useEffect(() => {
+    if (activeTab === "all") {
+      void fetchAllOrders();
+    }
+  }, [activeTab, fetchAllOrders]);
+
+  useEffect(() => {
+    if (activeTab === "returns") {
+      void fetchReturnOrders();
+    }
+  }, [activeTab, fetchReturnOrders]);
+
+  useEffect(() => {
+    if (activeTab === "cancelled") {
+      void fetchCancelledOrders();
+    }
+  }, [activeTab, fetchCancelledOrders]);
+
+  useEffect(() => {
+    if (activeTab === "delivered") {
+      void fetchDeliveredOrders();
+    }
+  }, [activeTab, fetchDeliveredOrders]);
+
+  useEffect(() => {
+    if (activeTab === "shipped") {
+      void fetchShippedOrders();
+    }
+  }, [activeTab, fetchShippedOrders]);
+
+  useEffect(() => {
+    if (activeTab === "processing") {
+      void fetchProcessingOrders();
+    }
+  }, [activeTab, fetchProcessingOrders]);
+
   const getFilteredOrders = () => {
-    let filtered = activeTab === "all" 
-      ? orders 
-      : orders.filter((order) => order.status === activeTab);
-    
-    // Apply search filter
+    let filtered: Order[] =
+      activeTab === "returns"
+        ? returnOrders
+        : activeTab === "cancelled"
+          ? cancelledOrders
+          : activeTab === "delivered"
+            ? deliveredOrders
+            : activeTab === "shipped"
+              ? shippedOrders
+              : activeTab === "processing"
+                ? processingOrders
+                : activeTab === "all"
+                  ? allOrders
+                  : orders.filter((order) => order.status === activeTab);
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter((order) => {
@@ -210,7 +694,7 @@ export default function OrdersScreen() {
         );
       });
     }
-    
+
     return filtered;
   };
 
@@ -245,9 +729,25 @@ export default function OrdersScreen() {
     setShowDetails(true);
   };
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    try {
+      if (activeTab === "returns") {
+        await fetchReturnOrders();
+      } else if (activeTab === "all") {
+        await fetchAllOrders();
+      } else if (activeTab === "cancelled") {
+        await fetchCancelledOrders();
+      } else if (activeTab === "delivered") {
+        await fetchDeliveredOrders();
+      } else if (activeTab === "shipped") {
+        await fetchShippedOrders();
+      } else if (activeTab === "processing") {
+        await fetchProcessingOrders();
+      }
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleCancel = () => {
@@ -415,7 +915,29 @@ export default function OrdersScreen() {
           contentContainerStyle={{ paddingBottom: 90 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          {filteredOrders.length === 0 ? (
+          {(activeTab === "returns" && returnOrdersLoading) ||
+          (activeTab === "all" && allOrdersLoading) ||
+          (activeTab === "cancelled" && cancelledOrdersLoading) ||
+          (activeTab === "delivered" && deliveredOrdersLoading) ||
+          (activeTab === "shipped" && shippedOrdersLoading) ||
+          (activeTab === "processing" && processingOrdersLoading) ? (
+            <View style={styles.returnsLoadingBox}>
+              <ActivityIndicator size="large" color="#E97A1F" />
+              <Text style={styles.returnsLoadingText}>
+                {activeTab === "cancelled"
+                  ? tr("Loading cancelled orders…")
+                  : activeTab === "all"
+                    ? tr("Loading orders…")
+                  : activeTab === "delivered"
+                    ? tr("Loading delivered orders…")
+                    : activeTab === "shipped"
+                      ? tr("Loading shipped orders…")
+                      : activeTab === "processing"
+                        ? tr("Loading processing orders…")
+                        : tr("Loading returned orders…")}
+              </Text>
+            </View>
+          ) : filteredOrders.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons 
                 name={searchQuery.trim() ? "search-outline" : "receipt-outline"} 
@@ -428,7 +950,19 @@ export default function OrdersScreen() {
               <Text style={styles.emptySubtext}>
                 {searchQuery.trim() 
                   ? `${tr("No orders match")} "${searchQuery}"` 
-                  : activeTab === "all" 
+                  : activeTab === "returns" && returnOrdersError
+                    ? returnOrdersError
+                    : activeTab === "cancelled" && cancelledOrdersError
+                      ? cancelledOrdersError
+                      : activeTab === "delivered" && deliveredOrdersError
+                        ? deliveredOrdersError
+                        : activeTab === "shipped" && shippedOrdersError
+                          ? shippedOrdersError
+                          : activeTab === "processing" && processingOrdersError
+                            ? processingOrdersError
+                            : activeTab === "all" && allOrdersError
+                              ? allOrdersError
+                              : activeTab === "all" 
                     ? tr("Start shopping to see your orders here") 
                     : `${tr("No")} ${getStatusConfig(activeTab).text.toLowerCase()} ${tr("orders")}`}
               </Text>
@@ -1057,6 +1591,19 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  returnsLoadingBox: {
+    flex: 1,
+    minHeight: 220,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 48,
+  },
+  returnsLoadingText: {
+    marginTop: 14,
+    fontSize: 14,
+    color: "#6B7280",
+    fontWeight: "600",
   },
   emptyState: {
     flex: 1,
