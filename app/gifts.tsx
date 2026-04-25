@@ -1183,6 +1183,9 @@ export default function GiftsScreen() {
   };
   const [giftsPtbApi, setGiftsPtbApi] = React.useState<GiftsPtbApiRow[]>([]);
   const [giftsPtbLoading, setGiftsPtbLoading] = React.useState(false);
+  const [recommendedForYouApiProducts, setRecommendedForYouApiProducts] = React.useState<
+    TrendingProduct[]
+  >([]);
   const [giftsWishlistIds, setGiftsWishlistIds] = React.useState<Set<string>>(new Set());
   const [giftsWishlistServerKeys, setGiftsWishlistServerKeys] = React.useState<Set<string>>(
     new Set()
@@ -1301,6 +1304,56 @@ export default function GiftsScreen() {
     return () => c.abort();
   }, [giftsMainCategoryIdForPtb]);
 
+  React.useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get("/api/products/main-category/89/recommended", {
+          signal: c.signal,
+        });
+        const rows = Array.isArray(data) ? data : data ? [data] : [];
+        const mapped = rows
+          .filter((p) => p && typeof (p as any).id === "number" && typeof (p as any).name === "string")
+          .map((p) => {
+            const imageUri = pickPtbProductImageUri(p);
+            if (!imageUri) return null;
+            const { sellingPrice, mrpPrice, discountPercentage } = pickPtbVariantPricing(p);
+            const showMrp =
+              mrpPrice != null &&
+              sellingPrice != null &&
+              Number.isFinite(mrpPrice) &&
+              Number.isFinite(sellingPrice) &&
+              mrpPrice > sellingPrice + 0.009;
+            return {
+              id: String((p as any).id),
+              name: safePtbText(String((p as any).name ?? "")),
+              price:
+                sellingPrice != null && Number.isFinite(sellingPrice)
+                  ? `Rs ${Math.round(sellingPrice)}`
+                  : mrpPrice != null && Number.isFinite(mrpPrice)
+                  ? `Rs ${Math.round(mrpPrice)}`
+                  : "View product",
+              ...(showMrp ? { mrp: `Rs ${Math.round(mrpPrice as number)}` } : {}),
+              ...(discountPercentage != null && Number.isFinite(discountPercentage)
+                ? {
+                    badge: `${Number(discountPercentage)
+                      .toFixed(1)
+                      .replace(/\.0$/, "")}% OFF`,
+                  }
+                : {}),
+              image: { uri: imageUri },
+            } satisfies TrendingProduct;
+          })
+          .filter((row): row is TrendingProduct => row != null)
+          .slice(0, 4);
+        setRecommendedForYouApiProducts(mapped);
+      } catch {
+        setRecommendedForYouApiProducts([]);
+      }
+    })();
+    return () => c.abort();
+  }, []);
+
   const handleToggleGiftsPtbWishlist = React.useCallback(
     async (product: {
       id: string;
@@ -1355,6 +1408,19 @@ export default function GiftsScreen() {
       },
     } as any);
   }, [giftsMainCategoryIdForPtb, router]);
+
+  const goRecommendedForYouShop = React.useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "gifts",
+        subCategory: "Recommended For You",
+        mainCategoryId: "89",
+        mainCategoryFeed: "recommended",
+        mainCategoryPath: "/api/products/main-category/89/recommended",
+      },
+    } as any);
+  }, [router]);
 
   const giftsPtbUiRows = React.useMemo(() => {
     const fmtRs = (n: number | null) =>
@@ -1418,6 +1484,11 @@ export default function GiftsScreen() {
     return rows;
   }, [giftsPtbUiRows]);
 
+  const recommendedForYouRowProducts = React.useMemo(() => {
+    if (recommendedForYouApiProducts.length > 0) return recommendedForYouApiProducts;
+    return RECOMMENDED_FOR_YOU_PRODUCTS.slice(0, 4);
+  }, [recommendedForYouApiProducts]);
+
   const activeHero = React.useMemo(() => {
     if (selectedCategoryId && GIFT_CATEGORY_HERO[selectedCategoryId]) {
       return GIFT_CATEGORY_HERO[selectedCategoryId];
@@ -1427,14 +1498,33 @@ export default function GiftsScreen() {
 
   const atGiftsRoot = selectedCategoryId === null;
 
-  const renderTrendingProductRow = (sectionTitle: string, products: TrendingProduct[]) => (
+  const renderTrendingProductRow = (sectionTitle: string, products: TrendingProduct[]) => {
+    const normalizedSectionTitle = sectionTitle.trim().toLowerCase();
+    const isTrendingGiftsSection = normalizedSectionTitle === "trending gifts";
+    const isRecentlyViewedSection = normalizedSectionTitle === "recently viewed";
+    const isRecommendedSection = normalizedSectionTitle === "recommended for you";
+    const openRowListing = isTrendingGiftsSection || isRecentlyViewedSection
+      ? goGiftsPtbShop
+      : isRecommendedSection
+      ? goRecommendedForYouShop
+      : () =>
+          router.push({
+            pathname: "/subcatProducts",
+            params: homelyHubSubcatNavigatorParams(sectionTitle, sectionTitle),
+          } as any);
+    return (
     <View style={styles.homeProductRowBlock}>
       <View style={styles.homeRowHeader}>
         <View style={styles.homeRowTitleWrap}>
           <Text style={styles.homeRowTitle}>{sectionTitle}</Text>
           <View style={styles.homeRowAccentDot} />
         </View>
-        <TouchableOpacity activeOpacity={0.7} hitSlop={10} style={styles.homeRowSeeAllBtn}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          hitSlop={10}
+          style={styles.homeRowSeeAllBtn}
+          onPress={openRowListing}
+        >
           <Text style={styles.homeRowSeeAll}>See all</Text>
           <Ionicons name="chevron-forward" size={16} color="#ea580c" />
         </TouchableOpacity>
@@ -1452,11 +1542,23 @@ export default function GiftsScreen() {
               key={item.id}
               style={styles.trendingProductCard}
               activeOpacity={0.9}
-              onPress={() =>
-                router.push({
-                  pathname: "/subcatProducts",
-                  params: homelyHubSubcatNavigatorParams(item.name, item.id),
-                } as any)
+              onPress={
+                isTrendingGiftsSection || isRecentlyViewedSection
+                  ? goGiftsPtbShop
+                  : isRecommendedSection
+                  ? () => {
+                      const pid = Number.parseInt(String(item.id), 10);
+                      if (!Number.isFinite(pid) || pid <= 0) return;
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: String(pid) },
+                      } as any);
+                    }
+                  : () =>
+                      router.push({
+                        pathname: "/subcatProducts",
+                        params: homelyHubSubcatNavigatorParams(item.name, item.id),
+                      } as any)
               }
             >
               <View style={styles.trendingProductImageWrap}>
@@ -1492,6 +1594,7 @@ export default function GiftsScreen() {
       </ScrollView>
     </View>
   );
+  };
 
   return (
     <View style={styles.container}>
@@ -2965,10 +3068,9 @@ export default function GiftsScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          {renderTrendingProductRow("Trending gifts", TRENDING_GIFTS_AS_PRODUCTS)}
-          {renderTrendingProductRow("Recommended For You", RECOMMENDED_FOR_YOU_PRODUCTS)}
-          {renderTrendingProductRow("Recently Viewed", RECENTLY_VIEWED_PRODUCTS)}
-          {renderTrendingProductRow("Best Sellers", BEST_SELLER_PRODUCTS)}
+          {renderTrendingProductRow("Trending gifts", TRENDING_GIFTS_AS_PRODUCTS.slice(0, 4))}
+          {renderTrendingProductRow("Recommended For You", recommendedForYouRowProducts)}
+          {renderTrendingProductRow("Recently Viewed", RECENTLY_VIEWED_PRODUCTS.slice(0, 4))}
         </View>
 
         <View style={styles.giftsPtbWrap}>

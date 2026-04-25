@@ -568,6 +568,8 @@ export default function SubcategoriesScreen() {
     productsSearchCategoryId?: string | string[];
     productsSearchSort?: string | string[];
     productsSearchGender?: string | string[];
+    mainCategoryFeed?: string | string[];
+    mainCategoryPath?: string | string[];
   }>();
   const mainCat = Array.isArray(params.mainCat)
     ? params.mainCat[0]
@@ -617,6 +619,14 @@ export default function SubcategoriesScreen() {
     ? params.productsSearchGender[0]
     : params.productsSearchGender;
   const routedProductsSearchGender = String(productsSearchGenderRaw ?? "").trim();
+  const mainCategoryFeedRaw = Array.isArray(params.mainCategoryFeed)
+    ? params.mainCategoryFeed[0]
+    : params.mainCategoryFeed;
+  const routedMainCategoryFeed = String(mainCategoryFeedRaw ?? "").trim().toLowerCase();
+  const mainCategoryPathRaw = Array.isArray(params.mainCategoryPath)
+    ? params.mainCategoryPath[0]
+    : params.mainCategoryPath;
+  const routedMainCategoryPath = String(mainCategoryPathRaw ?? "").trim();
   const pageTitle = tr(selectedSubCategory || "Products").toUpperCase();
 
   useEffect(() => {
@@ -670,6 +680,10 @@ export default function SubcategoriesScreen() {
 
   const [mainCategoryApiProducts, setMainCategoryApiProducts] = useState<ProductItem[]>([]);
   const [mainCategoryApiReady, setMainCategoryApiReady] = useState(false);
+  const [mainCategoryPathProducts, setMainCategoryPathProducts] = useState<ProductItem[]>([]);
+  const [mainCategoryPathReady, setMainCategoryPathReady] = useState(false);
+  const [mainCategoryFeedProducts, setMainCategoryFeedProducts] = useState<ProductItem[]>([]);
+  const [mainCategoryFeedReady, setMainCategoryFeedReady] = useState(false);
 
   const [productsSearchApiProducts, setProductsSearchApiProducts] = useState<ProductItem[]>([]);
   const [productsSearchApiReady, setProductsSearchApiReady] = useState(false);
@@ -1062,6 +1076,14 @@ export default function SubcategoriesScreen() {
 
   const routedFromMainCategoryId =
     Number.isFinite(routedMainCategoryId) && routedMainCategoryId > 0;
+  const routedFromMainCategoryPath = routedMainCategoryPath.length > 0;
+  const routedFromMainCategoryFeed =
+    !routedFromMainCategoryPath &&
+    routedFromMainCategoryId &&
+    (routedMainCategoryFeed === "spotlight" ||
+      routedMainCategoryFeed === "top-collections" ||
+      routedMainCategoryFeed === "trending" ||
+      routedMainCategoryFeed === "latest");
 
   const routedFromProductsSearch =
     routedProductsSearchQ.length > 0 ||
@@ -1113,6 +1135,73 @@ export default function SubcategoriesScreen() {
     routedProductsSearchGender,
     selectedSubCategory,
     mainCat,
+  ]);
+
+  useEffect(() => {
+    if (!routedFromMainCategoryPath) {
+      setMainCategoryPathProducts([]);
+      setMainCategoryPathReady(false);
+      return;
+    }
+
+    setMainCategoryPathReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<unknown>(routedMainCategoryPath, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        const rows = Array.isArray(data)
+          ? (data as unknown[])
+          : normalizeProductListPayload(data);
+        const mapped = rows
+          .map((row) => mapApiProductToProductItem(row))
+          .filter(Boolean) as ProductItem[];
+        setMainCategoryPathProducts(mapped);
+      } catch {
+        if (!controller.signal.aborted) setMainCategoryPathProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setMainCategoryPathReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [routedFromMainCategoryPath, routedMainCategoryPath]);
+
+  useEffect(() => {
+    if (!routedFromMainCategoryFeed) {
+      setMainCategoryFeedProducts([]);
+      setMainCategoryFeedReady(false);
+      return;
+    }
+
+    setMainCategoryFeedReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const path = `/api/products/main-category/${routedMainCategoryId}/${routedMainCategoryFeed}`;
+        const { data } = await api.get<unknown>(path, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        const rows = Array.isArray(data)
+          ? (data as unknown[])
+          : normalizeProductListPayload(data);
+        const mapped = rows
+          .map((row) => mapApiProductToProductItem(row))
+          .filter(Boolean) as ProductItem[];
+        setMainCategoryFeedProducts(mapped);
+      } catch {
+        if (!controller.signal.aborted) setMainCategoryFeedProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setMainCategoryFeedReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [
+    routedFromMainCategoryFeed,
+    routedMainCategoryId,
+    routedMainCategoryFeed,
   ]);
 
   useEffect(() => {
@@ -1478,6 +1567,16 @@ const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
     return productsSearchApiProducts;
   }
 
+  if (routedFromMainCategoryPath) {
+    if (!mainCategoryPathReady) return [];
+    return mainCategoryPathProducts;
+  }
+
+  if (routedFromMainCategoryFeed) {
+    if (!mainCategoryFeedReady) return [];
+    return mainCategoryFeedProducts;
+  }
+
   if (routedFromMainCategoryId) {
     if (!mainCategoryApiReady) return [];
     return mainCategoryApiProducts;
@@ -1529,8 +1628,14 @@ const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
   freshFindsReady,
   freshFindsProducts,
   routedFromMainCategoryId,
+  routedFromMainCategoryPath,
+  mainCategoryPathReady,
+  mainCategoryPathProducts,
+  routedFromMainCategoryFeed,
   mainCategoryApiReady,
   mainCategoryApiProducts,
+  mainCategoryFeedReady,
+  mainCategoryFeedProducts,
   routedFromProductsSearch,
   productsSearchApiReady,
   productsSearchApiProducts,
@@ -2291,6 +2396,8 @@ const handleBannerScroll = (event: any) => {
               </Text>
             </View>
             {(routedFromSubcategoryId && !apiRoutedFromIdReady) ||
+            (routedFromMainCategoryPath && !mainCategoryPathReady) ||
+            (routedFromMainCategoryFeed && !mainCategoryFeedReady) ||
             (routedFromMainCategoryId && !mainCategoryApiReady) ||
             (routedFromProductsSearch && !productsSearchApiReady) ? (
               <Text style={styles.apiRoutedLoadingHint}>{tr("Loading products…")}</Text>

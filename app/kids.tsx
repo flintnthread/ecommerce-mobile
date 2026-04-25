@@ -1207,6 +1207,19 @@ export default function KidsScreen() {
     if (cat) openKidsSubcategoryProducts(cat);
   }, [styleLabOpen, openKidsSubcategoryProducts]);
 
+  const onOpenTrendingPicks = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "kidswear",
+        subCategory: "Trending picks",
+        mainCategoryId: "30",
+        mainCategoryFeed: "trending",
+        mainCategoryPath: "/api/products/main-category/30/trending",
+      },
+    });
+  }, [router]);
+
   const onBannerScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const x = e.nativeEvent.contentOffset.x;
@@ -1527,6 +1540,9 @@ export default function KidsScreen() {
                     { borderColor: hexToRgba(activeBlock.railTo, 0.2) },
                   ]}
                   activeOpacity={0.9}
+                  onPress={onOpenTrendingPicks}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open trending picks products"
                 >
                   <View style={styles.fcTrendImgWrap}>
                     <Image source={p.image} style={styles.fcTrendImg} resizeMode="cover" />
