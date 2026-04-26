@@ -103,7 +103,7 @@ function mapApiLineToProduct(
   line: unknown,
   idx: number,
   placeholder: any
-): { id: string; name: string; image: any; quantity: number; price: string } | null {
+): { id: string; productId?: number; name: string; image: any; quantity: number; price: string } | null {
   if (!line || typeof line !== "object") return null;
   const L = line as Record<string, unknown>;
   const qty = Math.max(1, Math.floor(parseApiNumber(L.quantity ?? L.qty ?? 1)));
@@ -116,10 +116,22 @@ function mapApiLineToProduct(
       L.name ??
       "Product"
   ).trim();
-  const id = String(L.id ?? L.lineId ?? L.orderItemId ?? `line-${idx}`);
+  const nestedProduct = L.product as Record<string, unknown> | undefined;
+  const productIdRaw = L.productId ?? nestedProduct?.id ?? nestedProduct?.productId;
+  const productIdNum = Math.floor(Number(productIdRaw));
+  const productId =
+    Number.isFinite(productIdNum) && productIdNum > 0 ? productIdNum : undefined;
+  const id = String(
+    productId ??
+      L.id ??
+      L.lineId ??
+      L.orderItemId ??
+      `line-${idx}`
+  );
   const uri = pickPrimaryImageFromLineItem(L);
   return {
     id,
+    productId,
     name: name || `Product ${idx + 1}`,
     image: uri ? { uri } : placeholder,
     quantity: qty,
@@ -306,6 +318,7 @@ interface Order {
   returnStage?: 1 | 2 | 3 | 4;
   products?: {
     id: string;
+    productId?: number;
     name: string;
     image: any;
     quantity: number;
@@ -542,7 +555,7 @@ export default function OrdersScreen() {
         return;
       }
       const rows = await fetchUserOrdersList();
-      setOrders(rows.length > 0 ? rows.map(mapApiOrderToUiOrder) : []);
+      setOrders(rows.length > 0 ? rows.map((r) => mapApiOrderToUiOrder(r as ApiOrderRow)) : []);
     } catch {
       setOrders([]);
     }
@@ -1007,6 +1020,16 @@ export default function OrdersScreen() {
           onReturn={() => openReturnExchange("return")}
           onExchange={() => openReturnExchange("exchange")}
           onTrackPackage={() => void handleTrackOrder(selectedOrder)}
+          onWriteReview={(productId) => {
+            if (!productId || productId <= 0) {
+              Alert.alert(tr("Review"), tr("Product is unavailable for review."));
+              return;
+            }
+            router.push({
+              pathname: "/productdetail",
+              params: { id: String(productId), openReview: "1", fromOrders: "1" },
+            } as any);
+          }}
           getStatusConfig={getStatusConfig}
         />
       ) : (
@@ -1159,6 +1182,7 @@ function OrderDetailsView({
   onReturn,
   onExchange,
   onTrackPackage,
+  onWriteReview,
   getStatusConfig,
 }: {
   order: Order;
@@ -1166,6 +1190,7 @@ function OrderDetailsView({
   onReturn: () => void;
   onExchange: () => void;
   onTrackPackage: () => void;
+  onWriteReview: (productId?: number) => void;
   getStatusConfig: (status: OrderStatus) => any;
 }) {
   const { tr } = useLanguage();
@@ -1251,6 +1276,15 @@ function OrderDetailsView({
               <Text style={styles.productMeta}>
                 {tr("Qty")}: {product.quantity} × {product.price}
               </Text>
+              {order.status !== "cancelled" && product.productId ? (
+                <TouchableOpacity
+                  style={styles.writeReviewOrderBtn}
+                  activeOpacity={0.85}
+                  onPress={() => onWriteReview(product.productId)}
+                >
+                  <Text style={styles.writeReviewOrderBtnText}>{tr("Write Review")}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
             <Text style={styles.productPrice}>{product.price}</Text>
           </View>
@@ -2096,6 +2130,21 @@ const styles = StyleSheet.create({
   productMeta: {
     fontSize: 12,
     color: "#6B7280",
+  },
+  writeReviewOrderBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E97A1F",
+    backgroundColor: "#FFF7ED",
+  },
+  writeReviewOrderBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#E97A1F",
   },
   productPrice: {
     fontSize: 14,
