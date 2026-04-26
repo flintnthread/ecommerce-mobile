@@ -2602,16 +2602,6 @@ const banners2 = [
     [router]
   );
 
-  const serviceItems: {
-    id: number;
-    label: string;
-    icon: keyof typeof MaterialIcons.glyphMap;
-  }[] = [
-    { id: 1, label: "delivery", icon: "local-shipping" },
-    { id: 2, label: "upi payment", icon: "payments" },
-    { id: 3, label: "coupons", icon: "local-offer" },
-  ];
-
   useEffect(() => {
     const interval = setInterval(() => {
       setPlaceholderIndex((prev) =>
@@ -3525,19 +3515,6 @@ const categoryData = [
           </ScrollView>
         </LinearGradient>
 
-        {/* SERVICE LOGOS — Material icons for clearer delivery / UPI / offers */}
-        <View style={styles.homeServiceShell}>
-          <View style={styles.serviceRow}>
-            {serviceItems.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.serviceItem}>
-                <View style={styles.serviceIconCircle}>
-                  <MaterialIcons name={item.icon} size={22} color="#1565C0" />
-                </View>
-                <Text style={styles.serviceText}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
 {/* cards section */}
 
 
