@@ -766,6 +766,32 @@ function findVariantRowForWishlist(
 }
 
 const AVAILABLE_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
+const RECENT_VIEW_SESSION_KEY = "ft_recent_view_session_id";
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractUserIdFromToken(token: string): number | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+  const candidates = [payload.userId, payload.id, payload.uid, payload.sub];
+  for (const value of candidates) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  }
+  return null;
+}
 
 export default function ProductDetail() {
   const router = useRouter();
@@ -824,6 +850,32 @@ export default function ProductDetail() {
     return () => {
       cancelled = true;
     };
+  }, [numericProductId]);
+
+  useEffect(() => {
+    if (!numericProductId) return;
+    (async () => {
+      try {
+        const token = (await AsyncStorage.getItem("token"))?.trim();
+        const userId = token ? extractUserIdFromToken(token) : null;
+
+        let sessionId = (await AsyncStorage.getItem(RECENT_VIEW_SESSION_KEY))?.trim() || "";
+        if (!sessionId) {
+          sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+          await AsyncStorage.setItem(RECENT_VIEW_SESSION_KEY, sessionId);
+        }
+
+        if (!userId && !sessionId) return;
+
+        await api.post("/api/products/view", {
+          productId: Number(numericProductId),
+          userId: userId ?? undefined,
+          sessionId: sessionId || undefined,
+        });
+      } catch {
+        // Do not block product detail screen for tracking failures.
+      }
+    })();
   }, [numericProductId]);
 
   // Fetch related products when current product is loaded
@@ -1788,7 +1840,7 @@ export default function ProductDetail() {
               <View style={styles.highlightRow}>
                 <View style={styles.highlightBullet} />
                 <Text style={styles.highlightText}>
-                  Model is 5'6&quot; and wearing size M
+                  Model is 5&apos;6&quot; and wearing size M
                 </Text>
               </View>
               <View style={styles.highlightRow}>
@@ -1862,7 +1914,7 @@ export default function ProductDetail() {
         {/* YOU MAY ALSO LIKE */}
         <View style={styles.sectionBlock}>
           <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
-            You'll Love These
+            You&apos;ll Love These
           </Text>
           {relatedLoading ? (
             <View style={styles.relatedLoadingContainer}>

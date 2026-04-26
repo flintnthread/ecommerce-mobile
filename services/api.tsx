@@ -33,6 +33,32 @@ function getHostFromExpo(): string | null {
   }
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractUserIdFromToken(token: string): number | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+  const candidate = Number(
+    payload.userId ?? payload.id ?? payload.uid ?? payload.sub
+  );
+  if (!Number.isFinite(candidate) || candidate <= 0) return null;
+  return Math.floor(candidate);
+}
+
 function resolveBaseUrl(): string {
   const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
   if (envBaseUrl) return normalizeBaseUrl(envBaseUrl);
@@ -67,6 +93,42 @@ api.interceptors.request.use(
       const token = await AsyncStorage.getItem("token");
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      const rawUrl = String(config.url ?? "");
+      const isSearchRequest =
+        rawUrl.startsWith("/api/search") &&
+        !rawUrl.startsWith("/api/search/history") &&
+        !rawUrl.startsWith("/api/search/suggestions");
+
+      if (isSearchRequest) {
+        const base = String(config.baseURL ?? api.defaults.baseURL ?? "").replace(
+          /\/$/,
+          ""
+        );
+        const absolute = rawUrl.startsWith("http")
+          ? rawUrl
+          : `${base}${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`;
+        const u = new URL(absolute);
+        const hasUserId = u.searchParams.has("userId");
+        const hasSessionId = u.searchParams.has("sessionId");
+
+        if (!hasUserId && token) {
+          const userId = extractUserIdFromToken(token);
+          if (userId) {
+            u.searchParams.set("userId", String(userId));
+          }
+        }
+
+        if (!hasSessionId) {
+          const sessionId =
+            (await AsyncStorage.getItem("ft_recent_view_session_id"))?.trim() || "";
+          if (sessionId) {
+            u.searchParams.set("sessionId", sessionId);
+          }
+        }
+
+        config.url = `${u.pathname}${u.search}`;
       }
     } catch (error) {
       console.log("Error getting token from AsyncStorage:", error);
@@ -149,10 +211,25 @@ export function relatedProductsPath(productId: number): string {
 
 
 /** Search products by keyword — path only (use with `api.get(...)`). */
-export function searchProductsPath(keyword: string): string {
+export function searchProductsPath(
+  keyword: string,
+  params?: { userId?: number | null; sessionId?: string | null }
+): string {
   const sanitizedKeyword = keyword.trim().replace(/[^a-zA-Z0-9\s]/g, '');
-  if (!sanitizedKeyword) return "/api/search";
-  return `/api/search?keyword=${encodeURIComponent(sanitizedKeyword)}`;
+  const sp = new URLSearchParams();
+  if (sanitizedKeyword) {
+    sp.set("keyword", sanitizedKeyword);
+  }
+  const uid = Number(params?.userId);
+  if (Number.isFinite(uid) && uid > 0) {
+    sp.set("userId", String(Math.floor(uid)));
+  }
+  const sid = String(params?.sessionId ?? "").trim();
+  if (sid) {
+    sp.set("sessionId", sid);
+  }
+  const qs = sp.toString();
+  return qs ? `/api/search?${qs}` : "/api/search";
 }
 
 /** Search suggestions by keyword — path only (use with `api.get(...)`). */
@@ -330,6 +407,42 @@ export function productsByMainCategoryPath(mainCategoryId: number): string {
   const id = Math.floor(Number(mainCategoryId));
   if (!Number.isFinite(id) || id <= 0) return "/api/products/main-category/0";
   return `/api/products/main-category/${id}`;
+}
+
+/** Recently viewed products by user/session — path only (use with `api.get(...)`). */
+export function recentlyViewedProductsPath(params: {
+  userId?: number | null;
+  sessionId?: string | null;
+}): string {
+  const sp = new URLSearchParams();
+  const uid = Number(params.userId);
+  if (Number.isFinite(uid) && uid > 0) {
+    sp.set("userId", String(Math.floor(uid)));
+  }
+  const sid = String(params.sessionId ?? "").trim();
+  if (sid) {
+    sp.set("sessionId", sid);
+  }
+  const qs = sp.toString();
+  return qs ? `/api/products/recently-viewed?${qs}` : "/api/products/recently-viewed";
+}
+
+/** Search history by user/session — path only (use with `api.get(...)`). */
+export function searchHistoryPath(params: {
+  userId?: number | null;
+  sessionId?: string | null;
+}): string {
+  const sp = new URLSearchParams();
+  const uid = Number(params.userId);
+  if (Number.isFinite(uid) && uid > 0) {
+    sp.set("userId", String(Math.floor(uid)));
+  }
+  const sid = String(params.sessionId ?? "").trim();
+  if (sid) {
+    sp.set("sessionId", sid);
+  }
+  const qs = sp.toString();
+  return qs ? `/api/search/history?${qs}` : "/api/search/history";
 }
 
 /**

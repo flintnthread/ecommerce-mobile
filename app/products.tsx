@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
@@ -25,9 +26,13 @@ import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import {
   addProductToCart,
   getWishlistIds,
-  toggleWishlistProduct,
 } from "../lib/shopStorage";
 import api, { searchProductsPath, searchSuggestionsPath } from "../services/api";
+import {
+  categoryPtbRowWishlisted,
+  fetchWishlistServerKeySet,
+  togglePtbWishlistWithServer,
+} from "../lib/wishlistServerApi";
 import { useLanguage } from "../lib/language";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -39,6 +44,7 @@ type GenderTag = "Women" | "Men" | "Girls" | "Boys";
 
 type Product = {
   id: string;
+  variantId?: number;
   name: string;
   price: number;
   mrp: number;
@@ -445,9 +451,20 @@ export default function Products() {
     {}
   );
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [serverWishlistKeys, setServerWishlistKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [hasAuthToken, setHasAuthToken] = useState(false);
 
-  const refreshWishlistIds = useCallback(() => {
-    void getWishlistIds().then(setWishlistIds);
+  const refreshWishlistIds = useCallback(async () => {
+    const [token, ids, serverKeys] = await Promise.all([
+      AsyncStorage.getItem("token"),
+      getWishlistIds(),
+      fetchWishlistServerKeySet(),
+    ]);
+    setHasAuthToken(Boolean(token?.trim()));
+    setWishlistIds(ids);
+    setServerWishlistKeys(serverKeys);
   }, []);
 
   useFocusEffect(
@@ -480,6 +497,9 @@ export default function Products() {
       // Map API response to Product type (simplified for demo)
       const mappedProducts: Product[] = Array.isArray(data) ? data.slice(0, 10).map((item: any) => ({
         id: String(item.id),
+        variantId: Number.isFinite(Number(item.variantId))
+          ? Math.floor(Number(item.variantId))
+          : undefined,
         name: item.name || item.productName || item.title || `Product ${item.id}`,
         price: item.sellingPrice || item.price || 0,
         mrp: item.mrpPrice || item.maxRetailPrice || item.sellingPrice || item.price || 0,
@@ -830,17 +850,32 @@ export default function Products() {
         renderItem={({ item }) => (
           <ProductGridCard
             item={item}
-            inWishlist={wishlistIds.has(item.id)}
+            inWishlist={categoryPtbRowWishlisted(
+              item,
+              hasAuthToken,
+              serverWishlistKeys,
+              wishlistIds
+            )}
             onOpen={() => router.push("/productdetail")}
             onWishlistPress={() => {
               void (async () => {
-                await toggleWishlistProduct({
-                  id: item.id,
-                  name: item.name,
-                  price: item.price,
-                  mrp: item.mrp,
-                });
-                refreshWishlistIds();
+                const result = await togglePtbWishlistWithServer(
+                  {
+                    id: item.id,
+                    variantId: item.variantId,
+                    name: item.name,
+                    sellingNum: item.price,
+                    mrpNum: item.mrp,
+                  },
+                  refreshWishlistIds
+                );
+                if (result.ok === false) {
+                  Alert.alert("Wishlist", result.message);
+                  return;
+                }
+                if (result.title) {
+                  Alert.alert(result.title, result.body);
+                }
               })();
             }}
             onAddToCart={() => {
