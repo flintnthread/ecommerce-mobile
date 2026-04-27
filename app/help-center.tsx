@@ -30,8 +30,9 @@ interface FAQ {
 interface SupportTicket {
   id: string;
   subject: string;
+  type: string;
   description: string;
-  status: "open" | "in_progress" | "resolved";
+  status: string;
   date: string;
 }
 
@@ -52,6 +53,7 @@ export default function HelpCenterScreen() {
   const [ticketDescription, setTicketDescription] = useState("");
   const [ticketCategory, setTicketCategory] = useState("order");
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
+  const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
 
   useEffect(() => {
     const asString = (value: string | string[] | undefined): string =>
@@ -161,22 +163,10 @@ export default function HelpCenterScreen() {
     },
   ];
 
-  const supportTickets: SupportTicket[] = [
-    {
-      id: "1",
-      subject: "Order not delivered",
-      description: "Order #ORD-2024-001 was supposed to be delivered yesterday",
-      status: "in_progress",
-      date: "20 Jan 2024",
-    },
-    {
-      id: "2",
-      subject: "Refund request",
-      description: "Requesting refund for cancelled order",
-      status: "resolved",
-      date: "15 Jan 2024",
-    },
-  ];
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [ticketsError, setTicketsError] = useState<string | null>(null);
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
 
   const contactOptions = [
     {
@@ -221,40 +211,100 @@ export default function HelpCenterScreen() {
     },
   ];
 
+  const resetTicketForm = () => {
+    setTicketSubject("");
+    setTicketDescription("");
+    setTicketCategory("order");
+    setEditingTicketId(null);
+  };
+
+  const openNewTicketModal = () => {
+    resetTicketForm();
+    setShowSupportTicketModal(true);
+  };
+
+  const openEditTicketModal = (ticket: SupportTicket) => {
+    setEditingTicketId(ticket.id);
+    setTicketSubject(ticket.subject);
+    setTicketDescription(ticket.description);
+    setTicketCategory(ticket.type || "other");
+    setShowSupportTicketModal(true);
+  };
+
   const handleSubmitTicket = async () => {
-    const name = ticketName.trim();
-    const email = ticketEmail.trim();
-    const phoneDigits = ticketPhone.replace(/\D/g, "");
     const subject = ticketSubject.trim();
-    const message = ticketDescription.trim();
+    const description = ticketDescription.trim();
+    const type = ticketCategory === "returns" ? "return" : ticketCategory;
 
-    if (!name || !email || !message) {
-      Alert.alert("Missing Info", "Please enter name, email, and description.");
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert("Invalid Email", "Please enter a valid email address.");
-      return;
-    }
-
-    if (phoneDigits && (phoneDigits.length < 10 || phoneDigits.length > 20)) {
-      Alert.alert(
-        "Invalid Phone",
-        "Phone number must be between 10 and 20 digits."
-      );
+    if (!description) {
+      Alert.alert("Missing Info", "Please enter ticket description.");
       return;
     }
 
     try {
       setIsSubmittingTicket(true);
-      const response = await api.post("/api/contact/submit", {
-        name,
-        email,
-        phone: phoneDigits || undefined,
-        subject: subject || `${ticketCategory} support request`,
-        message,
+      if (editingTicketId) {
+        const response = await api.patch(`/api/support-tickets/${editingTicketId}`, {
+          type,
+          subject: subject || `${type} support request`,
+          description,
+        });
+
+        const successMessage =
+          typeof response?.data?.message === "string" && response.data.message.trim()
+            ? response.data.message.trim()
+            : "Support ticket updated successfully.";
+
+        Alert.alert("Ticket Updated", successMessage, [
+          {
+            text: "OK",
+            onPress: () => {
+              const updated = response?.data?.data as
+                | {
+                    id?: number | string;
+                    subject?: string;
+                    type?: string;
+                    message?: string;
+                    status?: string;
+                    updatedAt?: string | null;
+                  }
+                | undefined;
+
+              if (updated) {
+                const updatedAt = updated.updatedAt ? new Date(updated.updatedAt) : new Date();
+                setSupportTickets((prev) =>
+                  prev.map((ticket) =>
+                    ticket.id === String(updated.id ?? editingTicketId)
+                      ? {
+                          ...ticket,
+                          subject: String(
+                            updated.subject ?? (subject || `${type} support request`)
+                          ),
+                          type: String(updated.type ?? type),
+                          description: String(updated.message ?? description),
+                          status: String(updated.status ?? ticket.status),
+                          date: updatedAt.toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          }),
+                        }
+                      : ticket
+                  )
+                );
+              }
+              setShowSupportTicketModal(false);
+              resetTicketForm();
+            },
+          },
+        ]);
+        return;
+      }
+
+      const response = await api.post("/api/support-tickets", {
+        type,
+        subject: subject || `${type} support request`,
+        description,
       });
 
       const successMessage =
@@ -266,10 +316,35 @@ export default function HelpCenterScreen() {
         {
           text: "OK",
           onPress: () => {
+            const created = response?.data?.data as
+              | {
+                  id?: number | string;
+                  subject?: string;
+                  message?: string;
+                  status?: "open" | "in_progress" | "resolved";
+                  createdAt?: string | null;
+                }
+              | undefined;
+            if (created) {
+              const createdAt = created.createdAt ? new Date(created.createdAt) : new Date();
+              setSupportTickets((prev) => [
+                {
+                  id: String(created.id ?? `${Date.now()}`),
+                  subject: String(created.subject ?? (subject || `${type} support request`)),
+                  type,
+                  description: String(created.message ?? description),
+                  status: created.status ?? "open",
+                  date: createdAt.toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  }),
+                },
+                ...prev,
+              ]);
+            }
             setShowSupportTicketModal(false);
-            setTicketSubject("");
-            setTicketDescription("");
-            setTicketCategory("order");
+            resetTicketForm();
           },
         },
       ]);
@@ -291,6 +366,107 @@ export default function HelpCenterScreen() {
     } finally {
       setIsSubmittingTicket(false);
     }
+  };
+
+  const loadSupportTickets = async () => {
+    try {
+      setTicketsLoading(true);
+      setTicketsError(null);
+      const response = await api.get("/api/support-tickets");
+      const rows = Array.isArray(response?.data?.data)
+        ? (response.data.data as Array<{
+            id?: number | string;
+            subject?: string;
+            type?: string;
+            message?: string;
+            status?: string;
+            createdAt?: string | null;
+          }>)
+        : [];
+
+      const mapped: SupportTicket[] = rows.map((row) => {
+        const createdAt = row.createdAt ? new Date(row.createdAt) : new Date();
+        const validDate = Number.isNaN(createdAt.getTime()) ? new Date() : createdAt;
+        return {
+          id: String(row.id ?? `${Date.now()}`),
+          subject: String(row.subject ?? "Support ticket"),
+          type: String(row.type ?? "other"),
+          description: String(row.message ?? ""),
+          status: String(row.status ?? "open"),
+          date: validDate.toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+        };
+      });
+      setSupportTickets(mapped);
+    } catch (error) {
+      let messageText = "Failed to load support tickets.";
+      if (axios.isAxiosError(error)) {
+        const serverData = error.response?.data as
+          | { message?: string; error?: string }
+          | undefined;
+        messageText =
+          (typeof serverData?.message === "string" && serverData.message) ||
+          (typeof serverData?.error === "string" && serverData.error) ||
+          error.message ||
+          messageText;
+      } else if (error instanceof Error) {
+        messageText = error.message;
+      }
+      setTicketsError(messageText);
+    } finally {
+      setTicketsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "support_ticket") return;
+    void loadSupportTickets();
+  }, [activeTab]);
+
+  const deleteTicket = async (ticketId: string) => {
+    try {
+      setDeletingTicketId(ticketId);
+      const response = await api.delete(`/api/support-tickets/${ticketId}`);
+      const successMessage =
+        typeof response?.data?.message === "string" && response.data.message.trim()
+          ? response.data.message.trim()
+          : "Support ticket deleted successfully";
+      setSupportTickets((prev) => prev.filter((ticket) => ticket.id !== ticketId));
+      Alert.alert("Ticket Deleted", successMessage);
+    } catch (error) {
+      let messageText = "Failed to delete support ticket.";
+      if (axios.isAxiosError(error)) {
+        const serverData = error.response?.data as
+          | { message?: string; error?: string }
+          | undefined;
+        messageText =
+          (typeof serverData?.message === "string" && serverData.message) ||
+          (typeof serverData?.error === "string" && serverData.error) ||
+          error.message ||
+          messageText;
+      } else if (error instanceof Error) {
+        messageText = error.message;
+      }
+      Alert.alert("Delete Failed", messageText);
+    } finally {
+      setDeletingTicketId(null);
+    }
+  };
+
+  const confirmDeleteTicket = (ticketId: string) => {
+    Alert.alert("Delete Ticket", "Are you sure you want to delete this ticket?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void deleteTicket(ticketId);
+        },
+      },
+    ]);
   };
 
   const getStatusColor = (status: string) => {
@@ -463,14 +639,27 @@ export default function HelpCenterScreen() {
               <Text style={styles.sectionSubtitle}>Your Support Tickets</Text>
               <TouchableOpacity
                 style={styles.newTicketBtn}
-                onPress={() => setShowSupportTicketModal(true)}
+                onPress={openNewTicketModal}
               >
                 <Ionicons name="add-circle" size={20} color="#FFFFFF" />
                 <Text style={styles.newTicketBtnText}>New Ticket</Text>
               </TouchableOpacity>
             </View>
 
-            {supportTickets.length === 0 ? (
+            {ticketsLoading ? (
+              <Text style={styles.emptySubtext}>Loading tickets...</Text>
+            ) : ticketsError ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>Could not load tickets</Text>
+                <Text style={styles.emptySubtext}>{ticketsError}</Text>
+                <TouchableOpacity
+                  style={styles.newTicketBtn}
+                  onPress={() => void loadSupportTickets()}
+                >
+                  <Text style={styles.newTicketBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : supportTickets.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="ticket-outline" size={80} color="#E0E0E0" />
                 <Text style={styles.emptyText}>No support tickets</Text>
@@ -518,6 +707,24 @@ export default function HelpCenterScreen() {
                         {getStatusLabel(ticket.status)}
                       </Text>
                     </View>
+                    <TouchableOpacity
+                      style={styles.ticketEditBtn}
+                      onPress={() => openEditTicketModal(ticket)}
+                    >
+                      <Text style={styles.ticketEditBtnText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.ticketDeleteBtn,
+                        deletingTicketId === ticket.id && styles.ticketDeleteBtnDisabled,
+                      ]}
+                      disabled={deletingTicketId === ticket.id}
+                      onPress={() => confirmDeleteTicket(ticket.id)}
+                    >
+                      <Text style={styles.ticketDeleteBtnText}>
+                        {deletingTicketId === ticket.id ? "Deleting..." : "Delete"}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))
@@ -584,14 +791,22 @@ export default function HelpCenterScreen() {
         visible={showSupportTicketModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowSupportTicketModal(false)}
+        onRequestClose={() => {
+          setShowSupportTicketModal(false);
+          resetTicketForm();
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Raise Support Ticket</Text>
+              <Text style={styles.modalTitle}>
+                {editingTicketId ? "Edit Support Ticket" : "Raise Support Ticket"}
+              </Text>
               <TouchableOpacity
-                onPress={() => setShowSupportTicketModal(false)}
+                onPress={() => {
+                  setShowSupportTicketModal(false);
+                  resetTicketForm();
+                }}
                 style={styles.modalCloseBtn}
               >
                 <Ionicons name="close-circle" size={28} color="#666" />
@@ -685,7 +900,13 @@ export default function HelpCenterScreen() {
                 disabled={isSubmittingTicket}
               >
                 <Text style={styles.modalSubmitBtnText}>
-                  {isSubmittingTicket ? "Submitting..." : "Submit Ticket"}
+                  {isSubmittingTicket
+                    ? editingTicketId
+                      ? "Updating..."
+                      : "Submitting..."
+                    : editingTicketId
+                      ? "Update Ticket"
+                      : "Submit Ticket"}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
@@ -967,6 +1188,37 @@ const styles = StyleSheet.create({
   ticketStatusText: {
     fontSize: 11,
     fontWeight: "600",
+  },
+  ticketEditBtn: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+  },
+  ticketEditBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1D4ED8",
+  },
+  ticketDeleteBtn: {
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  ticketDeleteBtnDisabled: {
+    opacity: 0.65,
+  },
+  ticketDeleteBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#B91C1C",
   },
   // Contact Tab Styles
   contactContainer: {
