@@ -7,8 +7,6 @@ import {
   Image,
   StatusBar,
   TouchableOpacity,
-  Pressable,
-  Modal,
   ActivityIndicator,
   Alert,
   useWindowDimensions,
@@ -31,6 +29,7 @@ import Svg, {
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api, {
   mapSearchResultsToUi,
+  productsByMainCategoryFeedPath,
   productsByMainCategoryPath,
   productsBySubcategoryPath,
   searchProductsPath,
@@ -100,7 +99,6 @@ function HexagonShopBadge({
 }
 
 const MEN_HERO_BANNER_IMAGE = require("../assets/men/categories/MensWear.png");
-/** Full-width strip image below Style lab rings (men’s category art). */
 const MEN_STYLE_LAB_STRIP_IMAGE = require("../assets/men/categories/TopWear.png");
 const HEADER_FT_LOGO = require("../assets/men/categories/fntfav.png");
 
@@ -683,167 +681,6 @@ const FC_LAB_RING = 100;
 const FC_LAB_RING_BORDER = 4;
 const FC_LAB_GLOW = FC_LAB_RING + 36;
 
-const FC_STYLE_LAB: {
-  key: string;
-  step: string;
-  title: string;
-  sub: string;
-  detail: string;
-  tips: readonly string[];
-  shopCategory: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  grad: readonly [string, string];
-}[] = [
-  {
-    key: "sl1",
-    step: "01",
-    title: "Colour edit",
-    sub: "Palettes that pair clean",
-    detail:
-      "Neutrals anchor a look; one accent hue carries the outfit. Keep contrast between tops and bottoms so pieces don’t compete.",
-    tips: [
-      "Navy + ecru + white is a failsafe trio.",
-      "Earth tones (olive, rust, camel) layer cleanly together.",
-      "Use neon on one small piece only—socks, cap, or graphic.",
-    ],
-    shopCategory: "T-shirts",
-    icon: "color-palette-outline",
-    grad: ["#6366f1", "#4338ca"],
-  },
-  {
-    key: "sl2",
-    step: "02",
-    title: "Fit finder",
-    sub: "Cuts for your frame",
-    detail:
-      "Rise and break change how tall you read. Match trouser width to your shoes—slim with minimal, relaxed with chunky.",
-    tips: [
-      "Mid-rise balances most torsos; try high-rise to lengthen legs.",
-      "Jeans should kiss the shoe without stacking unless intentional.",
-      "Shoulder seams should sit on bone, not past it, on woven shirts.",
-    ],
-    shopCategory: "Jeans",
-    icon: "body-outline",
-    grad: ["#0ea5e9", "#0369a1"],
-  },
-  {
-    key: "sl3",
-    step: "03",
-    title: "Fabric guide",
-    sub: "Touch & drape decoded",
-    detail:
-      "Breathable cottons and linens for heat; structured wools for polish. Drape tells you how a piece will move in motion.",
-    tips: [
-      "Hold fabric to light—tighter weave usually lasts longer.",
-      "Stretch denim eases movement; rigid denim holds shape.",
-      "Steaming beats ironing on delicates and knits.",
-    ],
-    shopCategory: "Kurtas",
-    icon: "shirt-outline",
-    grad: ["#14b8a6", "#0f766e"],
-  },
-  {
-    key: "sl4",
-    step: "04",
-    title: "Layering 101",
-    sub: "Depth without bulk",
-    detail:
-      "Thin inside, thick outside. Three visible layers max; vary texture more than color for a premium, editorial feel.",
-    tips: [
-      "Base layer should be smooth so outer knits don’t snag.",
-      "Leave one layer partially unbuttoned for depth.",
-      "Outer shell length should clear the hem of the layer under.",
-    ],
-    shopCategory: "Jackets",
-    icon: "layers-outline",
-    grad: ["#a855f7", "#7e22ce"],
-  },
-  {
-    key: "sl5",
-    step: "05",
-    title: "Shoe map",
-    sub: "Finish every silhouette",
-    detail:
-      "Shoes set the formality dial. Rounded casual, slim formal, chunk for street. Match shoe bulk to trouser width.",
-    tips: [
-      "Minimal leather sneakers bridge jeans and chinos.",
-      "Derbies are more forgiving than oxfords across foot shapes.",
-      "Sock tone blends with pant OR shoe—never random contrast.",
-    ],
-    shopCategory: "Dress shoes",
-    icon: "walk-outline",
-    grad: ["#f97316", "#c2410c"],
-  },
-];
-
-const FC_SEASONS: {
-  key: string;
-  season: string;
-  title: string;
-  price: string;
-  image: ImageSourcePropType;
-  /** Playing-card style index (rank). */
-  rank: string;
-  suitIcon: keyof typeof Ionicons.glyphMap;
-  suitColor: string;
-  shopLabel: string;
-}[] = [
-  {
-    key: "se1",
-    season: "Spring",
-    title: "Light layers",
-    price: "From ₹999",
-    image: require("../assets/men/categories/TopWear.png"),
-    rank: "A",
-    suitIcon: "leaf-outline",
-    suitColor: "#059669",
-    shopLabel: "Casual shirts",
-  },
-  {
-    key: "se2",
-    season: "Summer",
-    title: "Breathable tees",
-    price: "From ₹699",
-    image: require("../assets/men/categories/TopWear.png"),
-    rank: "K",
-    suitIcon: "sunny-outline",
-    suitColor: "#ca8a04",
-    shopLabel: "T-shirts",
-  },
-  {
-    key: "se3",
-    season: "Monsoon",
-    title: "Quick-dry",
-    price: "From ₹1,199",
-    image: require("../assets/men/categories/MenBottomWear.png"),
-    rank: "Q",
-    suitIcon: "rainy-outline",
-    suitColor: "#0284c7",
-    shopLabel: "Joggers",
-  },
-  {
-    key: "se4",
-    season: "Festive",
-    title: "Statement kurta",
-    price: "From ₹1,499",
-    image: require("../assets/men/categories/EthnicWear.png"),
-    rank: "J",
-    suitIcon: "sparkles-outline",
-    suitColor: "#ea580c",
-    shopLabel: "Kurtas",
-  },
-  {
-    key: "se5",
-    season: "Winter",
-    title: "Warm knits",
-    price: "From ₹1,899",
-    image: require("../assets/men/categories/TopWear.png"),
-    rank: "10",
-    suitIcon: "snow-outline",
-    suitColor: "#475569",
-    shopLabel: "Sweatshirts",
-  },
-];
 
 const FC_REPURCHASE: {
   key: string;
@@ -1021,7 +858,6 @@ export default function MenScreen() {
   const shopAllScrollIndexRef = useRef(0);
   /** +1 = scroll toward next tile (LTR feel), -1 = toward previous. Ping‑pongs at ends. */
   const shopAllScrollDirRef = useRef(1);
-  const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -1096,6 +932,14 @@ export default function MenScreen() {
 
   const [menProductsToBuyApi, setMenProductsToBuyApi] = useState<MenProductsToBuyApiRow[]>([]);
   const [menProductsToBuyLoading, setMenProductsToBuyLoading] = useState(false);
+  const [menUniqueApi, setMenUniqueApi] = useState<MenProductsToBuyApiRow[]>([]);
+  const [menUniqueLoading, setMenUniqueLoading] = useState(false);
+  const [menTopCollectionsApi, setMenTopCollectionsApi] = useState<MenProductsToBuyApiRow[]>([]);
+  const [menTopCollectionsLoading, setMenTopCollectionsLoading] = useState(false);
+  const [menLatestApi, setMenLatestApi] = useState<MenProductsToBuyApiRow[]>([]);
+  const [menLatestLoading, setMenLatestLoading] = useState(false);
+  const [menMostLovedApi, setMenMostLovedApi] = useState<MenProductsToBuyApiRow[]>([]);
+  const [menMostLovedLoading, setMenMostLovedLoading] = useState(false);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [wishlistServerKeys, setWishlistServerKeys] = useState<Set<string>>(new Set());
   const [wishlistHasAuth, setWishlistHasAuth] = useState(false);
@@ -1119,6 +963,27 @@ export default function MenScreen() {
 
   const reloadCartCount = useCallback(async () => {
     setCartCount(await getCartUnitCount());
+  }, []);
+
+  const mapMenMainCategoryRows = useCallback((rows: unknown[]): MenProductsToBuyApiRow[] => {
+    return rows
+      .filter((p) => p && typeof (p as any).id === "number" && typeof (p as any).name === "string")
+      .map((p) => {
+        const imageUri = pickMenPtbProductImageUri(p);
+        if (!imageUri) return null;
+        const { sellingPrice, mrpPrice, discountPercentage, variantId } = pickMenPtbVariantPricing(p);
+        return {
+          id: (p as any).id as number,
+          name: safeTextMen(String((p as any).name ?? "")),
+          imageUri,
+          sellingPrice,
+          mrpPrice,
+          discountPercentage,
+          rating: pickMenPtbProductRating(p),
+          ...(variantId != null ? { variantId } : {}),
+        } satisfies MenProductsToBuyApiRow;
+      })
+      .filter(Boolean) as MenProductsToBuyApiRow[];
   }, []);
 
   useEffect(() => {
@@ -1192,25 +1057,7 @@ export default function MenScreen() {
           return;
         }
 
-        const mapped = (data as any[])
-          .filter((p) => p && typeof p.id === "number" && typeof p.name === "string")
-          .map((p) => {
-            const imageUri = pickMenPtbProductImageUri(p);
-            if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
-              pickMenPtbVariantPricing(p);
-            return {
-              id: p.id as number,
-              name: safeTextMen(String(p.name ?? "")),
-              imageUri,
-              sellingPrice,
-              mrpPrice,
-              discountPercentage,
-              rating: pickMenPtbProductRating(p),
-              ...(variantId != null ? { variantId } : {}),
-            } satisfies MenProductsToBuyApiRow;
-          })
-          .filter(Boolean) as MenProductsToBuyApiRow[];
+        const mapped = mapMenMainCategoryRows(data as unknown[]);
 
         setMenProductsToBuyApi(mapped);
       } catch {
@@ -1221,7 +1068,99 @@ export default function MenScreen() {
     })();
 
     return () => controller.abort();
-  }, [menMainCategoryIdForPtb]);
+  }, [menMainCategoryIdForPtb, mapMenMainCategoryRows]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setMenUniqueLoading(true);
+      try {
+        const { data } = await api.get(
+          productsByMainCategoryFeedPath(menMainCategoryIdForPtb, "unique"),
+          { signal: c.signal }
+        );
+        if (!Array.isArray(data)) {
+          setMenUniqueApi([]);
+          return;
+        }
+        setMenUniqueApi(mapMenMainCategoryRows(data as unknown[]));
+      } catch {
+        setMenUniqueApi([]);
+      } finally {
+        setMenUniqueLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [menMainCategoryIdForPtb, mapMenMainCategoryRows]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setMenTopCollectionsLoading(true);
+      try {
+        const { data } = await api.get(
+          productsByMainCategoryFeedPath(menMainCategoryIdForPtb, "top-collections"),
+          { signal: c.signal }
+        );
+        if (!Array.isArray(data)) {
+          setMenTopCollectionsApi([]);
+          return;
+        }
+        setMenTopCollectionsApi(mapMenMainCategoryRows(data as unknown[]));
+      } catch {
+        setMenTopCollectionsApi([]);
+      } finally {
+        setMenTopCollectionsLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [menMainCategoryIdForPtb, mapMenMainCategoryRows]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setMenLatestLoading(true);
+      try {
+        const { data } = await api.get(
+          productsByMainCategoryFeedPath(menMainCategoryIdForPtb, "latest"),
+          { signal: c.signal }
+        );
+        if (!Array.isArray(data)) {
+          setMenLatestApi([]);
+          return;
+        }
+        setMenLatestApi(mapMenMainCategoryRows(data as unknown[]));
+      } catch {
+        setMenLatestApi([]);
+      } finally {
+        setMenLatestLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [menMainCategoryIdForPtb, mapMenMainCategoryRows]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setMenMostLovedLoading(true);
+      try {
+        const { data } = await api.get(
+          productsByMainCategoryFeedPath(menMainCategoryIdForPtb, "recommended"),
+          { signal: c.signal }
+        );
+        if (!Array.isArray(data)) {
+          setMenMostLovedApi([]);
+          return;
+        }
+        setMenMostLovedApi(mapMenMainCategoryRows(data as unknown[]));
+      } catch {
+        setMenMostLovedApi([]);
+      } finally {
+        setMenMostLovedLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [menMainCategoryIdForPtb, mapMenMainCategoryRows]);
 
   const handleToggleWishlistMenPtb = useCallback(
     async (product: {
@@ -1269,8 +1208,15 @@ export default function MenScreen() {
   );
 
   const goMenPtbShop = useCallback(() => {
-    router.push("/subcatProducts");
-  }, [router]);
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "menswear",
+        subCategory: "All products",
+        mainCategoryId: String(menMainCategoryIdForPtb),
+      },
+    });
+  }, [router, menMainCategoryIdForPtb]);
 
   const menProductsToBuyUiRows = useMemo(() => {
     const fmtRs = (n: number | null) =>
@@ -1322,6 +1268,106 @@ export default function MenScreen() {
       };
     });
   }, [menProductsToBuyApi]);
+  const menTrendingPreviewRows = useMemo(
+    () => menProductsToBuyUiRows.slice(0, 5),
+    [menProductsToBuyUiRows]
+  );
+  const menUniquePreviewRows = useMemo(() => {
+    const fmtRs = (n: number | null) =>
+      n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+    return menUniqueApi.slice(0, 5).map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      const sellingLabel = fmtRs(p.sellingPrice);
+      const mrpLabel = showMrp ? fmtRs(p.mrpPrice) : "";
+      return {
+        id: String(p.id),
+        name: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        priceLabel: sellingLabel || mrpLabel,
+        subLabel:
+          p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+            ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+            : "Rare find",
+      };
+    });
+  }, [menUniqueApi]);
+  const menTopCollectionRows = useMemo(() => {
+    const top4 = menTopCollectionsApi.slice(0, 4).map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      const discountText =
+        p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+          ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+          : "";
+      const priceText =
+        p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+          ? `Rs ${Math.round(p.sellingPrice)}`
+          : p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+          ? `Rs ${Math.round(p.mrpPrice)}`
+          : "";
+      return {
+        id: String(p.id),
+        title: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        count: discountText || (showMrp ? "Featured collection" : priceText || "Featured collection"),
+      };
+    });
+    const rows: typeof top4[] = [];
+    for (let i = 0; i < top4.length; i += 2) rows.push(top4.slice(i, i + 2));
+    return rows;
+  }, [menTopCollectionsApi]);
+  const menLatestPreviewRows = useMemo(() => {
+    return menLatestApi.slice(0, 4).map((p) => {
+      const priceLabel =
+        p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+          ? `Rs ${Math.round(p.sellingPrice)}`
+          : p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+          ? `Rs ${Math.round(p.mrpPrice)}`
+          : "Rs 0";
+      const buyersText =
+        p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+          ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+          : "Just arrived";
+      return {
+        id: String(p.id),
+        title: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        priceLabel,
+        buyersText,
+      };
+    });
+  }, [menLatestApi]);
+  const menMostLovedPreviewRows = useMemo(() => {
+    const top4 = menMostLovedApi.slice(0, 4).map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      const subline =
+        p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+          ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+          : showMrp
+          ? "Loved pick"
+          : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+          ? `Rs ${Math.round(p.sellingPrice)}`
+          : "Loved pick";
+      return {
+        id: String(p.id),
+        title: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        subline,
+      };
+    });
+    return {
+      left: top4.filter((_, i) => i % 2 === 0),
+      right: top4.filter((_, i) => i % 2 === 1),
+    };
+  }, [menMostLovedApi]);
 
   const [menApiCats, setMenApiCats] = useState<MenSubcategoryApiRow[]>([]);
   const [menApiLoading, setMenApiLoading] = useState<boolean>(true);
@@ -1604,23 +1650,8 @@ export default function MenScreen() {
     setSelectedKey(menCategoriesForUi[0]?.key ?? MEN_CATEGORIES[0].key);
   }, [menCategoriesForUi, selectedKey]);
 
-  const styleLabOpen = useMemo(
-    () => FC_STYLE_LAB.find((l) => l.key === styleLabOpenKey) ?? null,
-    [styleLabOpenKey]
-  );
-
-  const closeStyleLab = useCallback(() => setStyleLabOpenKey(null), []);
-
   const bannerSlideWidth =
     windowWidth - MEN_SECTION_SCREEN_INSET - FC_BANNER_SIDE_PAD * 2;
-
-  const collectionRows = useMemo(() => {
-    const rows: (typeof FC_COLLECTIONS)[] = [];
-    for (let i = 0; i < FC_COLLECTIONS.length; i += 2) {
-      rows.push(FC_COLLECTIONS.slice(i, i + 2));
-    }
-    return rows;
-  }, []);
 
   const activeBlock = useMemo(
     () =>
@@ -1925,11 +1956,65 @@ export default function MenScreen() {
     [router]
   );
 
-  const onStyleLabShopPicks = useCallback(() => {
-    const cat = styleLabOpen?.shopCategory;
-    setStyleLabOpenKey(null);
-    if (cat) openMenSubcategoryProducts(cat);
-  }, [styleLabOpen, openMenSubcategoryProducts]);
+  const goMenSpotlightShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "menswear",
+        subCategory: "Men spotlight",
+        mainCategoryId: String(menMainCategoryIdForPtb),
+        mainCategoryFeed: "spotlight",
+      },
+    });
+  }, [router, menMainCategoryIdForPtb]);
+
+  const goMenUniqueShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "menswear",
+        subCategory: "Unique picks",
+        mainCategoryId: String(menMainCategoryIdForPtb),
+        mainCategoryFeed: "unique",
+      },
+    });
+  }, [router, menMainCategoryIdForPtb]);
+
+  const goMenTopCollectionsShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "menswear",
+        subCategory: "Top collections",
+        mainCategoryId: String(menMainCategoryIdForPtb),
+        mainCategoryFeed: "top-collections",
+      },
+    });
+  }, [router, menMainCategoryIdForPtb]);
+
+  const goMenLatestShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "menswear",
+        subCategory: "Bought again & again",
+        mainCategoryId: String(menMainCategoryIdForPtb),
+        mainCategoryFeed: "latest",
+      },
+    });
+  }, [router, menMainCategoryIdForPtb]);
+
+  const goMenMostLovedShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "menswear",
+        subCategory: "Most loved",
+        mainCategoryId: String(menMainCategoryIdForPtb),
+        mainCategoryFeed: "recommended",
+      },
+    });
+  }, [router, menMainCategoryIdForPtb]);
 
   const onBannerScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -2345,26 +2430,42 @@ export default function MenScreen() {
         <View style={styles.fcWrap}>
           {/* 1 — Trending picks */}
           <MenStoreSection>
-            <MenSectionHead
-              accent={activeBlock.railTo}
-              title="Trending picks"
-              sub="What everyone is adding to bag"
-              icon="flame"
-              iconColor="#f97316"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcRow}
-              nestedScrollEnabled
-            >
-              {FC_TRENDING.map((p, idx) => (
+            <View style={styles.menPtbHeaderRow}>
+              <MenSectionHead
+                accent={activeBlock.railTo}
+                title="Trending picks"
+                sub="What everyone is adding to bag"
+                icon="flame"
+                iconColor="#f97316"
+              />
+              <TouchableOpacity onPress={goMenPtbShop} activeOpacity={0.85}>
+                <Text style={styles.menPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {menProductsToBuyLoading && menTrendingPreviewRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>Loading products...</Text>
+            ) : menTrendingPreviewRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>No products found.</Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.fcRow}
+                nestedScrollEnabled
+              >
+              {menTrendingPreviewRows.map((p, idx) => (
                 <TouchableOpacity
-                  key={p.key}
+                  key={p.id}
                   style={styles.fcTrendOuter}
                   activeOpacity={0.94}
                   accessibilityRole="button"
-                  accessibilityLabel={`${p.title}, ${p.price}`}
+                  accessibilityLabel={`${p.name}`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/productdetail",
+                      params: { id: String(p.id) },
+                    } as any)
+                  }
                 >
                   <View style={styles.fcTrendStack}>
                     <LinearGradient
@@ -2379,7 +2480,7 @@ export default function MenScreen() {
                           idx % 2 === 0 ? styles.fcTrendArchVariantA : styles.fcTrendArchVariantB,
                         ]}
                       >
-                        <Image source={p.image} style={styles.fcTrendImg} resizeMode="cover" />
+                        <Image source={p.imageSource} style={styles.fcTrendImg} resizeMode="cover" />
                         <LinearGradient
                           colors={["transparent", "rgba(15,23,42,0.08)", "rgba(15,23,42,0.55)"]}
                           locations={[0, 0.55, 1]}
@@ -2387,7 +2488,7 @@ export default function MenScreen() {
                           pointerEvents="none"
                         />
                         <View style={[styles.fcTrendTag, { backgroundColor: activeBlock.railTo }]}>
-                          <Text style={styles.fcTrendTagText}>{p.tag}</Text>
+                          <Text style={styles.fcTrendTagText}>Trending</Text>
                         </View>
                       </View>
                     </LinearGradient>
@@ -2399,14 +2500,17 @@ export default function MenScreen() {
                     >
                       <View style={[styles.fcTrendBodyAccent, { backgroundColor: activeBlock.railTo }]} />
                       <Text style={styles.fcTrendTitle} numberOfLines={2}>
-                        {p.title}
+                        {p.name}
                       </Text>
-                      <Text style={[styles.fcTrendPrice, { color: activeBlock.railTo }]}>{p.price}</Text>
+                      <Text style={[styles.fcTrendPrice, { color: activeBlock.railTo }]}>
+                        {p.sellingLabel || p.mrpLabel}
+                      </Text>
                     </View>
                   </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            )}
           </MenStoreSection>
 
           {/* 2 — Men spotlight */}
@@ -2418,6 +2522,12 @@ export default function MenScreen() {
               icon="star"
               iconColor="#f59e0b"
             />
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={goMenSpotlightShop}
+              accessibilityRole="button"
+              accessibilityLabel="Open men spotlight products"
+            >
             <View style={[styles.fcSpotlight, { borderColor: hexToRgba(activeBlock.railTo, 0.35) }]}>
               <Image source={MEN_HERO_BANNER_IMAGE} style={styles.fcSpotlightImg} resizeMode="cover" />
               <LinearGradient
@@ -2444,7 +2554,7 @@ export default function MenScreen() {
                 </Text>
                 <TouchableOpacity
                   style={styles.fcSpotlightCta}
-                  onPress={() => router.push("/categories")}
+                  onPress={goMenSpotlightShop}
                   activeOpacity={0.9}
                   accessibilityRole="button"
                   accessibilityLabel="Shop the men spotlight edit"
@@ -2453,30 +2563,47 @@ export default function MenScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+            </TouchableOpacity>
           </MenStoreSection>
 
           {/* 3 — Unique picks */}
           <MenStoreSection>
-            <MenSectionHead
-              accent="#8b5cf6"
-              title="Unique picks"
-              sub="Rare finds & small runs"
-              icon="sparkles-outline"
-              iconColor="#8b5cf6"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcUniqueRow}
-              nestedScrollEnabled
-            >
-              {FC_UNIQUE.map((u, idx) => (
+            <View style={styles.menPtbHeaderRow}>
+              <MenSectionHead
+                accent="#8b5cf6"
+                title="Unique picks"
+                sub="Rare finds & small runs"
+                icon="sparkles-outline"
+                iconColor="#8b5cf6"
+              />
+              <TouchableOpacity onPress={goMenUniqueShop} activeOpacity={0.85}>
+                <Text style={styles.menPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {menUniqueLoading && menUniquePreviewRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>Loading products...</Text>
+            ) : menUniquePreviewRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>No products found.</Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.fcUniqueRow}
+                nestedScrollEnabled
+              >
+              {menUniquePreviewRows.map((u, idx) => (
                 <TouchableOpacity
-                  key={u.key}
+                  key={u.id}
                   style={styles.fcUniqueOuter}
                   activeOpacity={0.93}
                   accessibilityRole="button"
-                  accessibilityLabel={`${u.title}. ${u.sub}`}
+                  accessibilityLabel={`${u.name}. ${u.subLabel}`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/productdetail",
+                      params: { id: String(u.id) },
+                    } as any)
+                  }
                 >
                   <View
                     style={[
@@ -2484,7 +2611,7 @@ export default function MenScreen() {
                       idx % 2 === 0 ? styles.fcUniqueShapeA : styles.fcUniqueShapeB,
                     ]}
                   >
-                    <Image source={u.image} style={styles.fcUniquePhoto} resizeMode="cover" />
+                    <Image source={u.imageSource} style={styles.fcUniquePhoto} resizeMode="cover" />
                     <LinearGradient
                       colors={["rgba(15,23,42,0)", "rgba(15,23,42,0.18)", "rgba(15,23,42,0.5)"]}
                       locations={[0, 0.45, 1]}
@@ -2503,16 +2630,17 @@ export default function MenScreen() {
                     </View>
                     <View style={styles.fcUniqueCopy}>
                       <Text style={styles.fcUniqueTitleMag} numberOfLines={2}>
-                        {u.title}
+                        {u.name}
                       </Text>
                       <Text style={styles.fcUniqueSubMag} numberOfLines={2}>
-                        {u.sub}
+                        {u.subLabel || u.priceLabel}
                       </Text>
                     </View>
                   </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            )}
           </MenStoreSection>
 
           {/* 4 — Banners (auto-advancing carousel) */}
@@ -2613,25 +2741,42 @@ export default function MenScreen() {
 
           {/* 5 — Top collections (2 per row) */}
           <MenStoreSection>
-            <MenSectionHead
-              accent={activeBlock.railTo}
-              title="Top collections"
-              sub="Curated rails by occasion"
-              icon="grid-outline"
-            />
+            <View style={styles.menPtbHeaderRow}>
+              <MenSectionHead
+                accent={activeBlock.railTo}
+                title="Top collections"
+                sub="Curated rails by occasion"
+                icon="grid-outline"
+              />
+              <TouchableOpacity onPress={goMenTopCollectionsShop} activeOpacity={0.85}>
+                <Text style={styles.menPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {menTopCollectionsLoading && menTopCollectionRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>Loading products...</Text>
+            ) : menTopCollectionRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>No products found.</Text>
+            ) : (
             <View style={styles.fcCollGrid}>
-            {collectionRows.map((row, ri) => (
+            {menTopCollectionRows.map((row, ri) => (
               <View key={`coll-row-${ri}`} style={styles.fcCollRow}>
                 {row.map((c) => (
-                  <View
-                    key={c.key}
+                  <TouchableOpacity
+                    key={c.id}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: String(c.id) },
+                      } as any)
+                    }
                     style={[
                       styles.fcCollCard,
                       { borderColor: hexToRgba(activeBlock.railTo, 0.22) },
                     ]}
                   >
                     <View style={styles.fcCollImgBox}>
-                      <Image source={c.image} style={styles.fcCollImg} resizeMode="cover" />
+                      <Image source={c.imageSource} style={styles.fcCollImg} resizeMode="cover" />
                       <LinearGradient
                         colors={["transparent", "rgba(15,23,42,0.75)"]}
                         style={styles.fcCollFade}
@@ -2639,11 +2784,12 @@ export default function MenScreen() {
                       <Text style={styles.fcCollTitle}>{c.title}</Text>
                       <Text style={styles.fcCollCount}>{c.count}</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             ))}
           </View>
+          )}
           </MenStoreSection>
 
           {/* 6 — Shop all men sub categories (grid / list + auto-scroll list) */}
@@ -2897,87 +3043,9 @@ export default function MenScreen() {
             )}
           </MenStoreSection>
 
-          {/* 7 — Style lab (tappable circular guides + detail sheet) */}
-          <MenStoreSection>
-            <MenSectionHead
-              accent="#06b6d4"
-              title="Style lab"
-              sub="Tap any ring — full guide opens instantly"
-              icon="color-wand-outline"
-              iconColor="#0891b2"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcLabRow}
-              nestedScrollEnabled
-            >
-              {FC_STYLE_LAB.map((lab) => (
-                <TouchableOpacity
-                  key={lab.key}
-                  style={styles.fcLabItem}
-                  activeOpacity={0.92}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${lab.title} guide`}
-                  onPress={() => setStyleLabOpenKey(lab.key)}
-                >
-                  <View style={styles.fcLabTileCard}>
-                    <View style={styles.fcLabRingWrap}>
-                      <View
-                        style={[
-                          styles.fcLabGlow,
-                          {
-                            width: FC_LAB_GLOW,
-                            height: FC_LAB_GLOW,
-                            borderRadius: FC_LAB_GLOW / 2,
-                            backgroundColor: hexToRgba(lab.grad[0], 0.2),
-                          },
-                        ]}
-                      />
-                      <LinearGradient
-                        colors={[lab.grad[0], lab.grad[1], lab.grad[0]]}
-                        locations={[0, 0.52, 1]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.fcLabRingOuter}
-                      >
-                        <View style={styles.fcLabRingCutout}>
-                          <LinearGradient
-                            colors={["#ffffff", "#eef2ff"]}
-                            style={styles.fcLabIconDisk}
-                          >
-                            <Ionicons name={lab.icon} size={30} color={lab.grad[0]} />
-                          </LinearGradient>
-                        </View>
-                      </LinearGradient>
-                      <View
-                        style={[
-                          styles.fcLabStepBadge,
-                          { borderColor: hexToRgba(lab.grad[0], 0.4) },
-                        ]}
-                      >
-                        <Text style={[styles.fcLabStepBadgeText, { color: lab.grad[0] }]}>
-                          {lab.step}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.fcLabCircleTitle} numberOfLines={2}>
-                      {lab.title}
-                    </Text>
-                    <Text style={styles.fcLabCircleSub} numberOfLines={2}>
-                      {lab.sub}
-                    </Text>
-                    <View style={styles.fcLabTapCue}>
-                      <Text style={[styles.fcLabTapCueText, { color: lab.grad[0] }]}>
-                        Open
-                      </Text>
-                      <Ionicons name="chevron-forward" size={14} color={lab.grad[0]} />
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
 
+          {/* Middle banner */}
+          <MenStoreSection>
             <TouchableOpacity
               style={styles.menLabFollowBanner}
               activeOpacity={0.94}
@@ -3003,7 +3071,7 @@ export default function MenScreen() {
                   <Text style={styles.menLabFollowBannerPillText}>Men’s picks</Text>
                 </View>
                 <Text style={styles.menLabFollowBannerTitle} numberOfLines={2}>
-                  From Style lab to your wardrobe
+                  From curated picks to your wardrobe
                 </Text>
                 <Text style={styles.menLabFollowBannerSub} numberOfLines={2}>
                   Full-width edit · Fresh fits · Tap to explore casual shirts
@@ -3016,150 +3084,89 @@ export default function MenScreen() {
             </TouchableOpacity>
           </MenStoreSection>
 
-          {/* 8 — Shop by season (playing-card deck) */}
-          <MenStoreSection>
-            <MenSectionHead
-              accent="#10b981"
-              title="Shop by season"
-              sub="Playing-card deck — tap a card to shop"
-              icon="diamond-outline"
-              iconColor="#059669"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcSeasonPlayingRow}
-              nestedScrollEnabled
-            >
-              {FC_SEASONS.map((s, index) => (
-                <TouchableOpacity
-                  key={s.key}
-                  activeOpacity={0.93}
-                  style={[
-                    styles.seasonPlayingCard,
-                    { transform: [{ rotate: `${index % 2 === 0 ? -2.5 : 2.5}deg` }] },
-                  ]}
-                  onPress={() => openMenSubcategoryProducts(s.shopLabel)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${s.season}. ${s.title}. ${s.price}. Shop`}
-                >
-                  <LinearGradient
-                    colors={["#fdfbf7", "#ebe4d8"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.seasonPlayingCardOuter}
-                  >
-                    <View style={[styles.seasonPlayingCardRim, { borderColor: s.suitColor }]}>
-                      <View style={styles.seasonPlayingCardFace}>
-                        <View style={styles.seasonPlayingCornerTL}>
-                          <Text style={[styles.seasonPlayingRank, { color: s.suitColor }]}>
-                            {s.rank}
-                          </Text>
-                          <Ionicons name={s.suitIcon} size={15} color={s.suitColor} />
-                        </View>
-                        <View style={styles.seasonPlayingCornerBR}>
-                          <View style={styles.seasonPlayingCornerRotated}>
-                            <Text style={[styles.seasonPlayingRank, { color: s.suitColor }]}>
-                              {s.rank}
-                            </Text>
-                            <Ionicons name={s.suitIcon} size={15} color={s.suitColor} />
-                          </View>
-                        </View>
-                        <View style={styles.seasonPlayingArtWrap}>
-                          <View
-                            style={[
-                              styles.seasonPlayingArtRing,
-                              { borderColor: hexToRgba(s.suitColor, 0.45) },
-                            ]}
-                          >
-                            <Image
-                              source={s.image}
-                              style={styles.seasonPlayingArtImg}
-                              resizeMode="cover"
-                            />
-                          </View>
-                          <View
-                            style={[
-                              styles.seasonPlayingSeasonPill,
-                              { backgroundColor: s.suitColor },
-                            ]}
-                          >
-                            <Text style={styles.seasonPlayingSeasonPillText}>{s.season}</Text>
-                          </View>
-                        </View>
-                        <View style={styles.seasonPlayingFooter}>
-                          <Text style={styles.seasonPlayingTitle} numberOfLines={2}>
-                            {s.title}
-                          </Text>
-                          <Text style={[styles.seasonPlayingPrice, { color: s.suitColor }]}>
-                            {s.price}
-                          </Text>
-                        </View>
-                        <View style={styles.seasonAceWordmark} pointerEvents="none">
-                          <Text style={styles.seasonAceWordmarkText}>FNT</Text>
-                        </View>
-                      </View>
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </MenStoreSection>
-
           {/* 9 — More purchase products */}
           <MenStoreSection>
-            <MenSectionHead
-              accent="#ea580c"
-              title="Bought again & again"
-              sub="Trusted repeat buys from real shoppers"
-              icon="bag-handle-outline"
-              iconColor="#c2410c"
-            />
+            <View style={styles.menPtbHeaderRow}>
+              <MenSectionHead
+                accent="#ea580c"
+                title="Bought again & again"
+                sub="Trusted repeat buys from real shoppers"
+                icon="bag-handle-outline"
+                iconColor="#c2410c"
+              />
+              <TouchableOpacity onPress={goMenLatestShop} activeOpacity={0.85}>
+                <Text style={styles.menPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {menLatestLoading && menLatestPreviewRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>Loading products...</Text>
+            ) : menLatestPreviewRows.length === 0 ? (
+              <Text style={styles.menPtbStatus}>No products found.</Text>
+            ) : (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.fcRow}
               nestedScrollEnabled
             >
-              {FC_REPURCHASE.map((r) => (
-                <View
-                  key={r.key}
+              {menLatestPreviewRows.map((r) => (
+                <TouchableOpacity
+                  key={r.id}
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/productdetail",
+                      params: { id: String(r.id) },
+                    } as any)
+                  }
                   style={[
                     styles.fcBuyCard,
                     { borderColor: hexToRgba(activeBlock.railTo, 0.18) },
                   ]}
                 >
                   <View style={styles.fcBuyImgWrap}>
-                    <Image source={r.image} style={styles.fcBuyImg} resizeMode="cover" />
+                    <Image source={r.imageSource} style={styles.fcBuyImg} resizeMode="cover" />
                   </View>
                   <Text style={styles.fcBuyTitle} numberOfLines={2}>
                     {r.title}
                   </Text>
-                  <Text style={[styles.fcBuyPrice, { color: activeBlock.railTo }]}>{r.price}</Text>
+                  <Text style={[styles.fcBuyPrice, { color: activeBlock.railTo }]}>{r.priceLabel}</Text>
                   <View style={styles.fcBuyRow}>
                     <Ionicons name="repeat-outline" size={14} color="#64748b" />
-                    <Text style={styles.fcBuyMeta}>{r.buyers}</Text>
+                    <Text style={styles.fcBuyMeta}>{r.buyersText}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </ScrollView>
+            )}
           </MenStoreSection>
 
           {/* 10 — Most loved (dark staggered masonry, reference-style) */}
           <MenStoreSection>
-            <MenSectionHead
-              accent="#ec4899"
-              title="Most loved"
-              sub="Staggered spotlight grid — tap to shop"
-              icon="heart"
-              iconColor="#db2777"
-            />
+            <View style={styles.menPtbHeaderRow}>
+              <MenSectionHead
+                accent="#ec4899"
+                title="Most loved"
+                sub="Staggered spotlight grid — tap to shop"
+                icon="heart"
+                iconColor="#db2777"
+              />
+              <TouchableOpacity onPress={goMenMostLovedShop} activeOpacity={0.85}>
+                <Text style={styles.menPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {menMostLovedLoading &&
+            menMostLovedPreviewRows.left.length + menMostLovedPreviewRows.right.length === 0 ? (
+              <Text style={styles.menPtbStatus}>Loading products...</Text>
+            ) : menMostLovedPreviewRows.left.length + menMostLovedPreviewRows.right.length === 0 ? (
+              <Text style={styles.menPtbStatus}>No products found.</Text>
+            ) : (
             <View style={styles.loveMasonryDarkShell}>
               <View style={[styles.loveMasonryRow, { gap: LOVE_MASONRY_GAP }]}>
                 <View style={styles.loveMasonryCol}>
-                  {FC_LIKED.filter((_, i) => i % 2 === 0).map((l, j, arr) => (
+                  {menMostLovedPreviewRows.left.map((l, j, arr) => (
                     <TouchableOpacity
-                      key={l.key}
+                      key={l.id}
                       activeOpacity={0.94}
                       style={[
                         styles.loveMasonryCard,
@@ -3168,11 +3175,16 @@ export default function MenScreen() {
                           marginBottom: j < arr.length - 1 ? LOVE_MASONRY_GAP : 0,
                         },
                       ]}
-                      onPress={() => openMenSubcategoryProducts(l.shopLabel)}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/productdetail",
+                          params: { id: String(l.id) },
+                        } as any)
+                      }
                       accessibilityRole="button"
                       accessibilityLabel={`${l.title}. ${l.subline}`}
                     >
-                      <Image source={l.image} style={styles.loveMasonryImg} resizeMode="cover" />
+                      <Image source={l.imageSource} style={styles.loveMasonryImg} resizeMode="cover" />
                       <LinearGradient
                         colors={["transparent", "rgba(0,0,0,0.78)"]}
                         locations={[0.35, 1]}
@@ -3190,9 +3202,9 @@ export default function MenScreen() {
                   ))}
                 </View>
                 <View style={styles.loveMasonryCol}>
-                  {FC_LIKED.filter((_, i) => i % 2 === 1).map((l, j, arr) => (
+                  {menMostLovedPreviewRows.right.map((l, j, arr) => (
                     <TouchableOpacity
-                      key={l.key}
+                      key={l.id}
                       activeOpacity={0.94}
                       style={[
                         styles.loveMasonryCard,
@@ -3201,11 +3213,16 @@ export default function MenScreen() {
                           marginBottom: j < arr.length - 1 ? LOVE_MASONRY_GAP : 0,
                         },
                       ]}
-                      onPress={() => openMenSubcategoryProducts(l.shopLabel)}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/productdetail",
+                          params: { id: String(l.id) },
+                        } as any)
+                      }
                       accessibilityRole="button"
                       accessibilityLabel={`${l.title}. ${l.subline}`}
                     >
-                      <Image source={l.image} style={styles.loveMasonryImg} resizeMode="cover" />
+                      <Image source={l.imageSource} style={styles.loveMasonryImg} resizeMode="cover" />
                       <LinearGradient
                         colors={["transparent", "rgba(0,0,0,0.78)"]}
                         locations={[0.35, 1]}
@@ -3224,6 +3241,7 @@ export default function MenScreen() {
                 </View>
               </View>
             </View>
+            )}
           </MenStoreSection>
 
           {/* Products to buy — full-width strip (no store card shell) */}
@@ -3373,104 +3391,6 @@ export default function MenScreen() {
         </View>
 
       </ScrollView>
-
-      <Modal
-        visible={!!styleLabOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={closeStyleLab}
-      >
-        <View style={styles.styleLabModalRoot}>
-          <Pressable style={styles.styleLabModalBackdrop} onPress={closeStyleLab} />
-          <View
-            style={[
-              styles.styleLabModalSheet,
-              { paddingBottom: Math.max(insets.bottom, 14) + 16 },
-            ]}
-          >
-            {styleLabOpen ? (
-              <>
-                <View style={styles.styleLabModalHandle} />
-                <LinearGradient
-                  colors={[styleLabOpen.grad[0], styleLabOpen.grad[1]]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.styleLabModalHero}
-                >
-                  <View style={styles.styleLabModalHeroTop}>
-                    <View style={styles.styleLabModalHeroIconWrap}>
-                      <Ionicons name={styleLabOpen.icon} size={34} color="#ffffff" />
-                    </View>
-                    <TouchableOpacity
-                      style={styles.styleLabModalClose}
-                      onPress={closeStyleLab}
-                      hitSlop={12}
-                      accessibilityRole="button"
-                      accessibilityLabel="Close guide"
-                    >
-                      <Ionicons name="close" size={22} color="rgba(255,255,255,0.95)" />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.styleLabModalKicker}>Style lab · Step {styleLabOpen.step}</Text>
-                  <Text style={styles.styleLabModalTitle}>{styleLabOpen.title}</Text>
-                  <Text style={styles.styleLabModalSub}>{styleLabOpen.sub}</Text>
-                </LinearGradient>
-                <ScrollView
-                  style={styles.styleLabModalBodyScroll}
-                  contentContainerStyle={styles.styleLabModalBodyContent}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled
-                >
-                  <Text style={styles.styleLabModalDetail}>{styleLabOpen.detail}</Text>
-                  <Text style={styles.styleLabModalTipsTitle}>Quick wins</Text>
-                  {styleLabOpen.tips.map((tip, idx) => (
-                    <View key={`${styleLabOpen.key}-tip-${idx}`} style={styles.styleLabTipRow}>
-                      <View
-                        style={[
-                          styles.styleLabTipDot,
-                          { backgroundColor: hexToRgba(styleLabOpen.grad[0], 0.2) },
-                        ]}
-                      >
-                        <Ionicons
-                          name="checkmark"
-                          size={14}
-                          color={styleLabOpen.grad[0]}
-                        />
-                      </View>
-                      <Text style={styles.styleLabTipText}>{tip}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-                <View style={styles.styleLabModalActions}>
-                  <TouchableOpacity
-                    style={styles.styleLabBtnGhost}
-                    onPress={closeStyleLab}
-                    activeOpacity={0.88}
-                  >
-                    <Text style={styles.styleLabBtnGhostText}>Not now</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.92}
-                    onPress={onStyleLabShopPicks}
-                    accessibilityRole="button"
-                    accessibilityLabel="Shop related picks"
-                  >
-                    <LinearGradient
-                      colors={[styleLabOpen.grad[0], styleLabOpen.grad[1]]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.styleLabBtnPrimary}
-                    >
-                      <Ionicons name="bag-handle-outline" size={20} color="#ffffff" />
-                      <Text style={styles.styleLabBtnPrimaryText}>Shop picks</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
 
       <HomeBottomTabBar />
     </View>
