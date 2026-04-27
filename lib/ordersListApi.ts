@@ -24,13 +24,26 @@ type ApiEnvelope<T> = {
   data: T;
 };
 
-/** GET /api/orders — requires JWT (same axios instance as rest of app). */
-export async function fetchUserOrdersList(): Promise<ApiOrderRow[]> {
-  const { data } = await api.get<ApiEnvelope<ApiOrderRow[]>>("/api/orders");
-  if (!data?.success || !Array.isArray(data.data)) {
-    return [];
+/**
+ * GET /api/orders — requires JWT (same axios instance as rest of app).
+ * Accepts both `{ success, data: [] }` and legacy/raw array shapes.
+ */
+export async function fetchUserOrdersList(
+  status?: string
+): Promise<Record<string, unknown>[]> {
+  const { data } = await api.get<unknown>("/api/orders", {
+    params: status ? { status } : undefined,
+  });
+  if (Array.isArray(data)) {
+    return data.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"));
   }
-  return data.data;
+  if (data && typeof data === "object") {
+    const env = data as ApiEnvelope<unknown[]> & Record<string, unknown>;
+    if (Array.isArray(env.data)) {
+      return env.data.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"));
+    }
+  }
+  return [];
 }
 
 /** PUT /api/orders/{id}/cancel — requires JWT. */

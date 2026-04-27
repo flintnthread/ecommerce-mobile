@@ -18,7 +18,7 @@ import api from "../services/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-type HelpTab = "faqs" | "order_help" | "delivery_payment" | "support_ticket" | "contact";
+type HelpTab = "faqs" | "order_help" | "support_ticket" | "contact";
 
 interface FAQ {
   id: string;
@@ -65,7 +65,6 @@ export default function HelpCenterScreen() {
   const tabs: { key: HelpTab; label: string; icon: string }[] = [
     { key: "faqs", label: "FAQs", icon: "help-circle" },
     { key: "order_help", label: "Order Help", icon: "receipt" },
-    { key: "delivery_payment", label: "Delivery & Payment", icon: "card" },
     { key: "support_ticket", label: "Support Ticket", icon: "ticket" },
     { key: "contact", label: "Contact", icon: "call" },
   ];
@@ -159,39 +158,6 @@ export default function HelpCenterScreen() {
       title: "Order History",
       icon: "time",
       description: "View your past orders and invoices",
-    },
-  ];
-
-  const deliveryPaymentIssues = [
-    {
-      id: "1",
-      title: "Delivery Delayed",
-      icon: "time-outline",
-      description: "Your order is taking longer than expected",
-    },
-    {
-      id: "2",
-      title: "Wrong Item Delivered",
-      icon: "alert-circle",
-      description: "Received a different product than ordered",
-    },
-    {
-      id: "3",
-      title: "Payment Failed",
-      icon: "card-outline",
-      description: "Payment transaction was unsuccessful",
-    },
-    {
-      id: "4",
-      title: "Refund Issues",
-      icon: "cash-outline",
-      description: "Problems with refund processing",
-    },
-    {
-      id: "5",
-      title: "COD Not Available",
-      icon: "ban",
-      description: "Cash on Delivery option not showing",
     },
   ];
 
@@ -482,37 +448,6 @@ export default function HelpCenterScreen() {
                   <View style={styles.helpTopicInfo}>
                     <Text style={styles.helpTopicTitle}>{topic.title}</Text>
                     <Text style={styles.helpTopicDesc}>{topic.description}</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#CCCCCC" />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* Delivery & Payment Issues Tab */}
-        {activeTab === "delivery_payment" && (
-          <View style={styles.deliveryPaymentContainer}>
-            <Text style={styles.sectionSubtitle}>
-              Common Issues & Solutions
-            </Text>
-            {deliveryPaymentIssues.map((issue, index) => (
-              <TouchableOpacity
-                key={issue.id}
-                style={[
-                  styles.issueCard,
-                  index === deliveryPaymentIssues.length - 1 &&
-                    styles.issueCardLast,
-                ]}
-                activeOpacity={0.7}
-              >
-                <View style={styles.issueCardLeft}>
-                  <View style={styles.issueIcon}>
-                    <Ionicons name={issue.icon as any} size={24} color="#F44336" />
-                  </View>
-                  <View style={styles.issueInfo}>
-                    <Text style={styles.issueTitle}>{issue.title}</Text>
-                    <Text style={styles.issueDesc}>{issue.description}</Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#CCCCCC" />
@@ -950,54 +885,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   helpTopicDesc: {
-    fontSize: 13,
-    color: "#666",
-  },
-  // Delivery & Payment Issues Tab Styles
-  deliveryPaymentContainer: {
-    flex: 1,
-  },
-  issueCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#F0F0F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  issueCardLast: {
-    marginBottom: 0,
-  },
-  issueCardLeft: {
-    flexDirection: "row",
-    flex: 1,
-  },
-  issueIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#F4433620",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
-  },
-  issueInfo: {
-    flex: 1,
-  },
-  issueTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#000",
-    marginBottom: 4,
-  },
-  issueDesc: {
     fontSize: 13,
     color: "#666",
   },
