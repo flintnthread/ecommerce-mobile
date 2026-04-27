@@ -16,6 +16,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api, {
+  productsByMainCategoryFeedPath,
   productsByMainCategoryPath,
   productsSearchPath,
   searchProductsPath,
@@ -235,9 +236,9 @@ const productCardImageHeight = Math.min(
 );
 
 const bannerImages = [
-  require("../assets/images/womenscate.png"),
-  require("../assets/images/mencate.png"),
-  require("../assets/images/accessoriescate.png"),
+  require("../assets/Fashion.png"),
+  require("../assets/FootwearAccessories.png"),
+  require("../assets/IndoorplayGift.png"),
 ];
 
 const sortOptions = [
@@ -684,6 +685,8 @@ export default function SubcategoriesScreen() {
   const [mainCategoryPathReady, setMainCategoryPathReady] = useState(false);
   const [mainCategoryFeedProducts, setMainCategoryFeedProducts] = useState<ProductItem[]>([]);
   const [mainCategoryFeedReady, setMainCategoryFeedReady] = useState(false);
+  const [latestMainCategoryProducts, setLatestMainCategoryProducts] = useState<ProductItem[]>([]);
+  const [latestMainCategoryReady, setLatestMainCategoryReady] = useState(false);
 
   const [productsSearchApiProducts, setProductsSearchApiProducts] = useState<ProductItem[]>([]);
   const [productsSearchApiReady, setProductsSearchApiReady] = useState(false);
@@ -1083,6 +1086,8 @@ export default function SubcategoriesScreen() {
     (routedMainCategoryFeed === "spotlight" ||
       routedMainCategoryFeed === "top-collections" ||
       routedMainCategoryFeed === "trending" ||
+      routedMainCategoryFeed === "unique" ||
+      routedMainCategoryFeed === "recommended" ||
       routedMainCategoryFeed === "latest");
 
   const routedFromProductsSearch =
@@ -1180,7 +1185,10 @@ export default function SubcategoriesScreen() {
     const controller = new AbortController();
     (async () => {
       try {
-        const path = `/api/products/main-category/${routedMainCategoryId}/${routedMainCategoryFeed}`;
+        const path = productsByMainCategoryFeedPath(
+          routedMainCategoryId,
+          routedMainCategoryFeed
+        );
         const { data } = await api.get<unknown>(path, { signal: controller.signal });
         if (controller.signal.aborted) return;
         const rows = Array.isArray(data)
@@ -1252,6 +1260,37 @@ export default function SubcategoriesScreen() {
     selectedSubCategory,
     mainCat,
   ]);
+
+  useEffect(() => {
+    if (!routedFromMainCategoryId) {
+      setLatestMainCategoryProducts([]);
+      setLatestMainCategoryReady(false);
+      return;
+    }
+
+    setLatestMainCategoryReady(false);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const path = productsByMainCategoryFeedPath(routedMainCategoryId, "latest");
+        const { data } = await api.get<unknown>(path, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        const rows = Array.isArray(data)
+          ? (data as unknown[])
+          : normalizeProductListPayload(data);
+        const mapped = rows
+          .map((row) => mapApiProductToProductItem(row))
+          .filter(Boolean) as ProductItem[];
+        setLatestMainCategoryProducts(mapped);
+      } catch {
+        if (!controller.signal.aborted) setLatestMainCategoryProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setLatestMainCategoryReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [routedMainCategoryId, routedFromMainCategoryId]);
 
   useEffect(() => {
     if (!routedFromSubcategoryId) {
@@ -2115,9 +2154,12 @@ const handleBannerScroll = (event: any) => {
       ? expandedCategory.toUpperCase()
       : pageTitle;
 
-  const latestProductsRow = hasSubCategoryFromRoute
-    ? filteredRoutedProducts
-    : filteredCategoryProducts;
+  const latestProductsRow =
+    routedFromMainCategoryId && latestMainCategoryReady
+      ? latestMainCategoryProducts
+      : hasSubCategoryFromRoute
+      ? filteredRoutedProducts
+      : filteredCategoryProducts;
 
   const handleHeaderBack = () => {
     if (!hasSubCategoryFromRoute && expandedCategory) {
