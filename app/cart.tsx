@@ -568,7 +568,13 @@ export default function CartScreen() {
                 >
                   <Image source={item.image} style={styles.cartItemImage} />
                   <View style={styles.cartItemInfo}>
-                    <Text style={styles.cartItemName}>{item.name}</Text>
+                    <Text
+                      style={styles.cartItemName}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {item.name}
+                    </Text>
                     {(item.size || item.color) && (
                       <Text style={styles.cartItemMeta}>
                         {item.size ? `${tr("Size")}: ${item.size}` : ""}
