@@ -20,7 +20,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-import NotificationPermission from "./notification";
 import * as ImagePicker from "expo-image-picker";
 import {
   createAddress,
@@ -33,6 +32,10 @@ import {
 } from "../services/addresses";
 import { uploadProfileImage } from "../services/userProfile";
 import { fetchEmailLogs } from "../services/emailLogs";
+import {
+  fetchUnreadNotificationCount,
+  getCurrentUserIdFromToken,
+} from "../services/pushNotifications";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -79,7 +82,6 @@ interface Order {
 
 export default function AccountScreen() {
   const router = useRouter();
-  const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [activeProfile, setActiveProfile] =
     useState<"sankar" | "new" | string>("sankar");
   const [newName, setNewName] = useState("");
@@ -113,6 +115,7 @@ export default function AccountScreen() {
 
   const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
   const [emailActivityCount, setEmailActivityCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const loadSavedProfilesFromApi = useCallback(async () => {
     try {
@@ -140,11 +143,26 @@ export default function AccountScreen() {
     }
   }, [activeProfile, savedProfiles, newEmail]);
 
+  const loadNotificationCountFromApi = useCallback(async () => {
+    try {
+      const userId = await getCurrentUserIdFromToken();
+      const count = await fetchUnreadNotificationCount(userId);
+      setNotificationCount(count);
+    } catch {
+      // Keep existing value when network/API fails.
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void loadSavedProfilesFromApi();
       void loadEmailActivityFromApi();
-    }, [loadSavedProfilesFromApi, loadEmailActivityFromApi])
+      void loadNotificationCountFromApi();
+    }, [
+      loadSavedProfilesFromApi,
+      loadEmailActivityFromApi,
+      loadNotificationCountFromApi,
+    ])
   );
 
   const [showOrdersModal, setShowOrdersModal] = useState(false);
@@ -308,14 +326,6 @@ export default function AccountScreen() {
 
   const handleNotificationPress = () => {
     router.push("/notifications");
-  };
-
-  const handleNotificationAllow = () => {
-    setShowNotificationModal(false);
-  };
-
-  const handleNotificationDeny = () => {
-    setShowNotificationModal(false);
   };
 
   const handleHelpPress = () => {
@@ -721,10 +731,10 @@ export default function AccountScreen() {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="notifications" size={20} color="#E97A1F" />
-                  {emailActivityCount > 0 && (
+                  {notificationCount > 0 && (
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>
-                        {emailActivityCount > 99 ? "99+" : String(emailActivityCount)}
+                        {notificationCount > 99 ? "99+" : String(notificationCount)}
                       </Text>
                     </View>
                   )}
@@ -1063,13 +1073,6 @@ export default function AccountScreen() {
         >
           <Text style={styles.logoutText}>Log out</Text>
         </TouchableOpacity>
-
-        {/* Notification permission modal */}
-        <NotificationPermission
-          visible={showNotificationModal}
-          onAllow={handleNotificationAllow}
-          onDeny={handleNotificationDeny}
-        />
 
         <Modal
           visible={showAvatarPreviewModal}
