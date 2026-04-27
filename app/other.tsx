@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import axios from "axios";
 import {
   View,
   Text,
@@ -8,17 +7,14 @@ import {
   ScrollView,
   Switch,
   Alert,
-  Linking,
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { type SupportedLanguage, useLanguage } from "../lib/language";
-import { fetchCookiesPolicy } from "../services/cookiesPolicy";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
-const LEGAL_INFO_URL = "https://flintnthread.in/page-privacy-policy";
+const PRIVACY_POLICY_URL = "https://flintnthread.in/page-privacy-policy";
 
 export default function OtherScreen() {
   const router = useRouter();
@@ -27,7 +23,6 @@ export default function OtherScreen() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
-  const [isLoadingPrivacyPolicy, setIsLoadingPrivacyPolicy] = useState(false);
 
   const languages = [
     { code: "en", name: "English", nativeName: "English" },
@@ -45,61 +40,24 @@ export default function OtherScreen() {
     Alert.alert(tr("Language Changed"), `${tr("App language changed to")} ${language}`);
   };
 
-  const handlePrivacyPolicy = async () => {
-    if (isLoadingPrivacyPolicy) return;
-    setIsLoadingPrivacyPolicy(true);
-    try {
-      const policy = await fetchCookiesPolicy();
-      const content = policy.content.trim();
-      Alert.alert(
-        "Privacy & Cookies Policy",
-        content ||
-          "Privacy & cookies policy content is currently unavailable.",
-        [{ text: "OK" }]
-      );
-    } catch (error) {
-      let message =
-        "Could not load privacy policy from server. Please try again.";
-      if (axios.isAxiosError(error)) {
-        const serverData = error.response?.data as
-          | { message?: string; error?: string }
-          | undefined;
-        message =
-          (typeof serverData?.message === "string" && serverData.message) ||
-          (typeof serverData?.error === "string" && serverData.error) ||
-          error.message ||
-          message;
-      } else if (error instanceof Error) {
-        message = error.message;
-      }
-      Alert.alert("Privacy Policy", message, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "View Online",
-          onPress: () => {
-            Linking.openURL(LEGAL_INFO_URL);
-          },
-        },
-      ]);
-    } finally {
-      setIsLoadingPrivacyPolicy(false);
-    }
+  const handlePrivacyPolicy = () => {
+    router.push({
+      pathname: "/legal-content" as any,
+      params: {
+        title: "Privacy & Cookies Policy",
+        url: PRIVACY_POLICY_URL,
+      },
+    });
   };
 
   const handleTermsConditions = () => {
-    Alert.alert(
-      "Terms & Conditions",
-      "Our Terms & Conditions outline the rules and regulations for using our app. Would you like to view the full terms?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "View Online",
-          onPress: () => {
-            Linking.openURL(LEGAL_INFO_URL);
-          },
-        },
-      ]
-    );
+    router.push({
+      pathname: "/legal-content" as any,
+      params: {
+        title: "Terms & Conditions",
+        url: PRIVACY_POLICY_URL,
+      },
+    });
   };
 
   const handleNotificationToggle = (type: string) => {
@@ -269,9 +227,7 @@ export default function OtherScreen() {
             <View style={styles.infoItem}>
               <View style={styles.infoItemLeft}>
                 <Text style={styles.infoLabel}>
-                  {isLoadingPrivacyPolicy
-                    ? "Loading Privacy Policy..."
-                    : "View Privacy Policy"}
+                  {"View Privacy Policy"}
                 </Text>
                 <Text style={styles.infoDescription}>
                   Learn how we protect your data
