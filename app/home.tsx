@@ -2412,6 +2412,12 @@ export default function Home() {
                         return;
                       }
                       bumpCartBadgeAfterAdd();
+                      setTimeout(() => {
+                        Alert.alert(
+                          "Added to cart",
+                          `${item.name} is in your cart.`
+                        );
+                      }, 0);
                     })();
                   }}
                   accessibilityRole="button"
@@ -3785,10 +3791,12 @@ const categoryData = [
                           return;
                         }
                         bumpCartBadgeAfterAdd();
-                        Alert.alert(
-                          "Added to cart",
-                          `${item.name} is in your cart.`
-                        );
+                        setTimeout(() => {
+                          Alert.alert(
+                            "Added to cart",
+                            `${item.name} is in your cart.`
+                          );
+                        }, 0);
                       })();
                     }}
                     accessibilityRole="button"
