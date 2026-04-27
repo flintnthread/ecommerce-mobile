@@ -7,8 +7,6 @@ import {
   Image,
   StatusBar,
   TouchableOpacity,
-  Pressable,
-  Modal,
   ActivityIndicator,
   Alert,
   useWindowDimensions,
@@ -31,6 +29,7 @@ import Svg, {
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api, {
   mapSearchResultsToUi,
+  productsByMainCategoryFeedPath,
   productsByMainCategoryPath,
   searchProductsPath,
   searchSuggestionsPath,
@@ -455,173 +454,10 @@ const SHOP_ALL_LIST_GAP = 16;
 const SHOP_ALL_LIST_STEP = SHOP_ALL_LIST_CARD_W + SHOP_ALL_LIST_GAP;
 const SHOP_ALL_AUTO_MS = 1000;
 
-/** Full-width strip below Style lab (women’s category art). */
-const WOMEN_STYLE_LAB_STRIP_IMAGE = WOMEN_WESTERN_IMG;
-
+// Kept for shared style constants referenced by stylesheet entries.
 const FC_LAB_RING = 100;
 const FC_LAB_RING_BORDER = 4;
-const FC_LAB_GLOW = FC_LAB_RING + 36;
 
-const FC_STYLE_LAB: {
-  key: string;
-  step: string;
-  title: string;
-  sub: string;
-  detail: string;
-  tips: readonly string[];
-  shopCategory: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  grad: readonly [string, string];
-}[] = [
-  {
-    key: "sl1",
-    step: "01",
-    title: "Colour edit",
-    sub: "Palettes that pair clean",
-    detail:
-      "Jewel tones love gold accessories; pastels love silver. Let one hero colour lead and keep the rest supporting.",
-    tips: [
-      "Blush + ivory + cocoa reads soft luxe.",
-      "Red + black needs texture variation so it isn’t flat.",
-      "Match undertone (warm/cool) across makeup and outfit.",
-    ],
-    shopCategory: "Tops & Tees",
-    icon: "color-palette-outline",
-    grad: ["#6366f1", "#4338ca"],
-  },
-  {
-    key: "sl2",
-    step: "02",
-    title: "Fit finder",
-    sub: "Cuts for your frame",
-    detail:
-      "Waist placement and hem length change proportions instantly. High-rise elongates legs; ankle crops show footwear.",
-    tips: [
-      "Darted waists sharpen silhouettes on woven dresses.",
-      "Shoulder fit on blouses sets the whole upper body tone.",
-      "Try heel height before final hem alterations.",
-    ],
-    shopCategory: "Jeans",
-    icon: "body-outline",
-    grad: ["#0ea5e9", "#0369a1"],
-  },
-  {
-    key: "sl3",
-    step: "03",
-    title: "Fabric guide",
-    sub: "Touch & drape decoded",
-    detail:
-      "Chiffon floats, cotton crisps, silk catches light. Swap lining weight seasonally so outfits breathe.",
-    tips: [
-      "Bias-cut skirts need true fluid fabrics to fall well.",
-      "Stretch blends keep kurtas comfy through long days.",
-      "Store embellished pieces folded with tissue to avoid snags.",
-    ],
-    shopCategory: "Kurtas & Kurtis",
-    icon: "shirt-outline",
-    grad: ["#14b8a6", "#0f766e"],
-  },
-  {
-    key: "sl4",
-    step: "04",
-    title: "Layering 101",
-    sub: "Depth without bulk",
-    detail:
-      "Light base, structured mid, soft outer—or reverse with a crisp jacket over a knit. Scarves add colour without heat.",
-    tips: [
-      "Dupatta drape can replace a heavy third layer indoors.",
-      "Crop jackets over maxi dresses balance length.",
-      "Monochrome layers feel editorial when textures differ.",
-    ],
-    shopCategory: "Jackets",
-    icon: "layers-outline",
-    grad: ["#a855f7", "#7e22ce"],
-  },
-  {
-    key: "sl5",
-    step: "05",
-    title: "Shoe map",
-    sub: "Finish every silhouette",
-    detail:
-      "Heel pitch and toe shape change walk and vibe. Block heels stabilize long hems; strappy flats dress down pleats.",
-    tips: [
-      "Nude-to-you pumps lengthen the leg line.",
-      "Chunky loafers pair with wide trousers and denim.",
-      "Match bag hardware to primary jewelry tone.",
-    ],
-    shopCategory: "Dresses",
-    icon: "walk-outline",
-    grad: ["#f97316", "#c2410c"],
-  },
-];
-
-const FC_SEASONS: {
-  key: string;
-  season: string;
-  title: string;
-  price: string;
-  image: ImageSourcePropType;
-  rank: string;
-  suitIcon: keyof typeof Ionicons.glyphMap;
-  suitColor: string;
-  shopLabel: string;
-}[] = [
-  {
-    key: "se1",
-    season: "Spring",
-    title: "Floral dresses",
-    price: "From ₹799",
-    image: WOMEN_IMG,
-    rank: "A",
-    suitIcon: "leaf-outline",
-    suitColor: "#059669",
-    shopLabel: "Dresses",
-  },
-  {
-    key: "se2",
-    season: "Summer",
-    title: "Cotton kurtas",
-    price: "From ₹599",
-    image: WOMEN_IMG,
-    rank: "K",
-    suitIcon: "sunny-outline",
-    suitColor: "#ca8a04",
-    shopLabel: "Kurtas & Kurtis",
-  },
-  {
-    key: "se3",
-    season: "Monsoon",
-    title: "Quick-dry active",
-    price: "From ₹899",
-    image: require("../assets/images/sportscate.png"),
-    rank: "Q",
-    suitIcon: "rainy-outline",
-    suitColor: "#0284c7",
-    shopLabel: "Gym Tops",
-  },
-  {
-    key: "se4",
-    season: "Festive",
-    title: "Lehenga sets",
-    price: "From ₹2,499",
-    image: WOMEN_IMG,
-    rank: "J",
-    suitIcon: "sparkles-outline",
-    suitColor: "#ea580c",
-    shopLabel: "Lehengas",
-  },
-  {
-    key: "se5",
-    season: "Winter",
-    title: "Wool knits",
-    price: "From ₹1,499",
-    image: WOMEN_IMG,
-    rank: "10",
-    suitIcon: "snow-outline",
-    suitColor: "#475569",
-    shopLabel: "Sweaters",
-  },
-];
 
 const FC_REPURCHASE: {
   key: string;
@@ -724,7 +560,6 @@ export default function WomenScreen() {
   const shopAllScrollRef = useRef<ScrollView>(null);
   const shopAllScrollIndexRef = useRef(0);
   const shopAllScrollDirRef = useRef(1);
-  const [styleLabOpenKey, setStyleLabOpenKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -800,6 +635,14 @@ export default function WomenScreen() {
   };
   const [womenPtbApi, setWomenPtbApi] = useState<WomenPtbApiRow[]>([]);
   const [womenPtbLoading, setWomenPtbLoading] = useState(false);
+  const [womenUniqueApi, setWomenUniqueApi] = useState<WomenPtbApiRow[]>([]);
+  const [womenUniqueLoading, setWomenUniqueLoading] = useState(false);
+  const [womenTopCollectionsApi, setWomenTopCollectionsApi] = useState<WomenPtbApiRow[]>([]);
+  const [womenTopCollectionsLoading, setWomenTopCollectionsLoading] = useState(false);
+  const [womenMostLovedApi, setWomenMostLovedApi] = useState<WomenPtbApiRow[]>([]);
+  const [womenMostLovedLoading, setWomenMostLovedLoading] = useState(false);
+  const [womenLatestApi, setWomenLatestApi] = useState<WomenPtbApiRow[]>([]);
+  const [womenLatestLoading, setWomenLatestLoading] = useState(false);
   const [womenWishlistIds, setWomenWishlistIds] = useState<Set<string>>(new Set());
   const [womenWishlistServerKeys, setWomenWishlistServerKeys] = useState<Set<string>>(
     new Set()
@@ -880,6 +723,29 @@ export default function WomenScreen() {
     };
   }, [routeWomenMainCategoryId]);
 
+  const mapWomenMainCategoryRows = useCallback((rows: unknown[]): WomenPtbApiRow[] => {
+    return rows
+      .filter((p) => p && typeof (p as any).id === "number" && typeof (p as any).name === "string")
+      .map((p) => {
+        const imageUri = pickPtbProductImageUri(p);
+        if (!imageUri) return null;
+        const { sellingPrice, mrpPrice, discountPercentage, variantId } = pickPtbVariantPricing(p);
+        const ratingText = pickPtbProductRating(p);
+        const ratingValue = Number.parseFloat(ratingText);
+        return {
+          id: (p as any).id as number,
+          name: safePtbText(String((p as any).name ?? "")),
+          imageUri,
+          sellingPrice,
+          mrpPrice,
+          discountPercentage,
+          rating: Number.isFinite(ratingValue) ? ratingValue : null,
+          ...(variantId != null ? { variantId } : {}),
+        } satisfies WomenPtbApiRow;
+      })
+      .filter(Boolean) as WomenPtbApiRow[];
+  }, []);
+
   useEffect(() => {
     const c = new AbortController();
     (async () => {
@@ -892,25 +758,7 @@ export default function WomenScreen() {
           setWomenPtbApi([]);
           return;
         }
-        const mapped = (data as unknown[])
-          .filter((p) => p && typeof (p as any).id === "number" && typeof (p as any).name === "string")
-          .map((p) => {
-            const imageUri = pickPtbProductImageUri(p);
-            if (!imageUri) return null;
-            const { sellingPrice, mrpPrice, discountPercentage, variantId } =
-              pickPtbVariantPricing(p);
-            return {
-              id: (p as any).id as number,
-              name: safePtbText(String((p as any).name ?? "")),
-              imageUri,
-              sellingPrice,
-              mrpPrice,
-              discountPercentage,
-              rating: pickPtbProductRating(p),
-              ...(variantId != null ? { variantId } : {}),
-            } satisfies WomenPtbApiRow;
-          })
-          .filter(Boolean) as WomenPtbApiRow[];
+        const mapped = mapWomenMainCategoryRows(data as unknown[]);
         setWomenPtbApi(mapped);
       } catch {
         setWomenPtbApi([]);
@@ -919,7 +767,107 @@ export default function WomenScreen() {
       }
     })();
     return () => c.abort();
-  }, [womenMainCategoryIdForPtb]);
+  }, [womenMainCategoryIdForPtb, mapWomenMainCategoryRows]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setWomenMostLovedLoading(true);
+      try {
+        const { data } = await api.get(
+          productsByMainCategoryFeedPath(womenMainCategoryIdForPtb, "recommended"),
+          {
+            signal: c.signal,
+          }
+        );
+        if (!Array.isArray(data)) {
+          setWomenMostLovedApi([]);
+          return;
+        }
+        setWomenMostLovedApi(mapWomenMainCategoryRows(data as unknown[]));
+      } catch {
+        setWomenMostLovedApi([]);
+      } finally {
+        setWomenMostLovedLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [womenMainCategoryIdForPtb, mapWomenMainCategoryRows]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setWomenLatestLoading(true);
+      try {
+        const { data } = await api.get(
+          productsByMainCategoryFeedPath(womenMainCategoryIdForPtb, "latest"),
+          {
+            signal: c.signal,
+          }
+        );
+        if (!Array.isArray(data)) {
+          setWomenLatestApi([]);
+          return;
+        }
+        setWomenLatestApi(mapWomenMainCategoryRows(data as unknown[]));
+      } catch {
+        setWomenLatestApi([]);
+      } finally {
+        setWomenLatestLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [womenMainCategoryIdForPtb, mapWomenMainCategoryRows]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setWomenTopCollectionsLoading(true);
+      try {
+        const { data } = await api.get(
+          productsByMainCategoryFeedPath(womenMainCategoryIdForPtb, "top-collections"),
+          {
+            signal: c.signal,
+          }
+        );
+        if (!Array.isArray(data)) {
+          setWomenTopCollectionsApi([]);
+          return;
+        }
+        setWomenTopCollectionsApi(mapWomenMainCategoryRows(data as unknown[]));
+      } catch {
+        setWomenTopCollectionsApi([]);
+      } finally {
+        setWomenTopCollectionsLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [womenMainCategoryIdForPtb, mapWomenMainCategoryRows]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    (async () => {
+      setWomenUniqueLoading(true);
+      try {
+        const { data } = await api.get(
+          productsByMainCategoryFeedPath(womenMainCategoryIdForPtb, "unique"),
+          {
+            signal: c.signal,
+          }
+        );
+        if (!Array.isArray(data)) {
+          setWomenUniqueApi([]);
+          return;
+        }
+        setWomenUniqueApi(mapWomenMainCategoryRows(data as unknown[]));
+      } catch {
+        setWomenUniqueApi([]);
+      } finally {
+        setWomenUniqueLoading(false);
+      }
+    })();
+    return () => c.abort();
+  }, [womenMainCategoryIdForPtb, mapWomenMainCategoryRows]);
 
   const handleToggleWomenPtbWishlist = useCallback(
     async (product: {
@@ -930,7 +878,7 @@ export default function WomenScreen() {
       variantId?: number;
     }) => {
       const r = await togglePtbWishlistWithServer(product, reloadWomenWishlistIds);
-      if (!r.ok) Alert.alert("Wishlist", r.message);
+      if (r.ok === false) Alert.alert("Wishlist", r.message);
       else Alert.alert(r.title, r.body);
     },
     [reloadWomenWishlistIds]
@@ -956,7 +904,7 @@ export default function WomenScreen() {
           mrp: product.mrpNum,
         },
       });
-      if (!r.ok) {
+      if (r.ok === false) {
         Alert.alert("Cart", r.message);
         return;
       }
@@ -967,8 +915,15 @@ export default function WomenScreen() {
   );
 
   const goWomenPtbShop = useCallback(() => {
-    router.push("/subcatProducts");
-  }, [router]);
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "womenswear",
+        subCategory: "All products",
+        mainCategoryId: String(womenMainCategoryIdForPtb),
+      },
+    });
+  }, [router, womenMainCategoryIdForPtb]);
 
   const womenPtbUiRows = useMemo(() => {
     const fmtRs = (n: number | null) =>
@@ -1018,6 +973,29 @@ export default function WomenScreen() {
       };
     });
   }, [womenPtbApi]);
+  const womenTrendingPreviewRows = useMemo(() => womenPtbUiRows.slice(0, 5), [womenPtbUiRows]);
+  const womenUniquePreviewRows = useMemo(() => {
+    const fmtRs = (n: number | null) =>
+      n != null && Number.isFinite(n) ? `Rs ${Math.round(n)}` : "";
+    return womenUniqueApi.slice(0, 5).map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      const sellingLabel = fmtRs(p.sellingPrice);
+      const mrpLabel = showMrp ? fmtRs(p.mrpPrice) : "";
+      return {
+        id: String(p.id),
+        name: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        priceLabel: sellingLabel || mrpLabel,
+        subLabel:
+          p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+            ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+            : "Rare find",
+      };
+    });
+  }, [womenUniqueApi]);
 
   const [womenApiCats, setWomenApiCats] = useState<WomenSubcategoryApiRow[]>([]);
   const [womenApiLoading, setWomenApiLoading] = useState<boolean>(true);
@@ -1361,23 +1339,84 @@ export default function WomenScreen() {
     setSelectedKey(womenCategoriesForUi[0]?.key ?? WOMEN_CATEGORIES[0].key);
   }, [selectedKey, womenCategoriesForUi]);
 
-  const styleLabOpen = useMemo(
-    () => FC_STYLE_LAB.find((l) => l.key === styleLabOpenKey) ?? null,
-    [styleLabOpenKey]
-  );
-
-  const closeStyleLab = useCallback(() => setStyleLabOpenKey(null), []);
-
   const bannerSlideWidth =
     windowWidth - WOMEN_SECTION_SCREEN_INSET - FC_BANNER_SIDE_PAD * 2;
 
-  const collectionRows = useMemo(() => {
-    const rows: (typeof FC_COLLECTIONS)[] = [];
-    for (let i = 0; i < FC_COLLECTIONS.length; i += 2) {
-      rows.push(FC_COLLECTIONS.slice(i, i + 2));
-    }
+  const womenTopCollectionRows = useMemo(() => {
+    const top4 = womenTopCollectionsApi.slice(0, 4).map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      const discountText =
+        p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+          ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+          : "";
+      const priceText =
+        p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+          ? `Rs ${Math.round(p.sellingPrice)}`
+          : p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+          ? `Rs ${Math.round(p.mrpPrice)}`
+          : "";
+      return {
+        id: String(p.id),
+        title: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        count: discountText || (showMrp ? "Featured collection" : priceText || "Featured collection"),
+      };
+    });
+    const rows: typeof top4[] = [];
+    for (let i = 0; i < top4.length; i += 2) rows.push(top4.slice(i, i + 2));
     return rows;
-  }, []);
+  }, [womenTopCollectionsApi]);
+  const womenMostLovedPreviewRows = useMemo(() => {
+    const top4 = womenMostLovedApi.slice(0, 4).map((p) => {
+      const showMrp =
+        p.mrpPrice != null &&
+        p.sellingPrice != null &&
+        p.mrpPrice > p.sellingPrice + 0.009;
+      const subline =
+        p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+          ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+          : showMrp
+          ? "Loved pick"
+          : p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+          ? `Rs ${Math.round(p.sellingPrice)}`
+          : "Loved pick";
+      return {
+        id: String(p.id),
+        title: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        subline,
+      };
+    });
+    return {
+      left: top4.filter((_, i) => i % 2 === 0),
+      right: top4.filter((_, i) => i % 2 === 1),
+    };
+  }, [womenMostLovedApi]);
+  const womenLatestPreviewRows = useMemo(() => {
+    const top4 = womenLatestApi.slice(0, 4).map((p) => {
+      const priceLabel =
+        p.sellingPrice != null && Number.isFinite(p.sellingPrice)
+          ? `Rs ${Math.round(p.sellingPrice)}`
+          : p.mrpPrice != null && Number.isFinite(p.mrpPrice)
+          ? `Rs ${Math.round(p.mrpPrice)}`
+          : "Rs 0";
+      const buyersText =
+        p.discountPercentage != null && Number.isFinite(p.discountPercentage)
+          ? `${Number(p.discountPercentage).toFixed(1).replace(/\.0$/, "")}% off`
+          : "Just arrived";
+      return {
+        id: String(p.id),
+        title: p.name,
+        imageSource: { uri: p.imageUri } as ImageSourcePropType,
+        priceLabel,
+        buyersText,
+      };
+    });
+    return top4;
+  }, [womenLatestApi]);
 
   const activeBlock = useMemo(
     () =>
@@ -1668,11 +1707,65 @@ export default function WomenScreen() {
     [isWomensClothingTitle, onSelectShopCategory, openWomenSubcategoryProducts]
   );
 
-  const onStyleLabShopPicks = useCallback(() => {
-    const cat = styleLabOpen?.shopCategory;
-    setStyleLabOpenKey(null);
-    if (cat) openWomenSubcategoryProducts(cat);
-  }, [styleLabOpen, openWomenSubcategoryProducts]);
+  const goWomenSpotlightShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "womenswear",
+        subCategory: "Women spotlight",
+        mainCategoryId: String(womenMainCategoryIdForPtb),
+        mainCategoryFeed: "spotlight",
+      },
+    });
+  }, [router, womenMainCategoryIdForPtb]);
+
+  const goWomenUniqueShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "womenswear",
+        subCategory: "Unique picks",
+        mainCategoryId: String(womenMainCategoryIdForPtb),
+        mainCategoryFeed: "unique",
+      },
+    });
+  }, [router, womenMainCategoryIdForPtb]);
+
+  const goWomenTopCollectionsShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "womenswear",
+        subCategory: "Top collections",
+        mainCategoryId: String(womenMainCategoryIdForPtb),
+        mainCategoryFeed: "top-collections",
+      },
+    });
+  }, [router, womenMainCategoryIdForPtb]);
+
+  const goWomenMostLovedShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "womenswear",
+        subCategory: "Most loved",
+        mainCategoryId: String(womenMainCategoryIdForPtb),
+        mainCategoryFeed: "recommended",
+      },
+    });
+  }, [router, womenMainCategoryIdForPtb]);
+
+  const goWomenLatestShop = useCallback(() => {
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        mainCat: "womenswear",
+        subCategory: "Bought again & again",
+        mainCategoryId: String(womenMainCategoryIdForPtb),
+        mainCategoryFeed: "latest",
+      },
+    });
+  }, [router, womenMainCategoryIdForPtb]);
 
   const onBannerScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -2028,47 +2121,66 @@ export default function WomenScreen() {
         <View style={styles.fcWrap}>
           {/* 1 — Trending picks */}
           <WomenStoreSection>
-            <WomenSectionHead
-              accent={activeBlock.railTo}
-              title="Trending picks"
-              sub="What everyone is adding to bag"
-              icon="flame"
-              iconColor="#f97316"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcRow}
-              nestedScrollEnabled
-            >
-              {FC_TRENDING.map((p) => (
-                <TouchableOpacity
-                  key={p.key}
-                  style={[
-                    styles.fcTrendCard,
-                    { borderColor: hexToRgba(activeBlock.railTo, 0.2) },
-                  ]}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.fcTrendImgWrap}>
-                    <Image source={p.image} style={styles.fcTrendImg} resizeMode="cover" />
-                    <LinearGradient
-                      colors={["transparent", "rgba(15,23,42,0.65)"]}
-                      style={styles.fcTrendFade}
-                    />
-                    <View style={[styles.fcTrendTag, { backgroundColor: activeBlock.railTo }]}>
-                      <Text style={styles.fcTrendTagText}>{p.tag}</Text>
+            <View style={styles.womenPtbHeaderRow}>
+              <WomenSectionHead
+                accent={activeBlock.railTo}
+                title="Trending picks"
+                sub="What everyone is adding to bag"
+                icon="flame"
+                iconColor="#f97316"
+              />
+              <TouchableOpacity onPress={goWomenPtbShop} activeOpacity={0.85}>
+                <Text style={styles.womenPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {womenPtbLoading && womenTrendingPreviewRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>Loading products...</Text>
+            ) : womenTrendingPreviewRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>No products found.</Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.fcRow}
+                nestedScrollEnabled
+              >
+                {womenTrendingPreviewRows.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[
+                      styles.fcTrendCard,
+                      { borderColor: hexToRgba(activeBlock.railTo, 0.2) },
+                    ]}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: String(p.id) },
+                      } as any)
+                    }
+                  >
+                    <View style={styles.fcTrendImgWrap}>
+                      <Image source={p.imageSource} style={styles.fcTrendImg} resizeMode="cover" />
+                      <LinearGradient
+                        colors={["transparent", "rgba(15,23,42,0.65)"]}
+                        style={styles.fcTrendFade}
+                      />
+                      <View style={[styles.fcTrendTag, { backgroundColor: activeBlock.railTo }]}>
+                        <Text style={styles.fcTrendTagText}>Trending</Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.fcTrendBody}>
-                    <Text style={styles.fcTrendTitle} numberOfLines={2}>
-                      {p.title}
-                    </Text>
-                    <Text style={[styles.fcTrendPrice, { color: activeBlock.railTo }]}>{p.price}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+                    <View style={styles.fcTrendBody}>
+                      <Text style={styles.fcTrendTitle} numberOfLines={2}>
+                        {p.name}
+                      </Text>
+                      <Text style={[styles.fcTrendPrice, { color: activeBlock.railTo }]}>
+                        {p.sellingLabel || p.mrpLabel}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </WomenStoreSection>
 
           {/* 2 — Women spotlight */}
@@ -2080,6 +2192,12 @@ export default function WomenScreen() {
               icon="star"
               iconColor="#f59e0b"
             />
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={goWomenSpotlightShop}
+              accessibilityRole="button"
+              accessibilityLabel="Open women spotlight products"
+            >
             <View style={[styles.fcSpotlight, { borderColor: hexToRgba(activeBlock.railTo, 0.35) }]}>
             <Image source={WOMEN_IMG} style={styles.fcSpotlightImg} resizeMode="cover" />
             <LinearGradient
@@ -2096,48 +2214,69 @@ export default function WomenScreen() {
               </View>
             </View>
           </View>
+          </TouchableOpacity>
           </WomenStoreSection>
 
           {/* 3 — Unique picks */}
           <WomenStoreSection>
-            <WomenSectionHead
-              accent="#8b5cf6"
-              title="Unique picks"
-              sub="Rare finds & small runs"
-              icon="sparkles-outline"
-              iconColor="#8b5cf6"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcRow}
-              nestedScrollEnabled
-            >
-              {FC_UNIQUE.map((u) => (
-                <View
-                  key={u.key}
-                  style={[
-                    styles.fcUniqueCard,
-                    { borderColor: hexToRgba(activeBlock.railTo, 0.25) },
-                  ]}
-                >
-                  <View style={styles.fcUniqueImgBox}>
-                    <Image source={u.image} style={styles.fcUniqueImg} resizeMode="cover" />
-                    <LinearGradient
-                      colors={["transparent", "rgba(88,28,135,0.5)"]}
-                      style={styles.fcUniqueFade}
-                    />
-                    <View style={styles.fcUniqueRibbon}>
-                      <Text style={styles.fcUniqueRibbonText}>Only here</Text>
+            <View style={styles.womenPtbHeaderRow}>
+              <WomenSectionHead
+                accent="#8b5cf6"
+                title="Unique picks"
+                sub="Rare finds & small runs"
+                icon="sparkles-outline"
+                iconColor="#8b5cf6"
+              />
+              <TouchableOpacity onPress={goWomenUniqueShop} activeOpacity={0.85}>
+                <Text style={styles.womenPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {womenUniqueLoading && womenUniquePreviewRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>Loading products...</Text>
+            ) : womenUniquePreviewRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>No products found.</Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.fcRow}
+                nestedScrollEnabled
+              >
+                {womenUniquePreviewRows.map((u) => (
+                  <TouchableOpacity
+                    key={u.id}
+                    style={[
+                      styles.fcUniqueCard,
+                      { borderColor: hexToRgba(activeBlock.railTo, 0.25) },
+                    ]}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: String(u.id) },
+                      } as any)
+                    }
+                  >
+                    <View style={styles.fcUniqueImgBox}>
+                      <Image source={u.imageSource} style={styles.fcUniqueImg} resizeMode="cover" />
+                      <LinearGradient
+                        colors={["transparent", "rgba(88,28,135,0.5)"]}
+                        style={styles.fcUniqueFade}
+                      />
+                      <View style={styles.fcUniqueRibbon}>
+                        <Text style={styles.fcUniqueRibbonText}>Only here</Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.fcUniqueBody}>
-                    <Text style={styles.fcUniqueTitle}>{u.title}</Text>
-                    <Text style={styles.fcUniqueSub}>{u.sub}</Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
+                    <View style={styles.fcUniqueBody}>
+                      <Text style={styles.fcUniqueTitle} numberOfLines={2}>
+                        {u.name}
+                      </Text>
+                      <Text style={styles.fcUniqueSub}>{u.subLabel || u.priceLabel}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </WomenStoreSection>
 
           {/* 4 — Banners (auto-advancing carousel) */}
@@ -2198,37 +2337,55 @@ export default function WomenScreen() {
 
           {/* 5 — Top collections (2 per row) */}
           <WomenStoreSection>
-            <WomenSectionHead
-              accent={activeBlock.railTo}
-              title="Top collections"
-              sub="Curated rails by occasion"
-              icon="grid-outline"
-            />
-            <View style={styles.fcCollGrid}>
-            {collectionRows.map((row, ri) => (
-              <View key={`coll-row-${ri}`} style={styles.fcCollRow}>
-                {row.map((c) => (
-                  <View
-                    key={c.key}
-                    style={[
-                      styles.fcCollCard,
-                      { borderColor: hexToRgba(activeBlock.railTo, 0.22) },
-                    ]}
-                  >
-                    <View style={styles.fcCollImgBox}>
-                      <Image source={c.image} style={styles.fcCollImg} resizeMode="cover" />
-                      <LinearGradient
-                        colors={["transparent", "rgba(15,23,42,0.75)"]}
-                        style={styles.fcCollFade}
-                      />
-                      <Text style={styles.fcCollTitle}>{c.title}</Text>
-                      <Text style={styles.fcCollCount}>{c.count}</Text>
-                    </View>
+            <View style={styles.womenPtbHeaderRow}>
+              <WomenSectionHead
+                accent={activeBlock.railTo}
+                title="Top collections"
+                sub="Curated rails by occasion"
+                icon="grid-outline"
+              />
+              <TouchableOpacity onPress={goWomenTopCollectionsShop} activeOpacity={0.85}>
+                <Text style={styles.womenPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {womenTopCollectionsLoading && womenTopCollectionRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>Loading products...</Text>
+            ) : womenTopCollectionRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>No products found.</Text>
+            ) : (
+              <View style={styles.fcCollGrid}>
+                {womenTopCollectionRows.map((row, ri) => (
+                  <View key={`coll-row-${ri}`} style={styles.fcCollRow}>
+                    {row.map((c) => (
+                      <TouchableOpacity
+                        key={c.id}
+                        activeOpacity={0.9}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/productdetail",
+                            params: { id: String(c.id) },
+                          } as any)
+                        }
+                        style={[
+                          styles.fcCollCard,
+                          { borderColor: hexToRgba(activeBlock.railTo, 0.22) },
+                        ]}
+                      >
+                        <View style={styles.fcCollImgBox}>
+                          <Image source={c.imageSource} style={styles.fcCollImg} resizeMode="cover" />
+                          <LinearGradient
+                            colors={["transparent", "rgba(15,23,42,0.75)"]}
+                            style={styles.fcCollFade}
+                          />
+                          <Text style={styles.fcCollTitle}>{c.title}</Text>
+                          <Text style={styles.fcCollCount}>{c.count}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 ))}
               </View>
-            ))}
-          </View>
+            )}
           </WomenStoreSection>
 
           {/* 6 — Shop all women sub categories (grid / list + auto-scroll list, same as men) */}
@@ -2486,269 +2643,92 @@ export default function WomenScreen() {
             )}
           </WomenStoreSection>
 
-          {/* 7 — Style lab (tappable circular guides + detail sheet) */}
-          <WomenStoreSection>
-            <WomenSectionHead
-              accent="#06b6d4"
-              title="Style lab"
-              sub="Tap any ring — full guide opens instantly"
-              icon="color-wand-outline"
-              iconColor="#0891b2"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcLabRow}
-              nestedScrollEnabled
-            >
-              {FC_STYLE_LAB.map((lab) => (
-                <TouchableOpacity
-                  key={lab.key}
-                  style={styles.fcLabItem}
-                  activeOpacity={0.92}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${lab.title} guide`}
-                  onPress={() => setStyleLabOpenKey(lab.key)}
-                >
-                  <View style={styles.fcLabTileCard}>
-                    <View style={styles.fcLabRingWrap}>
-                      <View
-                        style={[
-                          styles.fcLabGlow,
-                          {
-                            width: FC_LAB_GLOW,
-                            height: FC_LAB_GLOW,
-                            borderRadius: FC_LAB_GLOW / 2,
-                            backgroundColor: hexToRgba(lab.grad[0], 0.2),
-                          },
-                        ]}
-                      />
-                      <LinearGradient
-                        colors={[lab.grad[0], lab.grad[1], lab.grad[0]]}
-                        locations={[0, 0.52, 1]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.fcLabRingOuter}
-                      >
-                        <View style={styles.fcLabRingCutout}>
-                          <LinearGradient
-                            colors={["#ffffff", "#eef2ff"]}
-                            style={styles.fcLabIconDisk}
-                          >
-                            <Ionicons name={lab.icon} size={30} color={lab.grad[0]} />
-                          </LinearGradient>
-                        </View>
-                      </LinearGradient>
-                      <View
-                        style={[
-                          styles.fcLabStepBadge,
-                          { borderColor: hexToRgba(lab.grad[0], 0.4) },
-                        ]}
-                      >
-                        <Text style={[styles.fcLabStepBadgeText, { color: lab.grad[0] }]}>
-                          {lab.step}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.fcLabCircleTitle} numberOfLines={2}>
-                      {lab.title}
-                    </Text>
-                    <Text style={styles.fcLabCircleSub} numberOfLines={2}>
-                      {lab.sub}
-                    </Text>
-                    <View style={styles.fcLabTapCue}>
-                      <Text style={[styles.fcLabTapCueText, { color: lab.grad[0] }]}>
-                        Open
-                      </Text>
-                      <Ionicons name="chevron-forward" size={14} color={lab.grad[0]} />
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.womenLabFollowBanner}
-              activeOpacity={0.94}
-              onPress={() => openWomenSubcategoryProducts("Tops & Tees")}
-              accessibilityRole="button"
-              accessibilityLabel="Shop women's style edit — tops and tees"
-            >
-              <Image
-                source={WOMEN_STYLE_LAB_STRIP_IMAGE}
-                style={styles.womenLabFollowBannerImg}
-                resizeMode="cover"
-              />
-              <LinearGradient
-                colors={["rgba(29,50,78,0.15)", "rgba(15,23,42,0.88)"]}
-                start={{ x: 0, y: 0.45 }}
-                end={{ x: 1, y: 0.55 }}
-                style={styles.womenLabFollowBannerTint}
-              />
-              <View style={styles.womenLabFollowBannerAccent} pointerEvents="none" />
-              <View style={styles.womenLabFollowBannerContent}>
-                <View style={styles.womenLabFollowBannerPill}>
-                  <Ionicons name="shirt-outline" size={13} color="#1d324e" />
-                  <Text style={styles.womenLabFollowBannerPillText}>Women{"'"}s picks</Text>
-                </View>
-                <Text style={styles.womenLabFollowBannerTitle} numberOfLines={2}>
-                  From Style lab to your wardrobe
-                </Text>
-                <Text style={styles.womenLabFollowBannerSub} numberOfLines={2}>
-                  Full-width edit · Western & ethnic · Tap to explore tops
-                </Text>
-                <View style={styles.womenLabFollowBannerCtaRow}>
-                  <Text style={styles.womenLabFollowBannerCta}>Shop the edit</Text>
-                  <Ionicons name="arrow-forward-circle" size={22} color="#ffffff" />
-                </View>
-              </View>
-            </TouchableOpacity>
-          </WomenStoreSection>
-
-          {/* 8 — Shop by season (playing-card deck) */}
-          <WomenStoreSection>
-            <WomenSectionHead
-              accent="#10b981"
-              title="Shop by season"
-              sub="Playing-card deck — tap a card to shop"
-              icon="diamond-outline"
-              iconColor="#059669"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcSeasonPlayingRow}
-              nestedScrollEnabled
-            >
-              {FC_SEASONS.map((s, index) => (
-                <TouchableOpacity
-                  key={s.key}
-                  activeOpacity={0.93}
-                  style={[
-                    styles.seasonPlayingCard,
-                    { transform: [{ rotate: `${index % 2 === 0 ? -2.5 : 2.5}deg` }] },
-                  ]}
-                  onPress={() => openWomenSubcategoryProducts(s.shopLabel)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${s.season}. ${s.title}. ${s.price}. Shop`}
-                >
-                  <LinearGradient
-                    colors={["#fdfbf7", "#ebe4d8"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.seasonPlayingCardOuter}
-                  >
-                    <View style={[styles.seasonPlayingCardRim, { borderColor: s.suitColor }]}>
-                      <View style={styles.seasonPlayingCardFace}>
-                        <View style={styles.seasonPlayingCornerTL}>
-                          <Text style={[styles.seasonPlayingRank, { color: s.suitColor }]}>
-                            {s.rank}
-                          </Text>
-                          <Ionicons name={s.suitIcon} size={15} color={s.suitColor} />
-                        </View>
-                        <View style={styles.seasonPlayingCornerBR}>
-                          <View style={styles.seasonPlayingCornerRotated}>
-                            <Text style={[styles.seasonPlayingRank, { color: s.suitColor }]}>
-                              {s.rank}
-                            </Text>
-                            <Ionicons name={s.suitIcon} size={15} color={s.suitColor} />
-                          </View>
-                        </View>
-                        <View style={styles.seasonPlayingArtWrap}>
-                          <View
-                            style={[
-                              styles.seasonPlayingArtRing,
-                              { borderColor: hexToRgba(s.suitColor, 0.45) },
-                            ]}
-                          >
-                            <Image
-                              source={s.image}
-                              style={styles.seasonPlayingArtImg}
-                              resizeMode="cover"
-                            />
-                          </View>
-                          <View
-                            style={[
-                              styles.seasonPlayingSeasonPill,
-                              { backgroundColor: s.suitColor },
-                            ]}
-                          >
-                            <Text style={styles.seasonPlayingSeasonPillText}>{s.season}</Text>
-                          </View>
-                        </View>
-                        <View style={styles.seasonPlayingFooter}>
-                          <Text style={styles.seasonPlayingTitle} numberOfLines={2}>
-                            {s.title}
-                          </Text>
-                          <Text style={[styles.seasonPlayingPrice, { color: s.suitColor }]}>
-                            {s.price}
-                          </Text>
-                        </View>
-                        <View style={styles.seasonAceWordmark} pointerEvents="none">
-                          <Text style={styles.seasonAceWordmarkText}>FNT</Text>
-                        </View>
-                      </View>
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </WomenStoreSection>
 
           {/* 9 — More purchase products */}
           <WomenStoreSection>
-            <WomenSectionHead
-              accent="#ea580c"
-              title="Bought again & again"
-              sub="Trusted repeat buys from real shoppers"
-              icon="bag-handle-outline"
-              iconColor="#c2410c"
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fcRow}
-              nestedScrollEnabled
-            >
-              {FC_REPURCHASE.map((r) => (
-                <View
-                  key={r.key}
-                  style={[
-                    styles.fcBuyCard,
-                    { borderColor: hexToRgba(activeBlock.railTo, 0.18) },
-                  ]}
-                >
-                  <View style={styles.fcBuyImgWrap}>
-                    <Image source={r.image} style={styles.fcBuyImg} resizeMode="cover" />
-                  </View>
-                  <Text style={styles.fcBuyTitle} numberOfLines={2}>
-                    {r.title}
-                  </Text>
-                  <Text style={[styles.fcBuyPrice, { color: activeBlock.railTo }]}>{r.price}</Text>
-                  <View style={styles.fcBuyRow}>
-                    <Ionicons name="repeat-outline" size={14} color="#64748b" />
-                    <Text style={styles.fcBuyMeta}>{r.buyers}</Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
+            <View style={styles.womenPtbHeaderRow}>
+              <WomenSectionHead
+                accent="#ea580c"
+                title="Bought again & again"
+                sub="Trusted repeat buys from real shoppers"
+                icon="bag-handle-outline"
+                iconColor="#c2410c"
+              />
+              <TouchableOpacity onPress={goWomenLatestShop} activeOpacity={0.85}>
+                <Text style={styles.womenPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {womenLatestLoading && womenLatestPreviewRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>Loading products...</Text>
+            ) : womenLatestPreviewRows.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>No products found.</Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.fcRow}
+                nestedScrollEnabled
+              >
+                {womenLatestPreviewRows.map((r) => (
+                  <TouchableOpacity
+                    key={r.id}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: String(r.id) },
+                      } as any)
+                    }
+                    style={[
+                      styles.fcBuyCard,
+                      { borderColor: hexToRgba(activeBlock.railTo, 0.18) },
+                    ]}
+                  >
+                    <View style={styles.fcBuyImgWrap}>
+                      <Image source={r.imageSource} style={styles.fcBuyImg} resizeMode="cover" />
+                    </View>
+                    <Text style={styles.fcBuyTitle} numberOfLines={2}>
+                      {r.title}
+                    </Text>
+                    <Text style={[styles.fcBuyPrice, { color: activeBlock.railTo }]}>
+                      {r.priceLabel}
+                    </Text>
+                    <View style={styles.fcBuyRow}>
+                      <Ionicons name="repeat-outline" size={14} color="#64748b" />
+                      <Text style={styles.fcBuyMeta}>{r.buyersText}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </WomenStoreSection>
 
           {/* 10 — Most loved (dark staggered masonry) */}
           <WomenStoreSection>
-            <WomenSectionHead
-              accent="#ec4899"
-              title="Most loved"
-              sub="Staggered spotlight grid — tap to shop"
-              icon="heart"
-              iconColor="#db2777"
-            />
-            <View style={styles.loveMasonryDarkShell}>
-              <View style={[styles.loveMasonryRow, { gap: LOVE_MASONRY_GAP }]}>
-                <View style={styles.loveMasonryCol}>
-                  {FC_LIKED.filter((_, i) => i % 2 === 0).map((l, j, arr) => (
+            <View style={styles.womenPtbHeaderRow}>
+              <WomenSectionHead
+                accent="#ec4899"
+                title="Most loved"
+                sub="Staggered spotlight grid — tap to shop"
+                icon="heart"
+                iconColor="#db2777"
+              />
+              <TouchableOpacity onPress={goWomenMostLovedShop} activeOpacity={0.85}>
+                <Text style={styles.womenPtbSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {womenMostLovedLoading &&
+            womenMostLovedPreviewRows.left.length + womenMostLovedPreviewRows.right.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>Loading products...</Text>
+            ) : womenMostLovedPreviewRows.left.length + womenMostLovedPreviewRows.right.length === 0 ? (
+              <Text style={styles.womenPtbStatus}>No products found.</Text>
+            ) : (
+              <View style={styles.loveMasonryDarkShell}>
+                <View style={[styles.loveMasonryRow, { gap: LOVE_MASONRY_GAP }]}>
+                  <View style={styles.loveMasonryCol}>
+                    {womenMostLovedPreviewRows.left.map((l, j, arr) => (
                     <TouchableOpacity
-                      key={l.key}
+                      key={l.id}
                       activeOpacity={0.94}
                       style={[
                         styles.loveMasonryCard,
@@ -2757,11 +2737,16 @@ export default function WomenScreen() {
                           marginBottom: j < arr.length - 1 ? LOVE_MASONRY_GAP : 0,
                         },
                       ]}
-                      onPress={() => openWomenSubcategoryProducts(l.shopLabel)}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/productdetail",
+                          params: { id: String(l.id) },
+                        } as any)
+                      }
                       accessibilityRole="button"
                       accessibilityLabel={`${l.title}. ${l.subline}`}
                     >
-                      <Image source={l.image} style={styles.loveMasonryImg} resizeMode="cover" />
+                      <Image source={l.imageSource} style={styles.loveMasonryImg} resizeMode="cover" />
                       <LinearGradient
                         colors={["transparent", "rgba(0,0,0,0.78)"]}
                         locations={[0.35, 1]}
@@ -2776,43 +2761,49 @@ export default function WomenScreen() {
                         </Text>
                       </View>
                     </TouchableOpacity>
-                  ))}
-                </View>
-                <View style={styles.loveMasonryCol}>
-                  {FC_LIKED.filter((_, i) => i % 2 === 1).map((l, j, arr) => (
-                    <TouchableOpacity
-                      key={l.key}
-                      activeOpacity={0.94}
-                      style={[
-                        styles.loveMasonryCard,
-                        {
-                          height: j % 2 === 0 ? LOVE_MASONRY_SHORT : LOVE_MASONRY_TALL,
-                          marginBottom: j < arr.length - 1 ? LOVE_MASONRY_GAP : 0,
-                        },
-                      ]}
-                      onPress={() => openWomenSubcategoryProducts(l.shopLabel)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${l.title}. ${l.subline}`}
-                    >
-                      <Image source={l.image} style={styles.loveMasonryImg} resizeMode="cover" />
-                      <LinearGradient
-                        colors={["transparent", "rgba(0,0,0,0.78)"]}
-                        locations={[0.35, 1]}
-                        style={styles.loveMasonryFade}
-                      />
-                      <View style={styles.loveMasonryCopy}>
-                        <Text style={styles.loveMasonryTitle} numberOfLines={2}>
-                          {l.title}
-                        </Text>
-                        <Text style={styles.loveMasonrySub} numberOfLines={2}>
-                          {l.subline}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                    ))}
+                  </View>
+                  <View style={styles.loveMasonryCol}>
+                    {womenMostLovedPreviewRows.right.map((l, j, arr) => (
+                      <TouchableOpacity
+                        key={l.id}
+                        activeOpacity={0.94}
+                        style={[
+                          styles.loveMasonryCard,
+                          {
+                            height: j % 2 === 0 ? LOVE_MASONRY_SHORT : LOVE_MASONRY_TALL,
+                            marginBottom: j < arr.length - 1 ? LOVE_MASONRY_GAP : 0,
+                          },
+                        ]}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/productdetail",
+                            params: { id: String(l.id) },
+                          } as any)
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={`${l.title}. ${l.subline}`}
+                      >
+                        <Image source={l.imageSource} style={styles.loveMasonryImg} resizeMode="cover" />
+                        <LinearGradient
+                          colors={["transparent", "rgba(0,0,0,0.78)"]}
+                          locations={[0.35, 1]}
+                          style={styles.loveMasonryFade}
+                        />
+                        <View style={styles.loveMasonryCopy}>
+                          <Text style={styles.loveMasonryTitle} numberOfLines={2}>
+                            {l.title}
+                          </Text>
+                          <Text style={styles.loveMasonrySub} numberOfLines={2}>
+                            {l.subline}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
-            </View>
+            )}
           </WomenStoreSection>
 
           <View style={styles.womenPtbSectionWrap}>
@@ -2956,104 +2947,6 @@ export default function WomenScreen() {
         </View>
 
       </ScrollView>
-
-      <Modal
-        visible={!!styleLabOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={closeStyleLab}
-      >
-        <View style={styles.styleLabModalRoot}>
-          <Pressable style={styles.styleLabModalBackdrop} onPress={closeStyleLab} />
-          <View
-            style={[
-              styles.styleLabModalSheet,
-              { paddingBottom: Math.max(insets.bottom, 14) + 16 },
-            ]}
-          >
-            {styleLabOpen ? (
-              <>
-                <View style={styles.styleLabModalHandle} />
-                <LinearGradient
-                  colors={[styleLabOpen.grad[0], styleLabOpen.grad[1]]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.styleLabModalHero}
-                >
-                  <View style={styles.styleLabModalHeroTop}>
-                    <View style={styles.styleLabModalHeroIconWrap}>
-                      <Ionicons name={styleLabOpen.icon} size={34} color="#ffffff" />
-                    </View>
-                    <TouchableOpacity
-                      style={styles.styleLabModalClose}
-                      onPress={closeStyleLab}
-                      hitSlop={12}
-                      accessibilityRole="button"
-                      accessibilityLabel="Close guide"
-                    >
-                      <Ionicons name="close" size={22} color="rgba(255,255,255,0.95)" />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.styleLabModalKicker}>Style lab · Step {styleLabOpen.step}</Text>
-                  <Text style={styles.styleLabModalTitle}>{styleLabOpen.title}</Text>
-                  <Text style={styles.styleLabModalSub}>{styleLabOpen.sub}</Text>
-                </LinearGradient>
-                <ScrollView
-                  style={styles.styleLabModalBodyScroll}
-                  contentContainerStyle={styles.styleLabModalBodyContent}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled
-                >
-                  <Text style={styles.styleLabModalDetail}>{styleLabOpen.detail}</Text>
-                  <Text style={styles.styleLabModalTipsTitle}>Quick wins</Text>
-                  {styleLabOpen.tips.map((tip, idx) => (
-                    <View key={`${styleLabOpen.key}-tip-${idx}`} style={styles.styleLabTipRow}>
-                      <View
-                        style={[
-                          styles.styleLabTipDot,
-                          { backgroundColor: hexToRgba(styleLabOpen.grad[0], 0.2) },
-                        ]}
-                      >
-                        <Ionicons
-                          name="checkmark"
-                          size={14}
-                          color={styleLabOpen.grad[0]}
-                        />
-                      </View>
-                      <Text style={styles.styleLabTipText}>{tip}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-                <View style={styles.styleLabModalActions}>
-                  <TouchableOpacity
-                    style={styles.styleLabBtnGhost}
-                    onPress={closeStyleLab}
-                    activeOpacity={0.88}
-                  >
-                    <Text style={styles.styleLabBtnGhostText}>Not now</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.92}
-                    onPress={onStyleLabShopPicks}
-                    accessibilityRole="button"
-                    accessibilityLabel="Shop related picks"
-                  >
-                    <LinearGradient
-                      colors={[styleLabOpen.grad[0], styleLabOpen.grad[1]]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.styleLabBtnPrimary}
-                    >
-                      <Ionicons name="bag-handle-outline" size={20} color="#ffffff" />
-                      <Text style={styles.styleLabBtnPrimaryText}>Shop picks</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
 
       <HomeBottomTabBar />
     </View>

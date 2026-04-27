@@ -409,6 +409,18 @@ export function productsByMainCategoryPath(mainCategoryId: number): string {
   return `/api/products/main-category/${id}`;
 }
 
+/** Feed listing for one main category, e.g. spotlight/trending/latest/top-collections. */
+export function productsByMainCategoryFeedPath(
+  mainCategoryId: number,
+  feedKey: string
+): string {
+  const id = Math.floor(Number(mainCategoryId));
+  const key = String(feedKey ?? "").trim().toLowerCase();
+  if (!Number.isFinite(id) || id <= 0) return "/api/products/main-category/0/spotlight";
+  if (!key) return `/api/products/main-category/${id}/spotlight`;
+  return `/api/products/main-category/${id}/${encodeURIComponent(key)}`;
+}
+
 /** Recently viewed products by user/session — path only (use with `api.get(...)`). */
 export function recentlyViewedProductsPath(params: {
   userId?: number | null;
