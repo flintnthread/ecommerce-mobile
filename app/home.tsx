@@ -2992,39 +2992,17 @@ const focusBanners = [
     image: require('../assets/images/focus2.png'),
   },
 ];
-  const launchHomeCamera = useCallback(async () => {
-    const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
-    if (cameraStatus.status !== "granted") {
-      Alert.alert("Permission required", "Camera permission is required.");
-      return;
-    }
-    await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 1,
-    });
-  }, []);
-
-  const launchHomeGallery = useCallback(async () => {
-    const libraryStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (libraryStatus.status !== "granted") {
-      Alert.alert(
-        "Permission required",
-        "Gallery permission is required to upload an image."
-      );
-      return;
-    }
-    await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 1,
-    });
-  }, []);
-
   const openCamera = () => {
     Alert.alert("Choose image source", "Search products using a photo.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Camera", onPress: () => void launchHomeCamera() },
-      { text: "Gallery", onPress: () => void launchHomeGallery() },
+      {
+        text: "Camera",
+        onPress: () => router.push({ pathname: "/camerasearch", params: { source: "camera" } }),
+      },
+      {
+        text: "Gallery",
+        onPress: () => router.push({ pathname: "/camerasearch", params: { source: "gallery" } }),
+      },
     ]);
   };
 

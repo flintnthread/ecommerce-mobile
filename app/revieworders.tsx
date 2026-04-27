@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import api from "../services/api";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import { payWithRazorpay } from "../lib/payment/razorpayFlow";
 import type { ApiCartItem, ApiCartPriceSummary } from "../lib/cartServerApi";
@@ -40,6 +41,8 @@ import {
   type PersistedCartLine,
 } from "../lib/shopStorage";
 import { useLanguage } from "../lib/language";
+
+const DELIVERY_SELECTED_ADDRESS_ID_STORAGE_KEY = "home_selectedDeliveryAddressId_v1";
 
 type ReviewItemSource = "local" | "server";
 
@@ -213,6 +216,19 @@ export default function ReviewOrdersScreen() {
     }
   };
 
+  const placeOrderOnServer = async (addressId: number): Promise<void> => {
+    const { data } = await api.post<{
+      success: boolean;
+      message?: string;
+    }>("/api/orders/place", {
+      addressId,
+      paymentMethod: "upi",
+    });
+    if (!data?.success) {
+      throw new Error(data?.message || "Could not place order.");
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (paying) return;
     if (total <= 0) {
@@ -222,6 +238,17 @@ export default function ReviewOrdersScreen() {
 
     setPaying(true);
     try {
+      const selectedAddressIdRaw = (
+        await AsyncStorage.getItem(DELIVERY_SELECTED_ADDRESS_ID_STORAGE_KEY)
+      )?.trim();
+      const selectedAddressId = Number(selectedAddressIdRaw);
+      if (!selectedAddressIdRaw || !Number.isFinite(selectedAddressId) || selectedAddressId <= 0) {
+        Alert.alert(tr("Checkout"), tr("Please select a delivery address."));
+        return;
+      }
+
+      await placeOrderOnServer(Math.floor(selectedAddressId));
+
       const result = await payWithRazorpay(total);
       if (result.ok === false) {
         if (result.reason === "use_web_checkout") {
