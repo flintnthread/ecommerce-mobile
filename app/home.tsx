@@ -57,6 +57,10 @@ import { normalizeWishlistApiRows } from "../lib/wishlistApi";
 import * as ImagePicker from "expo-image-picker";
 import { useLanguage } from "../lib/language";
 import { SHOW_POST_LOGIN_PROMO_KEY } from "./otpsection";
+import {
+  fetchUnreadNotificationCount,
+  getCurrentUserIdFromToken,
+} from "../services/pushNotifications";
 
 const { width, height } = Dimensions.get("window");
 const HIDE_TOP_BAR_H = 66;
@@ -1736,6 +1740,7 @@ export default function Home() {
   ]);
 
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
   const [cartBadgeCount, setCartBadgeCount] = useState(0);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
@@ -1851,6 +1856,22 @@ export default function Home() {
     useCallback(() => {
       void reloadWishlistBadge();
     }, [reloadWishlistBadge])
+  );
+
+  const reloadNotificationBadge = useCallback(async () => {
+    try {
+      const userId = await getCurrentUserIdFromToken();
+      const count = await fetchUnreadNotificationCount(userId);
+      setNotificationCount(count);
+    } catch {
+      // Keep existing value on API failure.
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadNotificationBadge();
+    }, [reloadNotificationBadge])
   );
 
   const reloadCartBadge = useCallback(async () => {
@@ -3164,6 +3185,13 @@ const categoryData = [
                 accessibilityLabel="Notifications"
               >
                 <Ionicons name="notifications-outline" size={24} color="#0F172A" />
+                {notificationCount > 0 ? (
+                  <View style={styles.headerWishlistBadge}>
+                    <Text style={styles.headerWishlistBadgeText}>
+                      {notificationCount > 99 ? "99+" : String(notificationCount)}
+                    </Text>
+                  </View>
+                ) : null}
               </TouchableOpacity>
             </View>
           </View>
@@ -4885,7 +4913,7 @@ const categoryData = [
                   activeOpacity={0.9}
                   onPress={() => {
                     setPromoSpotlightModalVisible(false);
-                    router.push("/account");
+                    router.push("/userrewords" as any);
                   }}
                 >
                   <LinearGradient
