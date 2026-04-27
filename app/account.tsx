@@ -1055,7 +1055,12 @@ export default function AccountScreen() {
         </View>
 
         {/* Logout */}
-        <TouchableOpacity style={styles.logoutButton}>
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={() => router.replace("/login")}
+          accessibilityRole="button"
+          accessibilityLabel="Log out and go to login"
+        >
           <Text style={styles.logoutText}>Log out</Text>
         </TouchableOpacity>
 
