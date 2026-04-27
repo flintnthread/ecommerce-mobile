@@ -14,6 +14,7 @@ import {
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios, { AxiosError } from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -48,6 +49,8 @@ import {
   type CreateAddressPayload,
 } from "../services/addresses";
 import { useLanguage } from "../lib/language";
+import { uploadReviewImage } from "../lib/reviewImageUpload";
+import * as ImagePicker from "expo-image-picker";
 
 type CatalogProduct = {
   id: string;
@@ -75,6 +78,17 @@ type CatalogProduct = {
   /** e.g. Delivery in 3–7 days */
   deliveryNote?: string;
   sellerId?: number;
+};
+
+type ProductReviewItem = {
+  id: string;
+  user: string;
+  userId?: number;
+  email?: string;
+  rating: number;
+  comment: string;
+  date: string;
+  imagePath?: string;
 };
 
 const L1 = require("../assets/images/look1.png");
@@ -793,12 +807,29 @@ function extractUserIdFromToken(token: string): number | null {
   return null;
 }
 
+function extractProfileFromToken(token: string): { name: string; email: string } {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return { name: "", email: "" };
+  const name =
+    String(payload.name ?? payload.fullName ?? payload.username ?? "").trim();
+  const email = String(payload.email ?? payload.mail ?? "").trim();
+  return { name, email };
+}
+
 export default function ProductDetail() {
   const router = useRouter();
   const { tr } = useLanguage();
-  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    openReview?: string | string[];
+    fromOrders?: string | string[];
+  }>();
   const productIdRaw = params.id;
   const productId = Array.isArray(productIdRaw) ? productIdRaw[0] : productIdRaw;
+  const openReviewRaw = Array.isArray(params.openReview)
+    ? params.openReview[0]
+    : params.openReview;
+  const shouldAutoOpenReviewForm = String(openReviewRaw ?? "").trim() === "1";
 
   const numericProductId = useMemo(() => {
     const s = String(productId ?? "").trim();
@@ -814,6 +845,24 @@ export default function ProductDetail() {
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [categoryProducts, setCategoryProducts] = useState<any[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
+  const [reviewsExpanded, setReviewsExpanded] = useState(false);
+  const [reviewsSectionOpen, setReviewsSectionOpen] = useState(true);
+  const [reviews, setReviews] = useState<ProductReviewItem[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewFormVisible, setReviewFormVisible] = useState(false);
+  const [reviewRatingInput, setReviewRatingInput] = useState(5);
+  const [reviewCommentInput, setReviewCommentInput] = useState("");
+  const [reviewNameInput, setReviewNameInput] = useState("");
+  const [reviewEmailInput, setReviewEmailInput] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  /** Local file URI chosen for a new/changed review photo (uploaded on submit). */
+  const [reviewPhotoLocalUri, setReviewPhotoLocalUri] = useState<string | null>(null);
+  /** Existing review image URL from API when editing (sent as imagePath if no new pick). */
+  const [reviewPhotoServerUrl, setReviewPhotoServerUrl] = useState<string | null>(null);
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [autoReviewHandled, setAutoReviewHandled] = useState(false);
 
   const getDetailAssetUriFromApiPath = useCallback((pathOrUrl: string): string => {
     const raw = String(pathOrUrl ?? "").trim();
@@ -822,6 +871,55 @@ export default function ProductDetail() {
     const apiBase = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
     if (!apiBase) return raw;
     return `${apiBase}/${raw.replace(/^\/+/, "")}`;
+  }, []);
+
+  const loadReviews = useCallback(async (pid: number) => {
+    setReviewsLoading(true);
+    try {
+      const { data } = await api.get<unknown>(`/api/reviews/product/${pid}`);
+      const rows = Array.isArray(data)
+        ? data
+        : data && typeof data === "object" && Array.isArray((data as { data?: unknown }).data)
+          ? ((data as { data?: unknown }).data as unknown[])
+          : [];
+      const mapped = rows
+        .filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"))
+        .map((row, idx) => {
+          const rawDate = String(row.createdAt ?? "").trim();
+          let dateLabel = "Recently";
+          if (rawDate) {
+            const parsed = new Date(rawDate);
+            if (!Number.isNaN(parsed.getTime())) {
+              dateLabel = parsed.toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              });
+            }
+          }
+          const ratingRaw = Number(row.rating);
+          return {
+            id: String(row.id ?? `${pid}-${idx}`),
+            user: String(row.name ?? "Customer").trim() || "Customer",
+            userId: Number.isFinite(Number(row.userId)) ? Math.floor(Number(row.userId)) : undefined,
+            email: typeof row.email === "string" ? row.email.trim() : undefined,
+            rating: Number.isFinite(ratingRaw)
+              ? Math.min(5, Math.max(1, Math.round(ratingRaw)))
+              : 5,
+            comment: String(row.comment ?? "").trim() || "No comment",
+            date: dateLabel,
+            imagePath:
+              typeof row.imagePath === "string" && row.imagePath.trim()
+                ? row.imagePath.trim()
+                : undefined,
+          } satisfies ProductReviewItem;
+        });
+      setReviews(mapped);
+    } catch {
+      setReviews([]);
+    } finally {
+      setReviewsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -877,6 +975,28 @@ export default function ProductDetail() {
       }
     })();
   }, [numericProductId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (!token) {
+        if (!cancelled) {
+          setCurrentUserId(null);
+          setCurrentUserEmail("");
+        }
+        return;
+      }
+      const profile = extractProfileFromToken(token);
+      if (!cancelled) {
+        setCurrentUserId(extractUserIdFromToken(token));
+        setCurrentUserEmail(profile.email.toLowerCase());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Fetch related products when current product is loaded
   useEffect(() => {
@@ -942,6 +1062,43 @@ export default function ProductDetail() {
     };
   }, [apiDetail]);
 
+  useEffect(() => {
+    if (!numericProductId) {
+      setReviews([]);
+      setReviewsExpanded(false);
+      setReviewsSectionOpen(true);
+      setAutoReviewHandled(false);
+      return;
+    }
+    setReviewsExpanded(false);
+    setReviewsSectionOpen(true);
+    setAutoReviewHandled(false);
+    void loadReviews(numericProductId);
+  }, [numericProductId, loadReviews]);
+
+  useEffect(() => {
+    if (!shouldAutoOpenReviewForm || autoReviewHandled) return;
+
+    setAutoReviewHandled(true);
+    setReviewsSectionOpen(true);
+
+    void (async () => {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (!token) return;
+      const profile = extractProfileFromToken(token);
+      if (profile.name) {
+        setReviewNameInput((prev) => (prev.trim() ? prev : profile.name));
+      }
+      if (profile.email) {
+        setReviewEmailInput((prev) => (prev.trim() ? prev : profile.email));
+      }
+      setEditingReviewId(null);
+      setReviewPhotoLocalUri(null);
+      setReviewPhotoServerUrl(null);
+      setReviewFormVisible(true);
+    })();
+  }, [shouldAutoOpenReviewForm, autoReviewHandled]);
+
   const product = useMemo(() => {
     if (apiDetail && typeof apiDetail.id === "number") {
       return mapApiProductDetailToCatalog(apiDetail, getDetailAssetUriFromApiPath);
@@ -977,33 +1134,7 @@ export default function ProductDetail() {
   const [newAddressState, setNewAddressState] = useState("");
   const [newAddressPincode, setNewAddressPincode] = useState("");
   const [newAddressType, setNewAddressType] = useState<"home" | "work" | "other">("home");
-  const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
-  const [reviews, setReviews] = useState<
-    { id: string; user: string; rating: number; comment: string; date: string }[]
-  >([
-    {
-      id: "r1",
-      user: "Ananya",
-      rating: 5,
-      comment: "Fabric quality is great and colour is same as shown in images.",
-      date: "2 days ago",
-    },
-    {
-      id: "r2",
-      user: "Meera",
-      rating: 4,
-      comment: "Perfect for office wear, fit is slightly loose but comfortable.",
-      date: "1 week ago",
-    },
-    {
-      id: "r3",
-      user: "Kavya",
-      rating: 4,
-      comment: "Nice dress for the price. Length is just below the knee.",
-      date: "3 weeks ago",
-    },
-  ]);
 
   const mainImage = product.images[activeImageIndex] ?? product.images[0];
   const sizeChoices = product.sizeOptions?.length ? product.sizeOptions : AVAILABLE_SIZES;
@@ -1166,6 +1297,258 @@ export default function ProductDetail() {
   const openProductDetail = (id: string) => {
     router.push({ pathname: "/productdetail", params: { id } } as any);
   };
+
+  const pickReviewImageFromLibrary = useCallback(async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== "granted") {
+      Alert.alert("Permission needed", "Please allow photo library access to attach an image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    setReviewPhotoLocalUri(result.assets[0].uri);
+  }, []);
+
+  const takeReviewPhoto = useCallback(async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (perm.status !== "granted") {
+      Alert.alert("Permission needed", "Please allow camera access to take a photo.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    setReviewPhotoLocalUri(result.assets[0].uri);
+  }, []);
+
+  const promptAttachReviewPhoto = useCallback(() => {
+    Alert.alert("Review photo", "Add an optional photo", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Photo library", onPress: () => void pickReviewImageFromLibrary() },
+      { text: "Camera", onPress: () => void takeReviewPhoto() },
+    ]);
+  }, [pickReviewImageFromLibrary, takeReviewPhoto]);
+
+  const openReviewForm = useCallback(async () => {
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    if (!token) {
+      Alert.alert("Sign in required", "Please log in to add a review.");
+      return;
+    }
+    const profile = extractProfileFromToken(token);
+    if (profile.name && !reviewNameInput.trim()) setReviewNameInput(profile.name);
+    if (profile.email && !reviewEmailInput.trim()) setReviewEmailInput(profile.email);
+    setReviewsSectionOpen(true);
+    setReviewFormVisible((prev) => {
+      const next = !prev;
+      if (next) {
+        setEditingReviewId(null);
+        setReviewPhotoLocalUri(null);
+        setReviewPhotoServerUrl(null);
+      }
+      return next;
+    });
+  }, [reviewNameInput, reviewEmailInput]);
+
+  const submitReview = useCallback(async () => {
+    const formatSubmitReviewError = (e: unknown, fallback: string): string => {
+      if (axios.isAxiosError(e)) {
+        const ax = e as AxiosError<unknown>;
+        const status = ax.response?.status;
+        const d = ax.response?.data;
+        let body = "";
+        if (typeof d === "string" && d.trim()) body = d.trim();
+        else if (d && typeof d === "object") {
+          const m = (d as { message?: unknown }).message;
+          if (typeof m === "string" && m.trim()) body = m.trim();
+        }
+        if (body) return status ? `${body} (${status})` : body;
+        if (status) return `Request failed (${status}).`;
+        if (ax.code === "ECONNABORTED") return "Request timed out. Check your connection and try again.";
+        return ax.message?.trim() || fallback;
+      }
+      if (e instanceof Error && e.message.trim()) return e.message.trim();
+      return fallback;
+    };
+
+    if (!numericProductId) {
+      Alert.alert("Review", "Invalid product.");
+      return;
+    }
+    const name = reviewNameInput.trim();
+    const comment = reviewCommentInput.trim();
+    if (!name) {
+      Alert.alert("Review", "Please enter your name.");
+      return;
+    }
+    if (!comment) {
+      Alert.alert("Review", "Please enter your review.");
+      return;
+    }
+    const token = (await AsyncStorage.getItem("token"))?.trim();
+    const userId = token ? extractUserIdFromToken(token) : null;
+    const email = reviewEmailInput.trim();
+    const wasEditing = Boolean(editingReviewId);
+    setReviewSubmitting(true);
+    try {
+      let imagePath: string | undefined;
+      if (reviewPhotoLocalUri) {
+        try {
+          imagePath = await uploadReviewImage(reviewPhotoLocalUri);
+        } catch (imgErr) {
+          const imgMsg = formatSubmitReviewError(
+            imgErr,
+            "Could not upload review photo."
+          );
+          const choice = await new Promise<"cancel" | "no_photo">((resolve) => {
+            Alert.alert(
+              "Photo upload failed",
+              `${imgMsg}\n\nSubmit your review without a photo?`,
+              [
+                { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+                {
+                  text: "Submit without photo",
+                  onPress: () => resolve("no_photo"),
+                },
+              ]
+            );
+          });
+          if (choice === "cancel") return;
+          imagePath = undefined;
+        }
+      } else if (reviewPhotoServerUrl?.trim()) {
+        imagePath = reviewPhotoServerUrl.trim();
+      }
+
+      if (editingReviewId) {
+        await api.put(`/api/reviews/${editingReviewId}`, {
+          productId: numericProductId,
+          userId: userId ?? undefined,
+          name,
+          email: email || undefined,
+          rating: reviewRatingInput,
+          comment,
+          imagePath,
+          status: true,
+        });
+      } else {
+        await api.post("/api/reviews", {
+          productId: numericProductId,
+          userId: userId ?? undefined,
+          name,
+          email: email || undefined,
+          rating: reviewRatingInput,
+          comment,
+          imagePath,
+          status: true,
+        });
+      }
+      setReviewCommentInput("");
+      setReviewRatingInput(5);
+      setReviewPhotoLocalUri(null);
+      setReviewPhotoServerUrl(null);
+      setEditingReviewId(null);
+      setReviewFormVisible(false);
+      Alert.alert(
+        wasEditing ? "Review updated" : "Review added",
+        wasEditing ? "Your review has been updated." : "Thanks for sharing your feedback."
+      );
+      await loadReviews(numericProductId);
+    } catch (e: unknown) {
+      const msg = formatSubmitReviewError(e, "Could not submit review. Please try again.");
+      Alert.alert("Review", msg);
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }, [
+    numericProductId,
+    reviewNameInput,
+    reviewCommentInput,
+    reviewEmailInput,
+    reviewRatingInput,
+    editingReviewId,
+    loadReviews,
+    reviewPhotoLocalUri,
+    reviewPhotoServerUrl,
+  ]);
+
+  const handleCancelReviewEdit = useCallback(() => {
+    setEditingReviewId(null);
+    setReviewNameInput("");
+    setReviewEmailInput("");
+    setReviewCommentInput("");
+    setReviewRatingInput(5);
+    setReviewPhotoLocalUri(null);
+    setReviewPhotoServerUrl(null);
+    setReviewFormVisible(false);
+  }, []);
+
+  const isReviewOwnedByCurrentUser = useCallback(
+    (review: ProductReviewItem) => {
+      if (currentUserId != null && review.userId != null) {
+        return currentUserId === review.userId;
+      }
+      if (currentUserEmail && review.email) {
+        return currentUserEmail === review.email.toLowerCase();
+      }
+      return false;
+    },
+    [currentUserId, currentUserEmail]
+  );
+
+  const handleEditReview = useCallback(
+    (review: ProductReviewItem) => {
+      setEditingReviewId(review.id);
+      setReviewNameInput(review.user);
+      setReviewEmailInput(review.email ?? currentUserEmail);
+      setReviewRatingInput(review.rating);
+      setReviewCommentInput(review.comment);
+      setReviewPhotoLocalUri(null);
+      setReviewPhotoServerUrl(
+        review.imagePath && review.imagePath.trim() ? review.imagePath.trim() : null
+      );
+      setReviewsSectionOpen(true);
+      setReviewFormVisible(true);
+    },
+    [currentUserEmail]
+  );
+
+  const handleDeleteReview = useCallback(
+    (review: ProductReviewItem) => {
+      Alert.alert("Delete review", "Do you want to remove your review?", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              if (!numericProductId) return;
+              setReviewSubmitting(true);
+              try {
+                await api.delete(`/api/reviews/${review.id}`);
+                await loadReviews(numericProductId);
+                Alert.alert("Review deleted", "Your review was removed.");
+              } catch {
+                Alert.alert("Review", "Could not delete review. Please try again.");
+              } finally {
+                setReviewSubmitting(false);
+              }
+            })();
+          },
+        },
+      ]);
+    },
+    [numericProductId, loadReviews]
+  );
 
   // Load saved addresses
   const loadSavedAddresses = useCallback(async () => {
@@ -1773,42 +2156,222 @@ export default function ProductDetail() {
 
         {/* REVIEWS */}
         <View style={styles.sectionBlock}>
-          <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
-            Reviews
-          </Text>
-          {(reviewsExpanded ? reviews : reviews.slice(0, 2)).map((rev) => (
-            <View key={rev.id} style={styles.reviewCard}>
-              <View style={styles.reviewHeaderRow}>
-                <Text style={styles.reviewUser}>{rev.user}</Text>
-                <View style={styles.reviewRatingBadge}>
-                  <Text style={styles.reviewRatingText}>{rev.rating}</Text>
-                  <Ionicons
-                    name="star"
-                    size={10}
-                    color="#FFFFFF"
-                    style={{ marginLeft: 2 }}
-                  />
-                </View>
-              </View>
-              <Text style={styles.reviewDate}>{rev.date}</Text>
-              <Text style={styles.reviewComment}>{rev.comment}</Text>
-              <View style={styles.reviewImageRow}>
-                <View style={styles.reviewImagePlaceholder} />
-                <View style={styles.reviewImagePlaceholder} />
-              </View>
-            </View>
-          ))}
-          {reviews.length > 2 && (
+          <TouchableOpacity
+            style={styles.reviewsHeaderButton}
+            activeOpacity={0.8}
+            onPress={() => setReviewsSectionOpen((prev) => !prev)}
+          >
+            <Text style={styles.reviewsSectionTitle}>Ratings and reviews</Text>
+            <Ionicons
+              name={reviewsSectionOpen ? "chevron-up" : "chevron-down"}
+              size={22}
+              color="#ef7b1a"
+            />
+          </TouchableOpacity>
+
+          <View style={styles.reviewsWriteRow}>
             <TouchableOpacity
-              style={styles.viewAllReviewsButton}
-              activeOpacity={0.75}
-              onPress={() => setReviewsExpanded((prev) => !prev)}
+              style={styles.writeReviewButton}
+              activeOpacity={0.8}
+              onPress={() => {
+                void openReviewForm();
+              }}
             >
-              <Text style={styles.viewAllReviewsText}>
-                {reviewsExpanded ? "See less" : "View all reviews"}
+              <Text style={styles.writeReviewText}>
+                {reviewFormVisible ? "Close review form" : "Write a review"}
               </Text>
             </TouchableOpacity>
-          )}
+          </View>
+
+          {reviewFormVisible ? (
+                <View style={styles.reviewFormCard}>
+                  <Text style={styles.reviewFormTitle}>
+                    {editingReviewId ? "Edit your review" : "Write your review"}
+                  </Text>
+                  <TextInput
+                    placeholder="Your name"
+                    placeholderTextColor="#94A3B8"
+                    value={reviewNameInput}
+                    onChangeText={setReviewNameInput}
+                    style={styles.reviewFormInput}
+                  />
+                  <TextInput
+                    placeholder="Email (optional)"
+                    placeholderTextColor="#94A3B8"
+                    value={reviewEmailInput}
+                    onChangeText={setReviewEmailInput}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    style={styles.reviewFormInput}
+                  />
+                  <View style={styles.reviewStarsRow}>
+                    {Array.from({ length: 5 }, (_, idx) => {
+                      const star = idx + 1;
+                      return (
+                        <TouchableOpacity
+                          key={`new-review-star-${star}`}
+                          onPress={() => setReviewRatingInput(star)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons
+                            name={star <= reviewRatingInput ? "star" : "star-outline"}
+                            size={22}
+                            color={star <= reviewRatingInput ? "#F59E0B" : "#94A3B8"}
+                            style={{ marginRight: 4 }}
+                          />
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <View style={styles.reviewPhotoSection}>
+                    <TouchableOpacity
+                      style={styles.reviewAttachPhotoBtn}
+                      onPress={promptAttachReviewPhoto}
+                      disabled={reviewSubmitting}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="image-outline" size={18} color="#ef7b1a" style={{ marginRight: 6 }} />
+                      <Text style={styles.reviewAttachPhotoText}>
+                        {reviewPhotoLocalUri || reviewPhotoServerUrl
+                          ? "Change photo"
+                          : "Add photo (optional)"}
+                      </Text>
+                    </TouchableOpacity>
+                    {reviewPhotoLocalUri || reviewPhotoServerUrl ? (
+                      <View style={styles.reviewPhotoPreviewRow}>
+                        <Image
+                          source={{
+                            uri:
+                              reviewPhotoLocalUri ??
+                              (reviewPhotoServerUrl && /^https?:\/\//i.test(reviewPhotoServerUrl)
+                                ? reviewPhotoServerUrl
+                                : getDetailAssetUriFromApiPath(reviewPhotoServerUrl ?? "")),
+                          }}
+                          style={styles.reviewPhotoThumb}
+                        />
+                        <TouchableOpacity
+                          style={styles.reviewPhotoRemove}
+                          onPress={() => {
+                            setReviewPhotoLocalUri(null);
+                            setReviewPhotoServerUrl(null);
+                          }}
+                          disabled={reviewSubmitting}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.reviewPhotoRemoveText}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                  <TextInput
+                    placeholder="Share your experience with this product"
+                    placeholderTextColor="#94A3B8"
+                    value={reviewCommentInput}
+                    onChangeText={setReviewCommentInput}
+                    style={[styles.reviewFormInput, styles.reviewCommentInput]}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                  <View style={styles.reviewFormActionsRow}>
+                    {editingReviewId ? (
+                      <TouchableOpacity
+                        style={styles.reviewCancelButton}
+                        activeOpacity={0.85}
+                        onPress={handleCancelReviewEdit}
+                        disabled={reviewSubmitting}
+                      >
+                        <Text style={styles.reviewCancelButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[
+                        styles.reviewSubmitButton,
+                        reviewSubmitting && styles.reviewSubmitButtonDisabled,
+                      ]}
+                      activeOpacity={0.85}
+                      onPress={() => void submitReview()}
+                      disabled={reviewSubmitting}
+                    >
+                      <Text style={styles.reviewSubmitButtonText}>
+                        {reviewSubmitting
+                          ? "Submitting..."
+                          : editingReviewId
+                            ? "Update review"
+                            : "Submit review"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+          ) : null}
+
+          {reviewsSectionOpen ? (
+            <>
+              {reviewsLoading ? (
+                <View style={styles.relatedLoadingContainer}>
+                  <ActivityIndicator size="small" color="#ef7b1a" />
+                  <Text style={styles.relatedLoadingText}>Loading reviews...</Text>
+                </View>
+              ) : reviews.length === 0 ? (
+                <Text style={styles.noRelatedText}>No reviews yet</Text>
+              ) : (
+                (reviewsExpanded ? reviews : reviews.slice(0, 2)).map((rev) => (
+                  <View key={rev.id} style={styles.reviewCard}>
+                    <View style={styles.reviewHeaderRow}>
+                      <Text style={styles.reviewUser}>{rev.user}</Text>
+                      <View style={styles.reviewRatingBadge}>
+                        <Text style={styles.reviewRatingText}>{rev.rating}</Text>
+                        <Ionicons
+                          name="star"
+                          size={10}
+                          color="#FFFFFF"
+                          style={{ marginLeft: 2 }}
+                        />
+                      </View>
+                    </View>
+                    <Text style={styles.reviewDate}>{rev.date}</Text>
+                    <Text style={styles.reviewComment}>{rev.comment}</Text>
+                    {rev.imagePath ? (
+                      <View style={styles.reviewImageRow}>
+                        <Image
+                          source={{ uri: getDetailAssetUriFromApiPath(rev.imagePath) }}
+                          style={styles.reviewImagePlaceholder}
+                        />
+                      </View>
+                    ) : null}
+                    {isReviewOwnedByCurrentUser(rev) ? (
+                      <View style={styles.reviewOwnerActionsRow}>
+                        <TouchableOpacity
+                          style={styles.reviewActionButton}
+                          onPress={() => handleEditReview(rev)}
+                          disabled={reviewSubmitting}
+                        >
+                          <Text style={styles.reviewActionButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.reviewActionDeleteButton}
+                          onPress={() => handleDeleteReview(rev)}
+                          disabled={reviewSubmitting}
+                        >
+                          <Text style={styles.reviewActionDeleteButtonText}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                ))
+              )}
+              {reviews.length > 2 && (
+                <TouchableOpacity
+                  style={styles.viewAllReviewsButton}
+                  activeOpacity={0.75}
+                  onPress={() => setReviewsExpanded((prev) => !prev)}
+                >
+                  <Text style={styles.viewAllReviewsText}>
+                    {reviewsExpanded ? "Show less reviews" : "Show all reviews"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : null}
         </View>
 
         {/* PRODUCT HIGHLIGHTS */}
@@ -2723,21 +3286,163 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#0F766E",
   },
-  reviewsRow: {
+  reviewsWriteRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  reviewsSectionTitle: {
+    flex: 1,
+    marginRight: 10,
+    marginBottom: 0,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#ef7b1a",
+  },
+  reviewsHeaderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
   },
   writeReviewButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: "#ef7b1a",
+    marginRight: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+  },
+  writeReviewText: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  writeReviewTextMuted: {
+    color: "#92400E",
+  },
+  writeReviewButtonDisabled: {
+    backgroundColor: "#FFEBD3",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  reviewEligibilityHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#64748B",
+  },
+  reviewFormCard: {
+    marginTop: 10,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFF7F0",
+    borderWidth: 1,
+    borderColor: "#FBD7B2",
+  },
+  reviewFormTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#79411c",
+    marginBottom: 10,
+  },
+  reviewFormInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#D0D0D0",
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: "#1d324e",
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  reviewStarsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  reviewPhotoSection: {
+    marginBottom: 10,
+  },
+  reviewAttachPhotoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FBD7B2",
+    backgroundColor: "#FFFFFF",
+  },
+  reviewAttachPhotoText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#79411c",
+  },
+  reviewPhotoPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  reviewPhotoThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: "#E5E5F0",
+  },
+  reviewPhotoRemove: {
+    marginLeft: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  reviewPhotoRemoveText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#DC2626",
+  },
+  reviewCommentInput: {
+    minHeight: 92,
+  },
+  reviewSubmitButton: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 18,
     backgroundColor: "#ef7b1a",
-    marginRight: 12,
   },
-  writeReviewText: {
+  reviewFormActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  reviewCancelButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
+    marginRight: 10,
+  },
+  reviewCancelButtonText: {
+    color: "#475569",
     fontSize: 12,
+    fontWeight: "700",
+  },
+  reviewSubmitButtonDisabled: {
+    opacity: 0.6,
+  },
+  reviewSubmitButtonText: {
     color: "#FFFFFF",
+    fontSize: 12,
     fontWeight: "700",
   },
   viewAllReviewsButton: {
@@ -2986,6 +3691,37 @@ const styles = StyleSheet.create({
     marginRight: 6,
     justifyContent: "center",
     alignItems: "center",
+  },
+  reviewOwnerActionsRow: {
+    flexDirection: "row",
+    marginTop: 8,
+  },
+  reviewActionButton: {
+    borderWidth: 1,
+    borderColor: "#ef7b1a",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginRight: 8,
+    backgroundColor: "#FFF7F0",
+  },
+  reviewActionButtonText: {
+    color: "#ef7b1a",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  reviewActionDeleteButton: {
+    borderWidth: 1,
+    borderColor: "#DC2626",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    backgroundColor: "#FEF2F2",
+  },
+  reviewActionDeleteButtonText: {
+    color: "#DC2626",
+    fontSize: 12,
+    fontWeight: "700",
   },
   addressInput: {
     borderWidth: StyleSheet.hairlineWidth,
