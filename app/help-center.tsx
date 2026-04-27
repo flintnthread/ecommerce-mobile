@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -36,6 +37,24 @@ interface SupportTicket {
   date: string;
 }
 
+type ChatMessage = {
+  id: string;
+  sender: "user" | "bot";
+  text: string;
+  time: string;
+  options?: string[];
+};
+
+const LIVE_CHAT_STORAGE_KEY = "ft_live_chat_messages_v1";
+const DEFAULT_BOT_MESSAGE: ChatMessage = {
+  id: "bot_welcome",
+  sender: "bot",
+  text:
+    "Hi! I am your support assistant. Ask me about orders, delivery, payments, returns, refunds, or account issues.",
+  time: "Now",
+  options: ["An order I placed", "Not about an order"],
+};
+
 export default function HelpCenterScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -54,6 +73,11 @@ export default function HelpCenterScreen() {
   const [ticketCategory, setTicketCategory] = useState("order");
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
   const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
+  const [showLiveChatModal, setShowLiveChatModal] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    DEFAULT_BOT_MESSAGE,
+  ]);
 
   useEffect(() => {
     const asString = (value: string | string[] | undefined): string =>
@@ -168,6 +192,225 @@ export default function HelpCenterScreen() {
   const [ticketsError, setTicketsError] = useState<string | null>(null);
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(LIVE_CHAT_STORAGE_KEY);
+        if (cancelled || !raw) return;
+        const parsed = JSON.parse(raw) as ChatMessage[];
+        if (
+          Array.isArray(parsed) &&
+          parsed.length > 0 &&
+          parsed.every(
+            (m) =>
+              m &&
+              typeof m.id === "string" &&
+              (m.sender === "user" || m.sender === "bot") &&
+              typeof m.text === "string" &&
+              typeof m.time === "string" &&
+              (typeof m.options === "undefined" || Array.isArray(m.options))
+          )
+        ) {
+          setChatMessages(parsed);
+        }
+      } catch {
+        // Ignore storage read issues and keep default welcome message.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    void AsyncStorage.setItem(LIVE_CHAT_STORAGE_KEY, JSON.stringify(chatMessages)).catch(
+      () => {
+        // Ignore storage write issues.
+      }
+    );
+  }, [chatMessages]);
+
+  const getChatReplyPayload = (
+    question: string
+  ): { text: string; options?: string[] } => {
+    const normalized = question.toLowerCase().replace(/[^\w\s#-]/g, " ");
+    const q = normalized.replace(/\s+/g, " ").trim();
+    const orderIdMatch = q.match(/(?:order|ord|#)\s*[-:]?\s*(\d{3,})/i);
+    const orderHint = orderIdMatch?.[1]
+      ? ` for order #${orderIdMatch[1]}`
+      : "";
+
+    const hasAny = (keywords: string[]) => keywords.some((k) => q.includes(k));
+
+    if (hasAny(["an order i placed", "order related", "about order"])) {
+      return {
+        text: "Sure, what is your order-related issue?",
+        options: [
+          "Track my order",
+          "Cancel order",
+          "Return or replace item",
+          "Refund status",
+        ],
+      };
+    }
+
+    if (hasAny(["not about an order", "not order", "general help"])) {
+      return {
+        text: "Sure, what is your question about?",
+        options: [
+          "Account and login",
+          "Payment issue",
+          "Coupons and offers",
+          "Talk to support agent",
+        ],
+      };
+    }
+
+    if (hasAny(["hi", "hello", "hey"])) {
+      return {
+        text: "Hello! I can help with orders, account, payment, delivery, and refunds.",
+        options: ["An order I placed", "Not about an order"],
+      };
+    }
+
+    if (
+      hasAny(["track", "where", "status", "not delivered", "not receive"]) &&
+      hasAny(["order", "shipment", "parcel", "package", "courier"])
+    ) {
+      return {
+        text: `You can track your order${orderHint} from My Orders > select order > Track. If tracking is not updating for 24 hours, share the order id and I will escalate it.`,
+        options: ["Refund status", "Talk to support agent"],
+      };
+    }
+
+    if (hasAny(["cancel", "stop order", "cancelled"])) {
+      return {
+        text: `You can cancel eligible orders${orderHint} before shipment from My Orders. If already shipped, you can place a return request after delivery.`,
+        options: ["Return or replace item", "Talk to support agent"],
+      };
+    }
+
+    if (hasAny(["return", "replace", "exchange", "wrong item", "damaged"])) {
+      return {
+        text: `For return/replacement${orderHint}, open My Orders and tap Return/Replace within 7 days of delivery. Keep item tags and original packaging ready.`,
+        options: ["Refund status", "Talk to support agent"],
+      };
+    }
+
+    if (hasAny(["refund", "money", "amount", "credited", "credit"])) {
+      return {
+        text: `Refunds${orderHint} are processed in 5-7 business days after cancellation/return approval. UPI refunds are usually quicker than card refunds.`,
+        options: ["Track my order", "Talk to support agent"],
+      };
+    }
+
+    if (hasAny(["delivery", "late", "delay", "delayed", "expected", "eta"])) {
+      return {
+        text: `Standard delivery is 3-7 business days. If your order is delayed${orderHint}, share order id and pincode so I can raise priority support.`,
+        options: ["Track my order", "Talk to support agent"],
+      };
+    }
+
+    if (hasAny(["payment", "upi", "card", "failed", "debited", "transaction"])) {
+      return {
+        text: "If payment failed but money was debited, it usually auto-reverses within 3-5 business days. You can retry with UPI/card from checkout.",
+        options: ["Refund status", "Talk to support agent"],
+      };
+    }
+
+    if (hasAny(["coupon", "promo", "discount", "offer code", "code"])) {
+      return {
+        text: "Apply your coupon on checkout page in Apply Coupon. If code fails, verify expiry, minimum order value, and category restrictions.",
+        options: ["Payment issue", "Talk to support agent"],
+      };
+    }
+
+    if (hasAny(["account", "login", "otp", "signin", "sign in", "password"])) {
+      return {
+        text: "For login issues, check network and request OTP again after 30 seconds. If OTP still does not arrive, verify mobile/email and try re-login.",
+        options: ["Talk to support agent", "Not about an order"],
+      };
+    }
+
+    if (hasAny(["agent", "human", "executive", "representative", "call back"])) {
+      return {
+        text: "I can connect you to a support agent. Please raise a Support Ticket with order id and issue details for faster resolution.",
+        options: ["Raise support ticket", "Call Us"],
+      };
+    }
+
+    if (hasAny(["thanks", "thank you"])) {
+      return {
+        text: "You are welcome! If you need anything else, ask me or choose an option below.",
+        options: ["An order I placed", "Not about an order"],
+      };
+    }
+
+    return {
+      text: "I can help with tracking, cancellation, return, refund, delivery, payment, and login issues.",
+      options: ["An order I placed", "Not about an order"],
+    };
+  };
+
+  const openLiveChat = () => {
+    setChatMessages([DEFAULT_BOT_MESSAGE]);
+    setShowLiveChatModal(true);
+  };
+
+  const handleSendChatMessage = () => {
+    const text = chatInput.trim();
+    if (!text) return;
+
+    const userMessage: ChatMessage = {
+      id: `user_${Date.now()}`,
+      sender: "user",
+      text,
+      time: "Now",
+    };
+    const reply = getChatReplyPayload(text);
+    const botMessage: ChatMessage = {
+      id: `bot_${Date.now() + 1}`,
+      sender: "bot",
+      text: reply.text,
+      time: "Now",
+      options: reply.options,
+    };
+
+    setChatMessages((prev) => [...prev, userMessage, botMessage]);
+    setChatInput("");
+  };
+
+  const handleQuickOptionTap = (option: string) => {
+    const normalizedOption = option.trim().toLowerCase();
+    const userMessage: ChatMessage = {
+      id: `user_${Date.now()}`,
+      sender: "user",
+      text: option,
+      time: "Now",
+    };
+    const reply = getChatReplyPayload(option);
+    const botMessage: ChatMessage = {
+      id: `bot_${Date.now() + 1}`,
+      sender: "bot",
+      text: reply.text,
+      time: "Now",
+      options: reply.options,
+    };
+    setChatMessages((prev) => [...prev, userMessage, botMessage]);
+
+    if (normalizedOption === "call us") {
+      void Linking.openURL("tel:+919063499092");
+      return;
+    }
+
+    if (normalizedOption === "raise support ticket") {
+      setShowLiveChatModal(false);
+      setActiveTab("support_ticket");
+      return;
+    }
+  };
+
   const contactOptions = [
     {
       id: "1",
@@ -194,9 +437,7 @@ export default function HelpCenterScreen() {
       title: "Live Chat",
       icon: "chatbubbles",
       value: "Available 24/7",
-      action: () => {
-        Alert.alert("Live Chat", "Connecting you to a support agent...");
-      },
+      action: openLiveChat,
       color: "#E97A1F",
     },
     {
@@ -913,6 +1154,78 @@ export default function HelpCenterScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={showLiveChatModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowLiveChatModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.chatModalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Live Chat</Text>
+              <TouchableOpacity
+                onPress={() => setShowLiveChatModal(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close-circle" size={28} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.chatMessagesWrap} contentContainerStyle={styles.chatMessagesContent}>
+              {chatMessages.map((msg) => (
+                <View
+                  key={msg.id}
+                  style={[
+                    styles.chatBubble,
+                    msg.sender === "user" ? styles.chatBubbleUser : styles.chatBubbleBot,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.chatBubbleText,
+                      msg.sender === "user" ? styles.chatBubbleTextUser : styles.chatBubbleTextBot,
+                    ]}
+                  >
+                    {msg.text}
+                  </Text>
+                  {msg.sender === "bot" &&
+                  Array.isArray(msg.options) &&
+                  msg.options.length > 0 ? (
+                    <View style={styles.quickOptionsWrap}>
+                      {msg.options.map((option) => (
+                        <TouchableOpacity
+                          key={`${msg.id}_${option}`}
+                          style={styles.quickOptionBtn}
+                          activeOpacity={0.8}
+                          onPress={() => handleQuickOptionTap(option)}
+                        >
+                          <Text style={styles.quickOptionText}>{option}</Text>
+                          <Ionicons name="chevron-forward" size={15} color="#94A3B8" />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.chatComposer}>
+              <TextInput
+                style={styles.chatInput}
+                placeholder="Type your question..."
+                value={chatInput}
+                onChangeText={setChatInput}
+                multiline
+              />
+              <TouchableOpacity style={styles.chatSendBtn} onPress={handleSendChatMessage}>
+                <Ionicons name="send" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1328,6 +1641,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     maxHeight: "90%",
   },
+  chatModalContainer: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: "82%",
+  },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1350,6 +1669,89 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 30,
+  },
+  chatMessagesWrap: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  chatMessagesContent: {
+    paddingVertical: 12,
+    gap: 10,
+  },
+  chatBubble: {
+    maxWidth: "85%",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  chatBubbleBot: {
+    alignSelf: "flex-start",
+    backgroundColor: "#F1F5F9",
+  },
+  chatBubbleUser: {
+    alignSelf: "flex-end",
+    backgroundColor: "#E97A1F",
+  },
+  chatBubbleText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  chatBubbleTextBot: {
+    color: "#0F172A",
+  },
+  chatBubbleTextUser: {
+    color: "#FFFFFF",
+  },
+  quickOptionsWrap: {
+    marginTop: 10,
+    gap: 8,
+  },
+  quickOptionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  quickOptionText: {
+    fontSize: 13,
+    color: "#475569",
+    fontWeight: "600",
+    paddingRight: 8,
+    flex: 1,
+  },
+  chatComposer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    gap: 8,
+  },
+  chatInput: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 96,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#F8FAFC",
+    fontSize: 14,
+  },
+  chatSendBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#E97A1F",
+    alignItems: "center",
+    justifyContent: "center",
   },
   formGroup: {
     marginBottom: 16,
