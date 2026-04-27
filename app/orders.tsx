@@ -437,17 +437,41 @@ function mapBackendOrderStatus(s?: string): OrderStatus {
 function mapApiOrderToUiOrder(row: ApiOrderRow): Order {
   const amt = row.finalAmount ?? row.totalAmount ?? 0;
   const totalStr = `₹${Math.round(amt).toLocaleString("en-IN")}`;
-  const img =
-    row.firstProductImage && /^https?:\/\//i.test(row.firstProductImage)
-      ? { uri: row.firstProductImage }
-      : require("../assets/images/age5.png");
-  const n = Math.max(0, row.totalItems ?? 0);
+  const fallbackImage = require("../assets/images/age5.png");
+  const itemsFromApi = Array.isArray((row as any).items) ? ((row as any).items as Array<Record<string, unknown>>) : [];
+  const mappedProducts = itemsFromApi
+    .map((it, idx) => {
+      const productIdNum = Math.floor(Number(it.productId));
+      const productId =
+        Number.isFinite(productIdNum) && productIdNum > 0 ? productIdNum : undefined;
+      const qty = Math.max(1, Math.floor(Number(it.quantity ?? 1)));
+      const priceNum = Number(it.price ?? 0);
+      const imgRaw = String(it.productImage ?? "").trim();
+      const image = imgRaw ? { uri: resolveApiImageUri(imgRaw) } : fallbackImage;
+      return {
+        id: String(productId ?? `api-item-${idx}`),
+        productId,
+        name: String(it.productName ?? `Product ${idx + 1}`),
+        image,
+        quantity: qty,
+        price: priceNum > 0 ? `₹${Math.round(priceNum).toLocaleString("en-IN")}` : "—",
+      };
+    })
+    .filter((p) => Boolean(p.name));
+
+  const firstApiImage = String(row.firstProductImage ?? "").trim();
+  const img = firstApiImage
+    ? { uri: resolveApiImageUri(firstApiImage) }
+    : mappedProducts[0]?.image ?? fallbackImage;
+
+  const countFromItems = mappedProducts.reduce((sum, p) => sum + Math.max(1, p.quantity), 0);
+  const n = Math.max(0, row.totalItems ?? countFromItems);
   const num = row.orderNumber?.trim() || "";
   const displayNum = num.startsWith("#") ? num : `#${num}`;
   return {
     id: String(row.orderId),
     orderNumber: displayNum,
-    date: row.createdDate || "",
+    date: row.createdDate ? formatOrderDate(row.createdDate) : "",
     status: mapBackendOrderStatus(row.orderStatus),
     items: n > 0 ? n : 1,
     total: totalStr,
@@ -460,18 +484,7 @@ function mapApiOrderToUiOrder(row: ApiOrderRow): Order {
       ? String(row.shiprocketStatus) +
         (row.shiprocketCourierName ? ` · ${row.shiprocketCourierName}` : "")
       : undefined,
-    products:
-      n > 0
-        ? [
-            {
-              id: "api-line",
-              name: n > 1 ? `Order items (${n})` : "Order items",
-              image: img,
-              quantity: n,
-              price: totalStr,
-            },
-          ]
-        : undefined,
+    products: mappedProducts.length > 0 ? mappedProducts : undefined,
   };
 }
 
