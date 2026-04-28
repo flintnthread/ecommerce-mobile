@@ -16,6 +16,7 @@ import { buildRazorpayCheckoutHtml } from "../lib/payment/razorpayWebHtml";
 import { verifyRazorpayPayment } from "../lib/payment/razorpayFlow";
 import { deleteCartClearServer } from "../lib/cartServerApi";
 import { saveCart } from "../lib/shopStorage";
+import api from "../services/api";
 
 function oneParam(v: string | string[] | undefined): string {
   if (v == null) return "";
@@ -29,12 +30,14 @@ export default function RazorpayWebCheckoutScreen() {
     orderId?: string | string[];
     amount?: string | string[];
     currency?: string | string[];
+    appOrderId?: string | string[];
   }>();
 
   const key = oneParam(params.key);
   const orderId = oneParam(params.orderId);
   const amount = oneParam(params.amount);
   const currency = oneParam(params.currency) || "INR";
+  const appOrderId = Number(oneParam(params.appOrderId));
 
   const html = useMemo(() => {
     if (!key || !orderId || !amount) return "";
@@ -58,6 +61,13 @@ export default function RazorpayWebCheckoutScreen() {
             signature: data.razorpay_signature,
           });
           if (verify.success) {
+            if (Number.isFinite(appOrderId) && appOrderId > 0) {
+              try {
+                await api.post("/api/invoices", { orderId: Math.floor(appOrderId) });
+              } catch (error) {
+                console.warn("Invoice generation failed after web checkout:", error);
+              }
+            }
             // Keep cart in sync after successful payment on web checkout path.
             await saveCart([]);
             const token = (await AsyncStorage.getItem("token"))?.trim();
@@ -92,7 +102,7 @@ export default function RazorpayWebCheckoutScreen() {
         router.back();
       }
     },
-    [router]
+    [appOrderId, router]
   );
 
   if (!html) {

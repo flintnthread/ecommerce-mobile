@@ -216,16 +216,36 @@ export default function ReviewOrdersScreen() {
     }
   };
 
-  const placeOrderOnServer = async (addressId: number): Promise<void> => {
+  const placeOrderOnServer = async (addressId: number): Promise<number> => {
     const { data } = await api.post<{
       success: boolean;
       message?: string;
+      data?: {
+        orderId?: number;
+      };
     }>("/api/orders/place", {
       addressId,
       paymentMethod: "upi",
     });
     if (!data?.success) {
       throw new Error(data?.message || "Could not place order.");
+    }
+    const orderId = Number(data?.data?.orderId);
+    if (!Number.isFinite(orderId) || orderId <= 0) {
+      throw new Error("Order placed but no order ID was returned.");
+    }
+    return Math.floor(orderId);
+  };
+
+  const createInvoiceForOrder = async (orderId: number): Promise<void> => {
+    const { data } = await api.post<{
+      success: boolean;
+      message?: string;
+    }>("/api/invoices", {
+      orderId,
+    });
+    if (!data?.success) {
+      throw new Error(data?.message || "Could not generate invoice.");
     }
   };
 
@@ -247,7 +267,7 @@ export default function ReviewOrdersScreen() {
         return;
       }
 
-      await placeOrderOnServer(Math.floor(selectedAddressId));
+      const orderId = await placeOrderOnServer(Math.floor(selectedAddressId));
 
       const result = await payWithRazorpay(total);
       if (result.ok === false) {
@@ -259,6 +279,7 @@ export default function ReviewOrdersScreen() {
               orderId: result.orderId,
               amount: String(result.amountPaise),
               currency: result.currency,
+              appOrderId: String(orderId),
             },
           } as any);
           return;
@@ -268,6 +289,11 @@ export default function ReviewOrdersScreen() {
         }
         Alert.alert(tr("Payment"), tr(result.message));
         return;
+      }
+      try {
+        await createInvoiceForOrder(orderId);
+      } catch {
+        // Invoice generation should not block successful payment completion.
       }
       await clearCartAfterSuccessfulOrder();
       Alert.alert(tr("Payment successful"), tr(result.verify.message ?? "Your payment was verified."), [
