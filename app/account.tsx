@@ -36,6 +36,7 @@ import {
   fetchUnreadNotificationCount,
   getCurrentUserIdFromToken,
 } from "../services/pushNotifications";
+import api from "../services/api";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -79,6 +80,13 @@ interface Order {
   /** Set when API provides a product thumbnail; otherwise list shows a neutral placeholder. */
   image: ImageSourcePropType | null;
 }
+
+type InvoiceRow = {
+  id: number;
+  orderId: number;
+  invoiceNumber: string;
+  invoicePath?: string | null;
+};
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -422,6 +430,60 @@ export default function AccountScreen() {
 
   const handleSettingsPress = () => {
     router.push("/settings");
+  };
+
+  const handleDownloadInvoice = async () => {
+    const orderId = Number(selectedOrder?.id);
+    if (!Number.isFinite(orderId) || orderId <= 0) {
+      Alert.alert("Invoice", "Order ID is missing for this order.");
+      return;
+    }
+
+    try {
+      const { data } = await api.get<{
+        success: boolean;
+        message?: string;
+        data?: InvoiceRow[];
+      }>("/api/invoices", {
+        params: { orderId: Math.floor(orderId) },
+      });
+
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      if (rows.length === 0) {
+        Alert.alert("Invoice", "Invoice not available yet for this order.");
+        return;
+      }
+
+      const latest = rows[0];
+      const path = String(latest?.invoicePath ?? "").trim();
+      if (!path) {
+        Alert.alert("Invoice", "Invoice file path is missing.");
+        return;
+      }
+
+      const baseUrl = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+      const invoiceUrl = /^https?:\/\//i.test(path)
+        ? path
+        : `${baseUrl}/${path.replace(/^\/+/, "")}`;
+
+      const canOpen = await Linking.canOpenURL(invoiceUrl);
+      if (!canOpen) {
+        Alert.alert("Invoice", "Could not open invoice URL.");
+        return;
+      }
+      await Linking.openURL(invoiceUrl);
+    } catch (e) {
+      let msg = "Could not download invoice right now.";
+      if (isAxiosError(e)) {
+        const serverMsg =
+          (typeof e.response?.data?.message === "string" && e.response.data.message) ||
+          (typeof e.response?.data?.error === "string" && e.response.data.error);
+        msg = serverMsg || e.message || msg;
+      } else if (e instanceof Error && e.message) {
+        msg = e.message;
+      }
+      Alert.alert("Invoice", msg);
+    }
   };
 
   // Orders data and functions
@@ -1537,7 +1599,7 @@ export default function AccountScreen() {
                       )}
                       <TouchableOpacity
                         style={styles.newModalQuickActionBtn}
-                        onPress={() => router.push("/orders")}
+                        onPress={handleDownloadInvoice}
                       >
                         <Ionicons name="receipt" size={20} color="#666" />
                         <Text style={styles.newModalQuickActionText}>
