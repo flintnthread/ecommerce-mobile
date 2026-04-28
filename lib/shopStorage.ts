@@ -10,6 +10,14 @@ export type PersistedCartLine = {
   price: number;
   mrp: number;
   quantity: number;
+  /** Optional absolute/relative uri for the chosen variant image (guest cart). */
+  imageUri?: string;
+  /** Optional selected variant metadata (guest cart). */
+  variantId?: number;
+  size?: string;
+  color?: string;
+  /** Optional variant stock captured at add time for guest cart checks. */
+  stock?: number;
 };
 
 export type PersistedWishlistLine = {
@@ -73,6 +81,17 @@ export async function addProductToCart(
     cart[idx] = {
       ...cart[idx],
       quantity: cart[idx].quantity + 1,
+      // Keep latest selected image/variant metadata.
+      imageUri: product.imageUri ?? cart[idx].imageUri,
+      variantId: product.variantId ?? cart[idx].variantId,
+      size: product.size ?? cart[idx].size,
+      color: product.color ?? cart[idx].color,
+      stock:
+        typeof product.stock === "number" && Number.isFinite(product.stock)
+          ? Math.max(0, Math.floor(product.stock))
+          : typeof cart[idx].stock === "number"
+          ? Math.max(0, Math.floor(cart[idx].stock))
+          : undefined,
     };
   } else {
     cart.push({ ...product, quantity: 1 });

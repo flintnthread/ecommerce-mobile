@@ -91,6 +91,18 @@ type ProductReviewItem = {
   imagePath?: string;
 };
 
+type SellerSummary = {
+  id?: number;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  mobileNumber?: string;
+  businessName?: string;
+  branchName?: string;
+  address?: string;
+  warehouseAddress?: string;
+};
+
 const L1 = require("../assets/images/look1.png");
 const L2 = require("../assets/images/look2.png");
 const L3 = require("../assets/images/look3.png");
@@ -746,11 +758,11 @@ function mapApiProductDetailToCatalog(
 }
 
 /** Resolve backend variant id for wishlist add/remove (matches size/color chips). */
-function findVariantRowForWishlist(
+function findVariantForSelection(
   api: any,
   size: string | null,
   color: string | null
-): { id: number } | null {
+): any | null {
   const variants = Array.isArray(api?.variants) ? api.variants : [];
   if (variants.length === 0) return null;
   const trimmedSize = size?.trim() ?? "";
@@ -764,19 +776,116 @@ function findVariantRowForWishlist(
       const colorOk = !trimmedColor || cl === trimmedColor;
       return sizeOk && colorOk;
     });
-    if (match) {
-      const id = Math.floor(Number(match.id ?? match.variantId));
-      return Number.isFinite(id) && id > 0 ? { id } : null;
-    }
+    if (match) return match;
   }
-  const fallback =
+  return (
     variants.find((x: any) => {
       const st = x?.stock;
       if (typeof st === "number") return st > 0;
       return x?.inStock !== false;
-    }) ?? variants[0];
-  const id = Math.floor(Number(fallback?.id ?? fallback?.variantId));
+    }) ?? variants[0]
+  );
+}
+
+function resolveImageIndexForVariant(
+  api: any,
+  galleryImages: any[],
+  size: string | null,
+  color: string | null
+): number | null {
+  const imagesCount = Array.isArray(galleryImages) ? galleryImages.length : 0;
+  if (!api || imagesCount <= 0) return null;
+
+  const normalizeImageKey = (value: unknown): string => {
+    const raw = String(value ?? "").trim().toLowerCase();
+    if (!raw) return "";
+    const noQuery = raw.split(/[?#]/, 1)[0];
+    const withoutHost = noQuery.replace(/^https?:\/\/[^/]+/i, "");
+    return withoutHost.replace(/\\/g, "/").replace(/^\/+/, "");
+  };
+
+  const galleryUriAt = (img: any): string => {
+    if (typeof img === "string") return img;
+    if (img && typeof img === "object" && typeof img.uri === "string") return img.uri;
+    return "";
+  };
+
+  const chosen = findVariantForSelection(api, size, color);
+  if (chosen) {
+    const candidateKeys = [chosen?.imageUrl, chosen?.imagePath]
+      .map(normalizeImageKey)
+      .filter(Boolean);
+
+    if (candidateKeys.length > 0) {
+      const galleryMatch = galleryImages.findIndex((img: any) => {
+        const gk = normalizeImageKey(galleryUriAt(img));
+        if (!gk) return false;
+        return candidateKeys.some(
+          (ck) => gk === ck || gk.endsWith(ck) || ck.endsWith(gk)
+        );
+      });
+      if (galleryMatch >= 0 && galleryMatch < imagesCount) return galleryMatch;
+
+      // If gallery URI differs, map through api.images index first.
+      const apiImages = Array.isArray(api?.images) ? api.images : [];
+      const apiIndex = apiImages.findIndex((img: any) => {
+        const ik = normalizeImageKey(img?.imageUrl || img?.imagePath);
+        return ik && candidateKeys.some((ck) => ik === ck || ik.endsWith(ck) || ck.endsWith(ik));
+      });
+      if (apiIndex >= 0 && apiIndex < imagesCount) return apiIndex;
+    }
+  }
+
+  const normalizedColor = String(color ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Prefer explicit filename/path color matches when available.
+  if (normalizedColor) {
+    const colorTokens = normalizedColor.split(" ").filter((t) => t.length >= 3);
+    const apiImages = Array.isArray(api?.images) ? api.images : [];
+    const byKeyword = apiImages.findIndex((img: any) => {
+      const raw = `${img?.imagePath ?? ""} ${img?.imageUrl ?? ""}`.toLowerCase();
+      return colorTokens.some((token) => raw.includes(token));
+    });
+    if (byKeyword >= 0 && byKeyword < imagesCount) return byKeyword;
+  }
+
+  // Stable fallback: map selected variant to a repeatable image slot.
+  if (!chosen) return 0;
+  const variantId = Math.floor(Number(chosen?.id ?? chosen?.variantId));
+  if (Number.isFinite(variantId) && variantId > 0) {
+    return variantId % imagesCount;
+  }
+  return 0;
+}
+
+function findVariantRowForWishlist(
+  api: any,
+  size: string | null,
+  color: string | null
+): { id: number } | null {
+  const chosen = findVariantForSelection(api, size, color);
+  const id = Math.floor(Number(chosen?.id ?? chosen?.variantId));
   return Number.isFinite(id) && id > 0 ? { id } : null;
+}
+
+function hasVariantDimensionOptions(
+  api: any
+): { requiresSize: boolean; requiresColor: boolean } {
+  const variants = Array.isArray(api?.variants) ? api.variants : [];
+  let requiresSize = false;
+  let requiresColor = false;
+  for (const row of variants) {
+    const sz = String(row?.size ?? "").trim();
+    const cl = String(row?.color ?? "").trim();
+    if (sz) requiresSize = true;
+    if (cl) requiresColor = true;
+    if (requiresSize && requiresColor) break;
+  }
+  return { requiresSize, requiresColor };
 }
 
 const AVAILABLE_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
@@ -805,6 +914,17 @@ function extractUserIdFromToken(token: string): number | null {
     if (Number.isFinite(n) && n > 0) return Math.floor(n);
   }
   return null;
+}
+
+function getSellerDisplayName(seller: SellerSummary | null, fallbackSellerId?: number): string {
+  if (!seller) {
+    return fallbackSellerId != null ? `Seller #${fallbackSellerId}` : "Seller";
+  }
+  const business = String(seller.businessName ?? "").trim();
+  if (business) return business;
+  const fullName = `${String(seller.firstName ?? "").trim()} ${String(seller.lastName ?? "").trim()}`.trim();
+  if (fullName) return fullName;
+  return seller.id != null ? `Seller #${seller.id}` : "Seller";
 }
 
 function extractProfileFromToken(token: string): { name: string; email: string } {
@@ -1136,6 +1256,30 @@ export default function ProductDetail() {
   const [newAddressType, setNewAddressType] = useState<"home" | "work" | "other">("home");
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
+  const sellerDetail = useMemo<SellerSummary | null>(() => {
+    const seller = apiDetail?.seller;
+    if (!seller || typeof seller !== "object") return null;
+    return seller as SellerSummary;
+  }, [apiDetail]);
+
+  const sellerDisplayName = useMemo(
+    () => getSellerDisplayName(sellerDetail, product.sellerId),
+    [sellerDetail, product.sellerId]
+  );
+
+  const sellerSubInfo = useMemo(() => {
+    if (!sellerDetail) return "";
+    const location = String(sellerDetail.branchName ?? sellerDetail.address ?? "").trim();
+    if (location) return location;
+    const contact = String(sellerDetail.mobileNumber ?? sellerDetail.email ?? "").trim();
+    return contact;
+  }, [sellerDetail]);
+
+  const sellerProducts = useMemo<any[]>(() => {
+    const rows = Array.isArray(apiDetail?.sellerProducts) ? apiDetail.sellerProducts : [];
+    return rows.filter((row) => Number(row?.id) !== Number(numericProductId));
+  }, [apiDetail, numericProductId]);
+
   const mainImage = product.images[activeImageIndex] ?? product.images[0];
   const sizeChoices = product.sizeOptions?.length ? product.sizeOptions : AVAILABLE_SIZES;
 
@@ -1230,6 +1374,18 @@ export default function ProductDetail() {
     if (n > 0 && activeImageIndex >= n) setActiveImageIndex(0);
   }, [product.images, activeImageIndex]);
 
+  useEffect(() => {
+    if (!apiDetail || typeof apiDetail !== "object") return;
+    const nextIndex = resolveImageIndexForVariant(
+      apiDetail,
+      product.images ?? [],
+      selectedSize,
+      selectedColor
+    );
+    if (nextIndex == null) return;
+    setActiveImageIndex(nextIndex);
+  }, [apiDetail, product.images, selectedSize, selectedColor]);
+
   useFocusEffect(
     useCallback(() => {
       void refreshCartAndWishlistState();
@@ -1246,6 +1402,16 @@ export default function ProductDetail() {
         apiDetail &&
         typeof apiDetail.id === "number"
       ) {
+        const { requiresSize, requiresColor } = hasVariantDimensionOptions(apiDetail);
+        if (requiresSize && !String(selectedSize ?? "").trim()) {
+          Alert.alert("Select size", "Please select size before adding to cart.");
+          return;
+        }
+        if (requiresColor && !String(selectedColor ?? "").trim()) {
+          Alert.alert("Select color", "Please select color before adding to cart.");
+          return;
+        }
+
         const vrow = findVariantRowForWishlist(
           apiDetail,
           selectedSize,
@@ -1272,11 +1438,35 @@ export default function ProductDetail() {
         }
         return;
       }
+      const localChosenVariant =
+        apiDetail && typeof apiDetail === "object"
+          ? findVariantForSelection(apiDetail, selectedSize, selectedColor)
+          : null;
+      const localVariantIdRaw = Number(
+        localChosenVariant?.id ?? localChosenVariant?.variantId
+      );
+      const localVariantId =
+        Number.isFinite(localVariantIdRaw) && localVariantIdRaw > 0
+          ? Math.floor(localVariantIdRaw)
+          : undefined;
+      const localStockRaw = Number(localChosenVariant?.stock);
+      const localStock =
+        Number.isFinite(localStockRaw) && localStockRaw >= 0
+          ? Math.floor(localStockRaw)
+          : undefined;
       await addProductToCart({
         id: product.id,
         name: product.name,
         price: product.price,
         mrp: product.mrp,
+        imageUri:
+          mainImage && typeof mainImage === "object" && "uri" in (mainImage as any)
+            ? String((mainImage as any).uri ?? "").trim() || undefined
+            : undefined,
+        variantId: localVariantId,
+        stock: localStock,
+        size: selectedSize ?? undefined,
+        color: selectedColor ?? undefined,
       });
       await refreshCartAndWishlistState();
       setHasAddedToCart(true);
@@ -2126,22 +2316,35 @@ export default function ProductDetail() {
           <TouchableOpacity
             style={styles.soldByCard}
             activeOpacity={0.85}
-            onPress={() =>
+            onPress={() => {
+              const sellerId = sellerDetail?.id ?? product.sellerId;
               router.push({
                 pathname: "/sellerstore",
-                params: { name: "@ SHIV CREATION", rating: "4.1" },
-              } as any)
-            }
+                params: {
+                  sellerId: sellerId != null ? String(sellerId) : undefined,
+                  name: sellerDisplayName,
+                  rating: "4.1",
+                  email: sellerDetail?.email ?? "",
+                  mobileNumber: sellerDetail?.mobileNumber ?? "",
+                  businessName: sellerDetail?.businessName ?? "",
+                  branchName: sellerDetail?.branchName ?? "",
+                  address: sellerDetail?.address ?? "",
+                },
+              } as any);
+            }}
             accessibilityRole="button"
             accessibilityLabel={tr("Open seller store")}
           >
             <View style={styles.soldByLeft}>
               <Text style={styles.soldByLabel}>Sold by</Text>
               <Text style={styles.soldByName} numberOfLines={1}>
-                {product.sellerId != null
-                  ? `Seller #${product.sellerId}`
-                  : "@ SHIV CREATION"}
+                {sellerDisplayName}
               </Text>
+              {sellerSubInfo ? (
+                <Text style={styles.sellerInfo} numberOfLines={1}>
+                  {sellerSubInfo}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.soldByRight}>
@@ -2153,6 +2356,42 @@ export default function ProductDetail() {
             </View>
           </TouchableOpacity>
         </View>
+
+        {/* MORE FROM THIS SELLER */}
+        {sellerProducts.length > 0 ? (
+          <View style={styles.sectionBlock}>
+            <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
+              More from this seller
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestRow}
+            >
+              {sellerProducts.map((item) => {
+                const catalogItem = mapApiRelatedProductToCatalog(item);
+                return (
+                  <TouchableOpacity
+                    key={`seller-${item.id}`}
+                    style={styles.suggestCard}
+                    activeOpacity={0.85}
+                    onPress={() => openProductDetail(item.id)}
+                  >
+                    <View style={styles.suggestImageWrapper}>
+                      <Image source={catalogItem.images[0]} style={styles.suggestImage} />
+                    </View>
+                    <Text style={styles.suggestTitle} numberOfLines={1}>
+                      {catalogItem.name}
+                    </Text>
+                    <Text style={styles.suggestPrice}>
+                      ₹{catalogItem.price.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
 
         {/* REVIEWS */}
         <View style={styles.sectionBlock}>
