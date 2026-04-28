@@ -67,6 +67,20 @@ function formatOrderDate(isoOrStr: string): string {
   });
 }
 
+function formatOrderCreatedDateTime(raw: string): string {
+  const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return raw.slice(0, 16);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function pickLineItemsFromApiOrder(o: Record<string, unknown>): unknown[] {
   const candidates = [
     o.orderItems,
@@ -171,10 +185,11 @@ function mapApiOrderRowToOrder(
     o.orderNumber ?? o.orderNo ?? o.order_number ?? `#ORD-${id}`
   ).trim();
 
-  const dateRaw = o.createdAt ?? o.orderDate ?? o.date ?? o.orderedAt ?? o.placedAt;
+  const dateRaw =
+    o.createdDate ?? o.createdAt ?? o.orderDate ?? o.date ?? o.orderedAt ?? o.placedAt;
   const date =
     typeof dateRaw === "string" && dateRaw
-      ? formatOrderDate(dateRaw)
+      ? formatOrderCreatedDateTime(dateRaw)
       : String(o.orderDate ?? "—");
 
   const lineItems = pickLineItemsFromApiOrder(o);
@@ -479,7 +494,7 @@ function mapApiOrderToUiOrder(row: ApiOrderRow): Order {
   return {
     id: String(row.orderId),
     orderNumber: displayNum,
-    date: row.createdDate ? formatOrderDate(row.createdDate) : "",
+    date: row.createdDate ? formatOrderCreatedDateTime(row.createdDate) : "",
     status: mapBackendOrderStatus(row.orderStatus),
     items: n > 0 ? n : 1,
     total: totalStr,
