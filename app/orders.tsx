@@ -17,6 +17,7 @@ import {
   Animated,
   BackHandler,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -340,6 +341,13 @@ interface Order {
     price: string;
   }[];
 }
+
+type InvoiceRow = {
+  id: number;
+  orderId: number;
+  invoiceNumber: string;
+  invoicePath?: string | null;
+};
 
 const sampleOrders: Order[] = [
   {
@@ -929,6 +937,51 @@ export default function OrdersScreen() {
     });
   };
 
+  const handleDownloadInvoice = async (order: Order) => {
+    const orderId = Number(order.id);
+    if (!Number.isFinite(orderId) || orderId <= 0) {
+      Alert.alert(tr("Invoice"), tr("Order ID is missing for this order."));
+      return;
+    }
+
+    try {
+      const { data } = await api.get<{
+        success: boolean;
+        message?: string;
+        data?: InvoiceRow[];
+      }>("/api/invoices", {
+        params: { orderId: Math.floor(orderId) },
+      });
+
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      if (rows.length === 0) {
+        Alert.alert(tr("Invoice"), tr("Invoice not available yet for this order."));
+        return;
+      }
+
+      const path = String(rows[0]?.invoicePath ?? "").trim();
+      if (!path) {
+        Alert.alert(tr("Invoice"), tr("Invoice file path is missing."));
+        return;
+      }
+
+      const baseUrl = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+      const invoiceUrl = /^https?:\/\//i.test(path)
+        ? path
+        : `${baseUrl}/${path.replace(/^\/+/, "")}`;
+
+      const canOpen = await Linking.canOpenURL(invoiceUrl);
+      if (!canOpen) {
+        Alert.alert(tr("Invoice"), tr("Could not open invoice URL."));
+        return;
+      }
+      await Linking.openURL(invoiceUrl);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : tr("Could not download invoice right now.");
+      Alert.alert(tr("Invoice"), message);
+    }
+  };
+
   const filteredOrders = getFilteredOrders();
 
   return (
@@ -1058,6 +1111,7 @@ export default function OrdersScreen() {
               params: { id: String(productId), openReview: "1", fromOrders: "1" },
             } as any);
           }}
+          onDownloadInvoice={() => void handleDownloadInvoice(selectedOrder)}
           getStatusConfig={getStatusConfig}
         />
       ) : (
@@ -1211,6 +1265,7 @@ function OrderDetailsView({
   onExchange,
   onTrackPackage,
   onWriteReview,
+  onDownloadInvoice,
   getStatusConfig,
 }: {
   order: Order;
@@ -1219,6 +1274,7 @@ function OrderDetailsView({
   onExchange: () => void;
   onTrackPackage: () => void;
   onWriteReview: (productId?: number) => void;
+  onDownloadInvoice: () => void;
   getStatusConfig: (status: OrderStatus) => any;
 }) {
   const { tr } = useLanguage();
@@ -1377,6 +1433,10 @@ function OrderDetailsView({
             <Text style={[styles.secondaryBtnText, { color: "#8B5CF6" }]}>{tr("Return/Exchange")}</Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity style={styles.secondaryBtn} onPress={onDownloadInvoice}>
+          <Ionicons name="receipt-outline" size={20} color="#6B7280" />
+          <Text style={[styles.secondaryBtnText, { color: "#6B7280" }]}>{tr("Download Invoice")}</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
