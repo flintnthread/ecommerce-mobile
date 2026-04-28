@@ -862,6 +862,8 @@ export default function ProductDetail() {
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [canReviewProduct, setCanReviewProduct] = useState(false);
+  const [reviewEligibilityMessage, setReviewEligibilityMessage] = useState("");
   const [autoReviewHandled, setAutoReviewHandled] = useState(false);
 
   const getDetailAssetUriFromApiPath = useCallback((pathOrUrl: string): string => {
@@ -922,6 +924,52 @@ export default function ProductDetail() {
     }
   }, []);
 
+  const loadReviewEligibility = useCallback(async (pid: number): Promise<{ canReview: boolean; message: string }> => {
+    try {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (!token) {
+        const result = { canReview: false, message: "Please log in to write a review." };
+        setCanReviewProduct(result.canReview);
+        setReviewEligibilityMessage(result.message);
+        return result;
+      }
+      const { data } = await api.get<unknown>(`/api/reviews/eligibility/${pid}`);
+      const payload = (data && typeof data === "object" ? data : {}) as {
+        canReview?: unknown;
+        message?: unknown;
+      };
+      const allowed = payload.canReview === true;
+      const message =
+        typeof payload.message === "string" && payload.message.trim()
+          ? payload.message.trim()
+          : allowed
+            ? "You can review this product."
+            : "You can review this product only after placing an order.";
+      setCanReviewProduct(allowed);
+      setReviewEligibilityMessage(message);
+      return { canReview: allowed, message };
+    } catch {
+      const result = { canReview: false, message: "Could not verify review eligibility right now." };
+      setCanReviewProduct(result.canReview);
+      setReviewEligibilityMessage(result.message);
+      return result;
+    }
+  }, []);
+
+  const loadProductDetail = useCallback(async (pid: number) => {
+    setApiLoading(true);
+    setApiError(null);
+    try {
+      const { data } = await api.get(productByIdPath(pid));
+      if (data && typeof (data as any).id === "number") setApiDetail(data);
+      else setApiError("Invalid product response.");
+    } catch {
+      setApiError("Could not load this product.");
+    } finally {
+      setApiLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!numericProductId) {
       setApiDetail(null);
@@ -930,25 +978,15 @@ export default function ProductDetail() {
       return;
     }
     let cancelled = false;
-    setApiLoading(true);
-    setApiError(null);
     setApiDetail(null);
     (async () => {
-      try {
-        const { data } = await api.get(productByIdPath(numericProductId));
-        if (cancelled) return;
-        if (data && typeof (data as any).id === "number") setApiDetail(data);
-        else setApiError("Invalid product response.");
-      } catch {
-        if (!cancelled) setApiError("Could not load this product.");
-      } finally {
-        if (!cancelled) setApiLoading(false);
-      }
+      if (cancelled) return;
+      await loadProductDetail(numericProductId);
     })();
     return () => {
       cancelled = true;
     };
-  }, [numericProductId]);
+  }, [numericProductId, loadProductDetail]);
 
   useEffect(() => {
     if (!numericProductId) return;
@@ -1074,7 +1112,8 @@ export default function ProductDetail() {
     setReviewsSectionOpen(true);
     setAutoReviewHandled(false);
     void loadReviews(numericProductId);
-  }, [numericProductId, loadReviews]);
+    void loadReviewEligibility(numericProductId);
+  }, [numericProductId, loadReviews, loadReviewEligibility]);
 
   useEffect(() => {
     if (!shouldAutoOpenReviewForm || autoReviewHandled) return;
@@ -1138,6 +1177,22 @@ export default function ProductDetail() {
 
   const mainImage = product.images[activeImageIndex] ?? product.images[0];
   const sizeChoices = product.sizeOptions?.length ? product.sizeOptions : AVAILABLE_SIZES;
+  const liveReviewAverage = useMemo(() => {
+    if (!reviews.length) return null;
+    const sum = reviews.reduce((acc, row) => acc + Number(row.rating || 0), 0);
+    if (!Number.isFinite(sum) || sum <= 0) return null;
+    return (sum / reviews.length).toFixed(1);
+  }, [reviews]);
+  const displayRating = useMemo(() => {
+    const raw = String(product.rating ?? "").trim();
+    if (raw && raw !== "—") return raw;
+    return liveReviewAverage ?? "—";
+  }, [product.rating, liveReviewAverage]);
+  const displayRatingCount = useMemo(() => {
+    const raw = String(product.ratingCount ?? "").trim();
+    if (raw && raw.toLowerCase() !== "new") return raw;
+    return reviews.length > 0 ? String(reviews.length) : "New";
+  }, [product.ratingCount, reviews.length]);
 
   const refreshCartAndWishlistState = useCallback(async () => {
     setCartCount(await getCartUnitCount());
@@ -1339,9 +1394,15 @@ export default function ProductDetail() {
   }, [pickReviewImageFromLibrary, takeReviewPhoto]);
 
   const openReviewForm = useCallback(async () => {
+    if (!numericProductId) return;
     const token = (await AsyncStorage.getItem("token"))?.trim();
     if (!token) {
       Alert.alert("Sign in required", "Please log in to add a review.");
+      return;
+    }
+    const eligibility = await loadReviewEligibility(numericProductId);
+    if (!eligibility.canReview) {
+      Alert.alert("Review", eligibility.message || "You can review this product only after placing an order.");
       return;
     }
     const profile = extractProfileFromToken(token);
@@ -1357,7 +1418,7 @@ export default function ProductDetail() {
       }
       return next;
     });
-  }, [reviewNameInput, reviewEmailInput]);
+  }, [numericProductId, reviewNameInput, reviewEmailInput, loadReviewEligibility]);
 
   const submitReview = useCallback(async () => {
     const formatSubmitReviewError = (e: unknown, fallback: string): string => {
@@ -1386,16 +1447,14 @@ export default function ProductDetail() {
     }
     const name = reviewNameInput.trim();
     const comment = reviewCommentInput.trim();
-    if (!name) {
-      Alert.alert("Review", "Please enter your name.");
-      return;
-    }
     if (!comment) {
       Alert.alert("Review", "Please enter your review.");
       return;
     }
     const token = (await AsyncStorage.getItem("token"))?.trim();
+    const profile = token ? extractProfileFromToken(token) : null;
     const userId = token ? extractUserIdFromToken(token) : null;
+    const finalReviewerName = name || profile?.name || "Anonymous";
     const email = reviewEmailInput.trim();
     const wasEditing = Boolean(editingReviewId);
     setReviewSubmitting(true);
@@ -1409,21 +1468,11 @@ export default function ProductDetail() {
             imgErr,
             "Could not upload review photo."
           );
-          const choice = await new Promise<"cancel" | "no_photo">((resolve) => {
-            Alert.alert(
-              "Photo upload failed",
-              `${imgMsg}\n\nSubmit your review without a photo?`,
-              [
-                { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
-                {
-                  text: "Submit without photo",
-                  onPress: () => resolve("no_photo"),
-                },
-              ]
-            );
-          });
-          if (choice === "cancel") return;
-          imagePath = undefined;
+          Alert.alert(
+            "Photo upload failed",
+            `${imgMsg}\n\nPlease try again. Review will be submitted only with the photo.`
+          );
+          return;
         }
       } else if (reviewPhotoServerUrl?.trim()) {
         imagePath = reviewPhotoServerUrl.trim();
@@ -1433,7 +1482,7 @@ export default function ProductDetail() {
         await api.put(`/api/reviews/${editingReviewId}`, {
           productId: numericProductId,
           userId: userId ?? undefined,
-          name,
+          name: finalReviewerName,
           email: email || undefined,
           rating: reviewRatingInput,
           comment,
@@ -1444,7 +1493,7 @@ export default function ProductDetail() {
         await api.post("/api/reviews", {
           productId: numericProductId,
           userId: userId ?? undefined,
-          name,
+          name: finalReviewerName,
           email: email || undefined,
           rating: reviewRatingInput,
           comment,
@@ -1463,6 +1512,7 @@ export default function ProductDetail() {
         wasEditing ? "Your review has been updated." : "Thanks for sharing your feedback."
       );
       await loadReviews(numericProductId);
+      await loadProductDetail(numericProductId);
     } catch (e: unknown) {
       const msg = formatSubmitReviewError(e, "Could not submit review. Please try again.");
       Alert.alert("Review", msg);
@@ -1477,6 +1527,7 @@ export default function ProductDetail() {
     reviewRatingInput,
     editingReviewId,
     loadReviews,
+    loadProductDetail,
     reviewPhotoLocalUri,
     reviewPhotoServerUrl,
   ]);
@@ -1536,6 +1587,7 @@ export default function ProductDetail() {
               try {
                 await api.delete(`/api/reviews/${review.id}`);
                 await loadReviews(numericProductId);
+                await loadProductDetail(numericProductId);
                 Alert.alert("Review deleted", "Your review was removed.");
               } catch {
                 Alert.alert("Review", "Could not delete review. Please try again.");
@@ -1547,7 +1599,7 @@ export default function ProductDetail() {
         },
       ]);
     },
-    [numericProductId, loadReviews]
+    [numericProductId, loadReviews, loadProductDetail]
   );
 
   // Load saved addresses
@@ -1804,7 +1856,7 @@ export default function ProductDetail() {
 
           <View style={styles.ratingRow}>
             <View style={styles.ratingBadge}>
-              <Text style={styles.ratingText}>{product.rating}</Text>
+              <Text style={styles.ratingText}>{displayRating}</Text>
               <Ionicons
                 name="star"
                 size={10}
@@ -1812,7 +1864,7 @@ export default function ProductDetail() {
                 style={{ marginLeft: 2 }}
               />
             </View>
-            <Text style={styles.ratingCount}>{product.ratingCount} ratings</Text>
+            <Text style={styles.ratingCount}>{displayRatingCount} ratings</Text>
           </View>
         </View>
 
@@ -2154,6 +2206,149 @@ export default function ProductDetail() {
           </TouchableOpacity>
         </View>
 
+        {/* PRODUCT HIGHLIGHTS */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
+            Product highlights
+          </Text>
+          {product.highlightBullets?.length ? (
+            product.highlightBullets.map((line, idx) => (
+              <View key={`hl-${idx}`} style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>{line}</Text>
+              </View>
+            ))
+          ) : (
+            <>
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>
+                  Pure cotton fabric for all‑day comfort
+                </Text>
+              </View>
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>
+                  A‑line silhouette ideal for casual and work wear
+                </Text>
+              </View>
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>
+                  Model is 5&apos;6&quot; and wearing size M
+                </Text>
+              </View>
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>
+                  Machine wash, mild cycle, wash dark colours separately
+                </Text>
+              </View>
+            </>
+          )}
+          
+          {/* SEE MORE INFO BUTTON */}
+          {product.descriptionPlain && (
+            <TouchableOpacity
+              style={styles.seeMoreButton}
+              activeOpacity={0.75}
+              onPress={() => setDescriptionExpanded(!descriptionExpanded)}
+            >
+              <Text style={styles.seeMoreButtonText}>
+                {descriptionExpanded ? "Show less info" : "See more info about product"}
+              </Text>
+              <Ionicons 
+                name={descriptionExpanded ? "chevron-up" : "chevron-down"} 
+                size={16} 
+                color="#ef7b1a" 
+                style={{ marginLeft: 4 }}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+ 
+        {/* PRODUCT DESCRIPTION (EXPANDABLE) */}
+        {descriptionExpanded && (
+          <View style={styles.sectionBlock}>
+            <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
+              Product Description
+            </Text>
+            {product.descriptionPlain && (
+              <Text style={styles.descriptionPlainText}>
+                {product.descriptionPlain}
+              </Text>
+            )}
+            
+            {/* SPECIFICATIONS */}
+            {product.specifications && product.specifications.length > 0 && (
+              <View style={styles.specificationsContainer}>
+                <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
+                  Specifications
+                </Text>
+                <View style={styles.specificationsList}>
+                  {product.specifications.map((spec, index) => {
+                    const name = spec.name;
+                    const value = spec.value;
+                    if (!name || !value) return null;
+                    
+                    return (
+                      <View key={`spec-${index}`} style={styles.specificationItem}>
+                        <Text style={styles.specificationKey}>
+                          {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
+                        </Text>
+                        <Text style={styles.specificationValue}>{value}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+         
+        {/* YOU MAY ALSO LIKE */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
+            You&apos;ll Love These
+          </Text>
+          {relatedLoading ? (
+            <View style={styles.relatedLoadingContainer}>
+              <ActivityIndicator size="small" color="#ef7b1a" />
+              <Text style={styles.relatedLoadingText}>Loading related products...</Text>
+            </View>
+          ) : relatedProducts.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestRow}
+            >
+              {relatedProducts.map((item) => {
+                const catalogItem = mapApiRelatedProductToCatalog(item);
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.suggestCard}
+                    activeOpacity={0.85}
+                    onPress={() => openProductDetail(item.id)}
+                  >
+                    <View style={styles.suggestImageWrapper}>
+                      <Image source={catalogItem.images[0]} style={styles.suggestImage} />
+                    </View>
+                    <Text style={styles.suggestTitle} numberOfLines={1}>
+                      {catalogItem.name}
+                    </Text>
+                    <Text style={styles.suggestPrice}>
+                      ₹{catalogItem.price.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noRelatedText}>No related products found</Text>
+          )}
+        </View>
+
         {/* REVIEWS */}
         <View style={styles.sectionBlock}>
           <TouchableOpacity
@@ -2169,27 +2364,13 @@ export default function ProductDetail() {
             />
           </TouchableOpacity>
 
-          <View style={styles.reviewsWriteRow}>
-            <TouchableOpacity
-              style={styles.writeReviewButton}
-              activeOpacity={0.8}
-              onPress={() => {
-                void openReviewForm();
-              }}
-            >
-              <Text style={styles.writeReviewText}>
-                {reviewFormVisible ? "Close review form" : "Write a review"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {reviewFormVisible ? (
+          {reviewFormVisible && canReviewProduct ? (
                 <View style={styles.reviewFormCard}>
                   <Text style={styles.reviewFormTitle}>
                     {editingReviewId ? "Edit your review" : "Write your review"}
                   </Text>
                   <TextInput
-                    placeholder="Your name"
+                    placeholder="Your name (optional)"
                     placeholderTextColor="#94A3B8"
                     value={reviewNameInput}
                     onChangeText={setReviewNameInput}
@@ -2372,149 +2553,6 @@ export default function ProductDetail() {
               )}
             </>
           ) : null}
-        </View>
-
-        {/* PRODUCT HIGHLIGHTS */}
-        <View style={styles.sectionBlock}>
-          <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
-            Product highlights
-          </Text>
-          {product.highlightBullets?.length ? (
-            product.highlightBullets.map((line, idx) => (
-              <View key={`hl-${idx}`} style={styles.highlightRow}>
-                <View style={styles.highlightBullet} />
-                <Text style={styles.highlightText}>{line}</Text>
-              </View>
-            ))
-          ) : (
-            <>
-              <View style={styles.highlightRow}>
-                <View style={styles.highlightBullet} />
-                <Text style={styles.highlightText}>
-                  Pure cotton fabric for all‑day comfort
-                </Text>
-              </View>
-              <View style={styles.highlightRow}>
-                <View style={styles.highlightBullet} />
-                <Text style={styles.highlightText}>
-                  A‑line silhouette ideal for casual and work wear
-                </Text>
-              </View>
-              <View style={styles.highlightRow}>
-                <View style={styles.highlightBullet} />
-                <Text style={styles.highlightText}>
-                  Model is 5&apos;6&quot; and wearing size M
-                </Text>
-              </View>
-              <View style={styles.highlightRow}>
-                <View style={styles.highlightBullet} />
-                <Text style={styles.highlightText}>
-                  Machine wash, mild cycle, wash dark colours separately
-                </Text>
-              </View>
-            </>
-          )}
-          
-          {/* SEE MORE INFO BUTTON */}
-          {product.descriptionPlain && (
-            <TouchableOpacity
-              style={styles.seeMoreButton}
-              activeOpacity={0.75}
-              onPress={() => setDescriptionExpanded(!descriptionExpanded)}
-            >
-              <Text style={styles.seeMoreButtonText}>
-                {descriptionExpanded ? "Show less info" : "See more info about product"}
-              </Text>
-              <Ionicons 
-                name={descriptionExpanded ? "chevron-up" : "chevron-down"} 
-                size={16} 
-                color="#ef7b1a" 
-                style={{ marginLeft: 4 }}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
- 
-        {/* PRODUCT DESCRIPTION (EXPANDABLE) */}
-        {descriptionExpanded && (
-          <View style={styles.sectionBlock}>
-            <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
-              Product Description
-            </Text>
-            {product.descriptionPlain && (
-              <Text style={styles.descriptionPlainText}>
-                {product.descriptionPlain}
-              </Text>
-            )}
-            
-            {/* SPECIFICATIONS */}
-            {product.specifications && product.specifications.length > 0 && (
-              <View style={styles.specificationsContainer}>
-                <Text style={[styles.sectionLabel, styles.sectionLabelSecondary]}>
-                  Specifications
-                </Text>
-                <View style={styles.specificationsList}>
-                  {product.specifications.map((spec, index) => {
-                    const name = spec.name;
-                    const value = spec.value;
-                    if (!name || !value) return null;
-                    
-                    return (
-                      <View key={`spec-${index}`} style={styles.specificationItem}>
-                        <Text style={styles.specificationKey}>
-                          {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
-                        </Text>
-                        <Text style={styles.specificationValue}>{value}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-         
-        {/* YOU MAY ALSO LIKE */}
-        <View style={styles.sectionBlock}>
-          <Text style={[styles.sectionLabel, styles.sectionLabelAccent]}>
-            You&apos;ll Love These
-          </Text>
-          {relatedLoading ? (
-            <View style={styles.relatedLoadingContainer}>
-              <ActivityIndicator size="small" color="#ef7b1a" />
-              <Text style={styles.relatedLoadingText}>Loading related products...</Text>
-            </View>
-          ) : relatedProducts.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.suggestRow}
-            >
-              {relatedProducts.map((item) => {
-                const catalogItem = mapApiRelatedProductToCatalog(item);
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.suggestCard}
-                    activeOpacity={0.85}
-                    onPress={() => openProductDetail(item.id)}
-                  >
-                    <View style={styles.suggestImageWrapper}>
-                      <Image source={catalogItem.images[0]} style={styles.suggestImage} />
-                    </View>
-                    <Text style={styles.suggestTitle} numberOfLines={1}>
-                      {catalogItem.name}
-                    </Text>
-                    <Text style={styles.suggestPrice}>
-                      ₹{catalogItem.price.toLocaleString()}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : (
-            <Text style={styles.noRelatedText}>No related products found</Text>
-          )}
         </View>
 
         {/* ALL PRODUCTS */}
@@ -2908,7 +2946,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
     backgroundColor: "#E5E5F0",
-    height: 260,
+    height: 350,
     justifyContent: "center",
     alignItems: "center",
   },
