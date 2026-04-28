@@ -394,15 +394,15 @@ export default function ReviewOrdersScreen() {
             <Text style={styles.lineValue}>₹{subtotal.toLocaleString()}</Text>
           </View>
 
-          <View style={styles.lineRow}>
+          {/* <View style={styles.lineRow}>
             <Text style={styles.lineLabel}>Product discount</Text>
             <Text style={[styles.lineValue, styles.positive]}>
               -₹{productDiscount.toLocaleString()}
             </Text>
-          </View>
+          </View> */}
 
           <View style={styles.lineRow}>
-            <Text style={styles.lineLabel}>{tr("Delivery")}</Text>
+            <Text style={styles.lineLabel}>{tr("Shipping charges")}</Text>
             <Text style={styles.lineValue}>
               {deliveryCharge <= 0 ? tr("FREE") : `₹${deliveryCharge.toLocaleString()}`}
             </Text>

@@ -31,11 +31,6 @@ import {
   parseCartApiError,
   putCartItemQuantityDelta,
 } from "../lib/cartServerApi";
-import {
-  estimateCartWeightKgFromItemCount,
-  fetchDeliveryChargeByWeight,
-  pickPreferredCharge,
-} from "../lib/deliveryChargesApi";
 import { useLanguage } from "../lib/language";
 
 const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
@@ -242,8 +237,6 @@ export default function CartScreen() {
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
-  const [apiWeightDeliveryCharge, setApiWeightDeliveryCharge] = useState<number | null>(null);
-
   // Calculate totals (server cart uses API priceSummary when available)
   const subtotal = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
@@ -264,37 +257,13 @@ export default function CartScreen() {
   }, [cartSource, serverPriceSummary, cartItems]);
 
   const totalDiscount = discount + couponDiscount;
-  const totalUnits = useMemo(
-    () => cartItems.reduce((sum, item) => sum + Math.max(0, item.quantity), 0),
-    [cartItems]
-  );
-
-  useEffect(() => {
-    if (cartSource === "server" && serverPriceSummary) return;
-    let alive = true;
-    void (async () => {
-      try {
-        const weightKg = estimateCartWeightKgFromItemCount(totalUnits);
-        const slab = await fetchDeliveryChargeByWeight(weightKg);
-        if (alive) setApiWeightDeliveryCharge(pickPreferredCharge(slab));
-      } catch {
-        if (alive) setApiWeightDeliveryCharge(null);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [cartSource, serverPriceSummary, totalUnits]);
 
   const deliveryCharge = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
       return serverPriceSummary.deliveryCharge;
     }
-    if (apiWeightDeliveryCharge != null) {
-      return apiWeightDeliveryCharge;
-    }
-    return 99;
-  }, [cartSource, serverPriceSummary, apiWeightDeliveryCharge]);
+    return 0;
+  }, [cartSource, serverPriceSummary]);
 
   const orderTotal = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
@@ -710,9 +679,9 @@ export default function CartScreen() {
                   </View>
                 ) : null}
                 <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>{tr("Delivery Charge")}</Text>
+                  <Text style={styles.priceLabel}>{tr("Shipping charges")}</Text>
                   <Text style={styles.priceValue}>
-                    {deliveryCharge <= 0 ? tr("FREE") : `₹${deliveryCharge.toLocaleString()}`}
+                    {deliveryCharge <= 0 ? tr("Free") : `₹${deliveryCharge.toLocaleString()}`}
                   </Text>
                 </View>
                 <View style={styles.priceDivider} />
