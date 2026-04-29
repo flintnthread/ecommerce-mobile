@@ -99,78 +99,9 @@ const MILK_SUBS_FALLBACK: SweetsSubItem[] = [
   },
 ];
 
-/** Product tiles for the bottom grid — ids `sw*` are registered in `productdetail` ALL_PRODUCTS. */
-type SweetsHubProduct = {
-  id: string;
-  name: string;
-  tag: string;
-  price: number;
-  rating: number;
-  image: any;
-};
-
 const SWEETS_PTB_GRID_GAP = 12;
 /** Parent used by sweets subcategory APIs — default main-category products id. */
 const SWEETS_MAIN_CATEGORY_FALLBACK_ID = 53;
-
-const RELATED_SWEETS_PRODUCTS: SweetsHubProduct[] = [
-  {
-    id: "sw1",
-    name: "Festive Gulab Jamun",
-    tag: "Milk sweets",
-    price: 449,
-    rating: 4.7,
-    image: require("../assets/sweetsimages/jamun.jpg"),
-  },
-  {
-    id: "sw2",
-    name: "Boondi Laddu Pack",
-    tag: "Dry sweets",
-    price: 399,
-    rating: 4.5,
-    image: require("../assets/sweetsimages/laddu.jpg"),
-  },
-  {
-    id: "sw3",
-    name: "Sununda Special",
-    tag: "Traditional",
-    price: 329,
-    rating: 4.6,
-    image: require("../assets/sweetsimages/sununda.jpg"),
-  },
-  {
-    id: "sw4",
-    name: "Dry Fruit Laddu",
-    tag: "Premium nuts",
-    price: 549,
-    rating: 4.8,
-    image: require("../assets/sweetsimages/dry fruit laddu.jpg"),
-  },
-  {
-    id: "sw5",
-    name: "Milk Kalakand",
-    tag: "Milk sweets",
-    price: 479,
-    rating: 4.4,
-    image: require("../assets/sweetsimages/48.png"),
-  },
-  {
-    id: "sw6",
-    name: "Assorted Mithai Box",
-    tag: "Gift box",
-    price: 899,
-    rating: 4.7,
-    image: require("../assets/sweetsimages/49.png"),
-  },
-  {
-    id: "sw7",
-    name: "Signature Asvi Collection",
-    tag: "House special",
-    price: 649,
-    rating: 4.6,
-    image: require("../assets/sweetsimages/Asvi.png"),
-  },
-];
 
 export default function Sweets() {
   const router = useRouter();
@@ -519,9 +450,9 @@ export default function Sweets() {
 
   const BANNERS = useMemo(
     () => [
-      { id: "b1", image: require("../assets/sweetsimages/48.png") },
-      { id: "b2", image: require("../assets/sweetsimages/49.png") },
-      { id: "b3", image: require("../assets/sweetsimages/Asvi.png") },
+      { id: "b1", image: require("../assets/sweetsimages/1.png") },
+      { id: "b2", image: require("../assets/sweetsimages/2.png") },
+      { id: "b3", image: require("../assets/sweetsimages/3.png") },
     ],
     []
   );
@@ -529,9 +460,9 @@ export default function Sweets() {
   /** Promo strip between Dry and Milk — smaller cards, same scroll-scale animation as hero */
   const MID_PROMO_BANNERS = useMemo(
     () => [
-      { id: "p1", image: require("../assets/sweetsimages/jamun.jpg"), title: "Festive box", subtitle: "Limited time" },
-      { id: "p2", image: require("../assets/sweetsimages/49.png"), title: "Bulk sweets", subtitle: "Wholesale picks" },
-      { id: "p3", image: require("../assets/sweetsimages/laddu.jpg"), title: "Gift hampers", subtitle: "Ready to ship" },
+      { id: "p1", image: require("../assets/sweetsimages/4.png"), title: "Festive box", subtitle: "Limited time" },
+      { id: "p2", image: require("../assets/sweetsimages/5.png"), title: "Bulk sweets", subtitle: "Wholesale picks" },
+      { id: "p3", image: require("../assets/sweetsimages/6.png"), title: "Gift hampers", subtitle: "Ready to ship" },
     ],
     []
   );
@@ -578,15 +509,6 @@ export default function Sweets() {
     return out;
   }, [SUB, query]);
 
-  const relatedSweetsFiltered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return RELATED_SWEETS_PRODUCTS;
-    return RELATED_SWEETS_PRODUCTS.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) || p.tag.toLowerCase().includes(q)
-    );
-  }, [query]);
-
   const params = useLocalSearchParams<{
     id?: string | string[];
     mainCategoryId?: string | string[];
@@ -626,11 +548,6 @@ export default function Sweets() {
   );
   const [sweetsWishlistHasAuth, setSweetsWishlistHasAuth] = useState(false);
   const [sweetsCartCount, setSweetsCartCount] = useState(0);
-
-  const sweetsPtbColW = useMemo(
-    () => Math.floor((width - 32 - SWEETS_PTB_GRID_GAP) / 2),
-    [width]
-  );
 
   const reloadSweetsWishlistIds = useCallback(async () => {
     const token = (await AsyncStorage.getItem("token"))?.trim();
@@ -718,6 +635,14 @@ export default function Sweets() {
             if (!imageUri) return null;
             const { sellingPrice, mrpPrice, discountPercentage, variantId } =
               pickPtbVariantPricing(p);
+            const ratingRaw = pickPtbProductRating(p);
+            const ratingParsed =
+              ratingRaw === "—"
+                ? null
+                : (() => {
+                    const n = parseFloat(ratingRaw);
+                    return Number.isFinite(n) ? n : null;
+                  })();
             return {
               id: (p as any).id as number,
               name: safePtbText(String((p as any).name ?? "")),
@@ -725,7 +650,7 @@ export default function Sweets() {
               sellingPrice,
               mrpPrice,
               discountPercentage,
-              rating: pickPtbProductRating(p),
+              rating: ratingParsed,
               ...(variantId != null ? { variantId } : {}),
             } satisfies SweetsPtbApiRow;
           })
@@ -749,7 +674,7 @@ export default function Sweets() {
       variantId?: number;
     }) => {
       const r = await togglePtbWishlistWithServer(product, reloadSweetsWishlistIds);
-      if (!r.ok) Alert.alert("Wishlist", r.message);
+      if (r.ok === false) Alert.alert("Wishlist", r.message);
       else Alert.alert(r.title, r.body);
     },
     [reloadSweetsWishlistIds]
@@ -775,7 +700,7 @@ export default function Sweets() {
           mrp: product.mrpNum,
         },
       });
-      if (!r.ok) {
+      if ("message" in r) {
         Alert.alert("Cart", r.message);
         return;
       }
@@ -1166,51 +1091,6 @@ export default function Sweets() {
 
         {renderCategorySection("milk")}
 
-        <View style={styles.sweetsProductsSection}>
-          <View style={styles.sweetsProductsHeaderRow}>
-            <Text style={styles.sweetsProductsTitle}>Popular sweet picks</Text>
-            <Text style={styles.sweetsProductsCount}>
-              {relatedSweetsFiltered.length} items
-            </Text>
-          </View>
-          <View style={styles.sweetsProductsGrid}>
-            {relatedSweetsFiltered.map((product) => (
-              <TouchableOpacity
-                key={product.id}
-                style={styles.sweetsProductCard}
-                activeOpacity={0.9}
-                onPress={() =>
-                  router.push({
-                    pathname: "/productdetail",
-                    params: { id: product.id },
-                  } as any)
-                }
-                accessibilityRole="button"
-                accessibilityLabel={`${product.name}, view details`}
-              >
-                <View style={styles.sweetsProductInner}>
-                  <Image source={product.image} style={styles.sweetsProductImage} />
-                  <View style={styles.sweetsProductMeta}>
-                    <Text style={styles.sweetsProductName} numberOfLines={2}>
-                      {product.name}
-                    </Text>
-                    <Text style={styles.sweetsProductTag}>{product.tag}</Text>
-                    <View style={styles.sweetsProductBottomRow}>
-                      <Text style={styles.sweetsProductPrice}>Rs {product.price}</Text>
-                      <View style={styles.sweetsProductRatingPill}>
-                        <Ionicons name="star" size={12} color="#c2410c" />
-                        <Text style={styles.sweetsProductRatingText}>
-                          {product.rating}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         <View style={styles.sweetsVideoSection}>
           <Text style={styles.sweetsVideoTitle}>Behind the sweets</Text>
           <View style={[styles.sweetsVideoWrap, { height: bottomVideoHeight }]}>
@@ -1247,7 +1127,7 @@ export default function Sweets() {
                   sweetsWishlistIds
                 );
                 return (
-                <View key={product.id} style={[styles.sweetsPtbCard, { width: sweetsPtbColW }]}>
+                <View key={product.id} style={styles.sweetsPtbCard}>
                   <TouchableOpacity
                     activeOpacity={0.9}
                     onPress={() =>
@@ -1943,10 +1823,11 @@ const styles = StyleSheet.create({
   sweetsPtbGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
-    gap: SWEETS_PTB_GRID_GAP,
   },
   sweetsPtbCard: {
+    width: "48%",
     borderRadius: 12,
     backgroundColor: "#ef7b1a",
     borderWidth: 1,
@@ -2020,11 +1901,11 @@ const styles = StyleSheet.create({
   sweetsPtbDiscountPill: {
     backgroundColor: "rgba(239,123,26,0.14)",
     borderRadius: 6,
-    paddingHorizontal: 6,
+    paddingHorizontal: 3,
     paddingVertical: 2,
   },
   sweetsPtbDiscountText: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "900",
     color: "#b45309",
   },
@@ -2056,7 +1937,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 9,
     paddingVertical: 7,
     backgroundColor: "#1d324e",
   },

@@ -31,11 +31,6 @@ import {
   parseCartApiError,
   putCartItemQuantityDelta,
 } from "../lib/cartServerApi";
-import {
-  estimateCartWeightKgFromItemCount,
-  fetchDeliveryChargeByWeight,
-  pickPreferredCharge,
-} from "../lib/deliveryChargesApi";
 import { useLanguage } from "../lib/language";
 
 const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
@@ -46,6 +41,8 @@ type CartItemSource = "local" | "server";
 
 interface CartItem {
   id: string;
+  /** Product id to open in product detail (server: productId, local: line id). */
+  productDetailId: string;
   name: string;
   image: any;
   price: number;
@@ -53,6 +50,7 @@ interface CartItem {
   quantity: number;
   size?: string;
   color?: string;
+  stock?: number;
   source: CartItemSource;
   serverItemId?: number;
 }
@@ -60,26 +58,31 @@ interface CartItem {
 function persistedToCartItem(line: PersistedCartLine): CartItem {
   return {
     id: line.id,
+    productDetailId: line.id,
     name: line.name,
-    image: resolveProductImage(line.id),
+    image: line.imageUri ? { uri: line.imageUri } : resolveProductImage(line.id),
     price: line.price,
     originalPrice: line.mrp > line.price ? line.mrp : undefined,
     quantity: line.quantity,
+    size: line.size,
+    color: line.color,
+    stock:
+      typeof line.stock === "number" && Number.isFinite(line.stock)
+        ? Math.max(0, Math.floor(line.stock))
+        : 0,
     source: "local",
   };
 }
 
 function serverRowToCartItem(row: ApiCartItem): CartItem {
   const uri = String(row.imageUrl ?? "").trim();
-  const image =
-    uri && /^https?:\/\//i.test(uri)
-      ? { uri }
-      : resolveProductImage(String(row.productId));
+  const image = uri ? { uri } : resolveProductImage(String(row.productId));
   const price = row.sellingPrice ?? row.price;
   const mrp = row.mrpPrice ?? row.originalPrice;
   const orig = mrp > price + 0.009 ? mrp : undefined;
   return {
     id: String(row.itemId),
+    productDetailId: String(row.productId),
     name: row.name,
     image,
     price,
@@ -87,6 +90,7 @@ function serverRowToCartItem(row: ApiCartItem): CartItem {
     quantity: Math.max(1, row.quantity),
     size: row.size ?? undefined,
     color: row.color ?? undefined,
+    stock: typeof row.stock === "number" ? Math.max(0, row.stock) : 0,
     source: "server",
     serverItemId: row.itemId,
   };
@@ -223,8 +227,17 @@ export default function CartScreen() {
           setCartSource("server");
           return;
         }
+        // Signed-in users should remain server-authoritative.
+        setServerPriceSummary(null);
+        setCartItems([]);
+        setCartSource("server");
+        return;
       } catch {
-        /* fall back to local */
+        // Signed-in users should remain server-authoritative.
+        setServerPriceSummary(null);
+        setCartItems([]);
+        setCartSource("server");
+        return;
       }
     }
     setCartSource("local");
@@ -242,8 +255,12 @@ export default function CartScreen() {
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
+<<<<<<< HEAD
   const [apiWeightDeliveryCharge, setApiWeightDeliveryCharge] = useState<number | null>(null);
+  const [qtyUpdatingIds, setQtyUpdatingIds] = useState<Set<string>>(new Set());
 
+=======
+>>>>>>> 8824e47bbfc15fdaf148ff6ba4b6b4ff52fef33c
   // Calculate totals (server cart uses API priceSummary when available)
   const subtotal = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
@@ -264,37 +281,13 @@ export default function CartScreen() {
   }, [cartSource, serverPriceSummary, cartItems]);
 
   const totalDiscount = discount + couponDiscount;
-  const totalUnits = useMemo(
-    () => cartItems.reduce((sum, item) => sum + Math.max(0, item.quantity), 0),
-    [cartItems]
-  );
-
-  useEffect(() => {
-    if (cartSource === "server" && serverPriceSummary) return;
-    let alive = true;
-    void (async () => {
-      try {
-        const weightKg = estimateCartWeightKgFromItemCount(totalUnits);
-        const slab = await fetchDeliveryChargeByWeight(weightKg);
-        if (alive) setApiWeightDeliveryCharge(pickPreferredCharge(slab));
-      } catch {
-        if (alive) setApiWeightDeliveryCharge(null);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [cartSource, serverPriceSummary, totalUnits]);
 
   const deliveryCharge = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
       return serverPriceSummary.deliveryCharge;
     }
-    if (apiWeightDeliveryCharge != null) {
-      return apiWeightDeliveryCharge;
-    }
-    return 99;
-  }, [cartSource, serverPriceSummary, apiWeightDeliveryCharge]);
+    return 0;
+  }, [cartSource, serverPriceSummary]);
 
   const orderTotal = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
@@ -312,8 +305,27 @@ export default function CartScreen() {
   // Update quantity
   const updateQuantity = (id: string, change: number) => {
     void (async () => {
+      if (qtyUpdatingIds.has(id)) return;
       const item = cartItems.find((x) => x.id === id);
+      if (
+        change > 0 &&
+        item &&
+        typeof item.stock === "number" &&
+        item.stock >= 0 &&
+        item.quantity >= item.stock
+      ) {
+        Alert.alert(
+          tr("Stock not available"),
+          tr("No more stock available for this variant.")
+        );
+        return;
+      }
       if (item?.serverItemId != null) {
+        setQtyUpdatingIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
         try {
           if (change < 0 && item.quantity <= 1) {
             await deleteCartLineServer(item.serverItemId);
@@ -323,11 +335,39 @@ export default function CartScreen() {
           await reloadCartFromStorage();
         } catch (e) {
           Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not update quantity.")));
+        } finally {
+          setQtyUpdatingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
         }
         return;
       }
-      await adjustCartQuantity(id, change);
-      await reloadCartFromStorage();
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (token) {
+        Alert.alert(
+          tr("Cart sync"),
+          tr("Please wait while cart syncs with server and try again.")
+        );
+        await reloadCartFromStorage();
+        return;
+      }
+      setQtyUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      try {
+        await adjustCartQuantity(id, change);
+        await reloadCartFromStorage();
+      } finally {
+        setQtyUpdatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
     })();
   };
 
@@ -423,6 +463,20 @@ export default function CartScreen() {
   const handleCheckout = () => {
     if (cartItems.length === 0) {
       Alert.alert(tr("Empty Cart"), tr("Your cart is empty. Add some items first!"));
+      return;
+    }
+    const outOfStockLine = cartItems.find(
+      (item) =>
+        item.source === "server" &&
+        typeof item.stock === "number" &&
+        item.stock >= 0 &&
+        item.quantity > item.stock
+    );
+    if (outOfStockLine) {
+      Alert.alert(
+        tr("Stock not available"),
+        tr("Requested quantity is not available in stock. Please reduce quantity.")
+      );
       return;
     }
     router.push("/revieworders");
@@ -566,9 +620,35 @@ export default function CartScreen() {
                     index === cartItems.length - 1 && styles.cartItemCardLast,
                   ]}
                 >
-                  <Image source={item.image} style={styles.cartItemImage} />
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/productdetail",
+                        params: { id: item.productDetailId },
+                      } as any)
+                    }
+                  >
+                    <Image source={item.image} style={styles.cartItemImage} />
+                  </TouchableOpacity>
                   <View style={styles.cartItemInfo}>
-                    <Text style={styles.cartItemName}>{item.name}</Text>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/productdetail",
+                          params: { id: item.productDetailId },
+                        } as any)
+                      }
+                    >
+                      <Text
+                        style={styles.cartItemName}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {item.name}
+                      </Text>
+                    </TouchableOpacity>
                     {(item.size || item.color) && (
                       <Text style={styles.cartItemMeta}>
                         {item.size ? `${tr("Size")}: ${item.size}` : ""}
@@ -576,6 +656,13 @@ export default function CartScreen() {
                         {item.color ? `${tr("Color")}: ${item.color}` : ""}
                       </Text>
                     )}
+                    {typeof item.stock === "number" && item.stock >= 0 ? (
+                      <Text style={styles.stockHintText}>
+                        {item.stock > 0
+                          ? `Only ${item.stock} left`
+                          : tr("Out of stock")}
+                      </Text>
+                    ) : null}
                     <View style={styles.cartItemPriceRow}>
                       <View>
                         <Text style={styles.cartItemPrice}>
@@ -597,7 +684,8 @@ export default function CartScreen() {
                           style={styles.quantityButton}
                           onPress={() => updateQuantity(item.id, -1)}
                           disabled={
-                            item.source === "local" && item.quantity <= 1
+                            qtyUpdatingIds.has(item.id) ||
+                            (item.source === "local" && item.quantity <= 1)
                           }
                         >
                           <Ionicons
@@ -614,8 +702,20 @@ export default function CartScreen() {
                         <TouchableOpacity
                           style={styles.quantityButton}
                           onPress={() => updateQuantity(item.id, 1)}
+                          disabled={qtyUpdatingIds.has(item.id)}
                         >
-                          <Ionicons name="add" size={18} color="#E97A1F" />
+                          <Ionicons
+                            name="add"
+                            size={18}
+                            color={
+                              item.source === "server" &&
+                              typeof item.stock === "number" &&
+                              item.stock >= 0 &&
+                              item.quantity >= item.stock
+                                ? "#CCC"
+                                : "#E97A1F"
+                            }
+                          />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -704,9 +804,9 @@ export default function CartScreen() {
                   </View>
                 ) : null}
                 <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>{tr("Delivery Charge")}</Text>
+                  <Text style={styles.priceLabel}>{tr("Shipping charges")}</Text>
                   <Text style={styles.priceValue}>
-                    {deliveryCharge <= 0 ? tr("FREE") : `₹${deliveryCharge.toLocaleString()}`}
+                    {deliveryCharge <= 0 ? tr("Free") : `₹${deliveryCharge.toLocaleString()}`}
                   </Text>
                 </View>
                 <View style={styles.priceDivider} />
@@ -901,6 +1001,12 @@ const styles = StyleSheet.create({
   cartItemMeta: {
     fontSize: 13,
     color: "#666",
+    marginBottom: 8,
+  },
+  stockHintText: {
+    fontSize: 12,
+    color: "#B45309",
+    fontWeight: "700",
     marginBottom: 8,
   },
   cartItemPriceRow: {

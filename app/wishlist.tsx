@@ -178,6 +178,17 @@ export default function WishlistScreen() {
   const [cartCount, setCartCount] = useState(0);
   const heartsAnimRef = useRef<Animated.Value[]>([]);
 
+  const openProductDetail = useCallback(
+    (item: WishlistItem) => {
+      const id =
+        Number.isFinite(item.productId) && item.productId > 0
+          ? String(item.productId)
+          : String(item.id);
+      router.push({ pathname: "/productdetail", params: { id } } as any);
+    },
+    [router]
+  );
+
   const fallingHearts = useMemo(() => {
     const count = 26;
     const out = Array.from({ length: count }, (_, i) => {
@@ -491,7 +502,13 @@ export default function WishlistScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`${item.name}, open product details`}
                 >
-                  <View style={styles.wishlistImageArea}>
+                  <TouchableOpacity
+                    style={styles.wishlistImageArea}
+                    activeOpacity={0.9}
+                    onPress={() => openProductDetail(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${item.name}`}
+                  >
                     <Image source={item.image} style={styles.wishlistHeroImage} />
                     <View style={styles.wishlistImageShade} />
 
@@ -530,7 +547,7 @@ export default function WishlistScreen() {
                         </Text>
                       ) : null}
                     </View>
-                  </View>
+                  </TouchableOpacity>
 
                   <View style={styles.wishlistBottomBar}>
                     <View style={styles.wishlistPriceCol}>
