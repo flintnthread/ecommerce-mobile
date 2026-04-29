@@ -255,12 +255,8 @@ export default function CartScreen() {
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
-<<<<<<< HEAD
   const [apiWeightDeliveryCharge, setApiWeightDeliveryCharge] = useState<number | null>(null);
   const [qtyUpdatingIds, setQtyUpdatingIds] = useState<Set<string>>(new Set());
-
-=======
->>>>>>> 8824e47bbfc15fdaf148ff6ba4b6b4ff52fef33c
   // Calculate totals (server cart uses API priceSummary when available)
   const subtotal = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
