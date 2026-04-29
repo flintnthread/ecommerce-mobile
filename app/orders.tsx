@@ -17,12 +17,12 @@ import {
   Animated,
   BackHandler,
   ActivityIndicator,
-  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import { useLanguage } from "../lib/language";
+import * as Print from "expo-print";
 
 import { cancelOrderById, fetchUserOrdersList, type ApiOrderRow } from "../lib/ordersListApi";
 import { fetchShiprocketTracking } from "../lib/shiprocketApi";
@@ -349,6 +349,255 @@ type InvoiceRow = {
   invoicePath?: string | null;
 };
 
+function escapeInvoiceHtml(value: string): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildInvoiceHtml(
+  order: Order,
+  invoiceNumber: string,
+  details?: Record<string, unknown>
+): string {
+  const readField = (keys: string[], fallback = ""): string => {
+    if (!details) return fallback;
+    for (const key of keys) {
+      const val = details[key];
+      if (typeof val === "string" && val.trim()) return val.trim();
+    }
+    return fallback;
+  };
+  const formatMoney = (value: number): string => `₹${value.toFixed(2)}`;
+
+  const soldByName = "SATYA SALES CORPORATION";
+  const soldByAddressLine1 = "Shri Hakim Singh Shamshabad Road Barouli Aheer";
+  const soldByAddressLine2 = "Agra, Uttar Pradesh, PIN: 282001";
+  const soldByPhone = "+91 9012100264";
+  const soldByEmail = "wugostore@gmail.com";
+  const soldByGstin = "09AZUPL0595L1ZG";
+  const brandName = "Flint & Thread (India) Pvt. Ltd.";
+  const brandPhone = "+91 9063499092";
+  const brandEmail = "support@flintnthread.in";
+  const brandGstin = "36AAGCF5402J1ZP";
+
+  const shippingAddress = readField(
+    ["shippingAddress", "deliveryAddress", "address"],
+    order.deliveryAddress?.trim() ||
+      "Tara living women's pg, lingampally, Hyderabad, Telangana - 500019, India"
+  );
+  const customerName = readField(["customerName", "billingName", "name"], "Customer");
+  const customerPhone = readField(["customerPhone", "phone"], "6300885700");
+  const customerEmail = readField(
+    ["customerEmail", "email"],
+    "customer@example.com"
+  );
+  const invoiceDate = order.date?.trim() || new Date().toLocaleDateString("en-IN");
+  const lineItems = order.products ?? [];
+  const orderTotalNum = parseApiNumber(order.total.replace(/[^\d.]/g, ""));
+  const subtotalNum =
+    lineItems.length > 0
+      ? lineItems.reduce((sum, p) => {
+          const unit = parseApiNumber(String(p.price).replace(/[^\d.]/g, ""));
+          return sum + unit * Math.max(1, p.quantity);
+        }, 0)
+      : orderTotalNum;
+  const taxAmount = Math.max(0, orderTotalNum - subtotalNum);
+  const igstPct = subtotalNum > 0 ? (taxAmount / subtotalNum) * 100 : 0;
+  const deliveryCharge = parseApiNumber(details?.shippingCharge);
+  const grandTotal = subtotalNum + taxAmount + deliveryCharge;
+
+  const rowsHtml =
+    lineItems.length > 0
+      ? lineItems
+          .map((p) => {
+            const qty = Math.max(1, p.quantity);
+            const unit = parseApiNumber(String(p.price).replace(/[^\d.]/g, ""));
+            const lineTotal = qty * unit;
+            return `
+              <tr>
+                <td>
+                  <div class="item-title">${escapeInvoiceHtml(p.name)}</div>
+                  <div class="item-sub">Color: Black &nbsp; Size: Medium</div>
+                </td>
+                <td>42021290</td>
+                <td>${qty}</td>
+                <td>${formatMoney(unit)}</td>
+                <td>${igstPct > 0 ? `${igstPct.toFixed(0)}%` : "0%"}</td>
+                <td>${formatMoney((lineTotal * igstPct) / 100)}</td>
+                <td>${formatMoney(lineTotal + (lineTotal * igstPct) / 100)}</td>
+              </tr>
+            `;
+          })
+          .join("")
+      : `
+          <tr>
+            <td><div class="item-title">${escapeInvoiceHtml(order.orderNumber)}</div></td>
+            <td>42021290</td>
+            <td>${Math.max(1, order.items)}</td>
+            <td>${escapeInvoiceHtml(order.total)}</td>
+            <td>${igstPct > 0 ? `${igstPct.toFixed(0)}%` : "0%"}</td>
+            <td>${formatMoney(taxAmount)}</td>
+            <td>${escapeInvoiceHtml(order.total)}</td>
+          </tr>
+        `;
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Invoice ${escapeInvoiceHtml(invoiceNumber)}</title>
+    <style>
+      body { margin: 0; padding: 16px; background: #f4f5f7; font-family: Arial, sans-serif; color: #111827; }
+      .wrap { max-width: 980px; margin: 0 auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; }
+      .top { display: grid; grid-template-columns: 1fr 280px; gap: 16px; }
+      .brand-title { font-size: 28px; font-weight: 800; letter-spacing: 0.3px; margin: 0; }
+      .brand-sub { color: #b45309; font-size: 12px; margin-top: 2px; font-weight: 600; }
+      .line { width: 54px; height: 3px; background: #b91c1c; margin: 14px 0 10px; border-radius: 99px; }
+      .txt { font-size: 14px; margin: 6px 0; color: #1f2937; }
+      .txt.muted { color: #6b7280; }
+      .inv-card { border: 1px solid #f4c7b5; border-left: 3px solid #b91c1c; border-radius: 10px; padding: 14px; background: #fffdfa; text-align: center; }
+      .inv-title { margin: 0; color: #991b1b; font-weight: 800; letter-spacing: 0.8px; }
+      .inv-meta { margin-top: 8px; font-size: 13px; color: #1f2937; line-height: 1.6; }
+      .qr { width: 98px; height: 98px; margin: 12px auto 0; border: 1px solid #d1d5db; background:
+        linear-gradient(90deg,#000 8px,transparent 8px) 0 0/16px 16px,
+        linear-gradient(#000 8px,transparent 8px) 0 0/16px 16px,
+        #fff; }
+      .section { margin-top: 20px; }
+      .section h3 { margin: 0; font-size: 28px; }
+      .section-title { font-size: 28px; font-weight: 700; margin: 0 0 2px; color: #111827; }
+      .sold-title { font-size: 28px; font-weight: 700; margin: 0; color: #1f2937; }
+      .addr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+      .addr-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; background: #fcfcfd; }
+      .addr-head { font-size: 24px; font-weight: 700; margin: 0 0 8px; }
+      .table-wrap { margin-top: 14px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+      table { width: 100%; border-collapse: collapse; }
+      th { background: #0b2b66; color: #fff; font-size: 12px; letter-spacing: .3px; padding: 10px; text-align: left; }
+      td { border-top: 1px solid #eef1f5; padding: 10px; font-size: 13px; vertical-align: top; }
+      .item-title { font-weight: 700; color: #1f2937; }
+      .item-sub { margin-top: 4px; color: #6b7280; font-size: 12px; }
+      .totals { margin-top: 14px; margin-left: auto; width: 360px; }
+      .row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px dashed #e5e7eb; font-size: 14px; }
+      .row strong { font-size: 20px; }
+      .free { color: #15803d; font-weight: 700; }
+      .grand { font-size: 24px; color: #b45309; font-weight: 800; }
+      .gst-box { margin-top: 18px; border: 1px solid #f6d4c6; border-left: 3px solid #b45309; border-radius: 8px; padding: 12px; background: #fffaf7; }
+      .gst-title { margin: 0 0 10px; font-weight: 700; color: #9a3412; }
+      .pay-box { margin-top: 18px; border-top: 1px solid #eceff3; padding-top: 14px; }
+      .thank { margin-top: 22px; text-align: center; color: #b45309; font-weight: 700; }
+      .foot { margin-top: 8px; text-align: center; color: #6b7280; font-size: 12px; }
+      @media (max-width: 760px) {
+        body { padding: 10px; }
+        .wrap { padding: 12px; }
+        .top, .addr-grid { grid-template-columns: 1fr; }
+        .totals { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top">
+        <div>
+          <h1 class="brand-title">FLINT & THREAD</h1>
+          <div class="brand-sub">The Infinity and Vanguard</div>
+          <div class="line"></div>
+          <div class="sold-title">${escapeInvoiceHtml(brandName)}</div>
+          <div class="txt">India</div>
+          <div class="txt">Phone: ${escapeInvoiceHtml(brandPhone)}</div>
+          <div class="txt">Email: ${escapeInvoiceHtml(brandEmail)}</div>
+          <div class="txt">GSTIN: ${escapeInvoiceHtml(brandGstin)}</div>
+        </div>
+        <div class="inv-card">
+          <h2 class="inv-title">INVOICE</h2>
+          <div class="inv-meta">
+            ${escapeInvoiceHtml(invoiceNumber)}<br/>
+            Order: ${escapeInvoiceHtml(order.orderNumber)}<br/>
+            Date: ${escapeInvoiceHtml(invoiceDate)}
+          </div>
+          <div class="qr"></div>
+          <div class="txt muted" style="font-size:11px; margin-top:8px;">Scan for order details</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="line"></div>
+        <h3>Sold By:</h3>
+        <div class="txt" style="font-weight:700;">${escapeInvoiceHtml(soldByName)}</div>
+        <div class="txt">${escapeInvoiceHtml(soldByAddressLine1)}</div>
+        <div class="txt">${escapeInvoiceHtml(soldByAddressLine2)}</div>
+        <div class="txt">Phone: ${escapeInvoiceHtml(soldByPhone)}</div>
+        <div class="txt">Email: ${escapeInvoiceHtml(soldByEmail)}</div>
+        <div class="txt">GST: ${escapeInvoiceHtml(soldByGstin)}</div>
+      </div>
+
+      <div class="addr-grid">
+        <div class="addr-card">
+          <div class="addr-head">Bill To:</div>
+          <div class="txt" style="font-weight:700;">${escapeInvoiceHtml(customerName)}</div>
+          <div class="txt">${escapeInvoiceHtml(shippingAddress)}</div>
+          <div class="txt">Phone: ${escapeInvoiceHtml(customerPhone)}</div>
+          <div class="txt">Email: ${escapeInvoiceHtml(customerEmail)}</div>
+        </div>
+        <div class="addr-card">
+          <div class="addr-head">Ship To:</div>
+          <div class="txt" style="font-weight:700;">${escapeInvoiceHtml(customerName)}</div>
+          <div class="txt">${escapeInvoiceHtml(shippingAddress)}</div>
+          <div class="txt">Phone: ${escapeInvoiceHtml(customerPhone)}</div>
+          <div class="txt">Email: ${escapeInvoiceHtml(customerEmail)}</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ITEM DESCRIPTION</th>
+              <th>HSN CODE</th>
+              <th>QTY</th>
+              <th>UNIT PRICE</th>
+              <th>TAX %</th>
+              <th>TAX AMOUNT</th>
+              <th>TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+
+      <div class="totals">
+        <div class="row"><span>Subtotal (Before Tax)</span><span>${formatMoney(subtotalNum)}</span></div>
+        <div class="row"><span>IGST @ ${igstPct > 0 ? igstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(taxAmount)}</span></div>
+        <div class="row"><span>Shipping Charges</span><span class="${deliveryCharge <= 0 ? "free" : ""}">${deliveryCharge <= 0 ? "FREE" : formatMoney(deliveryCharge)}</span></div>
+        <div class="row" style="border-bottom:0;"><strong>Grand Total</strong><span class="grand">${formatMoney(grandTotal)}</span></div>
+      </div>
+
+      <div class="gst-box">
+        <p class="gst-title">GST Breakdown Summary</p>
+        <div class="row"><span>Total CGST:</span><span>₹0.00</span></div>
+        <div class="row"><span>Total SGST:</span><span>₹0.00</span></div>
+        <div class="row"><span>Total IGST:</span><span>${formatMoney(taxAmount)}</span></div>
+        <div class="row" style="border-bottom:0; font-weight:700;"><span>Total GST:</span><span>${formatMoney(taxAmount)}</span></div>
+      </div>
+
+      <div class="pay-box">
+        <div class="section-title">Payment Information:</div>
+        <div class="txt">Payment Method: ${escapeInvoiceHtml(readField(["paymentMethod"], order.paymentMethod || "Online Payment (Razorpay)"))}</div>
+        <div class="txt">Payment Status: ${escapeInvoiceHtml(readField(["paymentStatus"], order.paymentStatus || "COMPLETED"))}</div>
+        <div class="txt">Transaction ID: ${escapeInvoiceHtml(readField(["transactionId", "paymentId"], `pay_${order.id}${invoiceNumber.slice(-4)}`))}</div>
+      </div>
+
+      <div class="thank">Thank you for your business!</div>
+      <div class="foot">If you have any questions about this invoice, please contact us at ${escapeInvoiceHtml(brandEmail)}</div>
+      <div class="foot">Flint & Thread - The Infinity and Vanguard</div>
+    </div>
+  </body>
+</html>`;
+}
+
 const sampleOrders: Order[] = [
   {
     id: "1",
@@ -364,7 +613,7 @@ const sampleOrders: Order[] = [
     estimatedDelivery: "Delivered on 18 Jan 2024",
     products: [
       { id: "p1", name: "Premium Product A", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,299" },
-      { id: "p2", name: "Premium Product B", image: require("../assets/images/age6.png"), quantity: 1, price: "₹1,200" },
+      { id: "p2", name: "Premium Product B", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,200" },
     ],
   },
   {
@@ -374,13 +623,13 @@ const sampleOrders: Order[] = [
     status: "shipped",
     items: 1,
     total: "₹1,299",
-    image: require("../assets/images/age6.png"),
+    image: require("../assets/images/age5.png"),
     trackingNumber: "TRK987654321",
     paymentMethod: "UPI",
     deliveryAddress: "456 Park Avenue, Floor 2",
     estimatedDelivery: "Expected: 25 Jan 2024",
     products: [
-      { id: "p3", name: "Premium Product C", image: require("../assets/images/age6.png"), quantity: 1, price: "₹1,299" },
+      { id: "p3", name: "Premium Product C", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,299" },
     ],
   },
   {
@@ -397,7 +646,7 @@ const sampleOrders: Order[] = [
     estimatedDelivery: "Expected: 28 Jan 2024",
     products: [
       { id: "p4", name: "Premium Product D", image: require("../assets/images/age5.png"), quantity: 2, price: "₹2,000" },
-      { id: "p5", name: "Premium Product E", image: require("../assets/images/age6.png"), quantity: 1, price: "₹1,999" },
+      { id: "p5", name: "Premium Product E", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,999" },
     ],
   },
   {
@@ -407,13 +656,13 @@ const sampleOrders: Order[] = [
     status: "delivered",
     items: 1,
     total: "₹899",
-    image: require("../assets/images/age6.png"),
+    image: require("../assets/images/age5.png"),
     trackingNumber: "TRK789123456",
     paymentMethod: "Wallet",
     deliveryAddress: "321 Elm Street",
     estimatedDelivery: "Delivered on 24 Jan 2024",
     products: [
-      { id: "p6", name: "Premium Product F", image: require("../assets/images/age6.png"), quantity: 1, price: "₹899" },
+      { id: "p6", name: "Premium Product F", image: require("../assets/images/age5.png"), quantity: 1, price: "₹899" },
     ],
   },
   {
@@ -439,11 +688,11 @@ const sampleOrders: Order[] = [
     status: "cancelled",
     items: 1,
     total: "₹1,499",
-    image: require("../assets/images/age6.png"),
+    image: require("../assets/images/age5.png"),
     paymentMethod: "UPI",
     deliveryAddress: "888 Pine Street",
     products: [
-      { id: "p8", name: "Premium Product H", image: require("../assets/images/age6.png"), quantity: 1, price: "₹1,499" },
+      { id: "p8", name: "Premium Product H", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,499" },
     ],
   },
 ];
@@ -939,43 +1188,13 @@ export default function OrdersScreen() {
 
   const handleDownloadInvoice = async (order: Order) => {
     const orderId = Number(order.id);
-    if (!Number.isFinite(orderId) || orderId <= 0) {
-      Alert.alert(tr("Invoice"), tr("Order ID is missing for this order."));
-      return;
-    }
-
     try {
-      const { data } = await api.get<{
-        success: boolean;
-        message?: string;
-        data?: InvoiceRow[];
-      }>("/api/invoices", {
-        params: { orderId: Math.floor(orderId) },
+      const fallbackNumber = Number.isFinite(orderId) && orderId > 0 ? Math.floor(orderId) : order.id;
+      const invoiceNumber = `INV-${fallbackNumber}`;
+      const html = buildInvoiceHtml(order, invoiceNumber);
+      await Print.printAsync({
+        html,
       });
-
-      const rows = Array.isArray(data?.data) ? data.data : [];
-      if (rows.length === 0) {
-        Alert.alert(tr("Invoice"), tr("Invoice not available yet for this order."));
-        return;
-      }
-
-      const path = String(rows[0]?.invoicePath ?? "").trim();
-      if (!path) {
-        Alert.alert(tr("Invoice"), tr("Invoice file path is missing."));
-        return;
-      }
-
-      const baseUrl = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
-      const invoiceUrl = /^https?:\/\//i.test(path)
-        ? path
-        : `${baseUrl}/${path.replace(/^\/+/, "")}`;
-
-      const canOpen = await Linking.canOpenURL(invoiceUrl);
-      if (!canOpen) {
-        Alert.alert(tr("Invoice"), tr("Could not open invoice URL."));
-        return;
-      }
-      await Linking.openURL(invoiceUrl);
     } catch (e) {
       const message = e instanceof Error ? e.message : tr("Could not download invoice right now.");
       Alert.alert(tr("Invoice"), message);
