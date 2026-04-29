@@ -426,15 +426,6 @@ export default function WishlistScreen() {
 
         <View style={styles.headerIcons}>
           <TouchableOpacity
-            onPress={() => setIsSearchVisible((prev) => !prev)}
-            style={styles.headerIcon}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle search"
-          >
-            <Ionicons name="search-outline" size={20} color="#ef7b1a" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
             onPress={() => router.push("/cart")}
             style={styles.headerIcon}
             activeOpacity={0.7}
@@ -482,12 +473,23 @@ export default function WishlistScreen() {
                   ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)
                   : null;
               return (
-                <View
+                <TouchableOpacity
                   key={item.id}
                   style={[
                     styles.wishlistCard,
                     index === displayedWishlistItems.length - 1 && styles.wishlistCardLast,
                   ]}
+                  activeOpacity={0.92}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/productdetail",
+                      params: {
+                        id: String(item.productId > 0 ? item.productId : item.id),
+                      },
+                    } as any)
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.name}, open product details`}
                 >
                   <View style={styles.wishlistImageArea}>
                     <Image source={item.image} style={styles.wishlistHeroImage} />
@@ -571,7 +573,7 @@ export default function WishlistScreen() {
                       </Text>
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}

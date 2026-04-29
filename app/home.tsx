@@ -4907,7 +4907,7 @@ const categoryData = [
                   activeOpacity={0.9}
                   onPress={() => {
                     setPromoSpotlightModalVisible(false);
-                    router.push("/account");
+                    router.push("/userrewords" as any);
                   }}
                 >
                   <LinearGradient
