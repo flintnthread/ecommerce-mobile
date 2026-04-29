@@ -55,6 +55,7 @@ type ReviewItem = {
   quantity: number;
   size?: string;
   color?: string;
+  stock?: number;
   source: ReviewItemSource;
   serverItemId?: number;
 };
@@ -63,20 +64,23 @@ function persistedToReviewItem(line: PersistedCartLine): ReviewItem {
   return {
     id: line.id,
     name: line.name,
-    image: resolveProductImage(line.id),
+    image: line.imageUri ? { uri: line.imageUri } : resolveProductImage(line.id),
     price: line.price,
     originalPrice: line.mrp > line.price ? line.mrp : undefined,
     quantity: line.quantity,
+    size: line.size,
+    color: line.color,
+    stock:
+      typeof line.stock === "number" && Number.isFinite(line.stock)
+        ? Math.max(0, Math.floor(line.stock))
+        : 0,
     source: "local",
   };
 }
 
 function serverRowToReviewItem(row: ApiCartItem): ReviewItem {
   const uri = String(row.imageUrl ?? "").trim();
-  const image =
-    uri && /^https?:\/\//i.test(uri)
-      ? { uri }
-      : resolveProductImage(String(row.productId));
+  const image = uri ? { uri } : resolveProductImage(String(row.productId));
   const price = row.sellingPrice ?? row.price;
   const mrp = row.mrpPrice ?? row.originalPrice;
   return {
@@ -88,6 +92,7 @@ function serverRowToReviewItem(row: ApiCartItem): ReviewItem {
     quantity: Math.max(1, row.quantity),
     size: row.size ?? undefined,
     color: row.color ?? undefined,
+    stock: typeof row.stock === "number" ? Math.max(0, row.stock) : 0,
     source: "server",
     serverItemId: row.itemId,
   };
@@ -101,6 +106,7 @@ export default function ReviewOrdersScreen() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [cartSource, setCartSource] = useState<ReviewItemSource>("local");
   const [serverPriceSummary, setServerPriceSummary] = useState<ApiCartPriceSummary | null>(null);
+  const [qtyUpdatingIds, setQtyUpdatingIds] = useState<Set<string>>(new Set());
 
   const reloadReviewCart = async () => {
     const token = (await AsyncStorage.getItem("token"))?.trim();
@@ -113,8 +119,17 @@ export default function ReviewOrdersScreen() {
           setServerPriceSummary(bundle.priceSummary);
           return;
         }
+        // Signed-in users should remain server-authoritative.
+        setItems([]);
+        setCartSource("server");
+        setServerPriceSummary(null);
+        return;
       } catch {
-        /* fall back to local */
+        // Signed-in users should remain server-authoritative.
+        setItems([]);
+        setCartSource("server");
+        setServerPriceSummary(null);
+        return;
       }
     }
     setCartSource("local");
@@ -185,8 +200,27 @@ export default function ReviewOrdersScreen() {
 
   const updateQty = (id: string, delta: number) => {
     void (async () => {
+      if (qtyUpdatingIds.has(id)) return;
       const item = items.find((x) => x.id === id);
+      if (
+        delta > 0 &&
+        item &&
+        typeof item.stock === "number" &&
+        item.stock >= 0 &&
+        item.quantity >= item.stock
+      ) {
+        Alert.alert(
+          tr("Stock not available"),
+          tr("No more stock available for this variant.")
+        );
+        return;
+      }
       if (item?.serverItemId != null) {
+        setQtyUpdatingIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
         try {
           if (delta < 0 && item.quantity <= 1) {
             await deleteCartLineServer(item.serverItemId);
@@ -196,11 +230,39 @@ export default function ReviewOrdersScreen() {
           await reloadReviewCart();
         } catch (e) {
           Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not update quantity.")));
+        } finally {
+          setQtyUpdatingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
         }
         return;
       }
-      await adjustCartQuantity(id, delta);
-      await reloadReviewCart();
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (token) {
+        Alert.alert(
+          tr("Cart sync"),
+          tr("Please wait while cart syncs with server and try again.")
+        );
+        await reloadReviewCart();
+        return;
+      }
+      setQtyUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      try {
+        await adjustCartQuantity(id, delta);
+        await reloadReviewCart();
+      } finally {
+        setQtyUpdatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
     })();
   };
 
@@ -251,6 +313,20 @@ export default function ReviewOrdersScreen() {
 
   const handlePlaceOrder = async () => {
     if (paying) return;
+    const outOfStockLine = items.find(
+      (item) =>
+        item.source === "server" &&
+        typeof item.stock === "number" &&
+        item.stock >= 0 &&
+        item.quantity > item.stock
+    );
+    if (outOfStockLine) {
+      Alert.alert(
+        tr("Stock not available"),
+        tr("Requested quantity is not available in stock. Please reduce quantity.")
+      );
+      return;
+    }
     if (total <= 0) {
       Alert.alert(tr("Checkout"), tr("Amount must be greater than zero."));
       return;
@@ -369,6 +445,11 @@ export default function ReviewOrdersScreen() {
                     {it.color ? `Color: ${it.color}` : ""}
                   </Text>
                 )}
+                {typeof it.stock === "number" && it.stock >= 0 ? (
+                  <Text style={styles.stockHintText}>
+                    {it.stock > 0 ? `Only ${it.stock} left` : tr("Out of stock")}
+                  </Text>
+                ) : null}
 
                 <View style={styles.priceRow}>
                   <Text style={styles.price}>
@@ -387,7 +468,7 @@ export default function ReviewOrdersScreen() {
                     <TouchableOpacity
                       style={[styles.qtyBtn, it.quantity <= 1 && styles.qtyBtnDisabled]}
                       onPress={() => updateQty(it.id, -1)}
-                      disabled={it.quantity <= 1}
+                      disabled={qtyUpdatingIds.has(it.id) || it.quantity <= 1}
                       activeOpacity={0.8}
                     >
                       <Ionicons
@@ -398,11 +479,31 @@ export default function ReviewOrdersScreen() {
                     </TouchableOpacity>
                     <Text style={styles.qtyValue}>{it.quantity}</Text>
                     <TouchableOpacity
-                      style={styles.qtyBtn}
+                      style={[
+                        styles.qtyBtn,
+                        qtyUpdatingIds.has(it.id) ? styles.qtyBtnDisabled : null,
+                        it.source === "server" &&
+                        typeof it.stock === "number" &&
+                        it.stock >= 0 &&
+                        it.quantity >= it.stock
+                          ? styles.qtyBtnDisabled
+                          : null,
+                      ]}
                       onPress={() => updateQty(it.id, 1)}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="add" size={16} color="#1d324e" />
+                      <Ionicons
+                        name="add"
+                        size={16}
+                        color={
+                          it.source === "server" &&
+                          typeof it.stock === "number" &&
+                          it.stock >= 0 &&
+                          it.quantity >= it.stock
+                            ? "#B9B9B9"
+                            : "#1d324e"
+                        }
+                      />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -666,6 +767,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#666666",
     fontWeight: "500",
+  },
+  stockHintText: {
+    marginTop: 4,
+    fontSize: 11,
+    color: "#B45309",
+    fontWeight: "800",
   },
   priceRow: { flexDirection: "row", alignItems: "center", marginTop: 6 },
   price: {

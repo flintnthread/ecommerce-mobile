@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -11,10 +11,8 @@ import {
   type ImageSourcePropType,
   ScrollView,
   Share,
-  Modal,
-  TextInput,
-  Pressable,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -25,6 +23,7 @@ import {
   fetchWishlistServerKeySet,
   togglePtbWishlistWithServer,
 } from "../lib/wishlistServerApi";
+import api from "../services/api";
 import { useLanguage } from "../lib/language";
 
 type SellerProduct = {
@@ -34,6 +33,8 @@ type SellerProduct = {
   price: string;
   mrp?: string;
   off?: string;
+  sellerId?: number;
+  variantId?: number;
 };
 
 const P1 = require("../assets/images/latest1.png");
@@ -42,42 +43,6 @@ const P3 = require("../assets/images/latest3.png");
 const P4 = require("../assets/images/latest4.png");
 const SELLER_PROFILE_IMG = require("../assets/images/image1.png");
 
-const sortOptions = [
-  "Relevance",
-  "New Arrivals",
-  "Price (High to Low)",
-  "Price (Low to High)",
-  "Ratings",
-  "Discount",
-];
-
-const genderOptions = ["Women", "Men", "Girls", "Boys"];
-
-const categoryOptions = [
-  "Women Bra",
-  "Hair Accessories",
-  "Women T-shirts",
-  "Women Tops And Tunics",
-  "Women Bangles & Bracelets",
-  "Kids Toys",
-  "Men Shirts",
-  "Men T-shirts",
-  "Women Dupatta Sets",
-  "Women Kurta Sets",
-  "Women Kurtis",
-  "Analog Watches",
-];
-
-const filterSections = ["Category", "Gender", "Price", "Rating", "Discount"] as const;
-
-const filterOptions: Record<(typeof filterSections)[number], string[]> = {
-  Category: categoryOptions,
-  Gender: genderOptions,
-  Price: ["Below ₹299", "₹300 - ₹499", "₹500 - ₹999", "Above ₹1000"],
-  Rating: ["4★ & above", "3★ & above", "2★ & above"],
-  Discount: ["10% and above", "25% and above", "40% and above", "60% and above"],
-};
-
 const SELLER_PRODUCTS: SellerProduct[] = [
   { id: "p1", title: "Banita Attractive Women Dupatta", image: P1, price: "₹1,323", mrp: "₹1,398", off: "5% off" },
   { id: "p2", title: "Charvi Attractive Women Dupatta", image: P2, price: "₹1,318", mrp: "₹1,384", off: "5% off" },
@@ -85,30 +50,36 @@ const SELLER_PRODUCTS: SellerProduct[] = [
   { id: "p4", title: "Lace Detail Dress", image: P4, price: "₹1,199", mrp: "₹1,999", off: "40% off" },
 ];
 
+const FALLBACK_SELLER_PRODUCT_IMAGE = P1;
+
 export default function SellerStoreScreen() {
   const router = useRouter();
   const { tr } = useLanguage();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
+  const sellerIdRaw = Array.isArray(params.sellerId) ? params.sellerId[0] : params.sellerId;
+  const sellerId = useMemo(() => {
+    const n = Number(String(sellerIdRaw ?? "").trim());
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+  }, [sellerIdRaw]);
   const sellerName = String(params.name ?? "@ SHIV CREATION");
   const rating = String(params.rating ?? "4.1");
+  const sellerBusinessName = String(params.businessName ?? "").trim();
+  const sellerBranchName = String(params.branchName ?? "").trim();
+  const sellerAddress = String(params.address ?? "").trim();
   const [following, setFollowing] = useState(false);
 
-  const [sortModalVisible, setSortModalVisible] = useState(false);
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
-  const [genderModalVisible, setGenderModalVisible] = useState(false);
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
-
-  const [selectedSort, setSelectedSort] = useState("Relevance");
-  const [selectedGender, setSelectedGender] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
-  const [searchCategoryText, setSearchCategoryText] = useState("");
-
-  const [selectedFilterSection, setSelectedFilterSection] =
-    useState<(typeof filterSections)[number]>("Category");
-  const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
-
-  const data = useMemo(() => SELLER_PRODUCTS, []);
+  const [sellerProductsApi, setSellerProductsApi] = useState<SellerProduct[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const data = useMemo(
+    () => (sellerProductsApi.length ? sellerProductsApi : SELLER_PRODUCTS),
+    [sellerProductsApi]
+  );
+  const productsCountLabel = useMemo(() => {
+    if (productsLoading) return "...";
+    return String(data.length);
+  }, [data.length, productsLoading]);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [serverWishlistKeys, setServerWishlistKeys] = useState<Set<string>>(
     new Set()
@@ -119,6 +90,97 @@ export default function SellerStoreScreen() {
     () => `${tr("Check out this shop on our app")} - ${sellerName}`,
     [sellerName, tr]
   );
+
+  useEffect(() => {
+    if (!sellerId) {
+      setSellerProductsApi([]);
+      setProductsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setProductsLoading(true);
+    setProductsError(null);
+
+    (async () => {
+      try {
+        const { data } = await api.get("/api/products/search/filter", {
+          params: { sellerId, page: 0, size: 100, sortBy: "createdAt", sortDirection: "desc" },
+        });
+        if (cancelled) return;
+        const rows = Array.isArray(data?.content) ? data.content : Array.isArray(data) ? data : [];
+
+        const mapped: SellerProduct[] = rows.map((p: any) => {
+          const variants = Array.isArray(p?.variants) ? p.variants : [];
+          const preferredVariant =
+            variants.find((v: any) => {
+              const rawId = v?.id ?? v?.variantId;
+              const idNum =
+                typeof rawId === "string" ? Number.parseInt(rawId, 10) : Number(rawId);
+              const inStock = v?.inStock === true || Number(v?.stock ?? 0) > 0;
+              return Number.isFinite(idNum) && idNum > 0 && inStock;
+            }) ??
+            variants.find((v: any) => {
+              const rawId = v?.id ?? v?.variantId;
+              const idNum =
+                typeof rawId === "string" ? Number.parseInt(rawId, 10) : Number(rawId);
+              return Number.isFinite(idNum) && idNum > 0;
+            }) ??
+            variants[0] ??
+            {};
+          const rawVariantId = preferredVariant?.id ?? preferredVariant?.variantId;
+          const parsedVariantId =
+            typeof rawVariantId === "string"
+              ? Number.parseInt(rawVariantId, 10)
+              : Number(rawVariantId);
+          const variantId =
+            Number.isFinite(parsedVariantId) && parsedVariantId > 0
+              ? Math.floor(parsedVariantId)
+              : undefined;
+          const selling = Number(preferredVariant?.sellingPrice ?? preferredVariant?.finalPrice ?? 0);
+          const mrpRaw = Number(preferredVariant?.mrpPrice ?? 0);
+          const discountPct = Number(preferredVariant?.discountPercentage ?? 0);
+
+          const imageUrlRaw =
+            p?.images?.find?.((img: any) => img?.isPrimary)?.imageUrl ??
+            p?.images?.[0]?.imageUrl ??
+            p?.images?.[0]?.imagePath ??
+            "";
+          const imageUrl = String(imageUrlRaw ?? "").trim();
+          const resolvedImage =
+            imageUrl && /^https?:\/\//i.test(imageUrl)
+              ? { uri: imageUrl }
+              : imageUrl
+              ? { uri: `${String(api.defaults.baseURL ?? "").replace(/\/$/, "")}/${imageUrl.replace(/^\/+/, "")}` }
+              : FALLBACK_SELLER_PRODUCT_IMAGE;
+
+          return {
+            id: String(p?.id ?? ""),
+            title: String(p?.name ?? "Product"),
+            image: resolvedImage,
+            price: `₹${Math.max(0, Math.round(selling || 0)).toLocaleString()}`,
+            mrp: mrpRaw > 0 ? `₹${Math.round(mrpRaw).toLocaleString()}` : undefined,
+            off: discountPct > 0 ? `${discountPct.toFixed(1).replace(/\.0$/, "")}% off` : undefined,
+            sellerId: Number.isFinite(Number(p?.sellerId)) ? Math.floor(Number(p.sellerId)) : undefined,
+            ...(variantId != null ? { variantId } : {}),
+          };
+        }).filter((it) => it.id);
+
+        setSellerProductsApi(mapped);
+      } catch {
+        if (!cancelled) {
+          setSellerProductsApi([]);
+          setProductsError("Could not load seller products");
+        }
+      } finally {
+        if (!cancelled) setProductsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId]);
 
   const reloadWishlist = useCallback(async () => {
     const [token, ids, list, serverKeys] = await Promise.all([
@@ -153,6 +215,7 @@ export default function SellerStoreScreen() {
           name: p.title,
           sellingNum: parseRupee(p.price),
           mrpNum: Math.max(parseRupee(p.mrp), parseRupee(p.price)),
+          ...(p.variantId != null ? { variantId: p.variantId } : {}),
         },
         reloadWishlist
       );
@@ -163,41 +226,6 @@ export default function SellerStoreScreen() {
       Alert.alert(tr("WISHLIST"), tr(result.title));
     },
     [parseRupee, reloadWishlist, tr]
-  );
-
-  const handleFilterPress = (label: string) => {
-    if (label === "Sort") setSortModalVisible(true);
-    if (label === "Category") setCategoryModalVisible(true);
-    if (label === "Gender") setGenderModalVisible(true);
-    if (label === "Filters") setFilterModalVisible(true);
-  };
-
-  const toggleCategory = (item: string) => {
-    setSelectedCategory((prev) =>
-      prev.includes(item) ? prev.filter((c) => c !== item) : [...prev, item]
-    );
-  };
-
-  const toggleFilterOption = (section: string, item: string) => {
-    setSelectedFilters((prev) => {
-      const existing = prev[section] || [];
-      const nextForSection = existing.includes(item)
-        ? existing.filter((v) => v !== item)
-        : [...existing, item];
-      return { ...prev, [section]: nextForSection };
-    });
-  };
-
-  const clearFilterModalSelections = () => {
-    setSelectedFilters({});
-    setSelectedCategory([]);
-    setSelectedGender("");
-    setSelectedSort("Relevance");
-    setSelectedFilterSection("Category");
-  };
-
-  const displayedCategories = categoryOptions.filter((item) =>
-    item.toLowerCase().includes(searchCategoryText.toLowerCase())
   );
 
   return (
@@ -287,6 +315,11 @@ export default function SellerStoreScreen() {
             <Image source={SELLER_PROFILE_IMG} style={styles.profileAvatarSoloImage} />
           </View>
           <Text style={styles.profileName}>{sellerName}</Text>
+          {!!sellerBusinessName && sellerBusinessName !== sellerName && (
+            <Text style={styles.profileSubLine}>{sellerBusinessName}</Text>
+          )}
+          {!!sellerBranchName && <Text style={styles.profileSubLine}>{sellerBranchName}</Text>}
+          {!!sellerAddress && <Text style={styles.profileSubLine} numberOfLines={2}>{sellerAddress}</Text>}
 
           <View style={styles.profileRatingRow}>
             <View style={styles.ratingPill}>
@@ -303,7 +336,7 @@ export default function SellerStoreScreen() {
             </View>
 
             <View style={styles.statBlock}>
-              <Text style={styles.statNum}>1,417</Text>
+              <Text style={styles.statNum}>{productsCountLabel}</Text>
               <Text style={styles.statSub}>Products</Text>
             </View>
 
@@ -322,33 +355,25 @@ export default function SellerStoreScreen() {
           </View>
         </View>
 
-        <View style={styles.filterRow}>
-          {[
-            { id: "sort", label: "Sort", icon: "swap-vertical" as const },
-            { id: "cat", label: "Category", icon: "chevron-down" as const },
-            { id: "gen", label: "Gender", icon: "chevron-down" as const },
-            { id: "fil", label: "Filters", icon: "options" as const },
-          ].map((b) => (
-            <TouchableOpacity
-              key={b.id}
-              style={styles.filterBtn}
-              activeOpacity={0.85}
-              onPress={() => handleFilterPress(b.label)}
-            >
-              <Ionicons name={b.icon} size={16} color="#0F172A" />
-              <Text style={styles.filterText}>{b.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <FlatList
-          data={data}
-          keyExtractor={(it) => it.id}
-          numColumns={2}
-          scrollEnabled={false}
-          columnWrapperStyle={styles.gridRow}
-          contentContainerStyle={styles.grid}
-          renderItem={({ item, index }) => {
+        {productsLoading ? (
+          <View style={styles.loaderWrap}>
+            <ActivityIndicator size="small" color="#ef7b1a" />
+            <Text style={styles.loaderText}>Loading products...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={data}
+            keyExtractor={(it) => it.id}
+            numColumns={2}
+            scrollEnabled={false}
+            columnWrapperStyle={styles.gridRow}
+            contentContainerStyle={styles.grid}
+            ListEmptyComponent={
+              <Text style={styles.loaderText}>
+                {productsError ?? "No products found for this seller"}
+              </Text>
+            }
+            renderItem={({ item, index }) => {
             const col = index % 2;
             return (
               <View style={styles.gridCell}>
@@ -359,7 +384,7 @@ export default function SellerStoreScreen() {
                     styles.cardDividerBottom,
                   ]}
                   activeOpacity={0.9}
-                  onPress={() => router.push("/productdetail")}
+                  onPress={() => router.push({ pathname: "/productdetail", params: { id: item.id } })}
                 >
                   <View style={styles.cardImageWrap}>
                     <Image source={item.image} style={styles.cardImage} resizeMode="cover" />
@@ -374,7 +399,7 @@ export default function SellerStoreScreen() {
                         name={
                           categoryPtbRowWishlisted(
                             item,
-                            hasAuthToken,
+                            hasAuthToken && item.variantId != null,
                             serverWishlistKeys,
                             wishlistIds
                           )
@@ -385,7 +410,7 @@ export default function SellerStoreScreen() {
                         color={
                           categoryPtbRowWishlisted(
                             item,
-                            hasAuthToken,
+                            hasAuthToken && item.variantId != null,
                             serverWishlistKeys,
                             wishlistIds
                           )
@@ -420,244 +445,11 @@ export default function SellerStoreScreen() {
                 </TouchableOpacity>
               </View>
             );
-          }}
-        />
+            }}
+          />
+        )}
       </ScrollView>
 
-      {/* SORT MODAL */}
-      <Modal
-        visible={sortModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSortModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.bottomModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>SORT</Text>
-              <TouchableOpacity onPress={() => setSortModalVisible(false)}>
-                <Ionicons name="close" size={28} color="#555" />
-              </TouchableOpacity>
-            </View>
-
-            {sortOptions.map((item) => (
-              <TouchableOpacity
-                key={item}
-                style={styles.sortRow}
-                onPress={() => {
-                  setSelectedSort(item);
-                  setSortModalVisible(false);
-                }}
-              >
-                <Text style={[styles.sortText, selectedSort === item ? styles.selectedSortText : null]}>
-                  {item}
-                </Text>
-                <View style={[styles.radioOuter, selectedSort === item ? styles.radioOuterActive : null]}>
-                  {selectedSort === item ? <View style={styles.radioInner} /> : null}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </Modal>
-
-      {/* CATEGORY MODAL */}
-      <Modal
-        visible={categoryModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCategoryModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.fullBottomModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>CATEGORY</Text>
-              <TouchableOpacity onPress={() => setCategoryModalVisible(false)}>
-                <Ionicons name="close" size={28} color="#555" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.categorySearchBox}>
-              <Ionicons name="search" size={18} color="#777" />
-              <TextInput
-                value={searchCategoryText}
-                onChangeText={setSearchCategoryText}
-                placeholder="Search categories"
-                placeholderTextColor="#999"
-                style={styles.categorySearchInput}
-              />
-              {searchCategoryText ? (
-                <TouchableOpacity onPress={() => setSearchCategoryText("")}>
-                  <Ionicons name="close-circle" size={18} color="#999" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {displayedCategories.map((item) => {
-                const checked = selectedCategory.includes(item);
-                return (
-                  <TouchableOpacity
-                    key={item}
-                    style={styles.checkRow}
-                    activeOpacity={0.8}
-                    onPress={() => toggleCategory(item)}
-                  >
-                    <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
-                      {checked ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
-                    </View>
-                    <Text style={styles.checkText}>{item}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <View style={styles.modalFooterRow}>
-              <TouchableOpacity
-                style={styles.modalSecondaryBtn}
-                onPress={() => {
-                  setSelectedCategory([]);
-                  setCategoryModalVisible(false);
-                }}
-              >
-                <Text style={styles.modalSecondaryText}>Clear</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalPrimaryBtn}
-                onPress={() => setCategoryModalVisible(false)}
-              >
-                <Text style={styles.modalPrimaryText}>Apply</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* GENDER MODAL */}
-      <Modal
-        visible={genderModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setGenderModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.bottomModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>GENDER</Text>
-              <TouchableOpacity onPress={() => setGenderModalVisible(false)}>
-                <Ionicons name="close" size={28} color="#555" />
-              </TouchableOpacity>
-            </View>
-
-            {genderOptions.map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={styles.sortRow}
-                onPress={() => {
-                  setSelectedGender(g);
-                  setGenderModalVisible(false);
-                }}
-              >
-                <Text style={[styles.sortText, selectedGender === g ? styles.selectedSortText : null]}>
-                  {g}
-                </Text>
-                <View style={[styles.radioOuter, selectedGender === g ? styles.radioOuterActive : null]}>
-                  {selectedGender === g ? <View style={styles.radioInner} /> : null}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </Modal>
-
-      {/* FILTERS MODAL (placeholder apply/clear like home) */}
-      <Modal
-        visible={filterModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFilterModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setFilterModalVisible(false)} />
-          <View style={styles.filterModalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>FILTERS</Text>
-              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
-                <Ionicons name="close" size={28} color="#555" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.filterBodyRow}>
-              <View style={styles.filterLeftCol}>
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  {filterSections.map((sec) => {
-                    const active = selectedFilterSection === sec;
-                    return (
-                      <TouchableOpacity
-                        key={sec}
-                        style={[styles.filterSectionBtn, active ? styles.filterSectionBtnActive : null]}
-                        activeOpacity={0.85}
-                        onPress={() => setSelectedFilterSection(sec)}
-                      >
-                        <Text style={[styles.filterSectionText, active ? styles.filterSectionTextActive : null]}>
-                          {sec}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              <View style={styles.filterRightCol}>
-                <Text style={styles.filterRightTitle}>{selectedFilterSection}</Text>
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  {(filterOptions[selectedFilterSection] || []).map((opt) => {
-                    const checked = (selectedFilters[selectedFilterSection] || []).includes(opt);
-                    return (
-                      <TouchableOpacity
-                        key={`${selectedFilterSection}:${opt}`}
-                        style={styles.filterOptionRow}
-                        activeOpacity={0.8}
-                        onPress={() => toggleFilterOption(selectedFilterSection, opt)}
-                      >
-                        <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
-                          {checked ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
-                        </View>
-                        <Text style={styles.checkText}>{opt}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </View>
-
-            <View style={styles.modalFooterRow}>
-              <TouchableOpacity
-                style={styles.modalSecondaryBtn}
-                onPress={() => {
-                  clearFilterModalSelections();
-                  setFilterModalVisible(false);
-                }}
-              >
-                <Text style={styles.modalSecondaryText}>Clear</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalPrimaryBtn}
-                onPress={() => {
-                  // keep modal selections in sync with dedicated states
-                  const cat = selectedFilters.Category || [];
-                  const gen = selectedFilters.Gender || [];
-                  if (cat.length) setSelectedCategory(cat);
-                  if (gen.length) setSelectedGender(gen[0] || "");
-                  setFilterModalVisible(false);
-                }}
-              >
-                <Text style={styles.modalPrimaryText}>Apply</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -792,6 +584,13 @@ const styles = StyleSheet.create({
   },
 
   profileName: { marginTop: 10, fontSize: 18, fontWeight: "900", color: "#0F172A" },
+  profileSubLine: {
+    marginTop: 3,
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "600",
+    textAlign: "center",
+  },
 
   profileRatingRow: {
     marginTop: 8,
@@ -838,200 +637,18 @@ const styles = StyleSheet.create({
   followText: { fontSize: 13, fontWeight: "900", color: "#FFFFFF" },
   followTextOn: { color: "#111827" },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "flex-end",
-  },
-  bottomModal: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingTop: 10,
-    minHeight: 300,
-  },
-  fullBottomModal: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    height: "82%",
-    paddingTop: 10,
-  },
-  filterModalContainer: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    height: "82%",
-    paddingTop: 10,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  loaderWrap: {
+    paddingVertical: 20,
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E5E5",
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#333",
-  },
-  sortRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-  },
-  sortText: { fontSize: 16, color: "#555" },
-  selectedSortText: { color: "#000", fontWeight: "700" },
-  radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "#444",
     justifyContent: "center",
-    alignItems: "center",
   },
-  radioOuterActive: { borderColor: "#2d33b4" },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#243384",
-  },
-  categorySearchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 20,
-    marginTop: 18,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#DADADA",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    height: 52,
-    backgroundColor: "#fff",
-    gap: 10,
-  },
-  categorySearchInput: { flex: 1, fontSize: 15, color: "#333" },
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
-  checkboxChecked: { backgroundColor: "#2d33b4", borderColor: "#2d33b4" },
-  checkText: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  modalFooterRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E5E5",
-  },
-  modalSecondaryBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
-  modalSecondaryText: { fontSize: 14, fontWeight: "800", color: "#111827" },
-  modalPrimaryBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#2d33b4",
-  },
-  modalPrimaryText: { fontSize: 14, fontWeight: "900", color: "#fff" },
-  filterBodyRow: {
-    flex: 1,
-    flexDirection: "row",
-  },
-  filterLeftCol: {
-    width: 140,
-    borderRightWidth: 1,
-    borderRightColor: "#E5E5E5",
-    backgroundColor: "#FAFAFA",
-  },
-  filterRightCol: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-  },
-  filterSectionBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EFEFEF",
-  },
-  filterSectionBtnActive: {
-    backgroundColor: "#FFFFFF",
-    borderLeftWidth: 4,
-    borderLeftColor: "#2d33b4",
-  },
-  filterSectionText: {
+  loaderText: {
+    marginTop: 8,
     fontSize: 13,
-    fontWeight: "800",
     color: "#64748B",
+    fontWeight: "600",
+    textAlign: "center",
   },
-  filterSectionTextActive: {
-    color: "#0F172A",
-  },
-  filterRightTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#0F172A",
-    marginBottom: 8,
-  },
-  filterOptionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-  },
-  filterRow: {
-    flexDirection: "row",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: "#EEF2F7",
-    backgroundColor: "#FFFFFF",
-  },
-  filterBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: "#EEF2F7",
-  },
-  filterText: { fontSize: 12, fontWeight: "800", color: "#0F172A" },
 
   grid: { paddingBottom: 6 },
   gridRow: { gap: 0 },

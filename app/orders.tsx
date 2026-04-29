@@ -613,7 +613,7 @@ const sampleOrders: Order[] = [
     estimatedDelivery: "Delivered on 18 Jan 2024",
     products: [
       { id: "p1", name: "Premium Product A", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,299" },
-      { id: "p2", name: "Premium Product B", image: require("../assets/images/age6.png"), quantity: 1, price: "₹1,200" },
+      { id: "p2", name: "Premium Product B", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,200" },
     ],
   },
   {
@@ -623,13 +623,13 @@ const sampleOrders: Order[] = [
     status: "shipped",
     items: 1,
     total: "₹1,299",
-    image: require("../assets/images/age6.png"),
+    image: require("../assets/images/age5.png"),
     trackingNumber: "TRK987654321",
     paymentMethod: "UPI",
     deliveryAddress: "456 Park Avenue, Floor 2",
     estimatedDelivery: "Expected: 25 Jan 2024",
     products: [
-      { id: "p3", name: "Premium Product C", image: require("../assets/images/age6.png"), quantity: 1, price: "₹1,299" },
+      { id: "p3", name: "Premium Product C", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,299" },
     ],
   },
   {
@@ -646,7 +646,7 @@ const sampleOrders: Order[] = [
     estimatedDelivery: "Expected: 28 Jan 2024",
     products: [
       { id: "p4", name: "Premium Product D", image: require("../assets/images/age5.png"), quantity: 2, price: "₹2,000" },
-      { id: "p5", name: "Premium Product E", image: require("../assets/images/age6.png"), quantity: 1, price: "₹1,999" },
+      { id: "p5", name: "Premium Product E", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,999" },
     ],
   },
   {
@@ -656,13 +656,13 @@ const sampleOrders: Order[] = [
     status: "delivered",
     items: 1,
     total: "₹899",
-    image: require("../assets/images/age6.png"),
+    image: require("../assets/images/age5.png"),
     trackingNumber: "TRK789123456",
     paymentMethod: "Wallet",
     deliveryAddress: "321 Elm Street",
     estimatedDelivery: "Delivered on 24 Jan 2024",
     products: [
-      { id: "p6", name: "Premium Product F", image: require("../assets/images/age6.png"), quantity: 1, price: "₹899" },
+      { id: "p6", name: "Premium Product F", image: require("../assets/images/age5.png"), quantity: 1, price: "₹899" },
     ],
   },
   {
@@ -688,11 +688,11 @@ const sampleOrders: Order[] = [
     status: "cancelled",
     items: 1,
     total: "₹1,499",
-    image: require("../assets/images/age6.png"),
+    image: require("../assets/images/age5.png"),
     paymentMethod: "UPI",
     deliveryAddress: "888 Pine Street",
     products: [
-      { id: "p8", name: "Premium Product H", image: require("../assets/images/age6.png"), quantity: 1, price: "₹1,499" },
+      { id: "p8", name: "Premium Product H", image: require("../assets/images/age5.png"), quantity: 1, price: "₹1,499" },
     ],
   },
 ];

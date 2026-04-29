@@ -25,6 +25,7 @@ export type ApiCartItem = {
   name: string;
   productName?: string | null;
   quantity: number;
+  stock?: number;
   /** Unit selling price (API may also send `sellingPrice`). */
   price: number;
   /** Unit MRP / list price (API may also send `mrpPrice`). */
@@ -70,6 +71,15 @@ function scalarToTrimmedString(v: unknown): string | null {
   return null;
 }
 
+function resolveCartImageUrl(raw: unknown): string | null {
+  const value = String(raw ?? "").trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  const base = String(api.defaults.baseURL ?? "").replace(/\/+$/, "");
+  if (!base) return value;
+  return `${base}/${value.replace(/^\/+/, "")}`;
+}
+
 function parseCartItem(raw: unknown): ApiCartItem | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -91,6 +101,8 @@ function parseCartItem(raw: unknown): ApiCartItem | null {
   const originalLegacy = numLike(o.originalPrice);
   const unitSelling = sellingExplicit > 0 ? sellingExplicit : priceLegacy;
   const unitMrp = mrpExplicit > 0 ? mrpExplicit : originalLegacy;
+  const stockRaw = Math.floor(Number((o as any).stock));
+  const stock = Number.isFinite(stockRaw) && stockRaw >= 0 ? stockRaw : 0;
 
   return {
     itemId,
@@ -99,6 +111,7 @@ function parseCartItem(raw: unknown): ApiCartItem | null {
     name,
     productName: productNameStr ?? nameStr ?? null,
     quantity: Math.max(0, Math.floor(Number(o.quantity) || 0)),
+    stock,
     sellingPrice: sellingExplicit > 0 ? sellingExplicit : undefined,
     mrpPrice: mrpExplicit > 0 ? mrpExplicit : undefined,
     price: unitSelling,
@@ -108,7 +121,7 @@ function parseCartItem(raw: unknown): ApiCartItem | null {
     color:
       scalarToTrimmedString(o.colorName) ??
       scalarToTrimmedString(o.color),
-    imageUrl: typeof o.imageUrl === "string" ? o.imageUrl : null,
+    imageUrl: resolveCartImageUrl(o.imageUrl),
   };
 }
 
@@ -219,7 +232,8 @@ export async function putCartItemQuantityDelta(
   delta: number
 ): Promise<void> {
   const id = Math.floor(itemId);
-  const q = Math.floor(delta);
+  const raw = Math.floor(delta);
+  const q = raw > 0 ? 1 : raw < 0 ? -1 : 0;
   if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid cart item");
   if (!Number.isFinite(q) || q === 0) return;
   await api.put(cartItemPath(id), undefined, { params: { quantity: q } });
