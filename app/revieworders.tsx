@@ -202,19 +202,6 @@ export default function ReviewOrdersScreen() {
     void (async () => {
       if (qtyUpdatingIds.has(id)) return;
       const item = items.find((x) => x.id === id);
-      if (
-        delta > 0 &&
-        item &&
-        typeof item.stock === "number" &&
-        item.stock >= 0 &&
-        item.quantity >= item.stock
-      ) {
-        Alert.alert(
-          tr("Stock not available"),
-          tr("No more stock available for this variant.")
-        );
-        return;
-      }
       if (item?.serverItemId != null) {
         setQtyUpdatingIds((prev) => {
           const next = new Set(prev);
@@ -313,20 +300,6 @@ export default function ReviewOrdersScreen() {
 
   const handlePlaceOrder = async () => {
     if (paying) return;
-    const outOfStockLine = items.find(
-      (item) =>
-        item.source === "server" &&
-        typeof item.stock === "number" &&
-        item.stock >= 0 &&
-        item.quantity > item.stock
-    );
-    if (outOfStockLine) {
-      Alert.alert(
-        tr("Stock not available"),
-        tr("Requested quantity is not available in stock. Please reduce quantity.")
-      );
-      return;
-    }
     if (total <= 0) {
       Alert.alert(tr("Checkout"), tr("Amount must be greater than zero."));
       return;
@@ -445,12 +418,6 @@ export default function ReviewOrdersScreen() {
                     {it.color ? `Color: ${it.color}` : ""}
                   </Text>
                 )}
-                {typeof it.stock === "number" && it.stock >= 0 ? (
-                  <Text style={styles.stockHintText}>
-                    {it.stock > 0 ? `Only ${it.stock} left` : tr("Out of stock")}
-                  </Text>
-                ) : null}
-
                 <View style={styles.priceRow}>
                   <Text style={styles.price}>
                     ₹{(it.price * it.quantity).toLocaleString()}
@@ -482,12 +449,6 @@ export default function ReviewOrdersScreen() {
                       style={[
                         styles.qtyBtn,
                         qtyUpdatingIds.has(it.id) ? styles.qtyBtnDisabled : null,
-                        it.source === "server" &&
-                        typeof it.stock === "number" &&
-                        it.stock >= 0 &&
-                        it.quantity >= it.stock
-                          ? styles.qtyBtnDisabled
-                          : null,
                       ]}
                       onPress={() => updateQty(it.id, 1)}
                       activeOpacity={0.8}
@@ -495,14 +456,7 @@ export default function ReviewOrdersScreen() {
                       <Ionicons
                         name="add"
                         size={16}
-                        color={
-                          it.source === "server" &&
-                          typeof it.stock === "number" &&
-                          it.stock >= 0 &&
-                          it.quantity >= it.stock
-                            ? "#B9B9B9"
-                            : "#1d324e"
-                        }
+                        color="#1d324e"
                       />
                     </TouchableOpacity>
                   </View>
