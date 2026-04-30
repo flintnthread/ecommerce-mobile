@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useLanguage } from "../lib/language";
 
 interface NotificationPermissionProps {
@@ -15,6 +16,7 @@ const NotificationPermission: React.FC<NotificationPermissionProps> = ({
   onDeny,
 }) => {
   const { tr } = useLanguage();
+  const router = useRouter();
 
   return (
     <Modal
@@ -24,6 +26,10 @@ const NotificationPermission: React.FC<NotificationPermissionProps> = ({
       statusBarTranslucent={true}
     >
       <View style={styles.overlay}>
+        <Pressable
+          style={StyleSheet.absoluteFillObject}
+          onPress={() => router.replace("/language")}
+        />
         <View style={styles.dialogContainer}>
           {/* Bell Icon with Notification Badge */}
           <View style={styles.iconContainer}>
@@ -40,13 +46,13 @@ const NotificationPermission: React.FC<NotificationPermissionProps> = ({
 
           {/* Buttons */}
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.allowButton} onPress={onAllow}>
+            <TouchableOpacity style={styles.allowButton} onPress={onAllow} activeOpacity={1}>
               <Text style={styles.allowButtonText}>{tr("Allow")}</Text>
             </TouchableOpacity>
           </View>
           
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.denyButton} onPress={onDeny}>
+            <TouchableOpacity style={styles.denyButton} onPress={onDeny} activeOpacity={1}>
               <Text style={styles.denyButtonText}>{tr("Don't Allow")}</Text>
             </TouchableOpacity>
           </View>

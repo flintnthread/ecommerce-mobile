@@ -1,11 +1,10 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Image,
-  Animated,
   type ImageSourcePropType,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -31,10 +30,6 @@ export default function LanguageScreen() {
   const [showNotification, setShowNotification] = useState(false);
   const [showLocation, setShowLocation] = useState(false);
 
-  const scales = useRef(
-    languages.map(() => new Animated.Value(1))
-  ).current;
-
   const handleSelect = (index: number) => {
     const nextLanguage = languages[index]?.name;
     if (!nextLanguage) return;
@@ -42,19 +37,6 @@ export default function LanguageScreen() {
     // Move flow forward on first tap; do not wait for animation completion.
     void setSelectedLanguage(nextLanguage);
     setShowNotification(true);
-
-    Animated.sequence([
-      Animated.timing(scales[index], {
-        toValue: 1.1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scales[index], {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start();
   };
 
   const handleNotificationAllow = () => {
@@ -119,18 +101,13 @@ export default function LanguageScreen() {
             activeOpacity={0.8}
             onPress={() => handleSelect(index)}
           >
-            <Animated.View
-              style={[
-                styles.card,
-                { transform: [{ scale: scales[index] }] },
-              ]}
-            >
+            <View style={styles.card}>
               <View style={styles.imageFrame}>
                 <Image source={item.image} style={styles.image} />
               </View>
               <Text style={styles.text}>{item.name}</Text>
               {selectedLanguage === item.name ? <View style={styles.selectedDot} /> : null}
-            </Animated.View>
+            </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -172,7 +149,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 20,
     borderWidth: 1.5,
-    borderColor: "#FFA500",
+    borderColor: "#2563EB",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
@@ -214,7 +191,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: "#FFA500",
+    borderColor: "#2563EB",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 18,
@@ -230,17 +207,18 @@ const styles = StyleSheet.create({
   },
 
   imageFrame: {
-    width: 52,
-    height: 52,
+    width: 64,
+    height: 64,
     marginBottom: 8,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
   },
   image: {
-    width: 52,
-    height: 52,
+    width: 64,
+    height: 64,
     resizeMode: "contain",
+    transform: [{ scale: 1.18 }],
   },
 
   text: {

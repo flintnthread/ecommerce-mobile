@@ -31,6 +31,7 @@ import {
   type PersistedWishlistLine,
 } from "../lib/shopStorage";
 import { useLanguage } from "../lib/language";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const { width, height } = Dimensions.get("window");
 
@@ -50,6 +51,55 @@ interface WishlistItem {
   size?: string;
   color?: string;
 }
+
+type SuggestionItem = {
+  id: string;
+  name: string;
+  image: ImageSourcePropType;
+  price: number;
+  mrp: number;
+  size: string;
+  color: string;
+};
+
+const EMPTY_WISHLIST_SUGGESTIONS: SuggestionItem[] = [
+  {
+    id: "101",
+    name: "Trendy Everyday Sneakers",
+    image: resolveProductImage("101"),
+    price: 899,
+    mrp: 1299,
+    size: "9",
+    color: "Orange",
+  },
+  {
+    id: "102",
+    name: "Classic Casual T-Shirt",
+    image: resolveProductImage("102"),
+    price: 499,
+    mrp: 799,
+    size: "M",
+    color: "Blue",
+  },
+  {
+    id: "103",
+    name: "Blue Denim Jeans",
+    image: resolveProductImage("103"),
+    price: 1199,
+    mrp: 1699,
+    size: "32",
+    color: "Navy",
+  },
+  {
+    id: "104",
+    name: "Stylish Analog Watch",
+    image: resolveProductImage("104"),
+    price: 1399,
+    mrp: 1999,
+    size: "Free",
+    color: "Black",
+  },
+];
 
 type ApiWishlistImage = {
   imageUrl?: string | null;
@@ -177,6 +227,7 @@ export default function WishlistScreen() {
   const [headerSearchQuery, setHeaderSearchQuery] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const heartsAnimRef = useRef<Animated.Value[]>([]);
+  const emptyHeartPulse = useRef(new Animated.Value(0)).current;
 
   const openProductDetail = useCallback(
     (item: WishlistItem) => {
@@ -190,7 +241,7 @@ export default function WishlistScreen() {
   );
 
   const fallingHearts = useMemo(() => {
-    const count = 26;
+    const count = 16;
     const out = Array.from({ length: count }, (_, i) => {
       const x = Math.max(0, Math.min(width - 28, Math.random() * (width - 28)));
       const size = 12 + Math.round(Math.random() * 12);
@@ -269,11 +320,40 @@ export default function WishlistScreen() {
     };
   }, [fallingHearts]);
 
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(emptyHeartPulse, {
+          toValue: 1,
+          duration: 550,
+          useNativeDriver: true,
+        }),
+        Animated.timing(emptyHeartPulse, {
+          toValue: 0,
+          duration: 550,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [emptyHeartPulse]);
+
   const displayedWishlistItems = useMemo(() => {
     const q = headerSearchQuery.trim().toLowerCase();
     if (!q) return wishlistItems;
     return wishlistItems.filter((x) => x.name.toLowerCase().includes(q));
   }, [wishlistItems, headerSearchQuery]);
+
+  const wishlistRows = useMemo(() => {
+    const rows: WishlistItem[][] = [];
+    for (let i = 0; i < displayedWishlistItems.length; i += 2) {
+      rows.push(displayedWishlistItems.slice(i, i + 2));
+    }
+    return rows;
+  }, [displayedWishlistItems]);
 
   const handleMoveToCart = (item: WishlistItem) => {
     void (async () => {
@@ -363,6 +443,17 @@ export default function WishlistScreen() {
     ]);
   };
 
+  const handleAddSuggestionToCart = useCallback(async (item: SuggestionItem) => {
+    await addProductToCart({
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      mrp: item.mrp,
+    });
+    setCartCount(await getCartUnitCount());
+    Alert.alert("Cart", `${item.name} added to cart.`);
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* Falling hearts background */}
@@ -384,13 +475,13 @@ export default function WishlistScreen() {
               <Ionicons
                 name="heart"
                 size={h.size + 5}
-                color="#ff1b77"
+                color="#ef7b1a"
                 style={{ position: "absolute", left: 0, top: 0, opacity: 0.95 }}
               />
               <Ionicons
                 name="heart"
                 size={h.size}
-                color="#ff4d8d"
+                color="#ef7b1a"
                 style={{ position: "absolute", left: 2, top: 2, opacity: 1 }}
               />
             </View>
@@ -468,134 +559,188 @@ export default function WishlistScreen() {
               <Text style={styles.loadingText}>Loading your wishlist…</Text>
             </View>
           ) : displayedWishlistItems.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIcon}>
-                <Ionicons name="heart-outline" size={80} color="#E0E0E0" />
-              </View>
-              <Text style={styles.emptyText}>{tr("Your wishlist is empty")}</Text>
-              <Text style={styles.emptySubtext}>
-                Add items you love to your wishlist!
-              </Text>
-            </View>
-          ) : (
-            displayedWishlistItems.map((item, index) => {
-              const discountPercent =
-                item.originalPrice && item.originalPrice > item.price
-                  ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)
-                  : null;
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.wishlistCard,
-                    index === displayedWishlistItems.length - 1 && styles.wishlistCardLast,
-                  ]}
-                  activeOpacity={0.92}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/productdetail",
-                      params: {
-                        id: String(item.productId > 0 ? item.productId : item.id),
-                      },
-                    } as any)
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel={`${item.name}, open product details`}
-                >
-                  <TouchableOpacity
-                    style={styles.wishlistImageArea}
-                    activeOpacity={0.9}
-                    onPress={() => openProductDetail(item)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open ${item.name}`}
+            <View>
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIcon}>
+                  <Animated.View
+                    style={{
+                      transform: [
+                        {
+                          scale: emptyHeartPulse.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [1, 1.16],
+                          }),
+                        },
+                      ],
+                      opacity: emptyHeartPulse.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.72, 1],
+                      }),
+                    }}
                   >
-                    <Image source={item.image} style={styles.wishlistHeroImage} />
-                    <View style={styles.wishlistImageShade} />
+                    <Ionicons name="heart" size={80} color="#ef4444" />
+                  </Animated.View>
+                </View>
+                <Text style={styles.emptyText}>{tr("Your wishlist is empty")}</Text>
+                <Text style={styles.emptySubtext}>
+                  Add items you love to your wishlist!
+                </Text>
+              </View>
 
-                    {discountPercent != null ? (
-                      <View style={styles.wishlistDiscountPill}>
-                        <Text style={styles.wishlistDiscountText}>{discountPercent}% OFF</Text>
-                      </View>
-                    ) : null}
-
-                    <TouchableOpacity
-                      onPress={() => handleRemoveItem(item)}
-                      style={styles.wishlistRemoveFab}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove ${item.name}`}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="trash-outline" size={18} color="#fff" />
-                    </TouchableOpacity>
-
-                    {!item.inStock ? (
-                      <View style={styles.wishlistStockPill}>
-                        <Ionicons name="alert-circle" size={14} color="#fff" />
-                        <Text style={styles.wishlistStockText}>Out of stock</Text>
-                      </View>
-                    ) : null}
-
-                    <View style={styles.wishlistHeroText}>
-                      <Text style={styles.wishlistName} numberOfLines={2}>
-                        {item.name}
-                      </Text>
-                      {item.size || item.color ? (
-                        <Text style={styles.wishlistMeta} numberOfLines={1}>
-                          {item.size ? `Size ${item.size}` : ""}
-                          {item.size && item.color ? " • " : ""}
-                          {item.color ? item.color : ""}
-                        </Text>
-                      ) : null}
+              <Text style={styles.suggestionsTitle}>{tr("Suggestions for you")}</Text>
+              <View style={styles.suggestionsGrid}>
+                {EMPTY_WISHLIST_SUGGESTIONS.map((item) => (
+                  <View key={item.id} style={styles.suggestionCard}>
+                    <Image source={item.image} style={styles.suggestionImage} />
+                    <Text style={styles.suggestionName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.suggestionMeta} numberOfLines={1}>
+                      {`Size ${item.size} • ${item.color}`}
+                    </Text>
+                    <View style={styles.suggestionPriceRow}>
+                      <Text style={styles.suggestionPrice}>₹{item.price.toLocaleString()}</Text>
+                      <Text style={styles.suggestionMrp}>₹{item.mrp.toLocaleString()}</Text>
                     </View>
-                  </TouchableOpacity>
-
-                  <View style={styles.wishlistBottomBar}>
-                    <View style={styles.wishlistPriceCol}>
-                      <View style={styles.wishlistPriceRow}>
-                        <Text style={styles.wishlistPrice}>₹{item.price.toLocaleString()}</Text>
-                        {item.originalPrice ? (
-                          <Text style={styles.wishlistOriginalPrice}>
-                            ₹{item.originalPrice.toLocaleString()}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <Text style={styles.wishlistDate} numberOfLines={1}>
-                        Added {item.addedDate}
-                      </Text>
-                    </View>
-
                     <TouchableOpacity
-                      style={[
-                        styles.wishlistPrimaryBtn,
-                        !item.inStock && styles.wishlistPrimaryBtnDisabled,
-                      ]}
-                      onPress={() => handleMoveToCart(item)}
-                      disabled={!item.inStock}
+                      style={styles.suggestionCartBtn}
+                      onPress={() => void handleAddSuggestionToCart(item)}
                       activeOpacity={0.9}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Move ${item.name} to cart`}
                     >
-                      <Ionicons
-                        name="cart-outline"
-                        size={16}
-                        color={item.inStock ? "#fff" : "#9ca3af"}
-                      />
-                      <Text
-                        style={[
-                          styles.wishlistPrimaryBtnText,
-                          !item.inStock && styles.wishlistPrimaryBtnTextDisabled,
-                        ]}
-                      >
-                        Move to cart
-                      </Text>
+                      <Text style={styles.suggestionCartBtnText}>{tr("Add to cart")}</Text>
                     </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-              );
-            })
+                ))}
+              </View>
+            </View>
+          ) : (
+            wishlistRows.map((row, rowIndex) => (
+              <View
+                key={`wishlist-row-${rowIndex}`}
+                style={[
+                  styles.wishlistRow,
+                  rowIndex === wishlistRows.length - 1 && styles.wishlistRowLast,
+                ]}
+              >
+                {row.map((item) => {
+                  const discountPercent =
+                    item.originalPrice && item.originalPrice > item.price
+                      ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)
+                      : null;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.wishlistCard}
+                      activeOpacity={0.92}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/productdetail",
+                          params: {
+                            id: String(item.productId > 0 ? item.productId : item.id),
+                          },
+                        } as any)
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`${item.name}, open product details`}
+                    >
+                      <TouchableOpacity
+                        style={styles.wishlistImageArea}
+                        activeOpacity={0.9}
+                        onPress={() => openProductDetail(item)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${item.name}`}
+                      >
+                        <Image source={item.image} style={styles.wishlistHeroImage} />
+                        <View style={styles.wishlistImageShade} />
+
+                        {discountPercent != null ? (
+                          <View style={styles.wishlistDiscountPill}>
+                            <Text style={styles.wishlistDiscountText}>{discountPercent}% OFF</Text>
+                          </View>
+                        ) : null}
+
+                        <TouchableOpacity
+                          onPress={() => handleRemoveItem(item)}
+                          style={styles.wishlistRemoveFab}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${item.name}`}
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="trash-outline" size={18} color="#fff" />
+                        </TouchableOpacity>
+
+                        {!item.inStock ? (
+                          <View style={styles.wishlistStockPill}>
+                            <Ionicons name="alert-circle" size={14} color="#fff" />
+                            <Text style={styles.wishlistStockText}>Out of stock</Text>
+                          </View>
+                        ) : null}
+
+                        <View style={styles.wishlistHeroText}>
+                          <Text style={styles.wishlistName} numberOfLines={2}>
+                            {item.name}
+                          </Text>
+                          {item.size || item.color ? (
+                            <Text style={styles.wishlistMeta} numberOfLines={1}>
+                              {item.size ? `Size ${item.size}` : ""}
+                              {item.size && item.color ? " • " : ""}
+                              {item.color ? item.color : ""}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+
+                      <View style={styles.wishlistBottomBar}>
+                        <View style={styles.wishlistPriceCol}>
+                          <View style={styles.wishlistPriceRow}>
+                            <Text style={styles.wishlistPrice}>₹{item.price.toLocaleString()}</Text>
+                            {item.originalPrice ? (
+                              <Text style={styles.wishlistOriginalPrice}>
+                                ₹{item.originalPrice.toLocaleString()}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <Text style={styles.wishlistDate} numberOfLines={1}>
+                            Added {item.addedDate}
+                          </Text>
+                        </View>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.wishlistPrimaryBtn,
+                            !item.inStock && styles.wishlistPrimaryBtnDisabled,
+                          ]}
+                          onPress={() => handleMoveToCart(item)}
+                          disabled={!item.inStock}
+                          activeOpacity={0.9}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Move ${item.name} to cart`}
+                        >
+                          <Ionicons
+                            name="cart-outline"
+                            size={16}
+                            color={item.inStock ? "#fff" : "#9ca3af"}
+                          />
+                          <Text
+                            style={[
+                              styles.wishlistPrimaryBtnText,
+                              !item.inStock && styles.wishlistPrimaryBtnTextDisabled,
+                            ]}
+                          >
+                            Move to cart
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+                {row.length === 1 ? <View style={styles.wishlistCardSpacer} /> : null}
+              </View>
+            ))
           )}
         </View>
       </ScrollView>
+      <HomeBottomTabBar cartBadgeCount={cartCount} />
     </View>
   );
 }
@@ -638,11 +783,16 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "900",
     flex: 1,
     textAlign: "left",
     marginLeft: 4,
     color: "#1d324e",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    textShadowColor: "rgba(239,123,26,0.45)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   headerSearchWrapper: {
     flex: 1,
@@ -699,7 +849,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    paddingBottom: 32,
+    paddingBottom: 118,
   },
   section: {
     marginBottom: 24,
@@ -745,11 +895,89 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
   },
+  suggestionsTitle: {
+    marginTop: 10,
+    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  suggestionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 12,
+  },
+  suggestionCard: {
+    width: "48.5%",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    padding: 8,
+  },
+  suggestionImage: {
+    width: "100%",
+    height: 120,
+    borderRadius: 10,
+    resizeMode: "cover",
+    backgroundColor: "#f1f5f9",
+  },
+  suggestionName: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+    minHeight: 34,
+  },
+  suggestionMeta: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  suggestionPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  suggestionPrice: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#ea580c",
+  },
+  suggestionMrp: {
+    marginLeft: 6,
+    fontSize: 11,
+    color: "#94a3b8",
+    textDecorationLine: "line-through",
+  },
+  suggestionCartBtn: {
+    marginTop: 8,
+    backgroundColor: "#1d324e",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+  suggestionCartBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  wishlistRow: {
+    flexDirection: "row",
+    columnGap: 10,
+    marginBottom: 14,
+  },
+  wishlistRowLast: {
+    marginBottom: 0,
+  },
   wishlistCard: {
     flexDirection: "column",
+    flex: 1,
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
-    marginBottom: 14,
     borderWidth: 1,
     borderColor: "rgba(15,23,42,0.08)",
     overflow: "hidden",
@@ -759,14 +987,14 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 3,
   },
-  wishlistCardLast: {
-    marginBottom: 0,
+  wishlistCardSpacer: {
+    flex: 1,
   },
   wishlistImageArea: {
     position: "relative",
     width: "100%",
-    height: 210,
-    backgroundColor: "#0f172a",
+    height: 174,
+    backgroundColor: "#F8FAFC",
   },
   wishlistHeroImage: {
     width: "100%",
@@ -775,7 +1003,7 @@ const styles = StyleSheet.create({
   },
   wishlistImageShade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,6,23,0.28)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   wishlistDiscountPill: {
     position: "absolute",
