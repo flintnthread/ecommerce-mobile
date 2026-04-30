@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import api from "../services/api";
+import { sendOtp, verifyOtp } from "../services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
@@ -156,9 +156,7 @@ export default function OTP() {
         ? { email: userInput, otp: enteredOtp }
         : { mobile: userInput, otp: enteredOtp };
 
-      const response = await api.post("/auth/verify-otp", payload);
-
-      const data = response.data;
+      const data = await verifyOtp(payload);
 
       if (data && data.success) {
 
@@ -209,9 +207,9 @@ export default function OTP() {
         ? { email: userInput }
         : { mobile: userInput };
 
-      const response = await api.post("/auth/send-otp", payload);
+      const data = await sendOtp(payload);
 
-      if (response.data) {
+      if (data) {
 
         Alert.alert(tr("Success"), tr("OTP resent successfully"));
 
