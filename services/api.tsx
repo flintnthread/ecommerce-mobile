@@ -1,7 +1,19 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_BASE_URL = "http://flintnthread.com/api";
+function resolveFlintScheme(): "http" | "https" {
+  try {
+    if (typeof window !== "undefined" && window.location?.protocol === "https:") {
+      return "https";
+    }
+  } catch {
+    // no-op: keep default
+  }
+  return "http";
+}
+
+const FLINT_SCHEME = resolveFlintScheme();
+const API_BASE_URL = `${FLINT_SCHEME}://flintnthread.com/api`;
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
@@ -51,8 +63,8 @@ const api = axios.create({
   withCredentials: true, // ✅ crucial for session/cookies
 });
 
-// Auth API instance for login/OTP only (kept on single `/api/...` path).
-const AUTH_BASE_URL = "http://flintnthread.com";
+// Auth API instance for login/OTP only (single `/api/...` path).
+const AUTH_BASE_URL = `${FLINT_SCHEME}://flintnthread.com`;
 console.log("Auth API Base URL:", AUTH_BASE_URL);
 
 const authApi = axios.create({
