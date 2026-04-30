@@ -99,11 +99,9 @@ export default function GenderAgeScreen() {
                 <Text style={styles.tileTitle}>{tr("Female")}</Text>
                 <Text style={styles.tileSubtitle}>{tr("Shop women’s picks")}</Text>
               </View>
-              <Ionicons
-                name={gender === "FEMALE" ? "checkmark-circle" : "chevron-forward"}
-                size={22}
-                color={gender === "FEMALE" ? "#EA580C" : "#94A3B8"}
-              />
+              <View style={[styles.genderRadio, gender === "FEMALE" && styles.genderRadioSelected]}>
+                {gender === "FEMALE" ? <View style={styles.genderRadioDot} /> : null}
+              </View>
             </Pressable>
 
             <Pressable
@@ -127,11 +125,9 @@ export default function GenderAgeScreen() {
                 <Text style={styles.tileTitle}>{tr("Male")}</Text>
                 <Text style={styles.tileSubtitle}>{tr("Shop men’s picks")}</Text>
               </View>
-              <Ionicons
-                name={gender === "MALE" ? "checkmark-circle" : "chevron-forward"}
-                size={22}
-                color={gender === "MALE" ? "#EA580C" : "#94A3B8"}
-              />
+              <View style={[styles.genderRadio, gender === "MALE" && styles.genderRadioSelected]}>
+                {gender === "MALE" ? <View style={styles.genderRadioDot} /> : null}
+              </View>
             </Pressable>
           </View>
         </View>
@@ -338,7 +334,7 @@ const styles = StyleSheet.create({
   blockHint: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#94A3B8",
+    color: "#D4AF37",
   },
 
   tileStack: {
@@ -387,6 +383,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#64748B",
+  },
+  genderRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#94A3B8",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  genderRadioSelected: {
+    borderColor: "#EA580C",
+  },
+  genderRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#EA580C",
   },
 
   ageTilesGrid: {
@@ -466,10 +481,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     borderRadius: 14,
-    backgroundColor: "#EA580C",
+    backgroundColor: "#D4AF37",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#EA580C",
+    shadowColor: "#D4AF37",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.22,
     shadowRadius: 14,
@@ -483,7 +498,7 @@ const styles = StyleSheet.create({
   footerBtnPrimaryText: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#FFFFFF",
+    color: "#1F2937",
   },
   footerBtnTextDisabled: {
     color: "#475569",

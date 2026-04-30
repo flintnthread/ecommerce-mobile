@@ -163,7 +163,7 @@ export default function Notifications() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   header: {
-    paddingTop: 14,
+    paddingTop: 18,
     paddingHorizontal: 16,
     paddingBottom: 10,
     flexDirection: "row",

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import type { AxiosRequestConfig } from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
@@ -69,6 +70,14 @@ const USER_PICK_CARD_WIDTH = Math.min(Math.round(width * 0.38), 148);
 const USER_PICK_ITEM_GAP = 12;
 /** Min height for Top Picks horizontal `ScrollView` (avoids 0-height nested scroll). */
 const USER_PICK_TOP_SCROLL_MIN_H = 200;
+const HOME_API_BASE_URL = "http://flintnthread.com/api";
+
+function homeApiGet<T = unknown>(path: string, config?: AxiosRequestConfig) {
+  return api.get<T>(path, {
+    ...(config ?? {}),
+    baseURL: HOME_API_BASE_URL,
+  });
+}
 
 /** Suggested for you — gap between the two columns in each row */
 const SUGGESTED_CARD_GAP = 12;
@@ -199,8 +208,9 @@ type MorePicksPageResponse = {
 
 /** Paginated products for “More picks” — base URL comes from `services/api.tsx` */
 const MORE_PICKS_PRODUCTS_PATH = "/api/products";
-/** Spring `page` size for `/api/products` (tune if backend caps `size`). */
-const MORE_PICKS_PAGE_SIZE = 30;
+/** Spring `page` size for `/api/products` while loading all rows for Home once. */
+const MORE_PICKS_PAGE_SIZE = 50;
+const MORE_PICKS_MAX_BOOTSTRAP_PAGES = 200;
 
 /** Two-column grid without `FlatList` (nested virtualized lists often do not extend parent scroll). */
 function chunkMorePicksRows<T>(items: T[]): [T, T | undefined][] {
@@ -1830,7 +1840,7 @@ export default function Home() {
     const token = (await AsyncStorage.getItem("token"))?.trim();
     if (token) {
       try {
-        const { data } = await api.get<unknown>(WISHLIST_USER_PATH);
+        const { data } = await homeApiGet<unknown>(WISHLIST_USER_PATH);
         const rows = normalizeWishlistApiRows(data);
         const ids = new Set<string>();
         for (const row of rows) {
@@ -1909,7 +1919,7 @@ export default function Home() {
       };
 
       try {
-        const { data } = await api.get<unknown>(MAIN_CATEGORIES_PATH);
+        const { data } = await homeApiGet<unknown>(MAIN_CATEGORIES_PATH);
         if (cancelled) return;
         const rows = normalizeMainCategoriesPayload(data);
         setMainCategories(mapRows(rows));
@@ -1942,7 +1952,7 @@ export default function Home() {
 
         // Primary source: full banners list from `/api/banners`, then pick configured IDs.
         try {
-          const { data: bannersData } = await api.get<unknown>(HERO_BANNERS_PATH);
+          const { data: bannersData } = await homeApiGet<unknown>(HERO_BANNERS_PATH);
           if (cancelled) return;
           const rows = normalizeHeroBannerRows(bannersData);
           for (const row of rows) {
@@ -1958,7 +1968,7 @@ export default function Home() {
         // Secondary source: active list (handles deployments where `/api/banners` differs).
         if (rowsByIdMap.size < targetIds.length) {
           try {
-            const { data: activeData } = await api.get<unknown>(HERO_BANNERS_ACTIVE_PATH);
+            const { data: activeData } = await homeApiGet<unknown>(HERO_BANNERS_ACTIVE_PATH);
             if (cancelled) return;
             const activeRows = normalizeHeroBannerRows(activeData);
             for (const row of activeRows) {
@@ -1976,7 +1986,7 @@ export default function Home() {
         const missingIds = targetIds.filter((id) => !rowsByIdMap.has(id));
         if (missingIds.length > 0) {
           const idResults = await Promise.allSettled(
-            missingIds.map((id) => api.get<unknown>(heroBannerByIdPath(Number(id))))
+            missingIds.map((id) => homeApiGet<unknown>(heroBannerByIdPath(Number(id))))
           );
           if (cancelled) return;
           for (const r of idResults) {
@@ -2030,25 +2040,39 @@ export default function Home() {
     let cancelled = false;
     void (async () => {
       try {
-        const { data } = await api.get<MorePicksPageResponse>(MORE_PICKS_PRODUCTS_PATH, {
-          params: { page: 0, size: MORE_PICKS_PAGE_SIZE, sort: "createdAt,desc" },
-        });
-        if (cancelled) return;
-        const rows = Array.isArray(data?.content) ? data.content! : [];
+        const allRows: MorePicksApiProduct[] = [];
+        let page = 0;
+        let hasNext = true;
+
+        while (hasNext && page < MORE_PICKS_MAX_BOOTSTRAP_PAGES) {
+          const { data } = await homeApiGet<MorePicksPageResponse>(MORE_PICKS_PRODUCTS_PATH, {
+            params: { page, size: MORE_PICKS_PAGE_SIZE, sort: "createdAt,desc" },
+          });
+          if (cancelled) return;
+          const rows = normalizeProductListPayload(data);
+          const meta = readSpringPageMeta(data);
+          if (rows.length > 0) {
+            allRows.push(...rows);
+          }
+          const last =
+            meta.last === true ||
+            rows.length === 0 ||
+            rows.length < MORE_PICKS_PAGE_SIZE;
+          hasNext = !last;
+          page += 1;
+        }
+
         const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
         const mapped = mapMorePicksApiToGrid(
-          rows,
+          allRows,
           base,
-          LATEST_PRODUCTS_FALLBACK[0].image
+          LATEST_PRODUCTS_FALLBACK[0].image,
+          { requireProductActive: false }
         );
         if (mapped.length > 0) {
           setMorePicksItems(mapped);
           setMorePicksPage(0);
-          const last =
-            data?.last === true ||
-            rows.length === 0 ||
-            rows.length < MORE_PICKS_PAGE_SIZE;
-          setMorePicksHasMore(!last);
+          setMorePicksHasMore(false); // We already loaded all products once during initial bootstrap.
         }
       } catch {
         /* keep LATEST_PRODUCTS_FALLBACK */
@@ -2067,15 +2091,17 @@ export default function Home() {
     setMorePicksLoadingMore(true);
     const nextPage = morePicksPage + 1;
     try {
-      const { data } = await api.get<MorePicksPageResponse>(MORE_PICKS_PRODUCTS_PATH, {
+      const { data } = await homeApiGet<MorePicksPageResponse>(MORE_PICKS_PRODUCTS_PATH, {
         params: { page: nextPage, size: MORE_PICKS_PAGE_SIZE, sort: "createdAt,desc" },
       });
-      const rows = Array.isArray(data?.content) ? data.content! : [];
+      const rows = normalizeProductListPayload(data);
+      const meta = readSpringPageMeta(data);
       const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
       const mapped = mapMorePicksApiToGrid(
         rows,
         base,
-        LATEST_PRODUCTS_FALLBACK[0].image
+        LATEST_PRODUCTS_FALLBACK[0].image,
+        { requireProductActive: false }
       );
       if (mapped.length > 0) {
         setMorePicksItems((prev) => {
@@ -2086,7 +2112,7 @@ export default function Home() {
       }
       setMorePicksPage(nextPage);
       const last =
-        data?.last === true ||
+        meta.last === true ||
         rows.length === 0 ||
         rows.length < MORE_PICKS_PAGE_SIZE;
       setMorePicksHasMore(!last);
@@ -2102,7 +2128,7 @@ export default function Home() {
     let cancelled = false;
     void (async () => {
       try {
-        const { data } = await api.get<unknown>(DISCOUNT_TOP_PRODUCTS_PATH);
+        const { data } = await homeApiGet<unknown>(DISCOUNT_TOP_PRODUCTS_PATH);
         if (cancelled) return;
         const rows = normalizeProductListPayload(data);
         const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
@@ -2137,7 +2163,7 @@ export default function Home() {
     let cancelled = false;
     void (async () => {
       try {
-        const { data } = await api.get<unknown>(
+        const { data } = await homeApiGet<unknown>(
           productsByMainCategoryPath(STORE_SPOTLIGHT_MAIN_CATEGORY_ID)
         );
         if (cancelled) return;
@@ -2174,7 +2200,7 @@ export default function Home() {
     let cancelled = false;
     void (async () => {
       try {
-        const { data } = await api.get<unknown>(TOP_SELLING_PRICE_PRODUCTS_PATH);
+        const { data } = await homeApiGet<unknown>(TOP_SELLING_PRICE_PRODUCTS_PATH);
         if (cancelled) return;
         const rows = normalizeProductListPayload(data);
         const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
@@ -2207,7 +2233,7 @@ export default function Home() {
     let cancelled = false;
     void (async () => {
       try {
-        const { data } = await api.get<unknown>(FRESH_FINDS_RECENT_PATH);
+        const { data } = await homeApiGet<unknown>(FRESH_FINDS_RECENT_PATH);
         if (cancelled) return;
         const rows = normalizeProductListPayload(data);
         const base = String((api.defaults.baseURL as string | undefined) ?? "").trim();
@@ -2247,7 +2273,7 @@ export default function Home() {
       setTopPicksHasMoreOnServer(false);
       void (async () => {
         try {
-          const { data } = await api.get<unknown>(TOP_PICKS_POPULAR_PATH, {
+          const { data } = await homeApiGet<unknown>(TOP_PICKS_POPULAR_PATH, {
             params: {
               page: 0,
               size: TOP_PICKS_PREVIEW_SIZE,
@@ -2303,7 +2329,7 @@ export default function Home() {
 
   const loadSuggestedForYouFromSubcategoryApi = useCallback(async () => {
     try {
-      const { data } = await api.get<unknown>(
+      const { data } = await homeApiGet<unknown>(
         productsBySubcategoryPath(SUGGESTED_FOR_YOU_SUBCATEGORY_ID)
       );
       const apiBase = String((api.defaults.baseURL as string | undefined) ?? "").trim();
@@ -3155,11 +3181,7 @@ const categoryData = [
                   style={styles.greetingTextChip}
                 >
                   <Text style={styles.helloLine} numberOfLines={1}>
-                    <Text style={styles.helloMuted}>{tr("Hi, ")}</Text>
-                    <Text style={styles.helloName}>{userDisplayName}</Text>
-                  </Text>
-                  <Text style={styles.shopText} numberOfLines={1}>
-                    {tr("New finds await")}
+                    <Text style={styles.helloName}>{tr("Welcome")}</Text>
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -4902,10 +4924,10 @@ const categoryData = [
               </View>
 
               <Text style={styles.promoBodyBold}>
-              Refer 5 friends using your code and get **10% OFF on your first order** 🎉
+              Refer 5 friends using your code and get **10% OFF on your first order** 
               </Text>
               <Text style={styles.promoBodyMuted}>
-                ✨ Invite your friends and enjoy exciting discounts! 🎉
+                Invite your friends and enjoy exciting discounts! 
               </Text>
 
               <Animated.View style={[styles.promoCtaOuter, { transform: [{ scale: promoCtaPulseAnim }] }]}>
@@ -5861,9 +5883,9 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 0,
   },
 
   logoRingPlain: {

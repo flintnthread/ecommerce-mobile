@@ -31,6 +31,7 @@ import {
 } from "../lib/shopStorage";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import { useLanguage } from "../lib/language";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import {
   firstWishlistRowImageUri,
   normalizeWishlistApiRows,
@@ -3115,6 +3116,9 @@ const handleBannerScroll = (event: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* Bottom navigation (Home-like) */}
+      <HomeBottomTabBar cartBadgeCount={cartBadgeCount} />
     </View>
   );
 }
@@ -3199,7 +3203,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
   },
   scrollContent: {
-    paddingBottom: 90,
+    paddingBottom: 108,
   },
   topTagRow: {
     paddingHorizontal: 12,

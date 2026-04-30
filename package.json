@@ -5,8 +5,8 @@
   "scripts": {
     "start": "expo start",
     "start:tunnel": "expo start --tunnel --clear",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "build": "node --max-old-space-size=4096 ./node_modules/.bin/expo export",
     "build:azure": "node --max-old-space-size=4096 ./node_modules/.bin/expo export",

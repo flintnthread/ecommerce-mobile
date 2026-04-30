@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import api from "../services/api";
+import { sendOtp, verifyOtp } from "../services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
@@ -42,6 +42,7 @@ export default function OTP() {
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isVerifying, setIsVerifying] = useState(false);
+  const VERIFY_TIMEOUT_MS = 20000;
 
   const inputs = useRef([]);
   const hiddenInput = useRef(null);
@@ -156,9 +157,14 @@ export default function OTP() {
         ? { email: userInput, otp: enteredOtp }
         : { mobile: userInput, otp: enteredOtp };
 
-      const response = await api.post("/auth/verify-otp", payload);
-
-      const data = response.data;
+      const data = await Promise.race([
+        verifyOtp(payload),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("OTP verification timed out. Please try again."));
+          }, VERIFY_TIMEOUT_MS);
+        }),
+      ]);
 
       if (data && data.success) {
 
@@ -179,11 +185,13 @@ export default function OTP() {
         Alert.alert(tr("Error"), tr(data.message || "Invalid OTP"));
       }
 
-    } catch (error) {
+    } catch (error: any) {
 
       console.log("Verify OTP Error:", error);
 
-      if (error?.response?.data?.message) {
+      if (typeof error?.message === "string" && error.message.trim()) {
+        Alert.alert(tr("Error"), tr(error.message));
+      } else if (error?.response?.data?.message) {
 
         Alert.alert(tr("Error"), tr(error.response.data.message));
 
@@ -209,9 +217,9 @@ export default function OTP() {
         ? { email: userInput }
         : { mobile: userInput };
 
-      const response = await api.post("/auth/send-otp", payload);
+      const data = await sendOtp(payload);
 
-      if (response.data) {
+      if (data) {
 
         Alert.alert(tr("Success"), tr("OTP resent successfully"));
 

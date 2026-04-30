@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import api from "../services/api";
+import api, { sendOtp } from "../services/api";
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { useLanguage } from "../lib/language";
 import { SHOW_POST_LOGIN_PROMO_KEY } from "./otpsection";
 
 WebBrowser.maybeCompleteAuthSession();
+const PRIVACY_POLICY_URL = "https://flintnthread.in/page-privacy-policy";
 
 function resolveGoogleOAuthClientId(): string | undefined {
   const fromEnv =
@@ -247,8 +248,7 @@ export default function Login() {
         const payload = emailRegex.test(value)
           ? { email: value }
           : { mobile: value };
-        const response = await api.post("/auth/send-otp", payload);
-        const data = response.data;
+        const data = await sendOtp(payload);
         if (data) {
           Alert.alert(
             tr("OTP Sent"),
@@ -388,8 +388,36 @@ export default function Login() {
     await sendOtpAndNavigateToOtp(value);
   };
 
+  const openTerms = useCallback(() => {
+    router.push({
+      pathname: "/legal-content" as any,
+      params: {
+        title: "Terms & Conditions",
+        url: PRIVACY_POLICY_URL,
+      },
+    });
+  }, [router]);
+
+  const openPrivacy = useCallback(() => {
+    router.push({
+      pathname: "/legal-content" as any,
+      params: {
+        title: "Privacy Policy",
+        url: PRIVACY_POLICY_URL,
+      },
+    });
+  }, [router]);
+
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        onPress={() => router.replace("/gender")}
+        style={styles.backButton}
+        activeOpacity={0.75}
+      >
+        <Ionicons name="arrow-back" size={22} color="#0F172A" />
+      </TouchableOpacity>
+
       <Image
         source={require("../assets/images/fntfav.png")}
         style={styles.logo}
@@ -423,8 +451,14 @@ export default function Login() {
         />
 
         <Text style={styles.checkboxText}>
-          {tr("By continue you agree to flint & thread terms & conditions")}{" "}
-          {tr("and along with privacy policy")}
+          {tr("By continue you agree to flint & thread")}{" "}
+          <Text style={styles.linkText} onPress={openTerms}>
+            {tr("terms & conditions")}
+          </Text>{" "}
+          {tr("and along with")}{" "}
+          <Text style={styles.linkText} onPress={openPrivacy}>
+            {tr("privacy policy")}
+          </Text>
         </Text>
       </View>
 
@@ -432,22 +466,20 @@ export default function Login() {
         style={[styles.signButton, loading && { opacity: 0.6 }]}
         onPress={handleSignIn}
         disabled={loading}
+        activeOpacity={1}
       >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
+        <View style={styles.signButtonContent}>
+          {loading ? <ActivityIndicator color="#fff" style={styles.signButtonLoader} /> : null}
           <Text style={styles.signButtonText}>{tr("Sign in to continue")}</Text>
-        )}
+        </View>
       </TouchableOpacity>
 
       <View style={styles.createAccountRow}>
-        <Text style={styles.newText}>{tr("New to FlintThread?")}</Text>
-
-        <TouchableOpacity onPress={() => router.push("/login")}>
-          <Text style={styles.createText}> {tr("Create an account")}</Text>
-        </TouchableOpacity>
+        <Text style={styles.newText}>{tr("New to Flint & Thread?")}</Text>
+        <Text style={styles.createText}> {tr("Create an account")}</Text>
       </View>
 
+      {/*
       {googleClientId ? (
         <GoogleOAuthContinueRow
           clientId={googleClientId}
@@ -470,6 +502,7 @@ export default function Login() {
           <Text style={styles.googleText}>{tr("Continue with Google")}</Text>
         </TouchableOpacity>
       )}
+      */}
     </View>
   );
 }
@@ -480,6 +513,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
     paddingHorizontal: 25,
     paddingTop: 60,
+  },
+  backButton: {
+    position: "absolute",
+    top: 56,
+    left: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.12)",
+    zIndex: 10,
   },
   logo: {
     width: 120,
@@ -546,8 +593,21 @@ const styles = StyleSheet.create({
     color: "#777",
   },
   createText: {
-    color: "#000",
-    fontWeight: "600",
+    color: "#777",
+    fontWeight: "400",
+  },
+  linkText: {
+    color: "#0F172A",
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
+  signButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signButtonLoader: {
+    marginRight: 8,
   },
   googleButton: {
     flexDirection: "row",
