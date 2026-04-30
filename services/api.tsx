@@ -13,7 +13,33 @@ function resolveFlintScheme(): "http" | "https" {
 }
 
 const FLINT_SCHEME = resolveFlintScheme();
-const API_BASE_URL = `${FLINT_SCHEME}://flintnthread.com/api`;
+const FLINT_HOST = "flintnthread.com";
+function resolveWebOrigin(): string | null {
+  try {
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return String(window.location.origin).replace(/\/+$/, "");
+    }
+  } catch {
+    // no-op
+  }
+  return null;
+}
+
+const WEB_ORIGIN = resolveWebOrigin();
+function isFlintOrigin(origin: string | null): boolean {
+  if (!origin) return false;
+  try {
+    const u = new URL(origin);
+    return u.hostname === FLINT_HOST || u.hostname.endsWith(`.${FLINT_HOST}`);
+  } catch {
+    return false;
+  }
+}
+
+const WEB_ORIGIN_IS_FLINT = isFlintOrigin(WEB_ORIGIN);
+const API_BASE_URL = WEB_ORIGIN_IS_FLINT
+  ? `${WEB_ORIGIN}/api`
+  : `${FLINT_SCHEME}://${FLINT_HOST}/api`;
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
@@ -64,7 +90,10 @@ const api = axios.create({
 });
 
 // Auth API instance for login/OTP only (single `/api/...` path).
-const AUTH_BASE_URL = `${FLINT_SCHEME}://flintnthread.com`;
+const AUTH_BASE_URL = WEB_ORIGIN
+  && WEB_ORIGIN_IS_FLINT
+  ? WEB_ORIGIN
+  : `${FLINT_SCHEME}://${FLINT_HOST}`;
 console.log("Auth API Base URL:", AUTH_BASE_URL);
 
 const authApi = axios.create({
