@@ -90,10 +90,8 @@ const api = axios.create({
 });
 
 // Auth API instance for login/OTP only (single `/api/...` path).
-const AUTH_BASE_URL = WEB_ORIGIN
-  && WEB_ORIGIN_IS_FLINT
-  ? WEB_ORIGIN
-  : `${FLINT_SCHEME}://${FLINT_HOST}`;
+// Use resolveBaseUrl() to respect EXPO_PUBLIC_API_BASE_URL env var for deployed environments
+const AUTH_BASE_URL = resolveBaseUrl();
 console.log("Auth API Base URL:", AUTH_BASE_URL);
 
 const authApi = axios.create({
@@ -639,12 +637,7 @@ export const getDefaultAddress = async (): Promise<ApiResponse<Address>> => {
   return response.data;
 };
 
-// ===== LOGIN AND OTP API FUNCTIONS (using flintnthread.com) =====
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
+// ===== OTP API FUNCTIONS (using flintnthread.com) =====
 
 export interface LoginResponse {
   success: boolean;
@@ -674,30 +667,12 @@ export interface OtpResponse {
 }
 
 /**
- * Login with email and password - uses http://flintnthread.com
- */
-export const login = async (loginData: LoginRequest): Promise<LoginResponse> => {
-  try {
-    console.log("Sending login request to:", AUTH_BASE_URL + "/api/auth/login");
-    const response = await authApi.post("/api/auth/login", loginData);
-    console.log("Login response:", response.data);
-    return response.data;
-  } catch (error: any) {
-    console.error("Login failed:", error.message, error.code);
-    if (error.code === "ERR_NETWORK") {
-      throw new Error("Cannot connect to server. Please check your internet connection or try again later.");
-    }
-    throw error;
-  }
-};
-
-/**
  * Send OTP to email for verification - uses http://flintnthread.com
  */
 export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => {
   try {
-    console.log("Sending OTP request to:", AUTH_BASE_URL + "/api/auth/send-otp", "with email:", otpData.email);
-    const response = await authApi.post("/api/auth/send-otp", otpData);
+    console.log("Sending OTP request to:", AUTH_BASE_URL + "/auth/send-otp", "with email:", otpData.email);
+    const response = await authApi.post("/auth/send-otp", otpData);
     console.log("OTP response:", response.data);
     return response.data;
   } catch (error: any) {
@@ -714,8 +689,8 @@ export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => 
  */
 export const verifyOtp = async (otpData: OtpRequest): Promise<LoginResponse> => {
   try {
-    console.log("Verifying OTP at:", AUTH_BASE_URL + "/api/auth/verify-otp");
-    const response = await authApi.post("/api/auth/verify-otp", otpData);
+    console.log("Verifying OTP at:", AUTH_BASE_URL + "/auth/verify-otp");
+    const response = await authApi.post("/auth/verify-otp", otpData);
     console.log("Verify OTP response:", response.data);
     return response.data;
   } catch (error: any) {
