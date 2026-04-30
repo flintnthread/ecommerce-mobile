@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
+import api from "../services/api";
 
 type CategoryKey =
   | "womenswear"
@@ -104,9 +105,6 @@ type ApiMainCategory = {
   sellerId: number | null;
   status: number;
 };
-
-const MAIN_CATEGORIES_URL =
-  "https://flintnthread-app-axczbcbrdebce5ev.centralindia-01.azurewebsites.net/api/categories/main";
 
 function categoryNameToKey(name: string): CategoryKey | null {
   const normalized = name.trim().toLowerCase();
@@ -399,8 +397,8 @@ export default function Categories() {
     const load = async () => {
       try {
         setIsLoadingCategories(true);
-        const res = await fetch(MAIN_CATEGORIES_URL);
-        const json = (await res.json()) as ApiMainCategory[];
+        const res = await api.get("/api/categories/main");
+        const json = res.data as ApiMainCategory[];
         if (!isMounted) return;
 
         const mapped: SideCategory[] = (Array.isArray(json) ? json : [])
