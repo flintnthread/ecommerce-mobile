@@ -255,7 +255,6 @@ export default function CartScreen() {
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
-
   const [apiWeightDeliveryCharge, setApiWeightDeliveryCharge] = useState<number | null>(null);
   const [qtyUpdatingIds, setQtyUpdatingIds] = useState<Set<string>>(new Set());
   // Calculate totals (server cart uses API priceSummary when available)

@@ -3181,11 +3181,7 @@ const categoryData = [
                   style={styles.greetingTextChip}
                 >
                   <Text style={styles.helloLine} numberOfLines={1}>
-                    <Text style={styles.helloMuted}>{tr("Hi, ")}</Text>
-                    <Text style={styles.helloName}>{userDisplayName}</Text>
-                  </Text>
-                  <Text style={styles.shopText} numberOfLines={1}>
-                    {tr("New finds await")}
+                    <Text style={styles.helloName}>{tr("Welcome")}</Text>
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -4928,10 +4924,10 @@ const categoryData = [
               </View>
 
               <Text style={styles.promoBodyBold}>
-              Refer 5 friends using your code and get **10% OFF on your first order** 🎉
+              Refer 5 friends using your code and get **10% OFF on your first order** 
               </Text>
               <Text style={styles.promoBodyMuted}>
-                ✨ Invite your friends and enjoy exciting discounts! 🎉
+                Invite your friends and enjoy exciting discounts! 
               </Text>
 
               <Animated.View style={[styles.promoCtaOuter, { transform: [{ scale: promoCtaPulseAnim }] }]}>
@@ -5887,9 +5883,9 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 0,
   },
 
   logoRingPlain: {

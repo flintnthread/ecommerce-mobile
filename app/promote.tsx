@@ -92,9 +92,9 @@ export default function PromoteScreen() {
         pointerEvents="box-none"
       >
         <View style={styles.topContent}>
-          <Text style={styles.title}>Checkout</Text>
-          <Text style={styles.subtitle}>Today top deals</Text>
-
+          <Text style={styles.title}>Hot Deals</Text>
+          <Text style={styles.subtitle}>Explore Best Offers</Text>
+          
           <TouchableOpacity style={styles.button} onPress={goToLanguage}>
             <Text style={styles.buttonText}>Get Started</Text>
           </TouchableOpacity>
@@ -143,8 +143,11 @@ const styles = StyleSheet.create({
   },
 
   topContent: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
     width: "100%",
+    marginTop: 150,
   },
 
   title: {
@@ -164,6 +167,16 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
     textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  subtitleAlt: {
+    marginTop: 6,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.92)",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.35)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
