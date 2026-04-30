@@ -306,7 +306,13 @@ function mapIndoorApiProductToLacingThreadingSpotlight(p: any): IndoorLacingThre
 const DEFAULT_EDU_IMAGE_ASPECT_RATIO = 1.45;
 
 function getLocalImageAspectRatio(source: ImageSourcePropType): number {
-  const asset = Image.resolveAssetSource(source);
+  const resolveAssetSource = (Image as any)?.resolveAssetSource as
+    | ((input: ImageSourcePropType) => { width?: number; height?: number } | undefined)
+    | undefined;
+  if (typeof resolveAssetSource !== "function") {
+    return DEFAULT_EDU_IMAGE_ASPECT_RATIO;
+  }
+  const asset = resolveAssetSource(source);
   if (asset?.width && asset?.height && asset.height > 0) {
     return asset.width / asset.height;
   }

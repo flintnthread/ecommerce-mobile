@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import api from "../services/api";
+import api, { sendOtp } from "../services/api";
 import {
   View,
   Text,
@@ -247,8 +247,7 @@ export default function Login() {
         const payload = emailRegex.test(value)
           ? { email: value }
           : { mobile: value };
-        const response = await api.post("/auth/send-otp", payload);
-        const data = response.data;
+        const data = await sendOtp(payload);
         if (data) {
           Alert.alert(
             tr("OTP Sent"),

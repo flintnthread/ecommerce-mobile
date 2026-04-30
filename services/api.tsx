@@ -1,36 +1,10 @@
 import axios from "axios";
-import Constants from "expo-constants";
-import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_PORT = "8080";
+const API_BASE_URL = "http://flintnthread.com/api";
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
-}
-
-function getHostFromExpo(): string | null {
-  try {
-    // Try different Expo Constants properties
-    let hostUri: string | undefined;
-    
-    if (Constants.expoConfig?.hostUri) {
-      hostUri = Constants.expoConfig.hostUri;
-    } else if ((Constants as any).manifest2?.extra?.expoClient?.hostUri) {
-      hostUri = (Constants as any).manifest2.extra.expoClient.hostUri;
-    } else if ((Constants as any).manifest?.debuggerHost) {
-      hostUri = (Constants as any).manifest.debuggerHost;
-    }
-
-    if (!hostUri) return null;
-    const host = hostUri.split(":")[0]?.trim();
-    if (!host) return null;
-    if (host === "localhost" || host === "127.0.0.1") return null;
-    return host;
-  } catch (error) {
-    console.log("Error getting host from Expo Constants:", error);
-    return null;
-  }
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -62,16 +36,7 @@ function extractUserIdFromToken(token: string): number | null {
 function resolveBaseUrl(): string {
   const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
   if (envBaseUrl) return normalizeBaseUrl(envBaseUrl);
-
-  const expoHost = getHostFromExpo();
-  if (expoHost) return `http://${expoHost}:${API_PORT}`;
-
-  if (Platform.OS === "android") {
-    // Android emulator cannot access host machine via localhost.
-    return `http://10.0.2.2:${API_PORT}`;
-  }
-
-  return `http://localhost:${API_PORT}`;
+  return API_BASE_URL;
 }
 
 const normalizedBaseUrl = resolveBaseUrl();
@@ -85,6 +50,57 @@ const api = axios.create({
   },
   withCredentials: true, // ✅ crucial for session/cookies
 });
+
+// Auth API instance for login/OTP only (kept on single `/api/...` path).
+const AUTH_BASE_URL = "http://flintnthread.com";
+console.log("Auth API Base URL:", AUTH_BASE_URL);
+
+const authApi = axios.create({
+  baseURL: AUTH_BASE_URL,
+  timeout: 15000, // Increased timeout for slower connections
+  headers: {
+    "Content-Type": "application/json",
+  },
+  withCredentials: false, // Disable for HTTP cross-domain to avoid CORS issues
+});
+
+// Add JWT token interceptor for authApi requests
+authApi.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      console.log("Auth API Request:", config.method?.toUpperCase(), config.baseURL + config.url);
+    } catch (error) {
+      console.log("Error getting token from AsyncStorage for authApi:", error);
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor for authApi to log errors
+authApi.interceptors.response.use(
+  (response) => {
+    console.log("Auth API Response:", response.status, response.config.url);
+    return response;
+  },
+  (error) => {
+    console.error("Auth API Error:", {
+      message: error.message,
+      code: error.code,
+      url: error.config?.url,
+      baseURL: error.config?.baseURL,
+      status: error.response?.status,
+      responseData: error.response?.data,
+    });
+    return Promise.reject(error);
+  }
+);
 
 // Add JWT token interceptor to include bearer token in all requests
 api.interceptors.request.use(
@@ -580,6 +596,118 @@ export const setDefaultAddress = async (id: number): Promise<ApiResponse<Address
 export const getDefaultAddress = async (): Promise<ApiResponse<Address>> => {
   const response = await api.get("/api/addresses/default");
   return response.data;
+};
+
+// ===== LOGIN AND OTP API FUNCTIONS (using flintnthread.com) =====
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  message: string;
+  token?: string;
+  user?: {
+    id: number;
+    email: string;
+    name: string;
+  };
+}
+
+export interface OtpRequest {
+  email?: string;
+  mobile?: string;
+  otp: string;
+}
+
+export interface SendOtpRequest {
+  email?: string;
+  mobile?: string;
+}
+
+export interface OtpResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Login with email and password - uses http://flintnthread.com
+ */
+export const login = async (loginData: LoginRequest): Promise<LoginResponse> => {
+  try {
+    console.log("Sending login request to:", AUTH_BASE_URL + "/api/auth/login");
+    const response = await authApi.post("/api/auth/login", loginData);
+    console.log("Login response:", response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error("Login failed:", error.message, error.code);
+    if (error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check your internet connection or try again later.");
+    }
+    throw error;
+  }
+};
+
+/**
+ * Send OTP to email for verification - uses http://flintnthread.com
+ */
+export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => {
+  try {
+    console.log("Sending OTP request to:", AUTH_BASE_URL + "/api/auth/send-otp", "with email:", otpData.email);
+    const response = await authApi.post("/api/auth/send-otp", otpData);
+    console.log("OTP response:", response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error("Send OTP failed:", error.message, error.code);
+    if (error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check your internet connection or try again later.");
+    }
+    throw error;
+  }
+};
+
+/**
+ * Verify OTP for email - uses http://flintnthread.com
+ */
+export const verifyOtp = async (otpData: OtpRequest): Promise<LoginResponse> => {
+  try {
+    console.log("Verifying OTP at:", AUTH_BASE_URL + "/api/auth/verify-otp");
+    const response = await authApi.post("/api/auth/verify-otp", otpData);
+    console.log("Verify OTP response:", response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error("Verify OTP failed:", error.message, error.code);
+    if (error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check your internet connection or try again later.");
+    }
+    throw error;
+  }
+};
+
+/**
+ * Logout user - clear token
+ */
+export const logout = async (): Promise<{ success: boolean; message: string }> => {
+  try {
+    await AsyncStorage.removeItem("token");
+    return { success: true, message: "Logged out successfully" };
+  } catch (error) {
+    return { success: false, message: "Failed to logout" };
+  }
+};
+
+/**
+ * Check if user is authenticated
+ */
+export const isAuthenticated = async (): Promise<boolean> => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+    return !!token;
+  } catch (error) {
+    return false;
+  }
 };
 
 export default api;
