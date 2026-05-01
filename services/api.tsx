@@ -726,4 +726,44 @@ export const isAuthenticated = async (): Promise<boolean> => {
   }
 };
 
+/**
+ * Search products by image - POST request with image data
+ */
+export const searchProductsByImage = async (
+  imageUri: string,
+  params?: { userId?: number | null; sessionId?: string | null }
+): Promise<SearchUiResult[]> => {
+  const formData = new FormData();
+  formData.append('image', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'search.jpg',
+  } as any);
+
+  // Add query parameters
+  const sp = new URLSearchParams();
+  const uid = Number(params?.userId);
+  if (Number.isFinite(uid) && uid > 0) {
+    sp.set("userId", String(Math.floor(uid)));
+  }
+  const sid = String(params?.sessionId ?? "").trim();
+  if (sid) {
+    sp.set("sessionId", sid);
+  }
+  const qs = sp.toString();
+  const url = qs ? `/api/search/image?${qs}` : "/api/search/image";
+
+  try {
+    const response = await api.post(url, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return mapSearchResultsToUi(response.data);
+  } catch (error) {
+    console.error('Error searching by image:', error);
+    return [];
+  }
+};
+
 export default api;
