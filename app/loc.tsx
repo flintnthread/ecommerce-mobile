@@ -5,8 +5,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { requestForegroundLocation } from "../lib/requestForegroundLocation";
 import { useLanguage } from "../lib/language";
 
@@ -24,6 +26,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
   onDontAllow,
 }) => {
   const { tr } = useLanguage();
+  const router = useRouter();
 
   /** Triggers the real OS location permission dialog (expo-location), then the parent callback. */
   const runLocationThen = useCallback((onContinue: () => void) => {
@@ -48,6 +51,10 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
   return (
     <Modal transparent visible={visible} animationType="fade">
       <View style={styles.overlay}>
+        <Pressable
+          style={StyleSheet.absoluteFillObject}
+          onPress={() => router.replace("/language")}
+        />
         <View style={styles.dialogContainer}>
           {/* Top Small Icon */}
           <Ionicons
@@ -90,6 +97,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
             <TouchableOpacity
               style={styles.button}
               onPress={handleWhileUsing}
+              activeOpacity={1}
             >
               <Text style={styles.primaryText}>
                 {tr("While using the app")}
@@ -99,6 +107,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
             <TouchableOpacity
               style={styles.button}
               onPress={handleOnlyThisTime}
+              activeOpacity={1}
             >
               <Text style={styles.primaryText}>
                 {tr("Only this time")}
@@ -108,6 +117,7 @@ const LocationPermission: React.FC<LocationPermissionProps> = ({
             <TouchableOpacity
               style={[styles.button, styles.dontAllowButton]}
               onPress={handleDontAllow}
+              activeOpacity={1}
             >
               <Text style={styles.dontAllowText}>
                 {tr("Don't allow")}
