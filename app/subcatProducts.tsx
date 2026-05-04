@@ -10,6 +10,7 @@ import {
   Modal,
   Dimensions,
   Alert,
+  Animated,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
@@ -710,6 +711,70 @@ export default function SubcategoriesScreen() {
   /** Fresh Finds products state */
   const [freshFindsProducts, setFreshFindsProducts] = useState<ProductItem[]>([]);
   const [freshFindsReady, setFreshFindsReady] = useState(false);
+
+  // Enhanced zoom and blink animation for loading logo
+  const logoScale = useRef(new Animated.Value(1)).current;
+  const logoOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    // Create enhanced animation with zoom in/out and blinking
+    const enhancedAnimation = Animated.loop(
+      Animated.sequence([
+        // Zoom in
+        Animated.parallel([
+          Animated.timing(logoScale, {
+            toValue: 1.3,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(logoOpacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]),
+        // Blink while zoomed
+        Animated.sequence([
+          Animated.timing(logoOpacity, {
+            toValue: 0.3,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(logoOpacity, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(logoOpacity, {
+            toValue: 0.3,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(logoOpacity, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+        ]),
+        // Zoom out
+        Animated.parallel([
+          Animated.timing(logoScale, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(logoOpacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]),
+        // Pause
+        Animated.delay(500),
+      ])
+    );
+    enhancedAnimation.start();
+  }, []);
 
   const handleFilterPress = (label: string) => {
     if (label === "Sort") setSortModalVisible(true);
@@ -2255,7 +2320,7 @@ const handleBannerScroll = (event: any) => {
               </View>
             )}
           </TouchableOpacity>
-          <View style={styles.headerIconWrapper}>
+          {/* <View style={styles.headerIconWrapper}>
             <Ionicons name="bag-outline" size={20} color="#1d324e" />
             {cartBadgeCount > 0 && (
               <View style={styles.headerBadge}>
@@ -2264,7 +2329,7 @@ const handleBannerScroll = (event: any) => {
                 </Text>
               </View>
             )}
-          </View>
+          </View> */}
         </View>
       </View>
 
@@ -2419,12 +2484,18 @@ const handleBannerScroll = (event: any) => {
         {/* PROMO STRIP */}
         <View style={styles.promoStrip}>
           <View style={[styles.promoCard, styles.promoLeft]}>
-            <Text style={styles.promoHighlight}>40% off</Text>
-            <Text style={styles.promoSub}>upto ₹400</Text>
+            <Ionicons name="pricetag" size={20} color="#FFFFFF" style={styles.promoIcon} />
+            <View style={styles.promoTextContainer}>
+              <Text style={styles.promoHighlight}>40% off</Text>
+              <Text style={styles.promoSub}>upto ₹400</Text>
+            </View>
           </View>
           <View style={[styles.promoCard, styles.promoRight]}>
-            <Text style={styles.promoHighlight}>EASY</Text>
-            <Text style={styles.promoSub}>Returns</Text>
+            <Ionicons name="sync" size={20} color="#FFFFFF" style={styles.promoIcon} />
+            <View style={styles.promoTextContainer}>
+              <Text style={styles.promoHighlight}>EASY</Text>
+              <Text style={styles.promoSub}>Returns</Text>
+            </View>
           </View>
         </View>
 
@@ -2443,7 +2514,21 @@ const handleBannerScroll = (event: any) => {
             (routedFromMainCategoryFeed && !mainCategoryFeedReady) ||
             (routedFromMainCategoryId && !mainCategoryApiReady) ||
             (routedFromProductsSearch && !productsSearchApiReady) ? (
-              <Text style={styles.apiRoutedLoadingHint}>{tr("Loading products…")}</Text>
+              <View style={styles.loadingContainer}>
+                <View style={styles.loadingSpinner}>
+                  <Animated.Image 
+                    source={require("../assets/images/fntfav.png")} 
+                    style={[
+                      styles.loadingLogo,
+                      {
+                        transform: [{ scale: logoScale }],
+                        opacity: logoOpacity
+                      }
+                    ]}
+                    resizeMode="contain"
+                  />
+                </View>
+              </View>
             ) : null}
             <View style={styles.productGrid}>
               {filteredRoutedProducts.map((product) => (
@@ -3315,9 +3400,12 @@ const styles = StyleSheet.create({
   promoCard: {
     flex: 1,
     borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
     justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
   },
   promoLeft: {
     backgroundColor: "#1d324e",
@@ -3336,6 +3424,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     color: "#f6c795",
+  },
+  promoIcon: {
+    marginRight: 8,
+    fontSize: 20,
+  },
+  promoTextContainer: {
+    flex: 1,
   },
   sectionHeaderRow: {
     paddingHorizontal: 16,
@@ -3392,6 +3487,27 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     fontSize: 13,
     fontWeight: "600",
+    color: "#6B7280",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  loadingSpinner: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  loadingLogo: {
+    width: 80,
+    height: 40,
+    opacity: 0.8,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: "500",
     color: "#6B7280",
   },
   bannerCarouselWrapper: {
