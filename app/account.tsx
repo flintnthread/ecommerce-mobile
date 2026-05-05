@@ -350,7 +350,7 @@ export default function AccountScreen() {
 
   const handleLanguagePress = () => {
     // Go to existing language selection screen
-    router.push("/language");
+    router.push("/other");
   };
 
   const handleMyOrdersPress = () => {
