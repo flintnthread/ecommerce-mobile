@@ -1,43 +1,114 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image, Share, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Image, Share, Alert, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import api from "../services/api";
+import { getCurrentUserIdFromToken } from "../services/pushNotifications"; // ✅ ADDED
 
-type InviteItem = {
-  id: string;
-  email: string;
-  status: "Pending" | "Registered";
-  remind?: boolean;
+type ReferralOverview = {
+  referralCode: string;
+  confirmedReferrals: number;
+  requiredReferrals: number;
+  discountPercent: number;
+  rewardUnlocked: boolean;
+  rewardUsed: boolean;
 };
-
-const INVITES: InviteItem[] = [
-  { id: "1", email: "john.smith@gmail.com", status: "Pending", remind: true },
-  { id: "2", email: "john.smith@gmail.com", status: "Registered" },
-];
 
 const GIFT_IMAGE = require("../assets/images/userrewords-gift.png");
 
 export default function UserRewordsScreen() {
   const [referralCode, setReferralCode] = React.useState("");
+  const [applyCode, setApplyCode] = React.useState("");
+  const [overview, setOverview] = React.useState<ReferralOverview | null>(null);
+  const [loading, setLoading] = React.useState(false);
 
-  const generateReferralCode = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let token = "";
-    for (let i = 0; i < 8; i += 1) {
-      token += chars[Math.floor(Math.random() * chars.length)];
+  // ✅ FIXED API
+  const fetchOverview = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const userId = await getCurrentUserIdFromToken();
+
+      const { data } = await api.get(`/api/referral/dashboard/${userId}`);
+
+      setOverview({
+        referralCode: data.referralCode,
+        confirmedReferrals: data.completedInvites,
+        requiredReferrals: 5,
+        discountPercent: 10,
+        rewardUnlocked: data.eligible,
+        rewardUsed: false
+      });
+
+      setReferralCode(data.referralCode);
+
+    } catch (e) {
+      Alert.alert("Referral", "Failed to load referral data");
+    } finally {
+      setLoading(false);
     }
-    setReferralCode(`FNT${token}`);
+  }, []);
+
+  React.useEffect(() => {
+    fetchOverview();
+  }, []);
+
+  // ✅ FIXED REFRESH API
+  const generateReferralCode = async () => {
+    try {
+      const userId = await getCurrentUserIdFromToken();
+
+      const { data } = await api.post(`/api/referral/refresh/${userId}`);
+
+      setReferralCode(data);
+
+      Alert.alert("Success", "New referral code generated");
+
+    } catch (e) {
+      Alert.alert("Error", "Failed to refresh code");
+    }
   };
 
-  const handleInviteFriends = async () => {
-    if (!referralCode) {
-      Alert.alert("Referral code", "Tap GenerateID first to create your referral code.");
+  // ✅ FIXED APPLY API
+  const handleApplyReferralCode = async () => {
+    const code = applyCode.trim();
+
+    if (!code) {
+      Alert.alert("Referral code", "Enter a referral code first.");
       return;
     }
+
     try {
-      await Share.share({
-        message: `Join me on Flint & Thread and get referral rewards.\nUse my code: ${referralCode}`,
+      const userId = await getCurrentUserIdFromToken();
+
+      const { data } = await api.post("/api/referral/apply", {
+        userId,
+        referralCode: code,
       });
+
+      if (!data.success) {
+        throw new Error(data.message);
+      }
+
+      Alert.alert("Success", data.message);
+      setApplyCode("");
+      fetchOverview();
+
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Failed to apply referral code");
+    }
+  };
+
+  // ✅ FIXED SHARE API
+  const handleInviteFriends = async () => {
+    try {
+      const userId = await getCurrentUserIdFromToken();
+
+      const { data } = await api.get(`/api/referral/share/${userId}`);
+
+      await Share.share({
+        message: data.message + "\n" + data.shareLink,
+      });
+
     } catch {
       Alert.alert("Share", "Could not open share options right now.");
     }
@@ -56,61 +127,98 @@ export default function UserRewordsScreen() {
           <Image source={GIFT_IMAGE} style={styles.giftImage} resizeMode="contain" />
         </View>
 
-        <Text style={styles.title}>Invite 5 friends{"\n"}and get 10% Discount on First Order</Text>
-        <Text style={styles.subtitle}>
-          After successful registration you and your{"\n"}friends will get  Refferal code
+        <Text style={styles.title}>
+          Invite 5 friends{"\n"}and get 10% Discount on First Order
         </Text>
+
+        <Text style={styles.subtitle}>
+          After successful registration you and your{"\n"}friends will get Referral code
+        </Text>
+
         <View style={styles.referralCodeWrap}>
           <View style={styles.referralCodeChip}>
             <Ionicons name="ticket-outline" size={16} color="#d9ccff" />
             <Text style={styles.referralCodeText}>
-              {referralCode || "No code generated"}
+              {referralCode || "No code available"}
             </Text>
           </View>
+
           <TouchableOpacity
             style={styles.generateBtn}
-            activeOpacity={0.9}
             onPress={generateReferralCode}
           >
-            <Text style={styles.generateBtnText}>GenerateID</Text>
+            <Text style={styles.generateBtnText}>
+              {loading ? "Loading..." : "Refresh ID"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.applyCodeWrap}>
+          <TextInput
+            value={applyCode}
+            onChangeText={setApplyCode}
+            placeholder="Enter referral code"
+            placeholderTextColor="#bba9ff"
+            style={styles.applyCodeInput}
+            autoCapitalize="characters"
+          />
+
+          <TouchableOpacity
+            style={styles.applyCodeBtn}
+            onPress={handleApplyReferralCode}
+          >
+            <Text style={styles.applyCodeBtnText}>Apply</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.invitesHeadRow}>
           <Text style={styles.invitesTitle}>Invites</Text>
-          <Text style={styles.invitesCount}>2</Text>
+          <Text style={styles.invitesCount}>
+            {overview?.confirmedReferrals ?? 0}
+          </Text>
         </View>
 
         <View style={styles.invitesList}>
-          {INVITES.map((invite) => (
-            <View key={invite.id} style={styles.inviteRow}>
-              <View style={styles.avatarWrap}>
-                <View style={styles.avatarRing}>
-                  <Ionicons name="person" size={14} color="#f6cf86" />
-                </View>
-              </View>
-
-              <View style={styles.inviteMeta}>
-                <Text style={styles.inviteEmail}>{invite.email}</Text>
-                <Text style={styles.inviteStatus}>{invite.status}</Text>
-              </View>
-
-              {invite.remind ? (
-                <TouchableOpacity activeOpacity={0.9} style={styles.remindBtn}>
-                  <Text style={styles.remindText}>Remind</Text>
-                </TouchableOpacity>
-              ) : null}
+          <View style={styles.inviteRow}>
+            <View style={styles.avatarRing}>
+              <Ionicons name="people" size={14} color="#f6cf86" />
             </View>
-          ))}
+
+            <View style={styles.inviteMeta}>
+              <Text style={styles.inviteEmail}>
+                Confirmed referrals: {overview?.confirmedReferrals ?? 0}/5
+              </Text>
+
+              <Text style={styles.inviteStatus}>
+                Reward: 10% first-order discount
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.inviteRow}>
+            <View style={styles.avatarRing}>
+              <Ionicons name="pricetag" size={14} color="#f6cf86" />
+            </View>
+
+            <View style={styles.inviteMeta}>
+              <Text style={styles.inviteEmail}>
+                Status: {overview?.rewardUnlocked ? "Unlocked" : "In progress"}
+              </Text>
+
+              <Text style={styles.inviteStatus}>
+                {overview?.rewardUsed
+                  ? "Discount already used"
+                  : "Discount available for your first order"}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
       <View style={styles.bottomActions}>
-        <TouchableOpacity style={styles.primaryBtn} activeOpacity={0.9} onPress={handleInviteFriends}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleInviteFriends}>
           <LinearGradient
             colors={["#8B47FF", "#6B2BFF"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
             style={styles.primaryBtnGradient}
           >
             <Text style={styles.primaryBtnText}>Invite friends</Text>
@@ -199,6 +307,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.3,
+  },
+  applyCodeWrap: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  applyCodeInput: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(165,136,255,0.55)",
+    backgroundColor: "rgba(120,83,255,0.15)",
+    color: "#ffffff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontWeight: "700",
+  },
+  applyCodeBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#8B47FF",
+  },
+  applyCodeBtnText: {
+    color: "#fff",
+    fontWeight: "800",
   },
   invitesHeadRow: {
     marginTop: 28,

@@ -303,19 +303,6 @@ export default function CartScreen() {
     void (async () => {
       if (qtyUpdatingIds.has(id)) return;
       const item = cartItems.find((x) => x.id === id);
-      if (
-        change > 0 &&
-        item &&
-        typeof item.stock === "number" &&
-        item.stock >= 0 &&
-        item.quantity >= item.stock
-      ) {
-        Alert.alert(
-          tr("Stock not available"),
-          tr("No more stock available for this variant.")
-        );
-        return;
-      }
       if (item?.serverItemId != null) {
         setQtyUpdatingIds((prev) => {
           const next = new Set(prev);
@@ -459,20 +446,6 @@ export default function CartScreen() {
   const handleCheckout = () => {
     if (cartItems.length === 0) {
       Alert.alert(tr("Empty Cart"), tr("Your cart is empty. Add some items first!"));
-      return;
-    }
-    const outOfStockLine = cartItems.find(
-      (item) =>
-        item.source === "server" &&
-        typeof item.stock === "number" &&
-        item.stock >= 0 &&
-        item.quantity > item.stock
-    );
-    if (outOfStockLine) {
-      Alert.alert(
-        tr("Stock not available"),
-        tr("Requested quantity is not available in stock. Please reduce quantity.")
-      );
       return;
     }
     router.push("/revieworders");
@@ -652,13 +625,6 @@ export default function CartScreen() {
                         {item.color ? `${tr("Color")}: ${item.color}` : ""}
                       </Text>
                     )}
-                    {typeof item.stock === "number" && item.stock >= 0 ? (
-                      <Text style={styles.stockHintText}>
-                        {item.stock > 0
-                          ? `Only ${item.stock} left`
-                          : tr("Out of stock")}
-                      </Text>
-                    ) : null}
                     <View style={styles.cartItemPriceRow}>
                       <View>
                         <Text style={styles.cartItemPrice}>
@@ -703,14 +669,7 @@ export default function CartScreen() {
                           <Ionicons
                             name="add"
                             size={18}
-                            color={
-                              item.source === "server" &&
-                              typeof item.stock === "number" &&
-                              item.stock >= 0 &&
-                              item.quantity >= item.stock
-                                ? "#CCC"
-                                : "#E97A1F"
-                            }
+                            color="#E97A1F"
                           />
                         </TouchableOpacity>
                       </View>
