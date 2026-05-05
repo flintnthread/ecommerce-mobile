@@ -229,6 +229,14 @@ export default function WishlistScreen() {
   const heartsAnimRef = useRef<Animated.Value[]>([]);
   const emptyHeartPulse = useRef(new Animated.Value(0)).current;
 
+  // Toast states
+  const [showCartAlert, setShowCartAlert] = useState(false);
+  const [addedItemName, setAddedItemName] = useState("");
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [deletedItemName, setDeletedItemName] = useState("");
+  const alertScale = useRef(new Animated.Value(0)).current;
+  const alertOpacity = useRef(new Animated.Value(0)).current;
+
   const openProductDetail = useCallback(
     (item: WishlistItem) => {
       const id =
@@ -355,6 +363,90 @@ export default function WishlistScreen() {
     return rows;
   }, [displayedWishlistItems]);
 
+  // Cart sweet alert animation function
+  const showCartSweetAlert = useCallback((itemName: string) => {
+    setAddedItemName(itemName);
+    setShowCartAlert(true);
+    
+    // Reset animation values
+    alertScale.setValue(0);
+    alertOpacity.setValue(0);
+    
+    // Animate in with scale
+    Animated.parallel([
+      Animated.timing(alertScale, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(alertOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Auto hide after 2 seconds
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(alertScale, {
+            toValue: 0,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+          Animated.timing(alertOpacity, {
+            toValue: 0,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setShowCartAlert(false);
+        });
+      }, 2000);
+    });
+  }, []);
+
+  // Delete sweet alert animation function
+  const showDeleteSweetAlert = useCallback((itemName: string) => {
+    setDeletedItemName(itemName);
+    setShowDeleteAlert(true);
+    
+    // Reset animation values
+    alertScale.setValue(0);
+    alertOpacity.setValue(0);
+    
+    // Animate in with scale
+    Animated.parallel([
+      Animated.timing(alertScale, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(alertOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Auto hide after 2 seconds
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(alertScale, {
+            toValue: 0,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+          Animated.timing(alertOpacity, {
+            toValue: 0,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setShowDeleteAlert(false);
+        });
+      }, 2000);
+    });
+  }, []);
+
   const handleMoveToCart = (item: WishlistItem) => {
     void (async () => {
       const cartProductId =
@@ -400,6 +492,9 @@ export default function WishlistScreen() {
       await removeWishlistLine(cartProductId);
       setWishlistItems((prev) => prev.filter((x) => x.id !== item.id));
       setCartCount(await getCartUnitCount());
+      
+      // Show sweet alert
+      showCartSweetAlert(item.name);
     })();
   };
 
@@ -436,7 +531,8 @@ export default function WishlistScreen() {
               await removeWishlistLine(item.id);
             }
             setWishlistItems((prev) => prev.filter((x) => x.id !== item.id));
-            Alert.alert("Removed", "Item has been removed from your wishlist.");
+            // Show delete sweet alert
+            showDeleteSweetAlert(item.name);
           })();
         },
       },
@@ -525,23 +621,6 @@ export default function WishlistScreen() {
         ) : (
           <Text style={styles.headerTitle}>{tr("WISHLIST")}</Text>
         )}
-
-        <View style={styles.headerIcons}>
-          <TouchableOpacity
-            onPress={() => router.push("/cart")}
-            style={styles.headerIcon}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Cart"
-          >
-            <Ionicons name="cart-outline" size={22} color="#000" />
-            {cartCount > 0 ? (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>{cartCount > 99 ? "99+" : String(cartCount)}</Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* Content */}
@@ -643,68 +722,71 @@ export default function WishlistScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={`${item.name}, open product details`}
                     >
-                      <TouchableOpacity
-                        style={styles.wishlistImageArea}
-                        activeOpacity={0.9}
-                        onPress={() => openProductDetail(item)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Open ${item.name}`}
-                      >
-                        <Image source={item.image} style={styles.wishlistHeroImage} />
-                        <View style={styles.wishlistImageShade} />
-
-                        {discountPercent != null ? (
-                          <View style={styles.wishlistDiscountPill}>
-                            <Text style={styles.wishlistDiscountText}>{discountPercent}% OFF</Text>
-                          </View>
-                        ) : null}
-
+                      {/* Product Image Section */}
+                      <View style={styles.wishlistImageSection}>
                         <TouchableOpacity
-                          onPress={() => handleRemoveItem(item)}
-                          style={styles.wishlistRemoveFab}
+                          style={styles.wishlistImageArea}
+                          activeOpacity={0.9}
+                          onPress={() => openProductDetail(item)}
                           accessibilityRole="button"
-                          accessibilityLabel={`Remove ${item.name}`}
-                          activeOpacity={0.85}
+                          accessibilityLabel={`Open ${item.name}`}
                         >
-                          <Ionicons name="trash-outline" size={18} color="#fff" />
+                          <Image source={item.image} style={styles.wishlistHeroImage} />
+                          <View style={styles.wishlistImageShade} />
+
+                          {discountPercent != null ? (
+                            <View style={styles.wishlistDiscountPill}>
+                              <Text style={styles.wishlistDiscountText}>{discountPercent}% OFF</Text>
+                            </View>
+                          ) : null}
+
+                          <TouchableOpacity
+                            onPress={() => handleRemoveItem(item)}
+                            style={styles.wishlistRemoveFab}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${item.name}`}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="trash-outline" size={18} color="#fff" />
+                          </TouchableOpacity>
+
+                          {!item.inStock ? (
+                            <View style={styles.wishlistStockPill}>
+                              <Ionicons name="alert-circle" size={14} color="#fff" />
+                              <Text style={styles.wishlistStockText}>Out of stock</Text>
+                            </View>
+                          ) : null}
                         </TouchableOpacity>
+                      </View>
 
-                        {!item.inStock ? (
-                          <View style={styles.wishlistStockPill}>
-                            <Ionicons name="alert-circle" size={14} color="#fff" />
-                            <Text style={styles.wishlistStockText}>Out of stock</Text>
-                          </View>
-                        ) : null}
-
-                        <View style={styles.wishlistHeroText}>
-                          <Text style={styles.wishlistName} numberOfLines={2}>
-                            {item.name}
+                      {/* Product Details Section */}
+                      <View style={styles.wishlistDetailsSection}>
+                        <Text style={styles.wishlistName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        {item.size || item.color ? (
+                          <Text style={styles.wishlistMeta} numberOfLines={1}>
+                            {item.size ? `Size ${item.size}` : ""}
+                            {item.size && item.color ? " • " : ""}
+                            {item.color ? item.color : ""}
                           </Text>
-                          {item.size || item.color ? (
-                            <Text style={styles.wishlistMeta} numberOfLines={1}>
-                              {item.size ? `Size ${item.size}` : ""}
-                              {item.size && item.color ? " • " : ""}
-                              {item.color ? item.color : ""}
+                        ) : null}
+                      </View>
+
+                      {/* Price Section */}
+                      <View style={styles.wishlistPriceSection}>
+                        <View style={styles.wishlistPriceRow}>
+                          <Text style={styles.wishlistPrice}>₹{item.price.toLocaleString()}</Text>
+                          {item.originalPrice ? (
+                            <Text style={styles.wishlistOriginalPrice}>
+                              ₹{item.originalPrice.toLocaleString()}
                             </Text>
                           ) : null}
                         </View>
-                      </TouchableOpacity>
+                      </View>
 
-                      <View style={styles.wishlistBottomBar}>
-                        <View style={styles.wishlistPriceCol}>
-                          <View style={styles.wishlistPriceRow}>
-                            <Text style={styles.wishlistPrice}>₹{item.price.toLocaleString()}</Text>
-                            {item.originalPrice ? (
-                              <Text style={styles.wishlistOriginalPrice}>
-                                ₹{item.originalPrice.toLocaleString()}
-                              </Text>
-                            ) : null}
-                          </View>
-                          <Text style={styles.wishlistDate} numberOfLines={1}>
-                            Added {item.addedDate}
-                          </Text>
-                        </View>
-
+                      {/* Button Section */}
+                      <View style={styles.wishlistButtonSection}>
                         <TouchableOpacity
                           style={[
                             styles.wishlistPrimaryBtn,
@@ -741,6 +823,54 @@ export default function WishlistScreen() {
         </View>
       </ScrollView>
       <HomeBottomTabBar cartBadgeCount={cartCount} />
+      
+      {/* Cart Sweet Alert Modal */}
+      {showCartAlert && (
+        <View style={styles.sweetAlertOverlay}>
+          <Animated.View
+            style={[
+              styles.sweetAlertContainer,
+              {
+                transform: [{ scale: alertScale }],
+                opacity: alertOpacity,
+              },
+            ]}
+          >
+            <View style={styles.sweetAlertIcon}>
+              <Ionicons name="checkmark-circle" size={32} color="#10b981" />
+            </View>
+            <Text style={styles.sweetAlertTitle}>Added to Cart!</Text>
+            <Text style={styles.sweetAlertMessage} numberOfLines={2}>
+              {addedItemName}
+            </Text>
+            <Text style={styles.sweetAlertSubtext}>Item moved from wishlist</Text>
+          </Animated.View>
+        </View>
+      )}
+
+      {/* Delete Sweet Alert Modal */}
+      {showDeleteAlert && (
+        <View style={styles.sweetAlertOverlay}>
+          <Animated.View
+            style={[
+              styles.sweetAlertContainer,
+              {
+                transform: [{ scale: alertScale }],
+                opacity: alertOpacity,
+              },
+            ]}
+          >
+            <View style={styles.sweetAlertIcon}>
+              <Ionicons name="trash-outline" size={32} color="#ef4444" />
+            </View>
+            <Text style={styles.sweetAlertTitle}>Removed from Wishlist!</Text>
+            <Text style={styles.sweetAlertMessage} numberOfLines={2}>
+              {deletedItemName}
+            </Text>
+            <Text style={styles.sweetAlertSubtext}>Item has been removed</Text>
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 }
@@ -987,6 +1117,21 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 3,
   },
+  wishlistImageSection: {
+    position: "relative",
+  },
+  wishlistDetailsSection: {
+    padding: 12,
+    paddingBottom: 8,
+  },
+  wishlistPriceSection: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  wishlistButtonSection: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
   wishlistCardSpacer: {
     flex: 1,
   },
@@ -1058,20 +1203,17 @@ const styles = StyleSheet.create({
     bottom: 12,
   },
   wishlistName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#ffffff",
-    lineHeight: 20,
-    textShadowColor: "rgba(0,0,0,0.35)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 10,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1f2937",
+    marginBottom: 4,
+    lineHeight: 18,
   },
   wishlistMeta: {
-    marginTop: 6,
     fontSize: 12,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.9)",
+    fontWeight: "500",
+    color: "#6b7280",
+    marginBottom: 2,
   },
   wishlistBottomBar: {
     flexDirection: "row",
@@ -1127,5 +1269,55 @@ const styles = StyleSheet.create({
   },
   wishlistPrimaryBtnTextDisabled: {
     color: "#9ca3af",
+  },
+  sweetAlertOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+    elevation: 1000,
+  },
+  sweetAlertContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    marginHorizontal: 40,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  sweetAlertIcon: {
+    marginBottom: 12,
+  },
+  sweetAlertTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1f2937",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  sweetAlertMessage: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#4b5563",
+    marginBottom: 4,
+    textAlign: "center",
+    maxWidth: 200,
+  },
+  sweetAlertSubtext: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
   },
 });

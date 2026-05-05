@@ -11,14 +11,12 @@ import {
   Alert,
 } from "react-native";
 
-import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-
-/** After OTP success + OK on alert, home reads this and opens the welcome promo sheet once. */
-export const SHOW_POST_LOGIN_PROMO_KEY = "app:showPostLoginPromo";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useLanguage } from "../lib/language";
 
-export default function OTP() {
+export const SHOW_POST_LOGIN_PROMO_KEY = "app:showPostLoginPromo";
 
+export default function OTP() {
   const params = useLocalSearchParams();
   const router = useRouter();
   const { tr } = useLanguage();
@@ -30,66 +28,33 @@ export default function OTP() {
       ? params.input[0]
       : "";
 
-  /** When set from Google sign-in flow, after OTP success navigate to rewards instead of home. */
-  const afterLoginRaw =
-    typeof params.afterLogin === "string"
-      ? params.afterLogin
-      : Array.isArray(params.afterLogin)
-      ? params.afterLogin[0]
-      : "";
-  const postOtpRoute: Href =
-    afterLoginRaw === "rewards" ? ("/rewards" as Href) : ("/home" as Href);
-
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isVerifying, setIsVerifying] = useState(false);
-  const VERIFY_TIMEOUT_MS = 20000;
 
-  const inputs = useRef([]);
-  const hiddenInput = useRef(null);
+const inputs = useRef<(TextInput | null)[]>([]);
+  const hiddenInput = useRef<any>(null);
 
-  // focus first input + hidden autofill input
   useEffect(() => {
-
     setTimeout(() => {
-
       inputs.current[0]?.focus();
-
       hiddenInput.current?.focus();
-
     }, 300);
-
   }, []);
 
-  // auto verify
-  useEffect(() => {
-
-    if (otp.every((d) => d !== "") && !isVerifying) {
-      handleVerify();
-    }
-
-  }, [otp]);
-
-  const maskValue = (value) => {
-
+  const maskValue = (value: string) => {
     if (!value) return "";
 
     if (value.includes("@")) {
-
       const [name, domain] = value.split("@");
-
       return `${name.slice(0, 3)}***@${domain}`;
     }
 
     return `******${value.slice(-3)}`;
   };
 
-  const handleChange = (text, index) => {
-
-    // paste full OTP
+  const handleChange = (text: string, index: number) => {
     if (text.length === 6) {
-
       const otpArray = text.split("");
-
       setOtp(otpArray);
 
       otpArray.forEach((digit, i) => {
@@ -103,189 +68,122 @@ export default function OTP() {
 
     const newOtp = [...otp];
     newOtp[index] = text;
-
     setOtp(newOtp);
 
     if (text && index < 5) {
       inputs.current[index + 1]?.focus();
     }
-
   };
 
-  const handleKeyPress = (key, index) => {
-
+  const handleKeyPress = (key: string, index: number) => {
     if (key === "Backspace" && otp[index] === "" && index > 0) {
       inputs.current[index - 1]?.focus();
     }
-
   };
 
-  // autofill handler
-  const handleAutoFill = (text) => {
-
+  const handleAutoFill = (text: string) => {
     if (text.length === 6) {
-
       const otpArray = text.split("");
-
       setOtp(otpArray);
 
       otpArray.forEach((digit, i) => {
         inputs.current[i]?.setNativeProps({ text: digit });
       });
-
     }
-
   };
 
-  // verify OTP
+  // VERIFY OTP
   const handleVerify = async () => {
-
     if (isVerifying) return;
 
     const enteredOtp = otp.join("");
 
     if (enteredOtp.length !== 6) {
-      Alert.alert(tr("Error"), tr("Please enter complete OTP"));
+      Alert.alert("Error", "Please enter complete OTP");
       return;
     }
 
     try {
-
       setIsVerifying(true);
 
       const payload = userInput.includes("@")
         ? { email: userInput, otp: enteredOtp }
         : { mobile: userInput, otp: enteredOtp };
 
-      const data = await Promise.race([
-        verifyOtp(payload),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error("OTP verification timed out. Please try again."));
-          }, VERIFY_TIMEOUT_MS);
-        }),
-      ]);
+      const data = await verifyOtp(payload);
 
-      if (data && data.success) {
-
-        await AsyncStorage.setItem("token", data.token);
+      if (data?.success) {
+        await AsyncStorage.setItem("token", data.token || "");
         await AsyncStorage.setItem(SHOW_POST_LOGIN_PROMO_KEY, "1");
 
-        Alert.alert(tr("Success"), tr("Login Successful"), [
-          {
-            text: tr("OK"),
-            onPress: () => {
-              router.replace(postOtpRoute);
-            },
-          },
-        ]);
-
+        // DIRECT HOME PAGE
+        router.replace("/home");
+        return;
       } else {
-
-        Alert.alert(tr("Error"), tr(data.message || "Invalid OTP"));
+        Alert.alert("Error", data?.message || "Invalid OTP");
       }
-
     } catch (error: any) {
-
       console.log("Verify OTP Error:", error);
-
-      if (typeof error?.message === "string" && error.message.trim()) {
-        Alert.alert(tr("Error"), tr(error.message));
-      } else if (error?.response?.data?.message) {
-
-        Alert.alert(tr("Error"), tr(error.response.data.message));
-
-      } else {
-
-        Alert.alert(tr("Error"), tr("OTP verification failed"));
-      }
-
+      Alert.alert("Error", "OTP verification failed");
     } finally {
-
       setIsVerifying(false);
-
     }
-
   };
 
-  // resend OTP
+  // RESEND OTP
   const handleResend = async () => {
-
     try {
-
       const payload = userInput.includes("@")
         ? { email: userInput }
         : { mobile: userInput };
 
-      const data = await sendOtp(payload);
+      await sendOtp(payload);
 
-      if (data) {
+      Alert.alert("Success", "OTP resent successfully");
 
-        Alert.alert(tr("Success"), tr("OTP resent successfully"));
+      setOtp(["", "", "", "", "", ""]);
 
-        setOtp(["", "", "", "", "", ""]);
-
-        inputs.current.forEach((input) => input?.clear());
-
-        inputs.current[0]?.focus();
-
-      }
-
+      inputs.current.forEach((input) => input?.clear());
+      inputs.current[0]?.focus();
     } catch (error) {
-
-      console.log("Resend Error:", error);
-
-      Alert.alert(tr("Error"), tr("Failed to resend OTP"));
-
+      Alert.alert("Error", "Failed to resend OTP");
     }
-
   };
 
   return (
-
     <View style={styles.container}>
-
-      <Text style={styles.title}>{tr("Enter Verification Code")}</Text>
+      <Text style={styles.title}>Enter Verification Code</Text>
 
       <Text style={styles.subtitle}>
-        {tr("We sent a code to")}
-        {"\n"}
+        We sent a code to{"\n"}
         <Text style={styles.boldText}>{maskValue(userInput)}</Text>
       </Text>
 
-      {/* hidden autofill input */}
       <TextInput
         ref={hiddenInput}
         style={{ position: "absolute", opacity: 0 }}
         keyboardType="number-pad"
         textContentType="oneTimeCode"
         autoComplete="sms-otp"
-        importantForAutofill="yes"
         onChangeText={handleAutoFill}
       />
 
       <View style={styles.otpContainer}>
-
         {otp.map((digit, index) => (
-
           <TextInput
             key={index}
-            ref={(ref) => { inputs.current[index] = ref }}
-            style={styles.otpBox}
+ref={(ref: TextInput | null) => {
+  inputs.current[index] = ref;
+}}            style={styles.otpBox}
             keyboardType="number-pad"
             maxLength={1}
             value={digit}
-            textContentType="oneTimeCode"
-            autoComplete="sms-otp"
-            importantForAutofill="yes"
             onChangeText={(text) => handleChange(text, index)}
             onKeyPress={({ nativeEvent }) =>
               handleKeyPress(nativeEvent.key, index)
             }
           />
-
         ))}
-
       </View>
 
       <TouchableOpacity
@@ -293,26 +191,21 @@ export default function OTP() {
         onPress={handleVerify}
         disabled={isVerifying}
       >
-
         <Text style={styles.verifyText}>
-          {isVerifying ? tr("Verifying...") : tr("Verify")}
+          {isVerifying ? "Verifying..." : "Verify"}
         </Text>
-
       </TouchableOpacity>
 
-      <Text style={styles.resendText}>{tr("Didn’t receive code?")}</Text>
+      <Text style={styles.resendText}>Didn’t receive code?</Text>
 
       <TouchableOpacity onPress={handleResend}>
-        <Text style={styles.resendLink}>{tr("Resend")}</Text>
+        <Text style={styles.resendLink}>Resend</Text>
       </TouchableOpacity>
-
     </View>
   );
-
 }
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: "#f2f2f2",
@@ -322,8 +215,8 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 20,
-    fontWeight: "600",
+    fontSize: 22,
+    fontWeight: "700",
   },
 
   subtitle: {
@@ -334,7 +227,7 @@ const styles = StyleSheet.create({
   },
 
   boldText: {
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#000",
   },
 
@@ -364,7 +257,7 @@ const styles = StyleSheet.create({
   verifyText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   resendText: {
@@ -375,7 +268,6 @@ const styles = StyleSheet.create({
   resendLink: {
     color: "#4b2be3",
     marginTop: 8,
-    fontWeight: "600",
+    fontWeight: "700",
   },
-
 });
