@@ -21,7 +21,8 @@ import api, {
 } from "../services/api";
 import { firstWishlistRowImageUri, normalizeWishlistApiRows, numLike } from "../lib/wishlistApi";
 import { loadWishlist, removeWishlistLine, resolveProductImage } from "../lib/shopStorage";
-import { addToCartPtbOrLocal } from "../lib/cartServerApi";
+import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 type ActivityTab = "recently_viewed" | "search_history" | "wishlist" | "reviews";
 const RECENT_VIEW_SESSION_KEY = "ft_recent_view_session_id";
@@ -33,6 +34,7 @@ interface RecentlyViewedProduct {
   imageUri: string;
   viewedDate: string;
   category: string;
+  variantId?: number;
 }
 
 interface SearchHistory {
@@ -75,6 +77,7 @@ export default function MyActivityScreen() {
   const [searchHistoryLoading, setSearchHistoryLoading] = useState(false);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [cartBadgeCount, setCartBadgeCount] = useState(0);
 
   const formatRupees = (value: unknown): string => {
     const n = Number(value);
@@ -87,6 +90,21 @@ export default function MyActivityScreen() {
     const n = Number.parseFloat(raw);
     return Number.isFinite(n) ? Math.round(n) : 0;
   };
+
+  const parseRupee = useCallback((value?: string) => {
+    const raw = String(value ?? "").replace(/[^\d.]/g, "");
+    const n = Number.parseFloat(raw);
+    return Number.isFinite(n) ? n : 0;
+  }, []);
+
+  const loadCartBadgeCount = useCallback(async () => {
+    const count = await getCartUnitCount();
+    setCartBadgeCount(count);
+  }, []);
+
+  const bumpCartBadgeAfterAdd = useCallback(() => {
+    setCartBadgeCount((prev) => prev + 1);
+  }, []);
 
   const resolveImageUri = (raw: unknown): string => {
     const value = String(raw ?? "").trim();
@@ -149,6 +167,15 @@ export default function MyActivityScreen() {
           const firstImage =
             images.find((img) => img && typeof img === "object") ?? ({} as Record<string, unknown>);
 
+          // Extract variantId from the first variant
+          const rawVariantId = (firstVariant as Record<string, unknown>).id;
+          const variantIdNum = typeof rawVariantId === "string" 
+            ? Number.parseInt(rawVariantId, 10) 
+            : Number(rawVariantId);
+          const variantId = Number.isFinite(variantIdNum) && variantIdNum > 0 
+            ? Math.floor(variantIdNum) 
+            : undefined;
+
           return {
             id: String(item.id ?? ""),
             name: String(item.name ?? "Product"),
@@ -163,6 +190,7 @@ export default function MyActivityScreen() {
             ),
             viewedDate: "Recently viewed",
             category: `Category ${String(item.categoryId ?? "-")}`,
+            variantId,
           } satisfies RecentlyViewedProduct;
         })
         .filter((item) => item.id);
@@ -284,7 +312,8 @@ export default function MyActivityScreen() {
       void loadRecentlyViewed();
       void loadSearchHistory();
       void loadWishlistItems();
-    }, [loadRecentlyViewed, loadSearchHistory, loadWishlistItems])
+      void loadCartBadgeCount();
+    }, [loadRecentlyViewed, loadSearchHistory, loadWishlistItems, loadCartBadgeCount])
   );
 
   const reviews: Review[] = [
@@ -440,6 +469,42 @@ export default function MyActivityScreen() {
     [router]
   );
 
+  const handleAddToCart = useCallback(
+    async (product: RecentlyViewedProduct) => {
+      const pid = Math.floor(Number(product.id));
+      if (!Number.isFinite(pid) || pid <= 0) {
+        Alert.alert("Error", "Invalid product ID");
+        return;
+      }
+
+      const addResult = await addToCartPtbOrLocal({
+        productId: pid,
+        variantId: product.variantId, // Use the actual variantId from the product
+        quantity: 1,
+        localLine: {
+          id: product.id,
+          name: product.name,
+          price: parseRupee(product.price),
+          mrp: parseRupee(product.price),
+        },
+      });
+
+      if (addResult.ok === false) {
+        Alert.alert("Cart", addResult.message);
+        return;
+      }
+
+      bumpCartBadgeAfterAdd();
+      setTimeout(() => {
+        Alert.alert(
+          "Added to cart",
+          `${product.name} is in your cart.`
+        );
+      }, 0);
+    },
+    [bumpCartBadgeAfterAdd, parseRupee]
+  );
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -547,12 +612,20 @@ export default function MyActivityScreen() {
                     </View>
                   )}
                   <View style={styles.productInfo}>
-                    <Text style={styles.productCategory}>{product.category}</Text>
+                    {/* <Text style={styles.productCategory}>{product.category}</Text> */}
                     <Text style={styles.productName}>{product.name}</Text>
                     <View style={styles.productFooter}>
                       <Text style={styles.productPrice}>{product.price}</Text>
                       <Text style={styles.viewedDate}>{product.viewedDate}</Text>
                     </View>
+                    <TouchableOpacity
+                      style={styles.addToCartBtn}
+                      onPress={() => void handleAddToCart(product)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="cart-outline" size={16} color="#FFFFFF" />
+                      <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+                    </TouchableOpacity>
                   </View>
                   <TouchableOpacity
                     style={styles.productActionBtn}
@@ -762,6 +835,7 @@ export default function MyActivityScreen() {
           </View>
         )}
       </ScrollView>
+      <HomeBottomTabBar cartBadgeCount={cartBadgeCount} />
     </View>
   );
 }
@@ -922,6 +996,22 @@ const styles = StyleSheet.create({
   },
   productActionBtn: {
     padding: 8,
+  },
+  addToCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1d324e",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    gap: 6,
+  },
+  addToCartBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
   },
   // Search History Styles
   searchHistoryContainer: {
