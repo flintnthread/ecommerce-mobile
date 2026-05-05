@@ -96,13 +96,13 @@ const FOCUS_CARD_GAP = 16;
 const FOCUS_CARD_HEIGHT = 232;
 
 /** First hero carousel: Amazon-style tall cards + matching sticky header tint */
-const HERO_PROMO_CARD_WIDTH = Math.round(Math.min(width * 0.90, 400));
+const HERO_PROMO_CARD_WIDTH = width;
 const HERO_PROMO_CARD_HEIGHT = Math.round(
   Math.max(280, Math.min(height * 0.5, 420))
 );
-const HERO_PROMO_CARD_GAP = 14;
+const HERO_PROMO_CARD_GAP = 0;
 const HERO_PROMO_SNAP_STRIDE = HERO_PROMO_CARD_WIDTH + HERO_PROMO_CARD_GAP;
-const HERO_PROMO_SIDE_PADDING = (width - HERO_PROMO_CARD_WIDTH) / 2;
+const HERO_PROMO_SIDE_PADDING = 0;
 
 type HeroPromoCard = {
   id: string;
@@ -1684,6 +1684,7 @@ export default function Home() {
   const [selectedSort, setSelectedSort] = useState("Relevance");
   const [selectedGender, setSelectedGender] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
+  const [selectedMainCategory, setSelectedMainCategory] = useState<string>("");
   const [selectedFilterSection, setSelectedFilterSection] = useState("Category");
   const [searchCategoryText, setSearchCategoryText] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
@@ -1756,6 +1757,24 @@ export default function Home() {
   const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
   const [saveToWishlistChecked, setSaveToWishlistChecked] = useState(true);
   const [createCollectionVisible, setCreateCollectionVisible] = useState(false);
+  const [cartAlertVisible, setCartAlertVisible] = useState(false);
+  const [cartAlertMessage, setCartAlertMessage] = useState("");
+
+  // Categories API state
+  const [subcategories, setSubcategories] = useState<any[]>([]);
+  const [subcategoriesLoading, setSubcategoriesLoading] = useState(false);
+
+  // Mapping of main categories to their parent IDs for API calls
+  const categoryParentIds: Record<string, number> = {
+    "Men": 51,        // Men categories
+    "Women": 52,      // Women categories (example ID - update with actual)
+    "Kids": 53,       // Kids categories (example ID - update with actual)
+    "Accessories": 54, // Accessories categories (example ID - update with actual)
+    "Footwear": 55,   // Footwear categories (example ID - update with actual)
+    "Sportswear": 56, // Sportswear categories (example ID - update with actual)
+    // Add more mappings as needed
+  };
+
   const [collectionName, setCollectionName] = useState("");
   const [collectionPrivacy, setCollectionPrivacy] = useState<
     "private" | "shared" | "public"
@@ -1896,6 +1915,29 @@ export default function Home() {
 
   const bumpCartBadgeAfterAdd = useCallback(() => {
     setCartBadgeCount((prev) => prev + 1);
+  }, []);
+
+  const fetchSubcategories = useCallback(async (parentId: number) => {
+    console.log('Fetching subcategories for parent ID:', parentId);
+    setSubcategoriesLoading(true);
+    try {
+      // Use localhost:8080 directly instead of the default base URL
+      const response = await fetch(`http://localhost:8080/api/categories/${parentId}/subcategories`);
+      const data = await response.json();
+      console.log('API response:', data);
+      if (Array.isArray(data)) {
+        setSubcategories(data);
+        console.log('Subcategories set:', data.length, 'items');
+      } else {
+        console.log('API response is not an array:', data);
+        setSubcategories([]);
+      }
+    } catch (error) {
+      console.error('Error fetching subcategories:', error);
+      setSubcategories([]);
+    } finally {
+      setSubcategoriesLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -2405,7 +2447,7 @@ export default function Home() {
               </TouchableOpacity>
 
               {item.discount ? (
-                <View style={styles.latestGridDiscountPill}>
+                <View style={styles.latestGridDiscountPillTop}>
                   <Text style={styles.latestGridDiscountPillText}>{item.discount} off</Text>
                 </View>
               ) : null}
@@ -2417,16 +2459,14 @@ export default function Home() {
               </Text>
 
               <View style={styles.latestGridPriceRow}>
-                <View style={styles.latestGridPriceCol}>
-                  <Text style={styles.latestGridPriceCaption}>Selling</Text>
-                  <Text style={styles.latestGridPrice}>{item.price}</Text>
-                </View>
                 {item.oldPrice ? (
                   <View style={styles.latestGridPriceCol}>
-                    <Text style={styles.latestGridPriceCaption}>MRP</Text>
                     <Text style={styles.latestGridOldPrice}>{item.oldPrice}</Text>
                   </View>
                 ) : null}
+                <View style={styles.latestGridPriceCol}>
+                  <Text style={styles.latestGridPrice}>{item.price}</Text>
+                </View>
               </View>
 
               <View style={styles.latestGridMetaRow}>
@@ -2455,15 +2495,20 @@ export default function Home() {
                         },
                       });
                       if (r.ok === false) {
-                        Alert.alert("Cart", r.message);
+                        setCartAlertVisible(true);
+                        setCartAlertMessage(r.message);
+                        setTimeout(() => {
+                          setCartAlertVisible(false);
+                        }, 2000);
                         return;
                       }
                       bumpCartBadgeAfterAdd();
                       setTimeout(() => {
-                        Alert.alert(
-                          "Added to cart",
-                          `${item.name} is in your cart.`
-                        );
+                        setCartAlertVisible(true);
+                        setCartAlertMessage(`${item.name} is in your cart.`);
+                        setTimeout(() => {
+                          setCartAlertVisible(false);
+                        }, 2000);
                       }, 0);
                     })();
                   }}
@@ -2900,7 +2945,13 @@ useEffect(() => {
 
   const handleFilterPress = (label: string) => {
     if (label === "Sort") setSortModalVisible(true);
-    if (label === "Category") setCategoryModalVisible(true);
+    if (label === "Category") {
+      setCategoryModalVisible(true);
+      // Fetch subcategories based on selected main category
+      if (selectedMainCategory && categoryParentIds[selectedMainCategory]) {
+        fetchSubcategories(categoryParentIds[selectedMainCategory]);
+      }
+    }
     if (label === "Gender") setGenderModalVisible(true);
     if (label === "Filter") setFilterModalVisible(true);
   };
@@ -2955,9 +3006,20 @@ useEffect(() => {
     setSelectedBrowseMainCategoryId(null);
   };
 
-  const displayedCategories = categoryOptions.filter((item) =>
-    item.toLowerCase().includes(searchCategoryText.toLowerCase())
-  );
+  const displayedCategories = subcategories.length > 0 
+    ? subcategories
+        .filter((item) => 
+          item.categoryName && 
+          item.categoryName.toLowerCase().includes(searchCategoryText.toLowerCase())
+        )
+        .map((item) => item.categoryName)
+    : categoryOptions.filter((item) =>
+        item.toLowerCase().includes(searchCategoryText.toLowerCase())
+      );
+
+  console.log('Debug - displayedCategories:', displayedCategories);
+  console.log('Debug - subcategories length:', subcategories.length);
+  console.log('Debug - selectedGender:', selectedGender);
 
   const displayedFilterOptions =
     selectedFilterSection === "Category"
@@ -3282,6 +3344,21 @@ const categoryData = [
         </LinearGradient>
       </View>
 
+      {/* Custom Cart Alert - Right Side Toast */}
+      {cartAlertVisible && (
+        <View style={styles.cartAlertOverlay}>
+          <View style={styles.cartAlertContainer}>
+            <View style={styles.cartAlertContent}>
+              <View style={styles.cartAlertHeader}>
+                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                <Text style={styles.cartAlertTitle}>Added to cart</Text>
+              </View>
+              <Text style={styles.cartAlertMessage}>{cartAlertMessage}</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
       <Animated.ScrollView
         style={{ flex: 1, backgroundColor: HOME_PAGE_BG }}
         showsVerticalScrollIndicator={false}
@@ -3366,7 +3443,12 @@ const categoryData = [
                     index < arr.length - 1 && styles.categoryChipSpacing,
                   ]}
                   activeOpacity={0.82}
-                  onPress={() => router.push(cat.href)}
+                  onPress={() => {
+                    // Set the selected main category for API calls
+                    setSelectedMainCategory(cat.title);
+                    // Navigate to the category page
+                    router.push(cat.href);
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={cat.title}
                 >
@@ -3815,15 +3897,17 @@ const categoryData = [
                           },
                         });
                         if (r.ok === false) {
-                          Alert.alert("Cart", r.message);
+                          setCartAlertVisible(true);
+                          setCartAlertMessage(r.message);
                           return;
                         }
                         bumpCartBadgeAfterAdd();
                         setTimeout(() => {
-                          Alert.alert(
-                            "Added to cart",
-                            `${item.name} is in your cart.`
-                          );
+                          setCartAlertVisible(true);
+                          setCartAlertMessage(`${item.name} is in your cart.`);
+                          setTimeout(() => {
+                            setCartAlertVisible(false);
+                          }, 2000);
                         }, 0);
                       })();
                     }}
@@ -3927,7 +4011,7 @@ const categoryData = [
 </View>
 
 {/* Rate your recent purchase — auto-scrolling card */}
-<View style={styles.rateSection}>
+{/* <View style={styles.rateSection}>
   <Text style={styles.rateSectionTitle}>{tr("Rate Your Recent Purchase")}</Text>
 
   <ScrollView
@@ -3995,7 +4079,7 @@ const categoryData = [
       />
     ))}
   </View>
-</View>
+</View> */}
 
 
 {/* Shop by Store */}
@@ -4007,8 +4091,8 @@ const categoryData = [
       </View>
       <View style={styles.shopByStoreTitleCol}>
         <Text style={styles.shopByStoreTitleMain}>
-          <Text style={styles.shopByStoreTitleLight}>Shop by </Text>
-          <Text style={styles.shopByStoreTitleEmphasis}>Store</Text>
+          <Text style={styles.shopByStoreTitleLight}>Browse </Text>
+          <Text style={styles.shopByStoreTitleEmphasis}>Categories</Text>
         </Text>
       </View>
     </View>
@@ -4178,7 +4262,6 @@ const categoryData = [
           accessibilityRole="text"
           accessibilityLabel="Featured picks"
         >
-          <Feather name="package" size={14} color="#6D28D9" />
         </View>
         <Text style={styles.sellerGalleryTitleLine}>
           <Text style={styles.sellerGalleryTitleItalic}>Featured </Text>
@@ -4198,7 +4281,6 @@ const categoryData = [
         }
         activeOpacity={0.88}
       >
-        <Text style={styles.sellerGallerySeeAllText}>View all</Text>
         <Feather name="arrow-right" size={17} color="#5B21B6" />
       </TouchableOpacity>
     </View>
@@ -4245,9 +4327,6 @@ const categoryData = [
       <View style={styles.latestHeaderTextCol}>
         <Text style={styles.latestHeaderEyebrow}>{tr("Recommended for you")}</Text>
         <Text style={styles.latestHeaderTitle}>{tr("More picks")}</Text>
-        <Text style={styles.latestHeaderSub} numberOfLines={1}>
-          {tr("Deals and essentials picked today")}
-        </Text>
       </View>
     </View>
 
@@ -5134,7 +5213,18 @@ const categoryData = [
                 <TouchableOpacity
                   key={index}
                   style={styles.genderItem}
-                  onPress={() => setSelectedGender(item.label)}
+                  onPress={() => {
+                    setSelectedGender(item.label);
+                    // Set the selected main category
+                    setSelectedMainCategory(item.label);
+                    // Fetch subcategories for the selected gender/category
+                    if (categoryParentIds[item.label]) {
+                      fetchSubcategories(categoryParentIds[item.label]);
+                    } else {
+                      // Clear subcategories when no mapping exists
+                      setSubcategories([]);
+                    }
+                  }}
                 >
                   <Image
                     source={{ uri: item.image }}
@@ -6192,6 +6282,7 @@ const styles = StyleSheet.create({
   categorySection: {
     paddingTop: 2,
     paddingBottom: 0,
+    marginBottom: 5,
   },
 
   categoryScrollContent: {
@@ -6260,7 +6351,7 @@ const styles = StyleSheet.create({
 
   filterRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "stretch",
     marginHorizontal: 8,
     marginTop: 0,
@@ -6276,7 +6367,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     shadowRadius: 0,
     elevation: 0,
-    gap: 1,
+    gap: 5,
   },
 
   filterChip: {
@@ -6284,38 +6375,38 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 1,
-    paddingVertical: 1,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
 
   filterIconBubble: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1.5,
-    marginBottom: 2,
+    marginBottom: 3,
   },
 
   filterChipLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
-    color: "#292524",
+    color: "#FFFFFF",
     textAlign: "center",
     letterSpacing: 0.15,
   },
 
- banner: {
-  width: '100%',
-  height: 200,
-  backgroundColor: '#fff',
-  borderRadius: 15,
-  justifyContent: 'center',
-  alignItems: 'center',
-  overflow: 'hidden',
-  marginTop: 0,
-},
+  banner: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    marginTop: 0,
+  },
 
   bannerCarousel: {
     marginTop: 0,
@@ -6653,11 +6744,11 @@ const styles = StyleSheet.create({
 
   sortText: {
     fontSize: 18,
-    color: "#555",
+    color: "#e9d5d5",
   },
 
   selectedSortText: {
-    color: "#000",
+    color: "black",
     fontWeight: "600",
   },
 
@@ -7769,7 +7860,7 @@ latestSection: {
     borderRadius: 17,
     backgroundColor: "rgba(255,255,255,0.92)",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "rgba(0,0,0,0.1)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -7786,11 +7877,22 @@ latestSection: {
     borderColor: "rgba(254,215,170,0.95)",
   },
 
+  latestGridDiscountPillTop: {
+    position: "absolute",
+    left: 10,
+    top: 10,
+    backgroundColor: "rgba(249,115,22,0.92)",
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(254,215,170,0.95)",
+  },
+
   latestGridDiscountPillText: {
     color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.2,
+    fontSize: 10,
+    fontWeight: "800",
   },
 
   latestGridBody: {
@@ -8043,17 +8145,8 @@ latestSection: {
   },
 
   sellerGalleryTitleBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     alignSelf: "flex-start",
-    backgroundColor: "#F5F3FF",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 999,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#DDD6FE",
   },
 
   sellerGalleryTitleLine: {
@@ -8569,5 +8662,58 @@ shopStoreImage: {
     fontSize: 17,
     fontWeight: "900",
     letterSpacing: 2,
+  },
+  cartAlertOverlay: {
+    position: "absolute",
+    top: 60,
+    right: 16,
+    left: 16,
+    alignItems: "flex-end",
+    zIndex: 1000,
+  },
+  cartAlertContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    padding: 12,
+    paddingHorizontal: 16,
+    maxWidth: 280,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  cartAlertContent: {
+    alignItems: "center",
+  },
+  cartAlertHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  cartAlertTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+    marginLeft: 6,
+  },
+  cartAlertMessage: {
+    fontSize: 12,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  cartAlertButton: {
+    backgroundColor: "#10B981",
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  cartAlertButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
