@@ -69,7 +69,7 @@ function persistedToCartItem(line: PersistedCartLine): CartItem {
     stock:
       typeof line.stock === "number" && Number.isFinite(line.stock)
         ? Math.max(0, Math.floor(line.stock))
-        : 0,
+        : undefined,
     source: "local",
   };
 }
@@ -90,7 +90,11 @@ function serverRowToCartItem(row: ApiCartItem): CartItem {
     quantity: Math.max(1, row.quantity),
     size: row.size ?? undefined,
     color: row.color ?? undefined,
-    stock: typeof row.stock === "number" ? Math.max(0, row.stock) : 0,
+    stock: typeof row.availableStock === "number"
+      ? Math.max(0, row.availableStock)
+      : typeof row.stock === "number"
+        ? Math.max(0, row.stock)
+        : undefined,
     source: "server",
     serverItemId: row.itemId,
   };
@@ -301,8 +305,24 @@ export default function CartScreen() {
   // Update quantity
   const updateQuantity = (id: string, change: number) => {
     void (async () => {
-      if (qtyUpdatingIds.has(id)) return;
+      if (qtyUpdatingIds.has(id)) {
+        console.log("[Cart] Quantity update blocked - already updating", id);
+        return;
+      }
       const item = cartItems.find((x) => x.id === id);
+      console.log("[Cart] Updating quantity:", { id, change, currentQty: item?.quantity, stock: item?.stock });
+
+      // Check stock limit before increasing quantity
+      if (change > 0 && item && typeof item.stock === "number" && item.stock >= 0) {
+        if (item.quantity >= item.stock) {
+          Alert.alert(
+            tr("Stock Unavailable"),
+            tr(`Only ${item.stock} items available in stock. You cannot add more.`)
+          );
+          return;
+        }
+      }
+
       if (item?.serverItemId != null) {
         setQtyUpdatingIds((prev) => {
           const next = new Set(prev);
@@ -317,7 +337,15 @@ export default function CartScreen() {
           }
           await reloadCartFromStorage();
         } catch (e) {
-          Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not update quantity.")));
+          // Check if error is stock-related
+          const errorMsg = parseCartApiError(e, "Could not update quantity.");
+          if (/stock|inventory|unavailable|limit/i.test(errorMsg)) {
+            // Refresh cart to get updated stock values from backend
+            await reloadCartFromStorage();
+            Alert.alert(tr("Stock Unavailable"), tr(errorMsg));
+          } else {
+            Alert.alert(tr("Cart"), tr(errorMsg));
+          }
         } finally {
           setQtyUpdatingIds((prev) => {
             const next = new Set(prev);
@@ -342,8 +370,25 @@ export default function CartScreen() {
         return next;
       });
       try {
-        await adjustCartQuantity(id, change);
+        const prevQuantity = item?.quantity ?? 0;
+        console.log("[Cart] Calling adjustCartQuantity:", { id, change, stock: item?.stock });
+        const updatedLines = await adjustCartQuantity(id, change, item?.stock);
+        console.log("[Cart] adjustCartQuantity returned:", updatedLines.find(x => x.id === id)?.quantity);
         await reloadCartFromStorage();
+        console.log("[Cart] reloadCartFromStorage completed");
+
+        // Check if stock limit prevented full increase - use fresh data from storage
+        if (change > 0 && item?.stock != null) {
+          const freshCart = await loadCart();
+          const freshItem = freshCart.find((x) => x.id === id);
+          if (freshItem && freshItem.quantity < prevQuantity + change) {
+            Alert.alert(
+              tr("Stock Limit Reached"),
+              tr(`Only ${item.stock} items available in stock. Quantity set to maximum available.`),
+              [{ text: tr("OK") }]
+            );
+          }
+        }
       } finally {
         setQtyUpdatingIds((prev) => {
           const next = new Set(prev);
@@ -457,11 +502,11 @@ export default function CartScreen() {
       <View style={styles.header} onLayout={onHeaderLayout}>
         <View onLayout={onLogoLayout}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => router.push("/")}
             style={styles.backButton}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel={tr("Go back")}
+            accessibilityLabel={tr("Go to home")}
           >
             <Image
               source={require("../assets/MainCatImages/images/fntfav.png")}
@@ -527,26 +572,85 @@ export default function CartScreen() {
           <TouchableOpacity
             onPress={() => setIsSearchVisible((prev) => !prev)}
             style={styles.headerIcon}
-            accessibilityRole="button"
-            accessibilityLabel={tr("Toggle search")}
-            onLayout={onSearchIconLayout}
-          >
-            <Ionicons name="search-outline" size={20} color="#ef7b1a" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => router.push("/wishlist")}
-            style={styles.headerIcon}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={tr("Wishlist")}
-          >
-            <Ionicons name="heart" size={20} color="red" />
-          </TouchableOpacity>
-        </View>
       </View>
 
-      {/* Content */}
+      {animationRange ? (
+        <>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.headerRunner,
+              {
+                top: animationRange.y,
+                opacity: animOpacity,
+                transform: [
+                  {
+                    translateX: animProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [animationRange.startX, animationRange.endX],
+                    }),
+                  },
+                  {
+                    translateY: walkBob.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, -2.5],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Image source={runnerBoyCartImg} style={styles.runnerImage} resizeMode="contain" />
+          </Animated.View>
+        </>
+      ) : null}
+
+      {isSearchVisible ? (
+        <View style={styles.headerSearchWrapper}>
+          <Ionicons
+            name="search-outline"
+            size={18}
+            color="#69798c"
+            style={styles.searchIcon}
+          />
+          <TextInput
+            placeholder={tr("Search cart")}
+            placeholderTextColor="#69798c"
+            value={headerSearchQuery}
+            onChangeText={setHeaderSearchQuery}
+            style={styles.searchInputHeader}
+            autoFocus
+          />
+        </View>
+      ) : (
+        <View style={{ flex: 1 }} />
+      )}
+
+      <View style={styles.headerIcons}>
+        <TouchableOpacity
+          onPress={() => setIsSearchVisible((prev) => !prev)}
+          style={styles.headerIcon}
+          accessibilityRole="button"
+          accessibilityLabel={tr("Toggle search")}
+          onLayout={onSearchIconLayout}
+        >
+          <Ionicons name="search-outline" size={20} color="#ef7b1a" />
+        </TouchableOpacity>
+
+        {/* Wishlist Icon */}
+        <TouchableOpacity
+          onPress={() => router.push("/wishlist")}
+          style={styles.headerIconHit}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={tr("Wishlist")}
+        >
+          <Ionicons name="heart-outline" size={24} color="#0F172A" />
+          {wishlistCount > 0 ? (
+            <View style={styles.headerWishlistBadge}>
+              <Text style={styles.headerWishlistBadgeText}>
+                {wishlistCount > 99 ? "99+" : String(wishlistCount)}
+              </Text>
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -625,6 +729,18 @@ export default function CartScreen() {
                         {item.color ? `${tr("Color")}: ${item.color}` : ""}
                       </Text>
                     )}
+                    {typeof item.stock === "number" && item.stock > 0 && (
+                      <Text
+                        style={[
+                          styles.stockHintText,
+                          item.stock > 0 && item.stock <= 5 && styles.stockLowText,
+                        ]}
+                      >
+                        {item.stock <= 5
+                          ? tr(`Only ${item.stock} left`)
+                          : tr(`${item.stock} in stock`)}
+                      </Text>
+                    )}
                     <View style={styles.cartItemPriceRow}>
                       <View>
                         <Text style={styles.cartItemPrice}>
@@ -638,12 +754,11 @@ export default function CartScreen() {
                       </View>
                     </View>
 
-                    {/* Quantity Controls */}
-                    <View style={styles.quantityContainer}>
-                      <Text style={styles.quantityLabel}>{tr("Quantity")}:</Text>
-                      <View style={styles.quantityControls}>
+                    {/* Quantity Controls - Flipkart/Meesho Style */}
+                    <View style={styles.quantityRow}>
+                      <View style={styles.quantityStepper}>
                         <TouchableOpacity
-                          style={styles.quantityButton}
+                          style={[styles.stepperButton, styles.stepperButtonLeft]}
                           onPress={() => updateQuantity(item.id, -1)}
                           disabled={
                             qtyUpdatingIds.has(item.id) ||
@@ -652,27 +767,37 @@ export default function CartScreen() {
                         >
                           <Ionicons
                             name="remove"
-                            size={18}
+                            size={16}
                             color={
                               item.source === "local" && item.quantity <= 1
                                 ? "#CCC"
-                                : "#E97A1F"
+                                : "#333"
                             }
                           />
                         </TouchableOpacity>
-                        <Text style={styles.quantityValue}>{item.quantity}</Text>
+                        <View style={styles.quantityDisplay}>
+                          <Text style={styles.quantityNumber}>{item.quantity}</Text>
+                        </View>
                         <TouchableOpacity
-                          style={styles.quantityButton}
+                          style={[styles.stepperButton, styles.stepperButtonRight]}
                           onPress={() => updateQuantity(item.id, 1)}
-                          disabled={qtyUpdatingIds.has(item.id)}
+                          disabled={
+                            qtyUpdatingIds.has(item.id) ||
+                            (typeof item.stock === "number" && item.quantity >= item.stock)
+                          }
                         >
                           <Ionicons
                             name="add"
-                            size={18}
-                            color="#E97A1F"
+                            size={16}
+                            color={
+                              typeof item.stock === "number" && item.quantity >= item.stock
+                                ? "#CCC"
+                                : "#333"
+                            }
                           />
                         </TouchableOpacity>
                       </View>
+                      <Text style={styles.qtyLabel}>{tr("Qty")}</Text>
                     </View>
 
                     {/* Remove Button */}
@@ -960,9 +1085,17 @@ const styles = StyleSheet.create({
   },
   stockHintText: {
     fontSize: 12,
-    color: "#B45309",
-    fontWeight: "700",
+    color: "#059669",
+    fontWeight: "600",
     marginBottom: 8,
+  },
+  stockOutText: {
+    color: "#DC2626",
+    fontWeight: "700",
+  },
+  stockLowText: {
+    color: "#EA580C",
+    fontWeight: "700",
   },
   cartItemPriceRow: {
     flexDirection: "row",
@@ -980,37 +1113,58 @@ const styles = StyleSheet.create({
     textDecorationLine: "line-through",
     marginLeft: 8,
   },
-  quantityContainer: {
+  quantityRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+    gap: 10,
   },
-  quantityLabel: {
-    fontSize: 14,
-    color: "#666",
-    marginRight: 12,
-  },
-  quantityControls: {
+  quantityStepper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8F9FA",
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: "#C4C4C4",
+    borderRadius: 4,
+    backgroundColor: "#FFF",
+    height: 32,
   },
-  quantityButton: {
-    padding: 8,
-    minWidth: 36,
+  stepperButton: {
+    width: 32,
+    height: 30,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#F9F9F9",
   },
-  quantityValue: {
-    fontSize: 16,
+  stepperButtonLeft: {
+    borderRightWidth: 1,
+    borderRightColor: "#C4C4C4",
+    borderTopLeftRadius: 3,
+    borderBottomLeftRadius: 3,
+  },
+  stepperButtonRight: {
+    borderLeftWidth: 1,
+    borderLeftColor: "#C4C4C4",
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  quantityDisplay: {
+    minWidth: 44,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF",
+    paddingHorizontal: 4,
+  },
+  quantityNumber: {
+    fontSize: 14,
     fontWeight: "600",
-    color: "#000",
-    paddingHorizontal: 16,
-    minWidth: 40,
+    color: "#333",
     textAlign: "center",
+  },
+  qtyLabel: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "500",
   },
   removeButton: {
     flexDirection: "row",

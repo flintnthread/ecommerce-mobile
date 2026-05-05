@@ -159,6 +159,10 @@ type MorePicksGridItem = {
   discount?: string;
   /** Backend `ProductVariantDTO.id` for wishlist add. */
   variantId?: number;
+  /** Stock flag from API variant (best-effort). */
+  inStock?: boolean;
+  /** Remaining units when backend sends quantity/stock (best-effort). */
+  stockQty?: number;
 };
 
 type MorePicksApiImage = {
@@ -176,6 +180,11 @@ type MorePicksApiVariant = {
   finalPrice?: number | string | null;
   discountPercentage?: number | null;
   inStock?: boolean | null;
+  /** Some APIs send `quantity` / `stock` / `availableQuantity` for on-hand units. */
+  quantity?: number | string | null;
+  stock?: number | string | boolean | null;
+  availableQuantity?: number | string | null;
+  available?: boolean | null;
 };
 
 type MorePicksApiProduct = {
@@ -674,6 +683,40 @@ function pickMorePicksVariant(p: MorePicksApiProduct): MorePicksApiVariant | und
   return inStock ?? vs[0];
 }
 
+function readVariantStockQty(v?: MorePicksApiVariant | null): number | null {
+  if (!v) return null;
+  const candidates = [v.quantity, v.availableQuantity, v.stock];
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isFinite(c)) return Math.max(0, Math.floor(c));
+    if (typeof c === "string" && c.trim()) {
+      const n = Number(c);
+      if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+    }
+  }
+  return null;
+}
+
+function readVariantInStock(v?: MorePicksApiVariant | null): boolean {
+  if (!v) return true;
+  const qty = readVariantStockQty(v);
+  if (qty != null) return qty > 0;
+  if (typeof v.inStock === "boolean") return v.inStock;
+  if (typeof v.available === "boolean") return v.available;
+  if (typeof v.stock === "boolean") return v.stock;
+  return true;
+}
+
+function stockUiLabel(input: { inStock?: boolean; stockQty?: number } | null): {
+  text: string;
+  tone: "ok" | "low" | "out";
+} {
+  const inStock = input?.inStock !== false;
+  const qty = typeof input?.stockQty === "number" ? input.stockQty : null;
+  if (!inStock || qty === 0) return { text: "Out of stock", tone: "out" };
+  if (qty != null && qty > 0 && qty <= 5) return { text: `Only ${qty} left`, tone: "low" };
+  return { text: "In stock", tone: "ok" };
+}
+
 /** Backend may send `status: 1` / `"active"` / `"ACTIVE"`; treat unknown or empty as visible. */
 function apiProductRowCountsAsActive(status: unknown): boolean {
   if (status === null || status === undefined) return true;
@@ -808,6 +851,9 @@ function mapMorePicksApiToGrid(
         ? Math.floor(variantIdNum)
         : undefined;
 
+    const stockQty = readVariantStockQty(v);
+    const inStock = readVariantInStock(v);
+
     out.push({
       id: String(idNum),
       cartId: String(idNum),
@@ -818,6 +864,8 @@ function mapMorePicksApiToGrid(
       oldPrice,
       discount,
       variantId,
+      inStock,
+      stockQty: stockQty ?? undefined,
     });
   }
 
@@ -2363,6 +2411,8 @@ export default function Home() {
     (item: MorePicksGridItem, index: number) => {
       const ratingValue = Number.parseFloat(String(item.rating).split(" ")[0]) || 0;
       const col = index % 2;
+      const stock = stockUiLabel(item);
+      const addDisabled = stock.tone === "out";
       return (
         <View style={styles.latestGridCell} key={`mp-${item.id}-${index}`}>
           <TouchableOpacity
@@ -2434,13 +2484,42 @@ export default function Home() {
                   <Ionicons name="star" size={14} color="#FFFFFF" />
                   <Text style={styles.latestGridRatingText}>{ratingValue.toFixed(1)}</Text>
                 </View>
+                <View
+                  style={[
+                    styles.latestGridStockPill,
+                    stock.tone === "ok"
+                      ? styles.latestGridStockPillOk
+                      : stock.tone === "low"
+                        ? styles.latestGridStockPillLow
+                        : styles.latestGridStockPillOut,
+                  ]}
+                  accessibilityRole="text"
+                  accessibilityLabel={`Stock: ${stock.text}`}
+                >
+                  <Text
+                    style={[
+                      styles.latestGridStockText,
+                      stock.tone === "out" ? styles.latestGridStockTextOut : null,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {stock.text}
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.latestGridAddCartRow}>
                 <TouchableOpacity
-                  style={styles.latestGridAddCartButton}
+                  style={[
+                    styles.latestGridAddCartButton,
+                    addDisabled ? styles.latestGridAddCartButtonDisabled : null,
+                  ]}
                   activeOpacity={0.9}
                   onPress={() => {
+                    if (addDisabled) {
+                      Alert.alert("Out of stock", `${item.name} is currently unavailable.`);
+                      return;
+                    }
                     void (async () => {
                       const pid = Math.floor(Number(item.cartId ?? item.id));
                       const r = await addToCartPtbOrLocal({
@@ -2467,8 +2546,11 @@ export default function Home() {
                       }, 0);
                     })();
                   }}
+                  disabled={addDisabled}
                   accessibilityRole="button"
-                  accessibilityLabel={`Add ${item.name} to cart`}
+                  accessibilityLabel={
+                    addDisabled ? `${item.name} is out of stock` : `Add ${item.name} to cart`
+                  }
                 >
                   <Text style={styles.latestGridAddCartButtonText}>Add to Cart</Text>
                 </TouchableOpacity>
@@ -7864,6 +7946,35 @@ latestSection: {
     color: "#FFFFFF",
     letterSpacing: 0.2,
   },
+  latestGridStockPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexShrink: 1,
+    maxWidth: "52%",
+  },
+  latestGridStockPillOk: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#34D399",
+  },
+  latestGridStockPillLow: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#F59E0B",
+  },
+  latestGridStockPillOut: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FCA5A5",
+  },
+  latestGridStockText: {
+    fontSize: 11.5,
+    fontWeight: "900",
+    color: "#065F46",
+    letterSpacing: 0.1,
+  },
+  latestGridStockTextOut: {
+    color: "#991B1B",
+  },
   latestGridAddCartRow: {
     marginTop: 2,
   },
@@ -7873,6 +7984,9 @@ latestSection: {
     paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
+  },
+  latestGridAddCartButtonDisabled: {
+    backgroundColor: "#D1D5DB",
   },
   latestGridAddCartButtonText: {
     color: "#FFFFFF",

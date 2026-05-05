@@ -642,21 +642,59 @@ function mapApiProductDetailToCatalog(
   );
   const colorOptions = [...colorSet].sort();
 
-  // Check if any variant is in stock
-  const inStock = variants.some((variant: any) => {
-    const stock = variant?.stock;
-    const quantity = variant?.quantity;
-    const available = variant?.available;
-    
-    // Check various possible stock field names
-    if (typeof stock === "number") return stock > 0;
-    if (typeof quantity === "number") return quantity > 0;
-    if (typeof available === "boolean") return available;
-    if (typeof stock === "boolean") return stock;
-    
-    // Default to true if no stock info is available
-    return true;
-  });
+  const readVariantQty = (variant: any): number | null => {
+    if (!variant) return null;
+    const candidates = [
+      variant.quantity,
+      variant.availableQuantity,
+      variant.availableStock,
+      variant.stockQuantity,
+      variant.inventory,
+      variant.inventoryQuantity,
+      variant.stock,
+    ];
+    for (const c of candidates) {
+      if (typeof c === "number" && Number.isFinite(c)) return Math.max(0, Math.floor(c));
+      if (typeof c === "string" && c.trim()) {
+        const n = Number(c);
+        if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+      }
+    }
+    return null;
+  };
+
+  const readVariantInStockFlag = (variant: any): boolean | null => {
+    if (!variant) return null;
+    if (typeof variant.inStock === "boolean") return variant.inStock;
+    if (typeof variant.available === "boolean") return variant.available;
+    if (typeof variant.outOfStock === "boolean") return !variant.outOfStock;
+    if (typeof variant.isOutOfStock === "boolean") return !variant.isOutOfStock;
+    if (typeof variant.stock === "boolean") return variant.stock;
+    return null;
+  };
+
+  // Check if any variant is in stock.
+  // If the backend provides stock signals and all are 0/false, treat as out of stock.
+  // If the backend provides no stock info at all, keep previous behavior (don’t block due to missing data).
+  const inStock = (() => {
+    let sawAnyStockSignal = false;
+    for (const variant of variants) {
+      const qty = readVariantQty(variant);
+      if (qty != null) {
+        sawAnyStockSignal = true;
+        if (qty > 0) return true;
+        continue;
+      }
+      const flag = readVariantInStockFlag(variant);
+      if (typeof flag === "boolean") {
+        sawAnyStockSignal = true;
+        if (flag) return true;
+        continue;
+      }
+    }
+    if (!sawAnyStockSignal) return true;
+    return false;
+  })();
 
   const rating =
     typeof p?.rating === "number" && Number.isFinite(p.rating)
@@ -1339,6 +1377,52 @@ export default function ProductDetail() {
     return reviews.length > 0 ? String(reviews.length) : "New";
   }, [product.ratingCount, reviews.length]);
 
+  const selectedVariantStock = useMemo(() => {
+    const chosen =
+      apiDetail && typeof apiDetail === "object"
+        ? findVariantForSelection(apiDetail, selectedSize, selectedColor)
+        : null;
+
+    const readQty = (v: any): number | null => {
+      if (!v) return null;
+      const candidates = [
+        v.quantity,
+        v.availableQuantity,
+        v.availableStock,
+        v.stockQuantity,
+        v.inventory,
+        v.inventoryQuantity,
+        v.stock,
+      ];
+      for (const c of candidates) {
+        if (typeof c === "number" && Number.isFinite(c)) return Math.max(0, Math.floor(c));
+        if (typeof c === "string" && c.trim()) {
+          const n = Number(c);
+          if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+        }
+      }
+      return null;
+    };
+
+    const qty = readQty(chosen);
+    const inStock = (() => {
+      if (qty != null) return qty > 0;
+      if (typeof chosen?.inStock === "boolean") return chosen.inStock;
+      if (typeof chosen?.available === "boolean") return chosen.available;
+      if (typeof chosen?.outOfStock === "boolean") return !chosen.outOfStock;
+      if (typeof chosen?.isOutOfStock === "boolean") return !chosen.isOutOfStock;
+      if (typeof chosen?.stock === "boolean") return chosen.stock;
+      return product.inStock !== false;
+    })();
+
+    const tone: "ok" | "low" | "out" =
+      !inStock || qty === 0 ? "out" : qty != null && qty > 0 && qty <= 5 ? "low" : "ok";
+    const label =
+      tone === "out" ? "Out of stock" : tone === "low" ? `Only ${qty} left` : "In stock";
+
+    return { inStock, qty, tone, label };
+  }, [apiDetail, product.inStock, selectedColor, selectedSize]);
+
   const refreshCartAndWishlistState = useCallback(async () => {
     setCartCount(await getCartUnitCount());
 
@@ -1450,6 +1534,10 @@ export default function ProductDetail() {
 
   const handleAddToBag = () => {
     if (hasAddedToCart) return;
+    if (selectedVariantStock.tone === "out") {
+      Alert.alert("Out of stock", "This variant is currently unavailable.");
+      return;
+    }
     void (async () => {
       const token = (await AsyncStorage.getItem("token"))?.trim();
       if (
@@ -1505,11 +1593,22 @@ export default function ProductDetail() {
         Number.isFinite(localVariantIdRaw) && localVariantIdRaw > 0
           ? Math.floor(localVariantIdRaw)
           : undefined;
-      const localStockRaw = Number(localChosenVariant?.stock);
-      const localStock =
-        Number.isFinite(localStockRaw) && localStockRaw >= 0
-          ? Math.floor(localStockRaw)
-          : undefined;
+      const localStock = (() => {
+        const candidates = [
+          localChosenVariant?.quantity,
+          localChosenVariant?.availableQuantity,
+          localChosenVariant?.stock,
+        ];
+        for (const c of candidates) {
+          const n = typeof c === "string" ? Number(c) : Number(c);
+          if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+        }
+        return undefined;
+      })();
+      if (typeof localStock === "number" && localStock <= 0) {
+        Alert.alert("Out of stock", "This variant is currently unavailable.");
+        return;
+      }
       await addProductToCart({
         id: product.id,
         name: product.name,
@@ -2023,16 +2122,16 @@ export default function ProductDetail() {
           {/* STOCK STATUS */}
           <View style={styles.stockRow}>
             <Ionicons
-              name={product.inStock !== false ? "checkmark-circle" : "close-circle"}
+              name={selectedVariantStock.tone !== "out" ? "checkmark-circle" : "close-circle"}
               size={14}
-              color={product.inStock !== false ? "#10893E" : "#DC2626"}
+              color={selectedVariantStock.tone !== "out" ? "#10893E" : "#DC2626"}
               style={{ marginRight: 6 }}
             />
             <Text style={[
               styles.stockText,
-              product.inStock !== false ? styles.stockTextInStock : styles.stockTextOutOfStock
+              selectedVariantStock.tone !== "out" ? styles.stockTextInStock : styles.stockTextOutOfStock
             ]}>
-              {product.inStock !== false ? "In stock" : "Out of stock"}
+              {selectedVariantStock.label}
             </Text>
           </View>
 
@@ -2310,7 +2409,10 @@ export default function ProductDetail() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.inlineAddToBagButton}
+                style={[
+                  styles.inlineAddToBagButton,
+                  selectedVariantStock.tone === "out" ? styles.inlineAddToBagButtonDisabled : null,
+                ]}
                 activeOpacity={0.9}
                 onPress={() => {
                   if (hasAddedToCart) {
@@ -2319,6 +2421,7 @@ export default function ProductDetail() {
                     handleAddToBag();
                   }
                 }}
+                disabled={selectedVariantStock.tone === "out"}
               >
                 <Ionicons name="bag-outline" size={18} color="#ffffff" style={{ marginRight: 4 }} />
                 <Text style={styles.inlineAddToBagText}>
@@ -3451,6 +3554,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 22,
     backgroundColor: "#ef7b1a",
+  },
+  inlineAddToBagButtonDisabled: {
+    backgroundColor: "#9CA3AF",
   },
   inlineAddToBagText: {
     fontSize: 13,
