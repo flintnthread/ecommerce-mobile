@@ -337,14 +337,52 @@ export async function putCartItemQuantityDelta(
   await api.put(cartItemPath(id), undefined, { params: { quantity: q } });
 }
 
+function isDeleteMethodNotSupported(error: unknown): boolean {
+  const e = error as {
+    response?: { status?: number; data?: unknown };
+    message?: string;
+  };
+  if (e?.response?.status === 405) return true;
+  const responseText = String(e?.response?.data ?? "").toLowerCase();
+  const messageText = String(e?.message ?? "").toLowerCase();
+  return (
+    responseText.includes("request method 'delete' is not supported") ||
+    messageText.includes("request method 'delete' is not supported")
+  );
+}
+
 export async function deleteCartLineServer(itemId: number): Promise<void> {
   const id = Math.floor(itemId);
   if (!Number.isFinite(id) || id <= 0) return;
-  await api.delete(cartItemPath(id));
+  const path = cartItemPath(id);
+  try {
+    await api.delete(path);
+    return;
+  } catch (e) {
+    if (!isDeleteMethodNotSupported(e)) throw e;
+  }
+
+  // Backend fallback when DELETE is not enabled.
+  try {
+    await api.put(path, undefined, { params: { quantity: -9999 } });
+    return;
+  } catch {
+    // Try explicit remove endpoint pattern.
+  }
+
+  await api.post("/api/cart/remove", { itemId: id });
 }
 
 export async function deleteCartClearServer(): Promise<void> {
-  await api.delete(CART_CLEAR_PATH);
+  try {
+    await api.delete(CART_CLEAR_PATH);
+    return;
+  } catch (e) {
+    if (!isDeleteMethodNotSupported(e)) throw e;
+  }
+
+  // Backend fallback when DELETE is not enabled.
+  await api.post(CART_CLEAR_PATH);
 }
 
 /**
