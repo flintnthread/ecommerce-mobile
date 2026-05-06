@@ -77,24 +77,39 @@ export async function addProductToCart(
 ): Promise<PersistedCartLine[]> {
   const cart = await loadCart();
   const idx = cart.findIndex((x) => x.id === product.id);
+  const productStock =
+    typeof product.stock === "number" && Number.isFinite(product.stock)
+      ? Math.max(0, Math.floor(product.stock))
+      : undefined;
+
   if (idx >= 0) {
+    // Calculate new quantity, respecting stock limit
+    const currentStock =
+      productStock ??
+      (typeof cart[idx].stock === "number"
+        ? Math.max(0, Math.floor(cart[idx].stock))
+        : undefined);
+
+    let newQuantity = cart[idx].quantity + 1;
+    if (typeof currentStock === "number") {
+      newQuantity = Math.min(newQuantity, currentStock);
+    }
+
     cart[idx] = {
       ...cart[idx],
-      quantity: cart[idx].quantity + 1,
+      quantity: newQuantity,
       // Keep latest selected image/variant metadata.
       imageUri: product.imageUri ?? cart[idx].imageUri,
       variantId: product.variantId ?? cart[idx].variantId,
       size: product.size ?? cart[idx].size,
       color: product.color ?? cart[idx].color,
-      stock:
-        typeof product.stock === "number" && Number.isFinite(product.stock)
-          ? Math.max(0, Math.floor(product.stock))
-          : typeof cart[idx].stock === "number"
-          ? Math.max(0, Math.floor(cart[idx].stock))
-          : undefined,
+      stock: currentStock,
     };
   } else {
-    cart.push({ ...product, quantity: 1 });
+    // For new items, quantity is 1 (unless stock is 0)
+    const initialQuantity =
+      typeof productStock === "number" && productStock > 0 ? 1 : 1;
+    cart.push({ ...product, quantity: initialQuantity });
   }
   await saveCart(cart);
   return cart;
@@ -102,13 +117,23 @@ export async function addProductToCart(
 
 export async function adjustCartQuantity(
   id: string,
-  delta: number
+  delta: number,
+  stock?: number
 ): Promise<PersistedCartLine[]> {
   const cart = await loadCart();
   const next = cart
     .map((line) => {
       if (line.id !== id) return line;
-      return { ...line, quantity: Math.max(1, line.quantity + delta) };
+      let newQuantity = Math.max(1, line.quantity + delta);
+      // Enforce stock limit if provided
+      if (typeof stock === "number" && Number.isFinite(stock) && stock >= 0) {
+        newQuantity = Math.min(newQuantity, Math.max(0, Math.floor(stock)));
+      }
+      // Also enforce line's own stock if present
+      if (typeof line.stock === "number" && line.stock >= 0) {
+        newQuantity = Math.min(newQuantity, Math.floor(line.stock));
+      }
+      return { ...line, quantity: newQuantity };
     })
     .filter((line) => line.quantity > 0);
   await saveCart(next);
