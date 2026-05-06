@@ -17,6 +17,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api, {
+  productsByCategoryPath,
   productsByMainCategoryFeedPath,
   productsByMainCategoryPath,
   productsSearchPath,
@@ -565,6 +566,7 @@ export default function SubcategoriesScreen() {
     subCategory?: string | string[];
     subcategoryId?: string | string[];
     mainCategoryId?: string | string[];
+    categoryId?: string | string[];
     discountMin?: string | string[];
     discountMax?: string | string[];
     productsSearchQ?: string | string[];
@@ -591,6 +593,12 @@ export default function SubcategoriesScreen() {
     : params.mainCategoryId;
   const routedMainCategoryId = routedMainCategoryIdRaw
     ? Number.parseInt(String(routedMainCategoryIdRaw), 10)
+    : NaN;
+  const routedCategoryIdRaw = Array.isArray(params.categoryId)
+    ? params.categoryId[0]
+    : params.categoryId;
+  const routedCategoryId = routedCategoryIdRaw
+    ? Number.parseInt(String(routedCategoryIdRaw), 10)
     : NaN;
   const routedDiscountMinRaw = Array.isArray(params.discountMin)
     ? params.discountMin[0]
@@ -680,6 +688,9 @@ export default function SubcategoriesScreen() {
   const [apiRoutedProducts, setApiRoutedProducts] = useState<ProductItem[]>([]);
   /** When `subcategoryId` is in the route, we only show API rows (no fallback to synthetic catalog). */
   const [apiRoutedFromIdReady, setApiRoutedFromIdReady] = useState(false);
+
+  const [categoryApiProducts, setCategoryApiProducts] = useState<ProductItem[]>([]);
+  const [categoryApiReady, setCategoryApiReady] = useState(false);
 
   const [mainCategoryApiProducts, setMainCategoryApiProducts] = useState<ProductItem[]>([]);
   const [mainCategoryApiReady, setMainCategoryApiReady] = useState(false);
@@ -1209,6 +1220,43 @@ export default function SubcategoriesScreen() {
   ]);
 
   useEffect(() => {
+    if (!Number.isFinite(routedCategoryId) || routedCategoryId <= 0) {
+      setCategoryApiProducts([]);
+      setCategoryApiReady(false);
+      return;
+    }
+
+    setCategoryApiReady(false);
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const path = productsByCategoryPath(routedCategoryId);
+        const { data } = await api.get<unknown>(path, { signal: controller.signal });
+        
+        // Handle the API response format
+        let products: unknown[] = [];
+        if (Array.isArray(data)) {
+          products = data;
+        } else if (data && typeof data === 'object' && 'content' in data) {
+          products = Array.isArray((data as any).content) ? (data as any).content : [];
+        }
+
+        const mapped = products
+          .map((row) => mapApiProductToProductItem(row))
+          .filter(Boolean) as ProductItem[];
+        setCategoryApiProducts(mapped);
+      } catch {
+        if (!controller.signal.aborted) setCategoryApiProducts([]);
+      } finally {
+        if (!controller.signal.aborted) setCategoryApiReady(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [routedCategoryId, selectedSubCategory, mainCat]);
+
+  useEffect(() => {
     if (!routedFromMainCategoryPath) {
       setMainCategoryPathProducts([]);
       setMainCategoryPathReady(false);
@@ -1711,6 +1759,12 @@ const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
     return freshFindsProducts;
   }
 
+  // Handle routed by categoryId (from category modal selection)
+  if (Number.isFinite(routedCategoryId) && routedCategoryId > 0) {
+    if (!categoryApiReady) return [];
+    return categoryApiProducts;
+  }
+
   // Handle routed by subcategoryId
   if (routedFromSubcategoryId) {
     if (!apiRoutedFromIdReady) return [];
@@ -1738,6 +1792,9 @@ const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
   mainCategoryPathProducts,
   routedFromMainCategoryFeed,
   mainCategoryApiReady,
+  routedCategoryId,
+  categoryApiReady,
+  categoryApiProducts,
   mainCategoryApiProducts,
   mainCategoryFeedReady,
   mainCategoryFeedProducts,
