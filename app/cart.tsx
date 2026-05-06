@@ -38,10 +38,12 @@ import {
 import api, { productByIdPath } from "../services/api";
 import { useLanguage } from "../lib/language";
 import AwesomeAlert from "react-native-awesome-alerts";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
 const RUNNER_W = 170;
 const RUNNER_H = 64;
+const BOTTOM_TAB_RESERVED_HEIGHT = 92;
 
 type CartItemSource = "local" | "server";
 
@@ -1043,7 +1045,9 @@ const handleClearServerCart =
         style={styles.content}
         contentContainerStyle={[
           styles.contentContainer,
-          cartItems.length > 0 ? { paddingBottom: Math.max(24, footerHeight + 24) } : null,
+          cartItems.length > 0
+            ? { paddingBottom: Math.max(24, footerHeight + BOTTOM_TAB_RESERVED_HEIGHT + 24) }
+            : { paddingBottom: BOTTOM_TAB_RESERVED_HEIGHT + 24 },
         ]}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
@@ -1388,6 +1392,8 @@ const handleClearServerCart =
           </TouchableOpacity>
         </View>
       )}
+
+      <HomeBottomTabBar cartBadgeCount={totalItems} />
 
       <Modal
         visible={isVariantModalVisible}
@@ -2071,7 +2077,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     position: "absolute",
-    bottom: 0,
+    bottom: BOTTOM_TAB_RESERVED_HEIGHT,
     left: 0,
     right: 0,
     backgroundColor: "#FFFFFF",
