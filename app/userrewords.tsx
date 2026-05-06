@@ -1,9 +1,18 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image, Share, Alert, TextInput } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Share,
+  Alert,
+  TextInput,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import api from "../services/api";
-import { getCurrentUserIdFromToken } from "../services/pushNotifications"; // ✅ ADDED
+import { getCurrentUserIdFromToken } from "../services/pushNotifications";
 
 type ReferralOverview = {
   referralCode: string;
@@ -22,26 +31,34 @@ export default function UserRewordsScreen() {
   const [overview, setOverview] = React.useState<ReferralOverview | null>(null);
   const [loading, setLoading] = React.useState(false);
 
-  // ✅ FIXED API
+  // 🔥 FETCH DASHBOARD
   const fetchOverview = React.useCallback(async () => {
     setLoading(true);
     try {
       const userId = await getCurrentUserIdFromToken();
 
+      console.log("USER ID:", userId);
+
+      if (!userId) {
+        throw new Error("Invalid userId");
+      }
+
       const { data } = await api.get(`/api/referral/dashboard/${userId}`);
+
+      console.log("API RESPONSE:", data);
 
       setOverview({
         referralCode: data.referralCode,
-        confirmedReferrals: data.completedInvites,
-        requiredReferrals: 5,
+        confirmedReferrals: data.totalInvites, // ✅ FIXED
+        requiredReferrals: data.requiredReferrals,
         discountPercent: 10,
         rewardUnlocked: data.eligible,
-        rewardUsed: false
+        rewardUsed: false,
       });
 
       setReferralCode(data.referralCode);
-
-    } catch (e) {
+    } catch (e: any) {
+      console.log("Dashboard error:", e?.response?.data || e.message);
       Alert.alert("Referral", "Failed to load referral data");
     } finally {
       setLoading(false);
@@ -52,23 +69,27 @@ export default function UserRewordsScreen() {
     fetchOverview();
   }, []);
 
-  // ✅ FIXED REFRESH API
+  // 🔥 REFRESH CODE
   const generateReferralCode = async () => {
     try {
       const userId = await getCurrentUserIdFromToken();
+
+      if (!userId) {
+        throw new Error("Invalid userId");
+      }
 
       const { data } = await api.post(`/api/referral/refresh/${userId}`);
 
       setReferralCode(data);
 
       Alert.alert("Success", "New referral code generated");
-
-    } catch (e) {
+    } catch (e: any) {
+      console.log("Refresh error:", e?.response?.data || e.message);
       Alert.alert("Error", "Failed to refresh code");
     }
   };
 
-  // ✅ FIXED APPLY API
+  // 🔥 APPLY REFERRAL
   const handleApplyReferralCode = async () => {
     const code = applyCode.trim();
 
@@ -80,10 +101,16 @@ export default function UserRewordsScreen() {
     try {
       const userId = await getCurrentUserIdFromToken();
 
-      const { data } = await api.post("/api/referral/apply", {
+      if (!userId) {
+        throw new Error("Invalid userId");
+      }
+
+      const { data } = await api.post(`/api/referral/apply`, {
         userId,
         referralCode: code,
       });
+
+      console.log("Apply response:", data);
 
       if (!data.success) {
         throw new Error(data.message);
@@ -92,24 +119,28 @@ export default function UserRewordsScreen() {
       Alert.alert("Success", data.message);
       setApplyCode("");
       fetchOverview();
-
     } catch (e: any) {
+      console.log("Apply error:", e?.response?.data || e.message);
       Alert.alert("Error", e.message || "Failed to apply referral code");
     }
   };
 
-  // ✅ FIXED SHARE API
+  // 🔥 SHARE
   const handleInviteFriends = async () => {
     try {
       const userId = await getCurrentUserIdFromToken();
+
+      if (!userId) {
+        throw new Error("Invalid userId");
+      }
 
       const { data } = await api.get(`/api/referral/share/${userId}`);
 
       await Share.share({
         message: data.message + "\n" + data.shareLink,
       });
-
-    } catch {
+    } catch (e: any) {
+      console.log("Share error:", e?.response?.data || e.message);
       Alert.alert("Share", "Could not open share options right now.");
     }
   };
@@ -143,10 +174,7 @@ export default function UserRewordsScreen() {
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.generateBtn}
-            onPress={generateReferralCode}
-          >
+          <TouchableOpacity style={styles.generateBtn} onPress={generateReferralCode}>
             <Text style={styles.generateBtnText}>
               {loading ? "Loading..." : "Refresh ID"}
             </Text>
@@ -163,10 +191,7 @@ export default function UserRewordsScreen() {
             autoCapitalize="characters"
           />
 
-          <TouchableOpacity
-            style={styles.applyCodeBtn}
-            onPress={handleApplyReferralCode}
-          >
+          <TouchableOpacity style={styles.applyCodeBtn} onPress={handleApplyReferralCode}>
             <Text style={styles.applyCodeBtnText}>Apply</Text>
           </TouchableOpacity>
         </View>
@@ -217,10 +242,7 @@ export default function UserRewordsScreen() {
 
       <View style={styles.bottomActions}>
         <TouchableOpacity style={styles.primaryBtn} onPress={handleInviteFriends}>
-          <LinearGradient
-            colors={["#8B47FF", "#6B2BFF"]}
-            style={styles.primaryBtnGradient}
-          >
+          <LinearGradient colors={["#8B47FF", "#6B2BFF"]} style={styles.primaryBtnGradient}>
             <Text style={styles.primaryBtnText}>Invite friends</Text>
           </LinearGradient>
         </TouchableOpacity>

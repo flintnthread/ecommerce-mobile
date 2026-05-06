@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "./api";
+import { Buffer } from "buffer";
+
 
 type ApiResponse<T> = {
   success?: boolean;
@@ -34,15 +36,24 @@ export type PushNotificationItem = {
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   const parts = token.split(".");
   if (parts.length < 2) return null;
+
   try {
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+
     const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-    const json = atob(padded);
-    const parsed = JSON.parse(json);
+
+    const decoded = Buffer.from(padded, "base64").toString("utf-8");
+
+    const parsed = JSON.parse(decoded);
+
     return parsed && typeof parsed === "object"
       ? (parsed as Record<string, unknown>)
       : null;
-  } catch {
+
+  } catch (e) {
+    console.log("JWT decode error:", e);
     return null;
   }
 }
