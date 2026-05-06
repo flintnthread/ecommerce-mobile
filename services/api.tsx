@@ -611,6 +611,9 @@ export function subcategoriesByCategoryPath(categoryId: number): string {
   return `/api/categories/${id}/subcategories`;
 }
 
+/** Categories tree — path only (use with `api.get(...)`). */
+export const categoriesTreePath = "/api/categories/tree";
+
 // ===== ADDRESS API FUNCTIONS =====
 
 // Address interface for TypeScript
