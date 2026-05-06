@@ -98,7 +98,7 @@ export default function LanguageScreen() {
         {languages.map((item, index) => (
           <TouchableOpacity
             key={index}
-            activeOpacity={0.8}
+            activeOpacity={1}
             onPress={() => handleSelect(index)}
           >
             <View style={styles.card}>
@@ -218,7 +218,6 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     resizeMode: "contain",
-    transform: [{ scale: 1.18 }],
   },
 
   text: {

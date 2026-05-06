@@ -16,7 +16,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import api from "../services/api";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import { payWithRazorpay } from "../lib/payment/razorpayFlow";
@@ -100,6 +100,7 @@ function serverRowToReviewItem(row: ApiCartItem): ReviewItem {
 
 export default function ReviewOrdersScreen() {
   const router = useRouter();
+  const { buyNowItemId } = useLocalSearchParams<{ buyNowItemId?: string }>();
   const { tr } = useLanguage();
   const [paying, setPaying] = useState(false);
   const [apiWeightDeliveryCharge, setApiWeightDeliveryCharge] = useState<number | null>(null);
@@ -144,28 +145,29 @@ export default function ReviewOrdersScreen() {
     }, [])
   );
 
+  const visibleItems = useMemo(() => {
+    const target = String(buyNowItemId ?? "").trim();
+    if (!target) return items;
+    return items.filter((item) => item.id === target);
+  }, [buyNowItemId, items]);
+
   const subtotal = useMemo(
     () =>
-      cartSource === "server" && serverPriceSummary
-        ? serverPriceSummary.subtotal
-        : items.reduce((sum, it) => sum + it.price * it.quantity, 0),
-    [cartSource, items, serverPriceSummary]
+      visibleItems.reduce((sum, it) => sum + it.price * it.quantity, 0),
+    [visibleItems]
   );
   const productDiscount = useMemo(
     () => {
-      if (cartSource === "server" && serverPriceSummary) {
-        return serverPriceSummary.discount;
-      }
-      return items.reduce((sum, it) => {
+      return visibleItems.reduce((sum, it) => {
         if (!it.originalPrice) return sum;
         return sum + (it.originalPrice - it.price) * it.quantity;
       }, 0);
     },
-    [cartSource, items, serverPriceSummary]
+    [visibleItems]
   );
   const totalItems = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantity, 0),
-    [items]
+    () => visibleItems.reduce((sum, item) => sum + item.quantity, 0),
+    [visibleItems]
   );
 
   useEffect(() => {
@@ -192,11 +194,8 @@ export default function ReviewOrdersScreen() {
     return 99;
   }, [apiWeightDeliveryCharge, cartSource, serverPriceSummary]);
   const total = useMemo(() => {
-    if (cartSource === "server" && serverPriceSummary) {
-      return serverPriceSummary.finalTotal;
-    }
     return Math.max(0, subtotal - productDiscount + deliveryCharge);
-  }, [cartSource, deliveryCharge, productDiscount, serverPriceSummary, subtotal]);
+  }, [deliveryCharge, productDiscount, subtotal]);
 
   const updateQty = (id: string, delta: number) => {
     void (async () => {
@@ -395,13 +394,13 @@ export default function ReviewOrdersScreen() {
 
         {/* Items */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{tr("Products")} ({items.length})</Text>
+          <Text style={styles.cardTitle}>{tr("Products")} ({visibleItems.length})</Text>
 
-          {items.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <Text style={styles.itemMeta}>{tr("Your cart is empty.")}</Text>
           ) : null}
 
-          {items.map((it) => (
+          {visibleItems.map((it) => (
             <View key={it.id} style={styles.itemRow}>
               <View style={styles.itemImageWrap}>
                 <Image source={it.image} style={styles.itemImage} />

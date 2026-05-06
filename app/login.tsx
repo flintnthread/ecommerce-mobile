@@ -240,6 +240,7 @@ export default function Login() {
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const mobileRegex = /^[0-9]{10}$/;
+  const OTP_RESEND_SECONDS = 60;
 
   const sendOtpAndNavigateToOtp = useCallback(
     async (value: string) => {
@@ -250,15 +251,13 @@ export default function Login() {
           : { mobile: value };
         const data = await sendOtp(payload);
         if (data) {
-          Alert.alert(
-            tr("OTP Sent"),
-            emailRegex.test(value)
-              ? tr("OTP sent to your email")
-              : tr("OTP sent to your mobile")
-          );
           router.push({
             pathname: "/otpsection",
-            params: { input: value },
+            params: {
+              input: value,
+              resendSeconds: String(OTP_RESEND_SECONDS),
+              showSentToast: "1",
+            },
           });
         } else {
           Alert.alert(tr("Error"), tr("Failed to send OTP"));
