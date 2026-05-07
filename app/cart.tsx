@@ -37,10 +37,13 @@ import {
 } from "../lib/cartServerApi";
 import api, { productByIdPath } from "../services/api";
 import { useLanguage } from "../lib/language";
+import AwesomeAlert from "react-native-awesome-alerts";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
 const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
 const RUNNER_W = 170;
 const RUNNER_H = 64;
+const BOTTOM_TAB_RESERVED_HEIGHT = 92;
 
 type CartItemSource = "local" | "server";
 
@@ -220,6 +223,14 @@ export default function CartScreen() {
   }, [animationRange, animOpacity, animProgress]);
 
   useEffect(() => {
+  if (isSearchVisible) {
+    animOpacity.setValue(0);
+  } else {
+    animOpacity.setValue(1);
+  }
+}, [isSearchVisible]);
+
+  useEffect(() => {
     if (!isCartLoading) {
       loadingLogoScale.setValue(1);
       return;
@@ -245,7 +256,6 @@ export default function CartScreen() {
       pulse.stop();
     };
   }, [isCartLoading, loadingLogoScale]);
-
   const onHeaderLayout = (e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
     setHeaderLayout({ w, h });
@@ -320,6 +330,94 @@ export default function CartScreen() {
   const [editingColor, setEditingColor] = useState<string | null>(null);
   const [editingQty, setEditingQty] = useState(1);
   const [variantOptions, setVariantOptions] = useState<VariantOptions>({ sizes: [], colors: [] });
+const [editingImage, setEditingImage] = useState<any>(null);
+const [editingApiProduct, setEditingApiProduct] = useState<any | null>(null);
+
+useEffect(() => {
+  if (!editingApiProduct) return;
+
+  const productData =
+    editingApiProduct?.data ||
+    editingApiProduct;
+
+  const variants = Array.isArray(
+    productData?.variants
+  )
+    ? productData.variants
+    : [];
+
+  let matchedVariant: any = null;
+
+  matchedVariant = variants.find(
+    (v: any) =>
+      String(
+        v.color ??
+          v.colorName ??
+          ""
+      ).trim() ===
+        String(
+          editingColor ?? ""
+        ).trim() &&
+      String(
+        v.size ?? ""
+      ).trim() ===
+        String(
+          editingSize ?? ""
+        ).trim()
+  );
+
+  if (!matchedVariant) {
+    matchedVariant =
+      variants.find(
+        (v: any) =>
+          String(
+            v.color ??
+              v.colorName ??
+              ""
+          ).trim() ===
+          String(
+            editingColor ?? ""
+          ).trim()
+      );
+  }
+
+  if (
+    matchedVariant?.imageUrl
+  ) {
+    setEditingImage({
+      uri: matchedVariant.imageUrl,
+    });
+  } else if (
+    matchedVariant?.imagePath
+  ) {
+    setEditingImage({
+      uri:
+        matchedVariant.imagePath,
+    });
+  }
+}, [
+  editingColor,
+  editingSize,
+  editingApiProduct,
+]);
+
+
+const [alertVisible, setAlertVisible] = useState(false);
+const [alertTitle, setAlertTitle] = useState("");
+const [alertMessage, setAlertMessage] = useState("");
+const [alertAction, setAlertAction] = useState<(() => void) | null>(null);
+const showSweetAlert = (
+  title: string,
+  message: string,
+  action?: () => void
+) => {
+  setAlertTitle(title);
+  setAlertMessage(message);
+  setAlertAction(() => action || null);
+  setAlertVisible(true);
+};
+
+
   // Calculate totals (server cart uses API priceSummary when available)
   const subtotal = useMemo(() => {
     if (cartSource === "server" && serverPriceSummary) {
@@ -462,62 +560,72 @@ export default function CartScreen() {
     })();
   };
 
+  const performRemoveProduct = async (
+  id: string
+) => {
+  const item = cartItems.find(
+    (x) => x.id === id
+  );
+
+  try {
+    if (item?.serverItemId != null) {
+      await deleteCartLineServer(
+        item.serverItemId
+      );
+    } else {
+      await removeCartLine(id);
+    }
+
+    await reloadCartFromStorage();
+  } catch (e) {
+    console.log(e);
+  }
+};
+  
   // Remove product
-  const removeProduct = (id: string) => {
-    Alert.alert(
-      tr("Remove Item"),
-      tr("Are you sure you want to remove this item from your cart?"),
-      [
-        { text: tr("Cancel"), style: "cancel" },
-        {
-          text: tr("Remove"),
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              const item = cartItems.find((x) => x.id === id);
-              try {
-                if (item?.serverItemId != null) {
-                  await deleteCartLineServer(item.serverItemId);
-                } else {
-                  await removeCartLine(id);
-                }
-                await reloadCartFromStorage();
-                Alert.alert(tr("Removed"), tr("Item has been removed from your cart."));
-              } catch (e) {
-                Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not remove item.")));
-              }
-            })();
-          },
-        },
-      ]
-    );
-  };
+ const removeProduct = (
+  id: string
+) => {
+  showSweetAlert(
+    tr("Remove Item"),
+    tr(
+      "Are you sure you want to remove this item from your cart?"
+    ),
+    () => {
+      void performRemoveProduct(id);
+    }
+  );
+};
 
-  const handleClearServerCart = () => {
-    Alert.alert(
+const handleClearServerCart =
+  () => {
+    showSweetAlert(
       tr("Clear cart"),
-      tr("Remove all items from your cart?"),
-      [
-        { text: tr("Cancel"), style: "cancel" },
-        {
-          text: tr("Clear all"),
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              try {
-                await deleteCartClearServer();
-                await reloadCartFromStorage();
-              } catch (e) {
-                Alert.alert(tr("Cart"), tr(parseCartApiError(e, "Could not clear cart.")));
-              }
-            })();
-          },
-        },
-      ]
+      tr(
+        "Remove all items from your cart?"
+      ),
+      () => {
+        void (async () => {
+          try {
+            if (
+              cartSource ===
+              "server"
+            ) {
+              await deleteCartClearServer();
+            } else {
+              await saveCart([]);
+            }
+
+            await reloadCartFromStorage();
+          } catch (e) {
+            console.log(e);
+          }
+        })();
+      }
     );
   };
 
-  // Apply coupon
+
   const handleApplyCoupon = () => {
     if (!couponCode.trim()) {
       Alert.alert(tr("Invalid Coupon"), tr("Please enter a coupon code."));
@@ -542,7 +650,6 @@ export default function CartScreen() {
     }
   };
 
-  // Remove coupon
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
     setCouponDiscount(0);
@@ -550,7 +657,6 @@ export default function CartScreen() {
     Alert.alert(tr("Coupon Removed"), tr("Coupon has been removed."));
   };
 
-  // Proceed to checkout
   const handleCheckout = () => {
     if (cartItems.length === 0) {
       Alert.alert(tr("Empty Cart"), tr("Your cart is empty. Add some items first!"));
@@ -593,63 +699,199 @@ export default function CartScreen() {
   };
 
   const handleOpenVariantEditor = (item: CartItem) => {
-    void (async () => {
-      setVariantLoading(true);
-      setEditingItemId(item.id);
-      setEditingQty(item.quantity);
-      setEditingSize(item.size ?? null);
-      setEditingColor(item.color ?? null);
-      setIsVariantModalVisible(true);
+  void (async () => {
+    setVariantLoading(true);
 
-      let options: VariantOptions = {
-        sizes: item.size ? [item.size] : [],
-        colors: item.color ? [item.color] : [],
-      };
+    setEditingItemId(item.id);
 
-      const numericProductId = Math.floor(Number(item.productDetailId));
-      if (Number.isFinite(numericProductId) && numericProductId > 0) {
-        try {
-          const { data } = await api.get(productByIdPath(numericProductId));
-          options = deriveVariantOptions(data, item);
-        } catch {
-          // Keep fallback options when detail fetch fails.
+    setEditingQty(item.quantity);
+
+    setEditingSize(item.size ?? null);
+
+    setEditingColor(item.color ?? null);
+
+    setIsVariantModalVisible(true);
+
+    let options: VariantOptions = {
+      sizes: item.size ? [item.size] : [],
+      colors: item.color ? [item.color] : [],
+    };
+
+    const numericProductId = Math.floor(
+      Number(item.productDetailId)
+    );
+
+    if (
+      Number.isFinite(numericProductId) &&
+      numericProductId > 0
+    ) {
+      try {
+        const { data } = await api.get(
+          productByIdPath(numericProductId)
+        );
+
+        setEditingApiProduct(data);
+
+        options = deriveVariantOptions(
+          data,
+          item
+        );
+
+        const variants = Array.isArray(
+          data?.variants
+        )
+          ? data.variants
+          : [];
+
+        const gallery = Array.isArray(
+          data?.images
+        )
+          ? data.images.map((img: any) => ({
+              uri:
+                img.imageUrl ||
+                img.imagePath,
+            }))
+          : [];
+
+        let matchedVariant: any = null;
+
+        matchedVariant = variants.find(
+          (v: any) =>
+            String(
+              v.color ??
+              v.colorName ??
+              ""
+            ).trim() ===
+              String(
+                item.color ?? ""
+              ).trim() &&
+            String(
+              v.size ?? ""
+            ).trim() ===
+              String(
+                item.size ?? ""
+              ).trim()
+        );
+
+        if (!matchedVariant) {
+          matchedVariant =
+            variants[0];
         }
-      }
-      setVariantOptions(options);
-      setVariantLoading(false);
-    })();
-  };
 
-  const handleSaveVariantSelection = () => {
+        if (
+          matchedVariant?.imageUrl
+        ) {
+          setEditingImage({
+            uri: matchedVariant.imageUrl,
+          });
+        } else if (
+          matchedVariant?.imagePath
+        ) {
+          setEditingImage({
+            uri:
+              matchedVariant.imagePath,
+          });
+        } else if (
+          gallery.length > 0
+        ) {
+          setEditingImage(
+            gallery[0]
+          );
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    }
+
+    setVariantOptions(options);
+
+    setVariantLoading(false);
+  })();
+};
+
+  const handleSaveVariantSelection =
+  () => {
     void (async () => {
-      const itemId = editingItemId;
+      const itemId =
+        editingItemId;
+
       if (!itemId) return;
-      const cartItem = cartItems.find((x) => x.id === itemId);
+
+      const cartItem =
+        cartItems.find(
+          (x) => x.id === itemId
+        );
+
       if (!cartItem) return;
 
-      if (cartItem.source === "server") {
-        Alert.alert(
-          tr("Update variant"),
-          tr("Size/Color update is available from product details for signed-in cart.")
-        );
-        setIsVariantModalVisible(false);
-        return;
-      }
+      if (
+  cartItem.source ===
+  "server"
+) {
+  const updatedCartItems =
+    cartItems.map((line) =>
+      line.id === itemId
+        ? {
+            ...line,
+            quantity: Math.max(
+              1,
+              editingQty
+            ),
+            size:
+              editingSize ??
+              undefined,
+            color:
+              editingColor ??
+              undefined,
+            image:
+              editingImage ??
+              line.image,
+          }
+        : line
+    );
 
-      const lines = await loadCart();
-      const nextLines = lines.map((line) =>
-        line.id === itemId
-          ? {
-              ...line,
-              quantity: Math.max(1, editingQty),
-              size: editingSize ?? undefined,
-              color: editingColor ?? undefined,
-            }
-          : line
-      );
+  setCartItems(updatedCartItems);
+
+  setIsVariantModalVisible(
+    false
+  );
+
+  return;
+}
+
+      const lines =
+        await loadCart();
+
+      const nextLines =
+        lines.map((line) =>
+          line.id === itemId
+            ? {
+                ...line,
+                quantity:
+                  Math.max(
+                    1,
+                    editingQty
+                  ),
+                size:
+                  editingSize ??
+                  undefined,
+                color:
+                  editingColor ??
+                  undefined,
+                imageUri:
+                  editingImage?.uri ??
+                  line.imageUri,
+              }
+            : line
+        );
+
       await saveCart(nextLines);
+
       await reloadCartFromStorage();
-      setIsVariantModalVisible(false);
+
+      setIsVariantModalVisible(
+        false
+      );
     })();
   };
 
@@ -663,7 +905,7 @@ export default function CartScreen() {
           mrp: item.originalPrice ?? item.price,
         });
         if (nowWishlisted) {
-          await removeProduct(item.id);
+          await performRemoveProduct(item.id);
           Alert.alert(
             tr("Wishlist"),
             tr("Item added to wishlist and removed from cart.")
@@ -696,7 +938,7 @@ export default function CartScreen() {
           </TouchableOpacity>
         </View>
 
-        {animationRange ? (
+        {animationRange && !isSearchVisible ? (
           <>
             <Animated.View
               pointerEvents="none"
@@ -749,15 +991,35 @@ export default function CartScreen() {
       )}
 
       <View style={styles.headerIcons}>
-        <TouchableOpacity
-          onPress={() => setIsSearchVisible((prev) => !prev)}
-          style={styles.headerIcon}
-          accessibilityRole="button"
-          accessibilityLabel={tr("Toggle search")}
-          onLayout={onSearchIconLayout}
-        >
-          <Ionicons name="search-outline" size={20} color="#ef7b1a" />
-        </TouchableOpacity>
+        {!isSearchVisible ? (
+  <TouchableOpacity
+    onPress={() => setIsSearchVisible(true)}
+    style={styles.headerIcon}
+    accessibilityRole="button"
+    accessibilityLabel={tr("Toggle search")}
+    onLayout={onSearchIconLayout}
+  >
+    <Ionicons
+      name="search-outline"
+      size={20}
+      color="#ef7b1a"
+    />
+  </TouchableOpacity>
+) : (
+  <TouchableOpacity
+    onPress={() => {
+      setIsSearchVisible(false);
+      setHeaderSearchQuery("");
+    }}
+    style={styles.headerIcon}
+  >
+    <Ionicons
+      name="close-outline"
+      size={22}
+      color="#ef7b1a"
+    />
+  </TouchableOpacity>
+)}
 
         {/* Wishlist Icon */}
         <TouchableOpacity
@@ -783,9 +1045,11 @@ export default function CartScreen() {
         style={styles.content}
         contentContainerStyle={[
           styles.contentContainer,
-          cartItems.length > 0 ? { paddingBottom: Math.max(24, footerHeight + 24) } : null,
+          cartItems.length > 0
+            ? { paddingBottom: Math.max(24, footerHeight + BOTTOM_TAB_RESERVED_HEIGHT + 24) }
+            : { paddingBottom: BOTTOM_TAB_RESERVED_HEIGHT + 24 },
         ]}
-        showsVerticalScrollIndicator={true}
+        showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
       >
         {isCartLoading && cartItems.length === 0 ? (
@@ -804,6 +1068,18 @@ export default function CartScreen() {
           </View>
         ) : cartItems.length === 0 ? (
           <View style={styles.emptyContainer}>
+
+          <Image
+  source={runnerBoyCartImg}
+  style={{
+    width: 220,
+    height: 120,
+    opacity: 0.12,
+    position: "absolute",
+    top: 90,
+  }}
+  resizeMode="contain"
+/>
             <View style={styles.emptyIcon}>
               <Ionicons name="cart-outline" size={80} color="#E0E0E0" />
             </View>
@@ -815,7 +1091,7 @@ export default function CartScreen() {
               style={styles.shopNowButton}
               onPress={() => router.push("/home")}
             >
-              <Text style={styles.shopNowButtonText}>{tr("Shop Now")}</Text>
+<Text style={styles.shopNowButtonText}>{tr("Start")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1117,6 +1393,8 @@ export default function CartScreen() {
         </View>
       )}
 
+      <HomeBottomTabBar cartBadgeCount={totalItems} />
+
       <Modal
         visible={isVariantModalVisible}
         transparent
@@ -1131,85 +1409,184 @@ export default function CartScreen() {
             >
               <Ionicons name="close" size={24} color="#6B7280" />
             </TouchableOpacity>
-            {editingItemId ? (
-              <>
-                <Text style={styles.variantTitle}>{tr("Select Size")}</Text>
-                <View style={styles.variantOptionsRow}>
-                  {(variantOptions.sizes.length ? variantOptions.sizes : [editingSize ?? "M"]).map((size) => (
-                    <TouchableOpacity
-                      key={`size-${size}`}
-                      style={[
-                        styles.variantChip,
-                        editingSize === size && styles.variantChipActive,
-                      ]}
-                      onPress={() => setEditingSize(size)}
-                    >
-                      <Text
-                        style={[
-                          styles.variantChipText,
-                          editingSize === size && styles.variantChipTextActive,
-                        ]}
-                      >
-                        {size}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={styles.variantTitle}>{tr("Select Color")}</Text>
-                <View style={styles.variantOptionsRow}>
-                  {(variantOptions.colors.length ? variantOptions.colors : [editingColor ?? "Default"]).map((color) => (
-                    <TouchableOpacity
-                      key={`color-${color}`}
-                      style={[
-                        styles.variantChip,
-                        editingColor === color && styles.variantChipActive,
-                      ]}
-                      onPress={() => setEditingColor(color)}
-                    >
-                      <Text
-                        style={[
-                          styles.variantChipText,
-                          editingColor === color && styles.variantChipTextActive,
-                        ]}
-                      >
-                        {color}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={styles.variantTitle}>{tr("Qty")}</Text>
-                <View style={styles.variantQtyRow}>
-                  <TouchableOpacity
-                    style={styles.variantQtyBtn}
-                    onPress={() => setEditingQty((prev) => Math.max(1, prev - 1))}
-                  >
-                    <Ionicons name="remove" size={16} color="#111827" />
-                  </TouchableOpacity>
-                  <Text style={styles.variantQtyValue}>{editingQty}</Text>
-                  <TouchableOpacity
-                    style={styles.variantQtyBtn}
-                    onPress={() => setEditingQty((prev) => prev + 1)}
-                  >
-                    <Ionicons name="add" size={16} color="#111827" />
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.variantSaveButton}
-                  onPress={handleSaveVariantSelection}
-                  disabled={variantLoading}
-                >
-                  <Text style={styles.variantSaveButtonText}>
-                    {variantLoading ? tr("Loading...") : tr("Done")}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : null}
+      {editingItemId ? (
+        <>
+          <View
+            style={{
+              alignItems: "center",
+              marginBottom: 18,
+            }}
+          >
+            <Image
+              source={
+                editingImage ||
+                require("../assets/images/look1.png")
+              }
+              style={{
+                width: 140,
+                height: 140,
+                borderRadius: 14,
+                backgroundColor: "#F3F4F6",
+              }}
+              resizeMode="cover"
+            />
           </View>
-        </View>
-      </Modal>
+
+          <Text style={styles.variantTitle}>
+            {tr("Select Size")}
+          </Text>
+
+          <View style={styles.variantOptionsRow}>
+            {(
+              variantOptions.sizes.length
+                ? variantOptions.sizes
+                : [editingSize ?? "M"]
+            ).map((size) => (
+              <TouchableOpacity
+                key={`size-${size}`}
+                style={[
+                  styles.variantChip,
+                  editingSize === size &&
+                    styles.variantChipActive,
+                ]}
+                onPress={() =>
+                  setEditingSize(size)
+                }
+              >
+                <Text
+                  style={[
+                    styles.variantChipText,
+                    editingSize === size &&
+                      styles.variantChipTextActive,
+                  ]}
+                >
+                  {size}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.variantTitle}>
+            {tr("Select Color")}
+          </Text>
+
+          <View style={styles.variantOptionsRow}>
+            {(
+              variantOptions.colors.length
+                ? variantOptions.colors
+                : [editingColor ?? "Default"]
+            ).map((color) => (
+              <TouchableOpacity
+                key={`color-${color}`}
+                style={[
+                  styles.variantChip,
+                  editingColor === color &&
+                    styles.variantChipActive,
+                ]}
+                onPress={() =>
+                  setEditingColor(color)
+                }
+              >
+                <Text
+                  style={[
+                    styles.variantChipText,
+                    editingColor === color &&
+                      styles.variantChipTextActive,
+                  ]}
+                >
+                  {color}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.variantTitle}>
+            {tr("Qty")}
+          </Text>
+
+          <View style={styles.variantQtyRow}>
+            <TouchableOpacity
+              style={styles.variantQtyBtn}
+              onPress={() =>
+                setEditingQty((prev) =>
+                  Math.max(1, prev - 1)
+                )
+              }
+            >
+              <Ionicons
+                name="remove"
+                size={16}
+                color="#111827"
+              />
+            </TouchableOpacity>
+
+            <Text style={styles.variantQtyValue}>
+              {editingQty}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.variantQtyBtn}
+              onPress={() =>
+                setEditingQty(
+                  (prev) => prev + 1
+                )
+              }
+            >
+              <Ionicons
+                name="add"
+                size={16}
+                color="#111827"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={styles.variantSaveButton}
+            onPress={
+              handleSaveVariantSelection
+            }
+            disabled={variantLoading}
+          >
+            <Text
+              style={
+                styles.variantSaveButtonText
+              }
+            >
+              {variantLoading
+                ? tr("Loading...")
+                : tr("Done")}
+            </Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+
+
+      <AwesomeAlert
+  show={alertVisible}
+  showProgress={false}
+  title={alertTitle}
+  message={alertMessage}
+  closeOnTouchOutside={false}
+  closeOnHardwareBackPress={false}
+  showCancelButton={true}
+  showConfirmButton={true}
+  cancelText="Cancel"
+  confirmText="OK"
+  confirmButtonColor="#E97A1F"
+  onCancelPressed={() => {
+    setAlertVisible(false);
+  }}
+  onConfirmPressed={() => {
+    setAlertVisible(false);
+
+    if (alertAction) {
+      alertAction();
+    }
+  }}
+/>
+    </View>
+  </View>
+</Modal>
     </View>
   );
 }
@@ -1700,7 +2077,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     position: "absolute",
-    bottom: 0,
+    bottom: BOTTOM_TAB_RESERVED_HEIGHT,
     left: 0,
     right: 0,
     backgroundColor: "#FFFFFF",
