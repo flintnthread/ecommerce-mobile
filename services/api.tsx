@@ -614,6 +614,86 @@ export function subcategoriesByCategoryPath(categoryId: number): string {
 /** Categories tree — path only (use with `api.get(...)`). */
 export const categoriesTreePath = "/api/categories/tree";
 
+/** Sizes — path only (use with `api.get(...)`). */
+export const sizesPath = "/api/sizes";
+
+/** Colors — path only (use with `api.get(...)`). */
+export const colorsPath = "/api/colors";
+
+/** Gender — path only (use with `api.get(...)`). */
+export const genderPath = "/api/gender";
+
+/** Prices — path only (use with `api.get(...)`). */
+export const pricesPath = "/api/prices";
+
+/** Rating — path only (use with `api.get(...)`). */
+export const ratingPath = "/api/rating";
+
+// ===== PRODUCT FILTER API FUNCTIONS =====
+
+/** Filter products by price range */
+export const filterProductsByPriceRange = async (
+  minPrice?: number,
+  maxPrice?: number,
+  page?: number,
+  size?: number,
+  sortBy?: string,
+  sortDirection?: string
+) => {
+  const params = new URLSearchParams();
+  if (minPrice !== undefined) params.append('minPrice', minPrice.toString());
+  if (maxPrice !== undefined) params.append('maxPrice', maxPrice.toString());
+  if (page !== undefined) params.append('page', page.toString());
+  if (size !== undefined) params.append('size', size.toString());
+  if (sortBy) params.append('sortBy', sortBy);
+  if (sortDirection) params.append('sortDirection', sortDirection);
+
+  const response = await api.get(`/api/products/filter/price-range?${params.toString()}`);
+  return response.data;
+};
+
+/** Filter products by rating */
+export const filterProductsByRating = async (
+  minRating?: number,
+  page?: number,
+  size?: number,
+  sortBy?: string,
+  sortDirection?: string
+) => {
+  const params = new URLSearchParams();
+  if (minRating !== undefined) params.append('minRating', minRating.toString());
+  if (page !== undefined) params.append('page', page.toString());
+  if (size !== undefined) params.append('size', size.toString());
+  if (sortBy) params.append('sortBy', sortBy);
+  if (sortDirection) params.append('sortDirection', sortDirection);
+
+  const response = await api.get(`/api/products/filter/rating?${params.toString()}`);
+  return response.data;
+};
+
+/** Filter products by price and rating combined */
+export const filterProductsByPriceAndRating = async (
+  minPrice?: number,
+  maxPrice?: number,
+  minRating?: number,
+  page?: number,
+  size?: number,
+  sortBy?: string,
+  sortDirection?: string
+) => {
+  const params = new URLSearchParams();
+  if (minPrice !== undefined) params.append('minPrice', minPrice.toString());
+  if (maxPrice !== undefined) params.append('maxPrice', maxPrice.toString());
+  if (minRating !== undefined) params.append('minRating', minRating.toString());
+  if (page !== undefined) params.append('page', page.toString());
+  if (size !== undefined) params.append('size', size.toString());
+  if (sortBy) params.append('sortBy', sortBy);
+  if (sortDirection) params.append('sortDirection', sortDirection);
+
+  const response = await api.get(`/api/products/filter/price-rating?${params.toString()}`);
+  return response.data;
+};
+
 // ===== ADDRESS API FUNCTIONS =====
 
 // Address interface for TypeScript

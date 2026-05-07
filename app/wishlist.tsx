@@ -634,7 +634,16 @@ export default function WishlistScreen() {
         <View style={styles.section}>
           {wishlistLoading ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color="#ef7b1a" />
+              <Animated.Image
+                source={require("../assets/MainCatImages/images/fntfav.png")}
+                style={[
+                  styles.loadingFavicon,
+                  {
+                    transform: [{ scale: emptyHeartPulse }],
+                  },
+                ]}
+                resizeMode="contain"
+              />
               <Text style={styles.loadingText}>Loading your wishlist…</Text>
             </View>
           ) : displayedWishlistItems.length === 0 ? (
@@ -1002,9 +1011,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   loadingText: {
-    fontSize: 15,
-    color: "#64748b",
-    marginTop: 8,
+    fontSize: 14,
+    color: "#ef7b1a",
+    fontWeight: "500",
+  },
+  loadingFavicon: {
+    width: 62,
+    height: 62,
+    marginBottom: 16,
+    justifyContent: "center",
+    alignItems: "center",
   },
   emptyContainer: {
     flex: 1,
