@@ -8,7 +8,6 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -27,12 +26,53 @@ export default function OTP() {
       : Array.isArray(params.input)
       ? params.input[0]
       : "";
+  const showSentToastParam =
+    typeof params.showSentToast === "string"
+      ? params.showSentToast
+      : Array.isArray(params.showSentToast)
+      ? params.showSentToast[0]
+      : "";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    type: "success" | "error";
+    message: string;
+  }>({
+    visible: false,
+    type: "success",
+    message: "",
+  });
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resendSecondsParam =
+    typeof params.resendSeconds === "string"
+      ? Number(params.resendSeconds)
+      : Array.isArray(params.resendSeconds)
+      ? Number(params.resendSeconds[0])
+      : NaN;
+  const RESEND_COOLDOWN_SECONDS =
+    Number.isFinite(resendSecondsParam) && resendSecondsParam > 0
+      ? Math.floor(resendSecondsParam)
+      : 60;
+  const [resendCountdown, setResendCountdown] = useState(
+    RESEND_COOLDOWN_SECONDS
+  );
 
 const inputs = useRef<(TextInput | null)[]>([]);
   const hiddenInput = useRef<any>(null);
+
+  const showToast = (type: "success" | "error", message: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setToast({ visible: true, type, message });
+    toastTimerRef.current = setTimeout(() => {
+      setToast((prev) => ({ ...prev, visible: false }));
+    }, 2200);
+  };
 
   useEffect(() => {
     setTimeout(() => {
@@ -40,6 +80,36 @@ const inputs = useRef<(TextInput | null)[]>([]);
       hiddenInput.current?.focus();
     }, 300);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (showSentToastParam === "1") {
+      showToast("success", "OTP sent successfully");
+    }
+  }, [showSentToastParam]);
+
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setResendCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [resendCountdown]);
+
+  const formatCountdown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
 
   const maskValue = (value: string) => {
     if (!value) return "";
@@ -99,7 +169,7 @@ const inputs = useRef<(TextInput | null)[]>([]);
     const enteredOtp = otp.join("");
 
     if (enteredOtp.length !== 6) {
-      Alert.alert("Error", "Please enter complete OTP");
+      showToast("error", "Please enter complete OTP");
       return;
     }
 
@@ -115,16 +185,17 @@ const inputs = useRef<(TextInput | null)[]>([]);
       if (data?.success) {
         await AsyncStorage.setItem("token", data.token || "");
         await AsyncStorage.setItem(SHOW_POST_LOGIN_PROMO_KEY, "1");
-
-        // DIRECT HOME PAGE
-        router.replace("/home");
+        showToast("success", "OTP verified successfully");
+        setTimeout(() => {
+          router.replace("/home");
+        }, 300);
         return;
       } else {
-        Alert.alert("Error", data?.message || "Invalid OTP");
+        showToast("error", data?.message || "Invalid OTP");
       }
     } catch (error: any) {
       console.log("Verify OTP Error:", error);
-      Alert.alert("Error", "OTP verification failed");
+      showToast("error", "OTP verification failed");
     } finally {
       setIsVerifying(false);
     }
@@ -132,26 +203,43 @@ const inputs = useRef<(TextInput | null)[]>([]);
 
   // RESEND OTP
   const handleResend = async () => {
+    if (resendCountdown > 0 || isResending) return;
+
     try {
+      setIsResending(true);
       const payload = userInput.includes("@")
         ? { email: userInput }
         : { mobile: userInput };
 
       await sendOtp(payload);
 
-      Alert.alert("Success", "OTP resent successfully");
+      showToast("success", "OTP resent successfully");
 
       setOtp(["", "", "", "", "", ""]);
 
       inputs.current.forEach((input) => input?.clear());
       inputs.current[0]?.focus();
+      setResendCountdown(RESEND_COOLDOWN_SECONDS);
     } catch (error) {
-      Alert.alert("Error", "Failed to resend OTP");
+      showToast("error", "Failed to resend OTP");
+    } finally {
+      setIsResending(false);
     }
   };
 
   return (
     <View style={styles.container}>
+      {toast.visible ? (
+        <View
+          style={[
+            styles.toastContainer,
+            toast.type === "success" ? styles.toastSuccess : styles.toastError,
+          ]}
+        >
+          <Text style={styles.toastText}>{toast.message}</Text>
+        </View>
+      ) : null}
+
       <Text style={styles.title}>Enter Verification Code</Text>
 
       <Text style={styles.subtitle}>
@@ -198,8 +286,22 @@ ref={(ref: TextInput | null) => {
 
       <Text style={styles.resendText}>Didn’t receive code?</Text>
 
-      <TouchableOpacity onPress={handleResend}>
-        <Text style={styles.resendLink}>Resend</Text>
+      <TouchableOpacity
+        onPress={handleResend}
+        disabled={resendCountdown > 0 || isResending}
+      >
+        <Text
+          style={[
+            styles.resendLink,
+            (resendCountdown > 0 || isResending) && styles.resendLinkDisabled,
+          ]}
+        >
+          {isResending
+            ? "Resending..."
+            : resendCountdown > 0
+            ? `Resend in ${formatCountdown(resendCountdown)}`
+            : "Resend OTP"}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -269,5 +371,29 @@ const styles = StyleSheet.create({
     color: "#4b2be3",
     marginTop: 8,
     fontWeight: "700",
+  },
+  resendLinkDisabled: {
+    color: "#9d8ef2",
+  },
+  toastContainer: {
+    position: "absolute",
+    top: 70,
+    left: 20,
+    right: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    zIndex: 50,
+  },
+  toastSuccess: {
+    backgroundColor: "#16a34a",
+  },
+  toastError: {
+    backgroundColor: "#dc2626",
+  },
+  toastText: {
+    color: "#fff",
+    fontWeight: "700",
+    textAlign: "center",
   },
 });

@@ -29,10 +29,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import api, {
+  categoriesTreePath,
+  productsByMainCategoryFeedPath,
   productsByMainCategoryPath,
-  productsBySubcategoryPath,
+  productsSearchPath,
   searchProductsPath,
   searchSuggestionsPath,
+  subcategoriesByCategoryPath,
+  WISHLIST_ADD_PATH,
+  WISHLIST_REMOVE_PATH,
   WISHLIST_USER_PATH,
 } from "../services/api";
 import { addToCartPtbOrLocal, getCartUnitCount } from "../lib/cartServerApi";
@@ -159,6 +164,10 @@ type MorePicksGridItem = {
   discount?: string;
   /** Backend `ProductVariantDTO.id` for wishlist add. */
   variantId?: number;
+  /** Stock flag from API variant (best-effort). */
+  inStock?: boolean;
+  /** Remaining units when backend sends quantity/stock (best-effort). */
+  stockQty?: number;
 };
 
 type MorePicksApiImage = {
@@ -176,6 +185,11 @@ type MorePicksApiVariant = {
   finalPrice?: number | string | null;
   discountPercentage?: number | null;
   inStock?: boolean | null;
+  /** Some APIs send `quantity` / `stock` / `availableQuantity` for on-hand units. */
+  quantity?: number | string | null;
+  stock?: number | string | boolean | null;
+  availableQuantity?: number | string | null;
+  available?: boolean | null;
 };
 
 type MorePicksApiProduct = {
@@ -674,6 +688,40 @@ function pickMorePicksVariant(p: MorePicksApiProduct): MorePicksApiVariant | und
   return inStock ?? vs[0];
 }
 
+function readVariantStockQty(v?: MorePicksApiVariant | null): number | null {
+  if (!v) return null;
+  const candidates = [v.quantity, v.availableQuantity, v.stock];
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isFinite(c)) return Math.max(0, Math.floor(c));
+    if (typeof c === "string" && c.trim()) {
+      const n = Number(c);
+      if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+    }
+  }
+  return null;
+}
+
+function readVariantInStock(v?: MorePicksApiVariant | null): boolean {
+  if (!v) return true;
+  const qty = readVariantStockQty(v);
+  if (qty != null) return qty > 0;
+  if (typeof v.inStock === "boolean") return v.inStock;
+  if (typeof v.available === "boolean") return v.available;
+  if (typeof v.stock === "boolean") return v.stock;
+  return true;
+}
+
+function stockUiLabel(input: { inStock?: boolean; stockQty?: number } | null): {
+  text: string;
+  tone: "ok" | "low" | "out";
+} {
+  const inStock = input?.inStock !== false;
+  const qty = typeof input?.stockQty === "number" ? input.stockQty : null;
+  if (!inStock || qty === 0) return { text: "Out of stock", tone: "out" };
+  if (qty != null && qty > 0 && qty <= 5) return { text: `Only ${qty} left`, tone: "low" };
+  return { text: "In stock", tone: "ok" };
+}
+
 /** Backend may send `status: 1` / `"active"` / `"ACTIVE"`; treat unknown or empty as visible. */
 function apiProductRowCountsAsActive(status: unknown): boolean {
   if (status === null || status === undefined) return true;
@@ -808,6 +856,9 @@ function mapMorePicksApiToGrid(
         ? Math.floor(variantIdNum)
         : undefined;
 
+    const stockQty = readVariantStockQty(v);
+    const inStock = readVariantInStock(v);
+
     out.push({
       id: String(idNum),
       cartId: String(idNum),
@@ -818,6 +869,8 @@ function mapMorePicksApiToGrid(
       oldPrice,
       discount,
       variantId,
+      inStock,
+      stockQty: stockQty ?? undefined,
     });
   }
 
@@ -1681,6 +1734,10 @@ export default function Home() {
   const [genderModalVisible, setGenderModalVisible] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
+  // Categories tree state for filter modal
+  const [categoriesTree, setCategoriesTree] = useState<any[]>([]);
+  const [categoriesTreeLoading, setCategoriesTreeLoading] = useState(false);
+
   const [selectedSort, setSelectedSort] = useState("Relevance");
   const [selectedGender, setSelectedGender] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
@@ -1921,9 +1978,8 @@ export default function Home() {
     console.log('Fetching subcategories for parent ID:', parentId);
     setSubcategoriesLoading(true);
     try {
-      // Use localhost:8080 directly instead of the default base URL
-      const response = await fetch(`http://localhost:8080/api/categories/${parentId}/subcategories`);
-      const data = await response.json();
+      const response = await api.get(`/api/categories/${parentId}/subcategories`);
+      const data = response.data;
       console.log('API response:', data);
       if (Array.isArray(data)) {
         setSubcategories(data);
@@ -1937,6 +1993,28 @@ export default function Home() {
       setSubcategories([]);
     } finally {
       setSubcategoriesLoading(false);
+    }
+  }, []);
+
+  const fetchCategoriesTree = useCallback(async () => {
+    console.log('Fetching categories tree');
+    setCategoriesTreeLoading(true);
+    try {
+      const response = await api.get(categoriesTreePath);
+      const data = response.data;
+      console.log('Categories tree API response:', data);
+      if (Array.isArray(data)) {
+        setCategoriesTree(data);
+        console.log('Categories tree set:', data.length, 'items');
+      } else {
+        console.log('Categories tree API response is not an array:', data);
+        setCategoriesTree([]);
+      }
+    } catch (error) {
+      console.error('Error fetching categories tree:', error);
+      setCategoriesTree([]);
+    } finally {
+      setCategoriesTreeLoading(false);
     }
   }, []);
 
@@ -2405,6 +2483,8 @@ export default function Home() {
     (item: MorePicksGridItem, index: number) => {
       const ratingValue = Number.parseFloat(String(item.rating).split(" ")[0]) || 0;
       const col = index % 2;
+      const stock = stockUiLabel(item);
+      const addDisabled = stock.tone === "out";
       return (
         <View style={styles.latestGridCell} key={`mp-${item.id}-${index}`}>
           <TouchableOpacity
@@ -2474,13 +2554,42 @@ export default function Home() {
                   <Ionicons name="star" size={14} color="#FFFFFF" />
                   <Text style={styles.latestGridRatingText}>{ratingValue.toFixed(1)}</Text>
                 </View>
+                <View
+                  style={[
+                    styles.latestGridStockPill,
+                    stock.tone === "ok"
+                      ? styles.latestGridStockPillOk
+                      : stock.tone === "low"
+                        ? styles.latestGridStockPillLow
+                        : styles.latestGridStockPillOut,
+                  ]}
+                  accessibilityRole="text"
+                  accessibilityLabel={`Stock: ${stock.text}`}
+                >
+                  <Text
+                    style={[
+                      styles.latestGridStockText,
+                      stock.tone === "out" ? styles.latestGridStockTextOut : null,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {stock.text}
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.latestGridAddCartRow}>
                 <TouchableOpacity
-                  style={styles.latestGridAddCartButton}
+                  style={[
+                    styles.latestGridAddCartButton,
+                    addDisabled ? styles.latestGridAddCartButtonDisabled : null,
+                  ]}
                   activeOpacity={0.9}
                   onPress={() => {
+                    if (addDisabled) {
+                      Alert.alert("Out of stock", `${item.name} is currently unavailable.`);
+                      return;
+                    }
                     void (async () => {
                       const pid = Math.floor(Number(item.cartId ?? item.id));
                       const r = await addToCartPtbOrLocal({
@@ -2512,8 +2621,11 @@ export default function Home() {
                       }, 0);
                     })();
                   }}
+                  disabled={addDisabled}
                   accessibilityRole="button"
-                  accessibilityLabel={`Add ${item.name} to cart`}
+                  accessibilityLabel={
+                    addDisabled ? `${item.name} is out of stock` : `Add ${item.name} to cart`
+                  }
                 >
                   <Text style={styles.latestGridAddCartButtonText}>Add to Cart</Text>
                 </TouchableOpacity>
@@ -2917,31 +3029,19 @@ useEffect(() => {
     "Category",
     "Gender",
     "Color",
-    "Fabric",
-    "Dial Shape",
     "Size",
     "Price",
     "Rating",
-    "Occassion",
-    "combo of",
-    "Kurta Fabric",
-    "Dupatta Color",
   ];
 
   const filterOptions: Record<string, string[]> = {
     Category: categoryOptions,
     Identity: ["Women", "Men", "Girls", "Boys"],
     Color: ["Black", "Blue", "Pink", "Red", "White", "Green"],
-    Fabric: ["Cotton", "Rayon", "Silk", "Polyester", "Linen"],
-    "Dial Shape": ["Round", "Square", "Oval", "Rectangle"],
     Size: ["XS", "S", "M", "L", "XL", "XXL"],
     Price: ["Below ₹299", "₹300 - ₹499", "₹500 - ₹999", "Above ₹1000"],
     Rating: ["4★ & above", "3★ & above", "2★ & above"],
-    Occassion: ["Casual", "Party", "Festive", "Wedding"],
-    "combo of": ["Pack of 1", "Pack of 2", "Pack of 3", "Pack of 5"],
-    "Kurta Fabric": ["Cotton", "Silk", "Rayon", "Georgette"],
-    "Dupatta Color": ["Pink", "Red", "Yellow", "Blue", "White"],
-  };
+    };
 
   const handleFilterPress = (label: string) => {
     if (label === "Sort") setSortModalVisible(true);
@@ -2953,7 +3053,11 @@ useEffect(() => {
       }
     }
     if (label === "Gender") setGenderModalVisible(true);
-    if (label === "Filter") setFilterModalVisible(true);
+    if (label === "Filter") {
+      setFilterModalVisible(true);
+      // Fetch categories tree when filter modal opens
+      fetchCategoriesTree();
+    }
   };
 
   const toggleCategory = (item: string) => {
@@ -2978,6 +3082,20 @@ useEffect(() => {
         [section]: [...existingValues, item],
       });
     }
+  };
+
+  const handleCategorySelection = (categoryName: string, categoryId: number) => {
+    // Navigate to subcatProducts with the selected category
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        subCategory: categoryName,
+        categoryId: String(categoryId),
+      },
+    } as any);
+    
+    // Close the filter modal
+    setFilterModalVisible(false);
   };
 
   const clearCategoryModalSelections = () => {
@@ -5113,9 +5231,21 @@ const categoryData = [
                           styles.homeBrowseDeptChip,
                           selected && styles.homeBrowseDeptChipSelected,
                         ]}
-                        onPress={() =>
-                          setSelectedBrowseMainCategoryId(selected ? null : cat.id)
-                        }
+                        onPress={async () => {
+                          const newSelectedId = selected ? null : cat.id;
+                          setSelectedBrowseMainCategoryId(newSelectedId);
+                          
+                          // Fetch subcategories when a department is selected
+                          if (newSelectedId) {
+                            const categoryId = Number(newSelectedId);
+                            if (Number.isFinite(categoryId) && categoryId > 0) {
+                              await fetchSubcategories(categoryId);
+                            }
+                          } else {
+                            // Clear subcategories when deselected
+                            setSubcategories([]);
+                          }
+                        }}
                         activeOpacity={0.85}
                       >
                         <Text
@@ -5151,7 +5281,15 @@ const categoryData = [
             </View>
 
             <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-              {displayedCategories.map((item, index) => (
+              {subcategoriesLoading ? (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#A0208C" />
+                  <Text style={{ marginTop: 10, color: '#666', fontSize: 14 }}>
+                    Loading categories...
+                  </Text>
+                </View>
+              ) : (
+                displayedCategories.map((item, index) => (
                 <TouchableOpacity
                   key={index}
                   style={styles.checkRow}
@@ -5169,7 +5307,8 @@ const categoryData = [
                   </View>
                   <Text style={styles.checkText}>{item}</Text>
                 </TouchableOpacity>
-              ))}
+              ))
+              )}
             </ScrollView>
 
             <View style={styles.bottomActionBar}>
@@ -5183,7 +5322,25 @@ const categoryData = [
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.doneButton}
-                onPress={() => setCategoryModalVisible(false)}
+                onPress={() => {
+                  // Find the selected subcategory object
+                  const selectedSubcategory = subcategories.find(sub => 
+                    selectedCategory.includes(sub.categoryName)
+                  );
+                  
+                  if (selectedSubcategory) {
+                    // Navigate to subcatProducts with category ID
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        subCategory: selectedSubcategory.categoryName,
+                        categoryId: String(selectedSubcategory.id),
+                      },
+                    } as any);
+                  }
+                  
+                  setCategoryModalVisible(false);
+                }}
               >
                 <Text style={styles.doneButtonText}>Done</Text>
               </TouchableOpacity>
@@ -5332,33 +5489,67 @@ const categoryData = [
                 )}
 
                 <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-                  {displayedFilterOptions.map((item, index) => {
-                    const isSelected =
-                      selectedFilters[selectedFilterSection]?.includes(item) ||
-                      false;
-
-                    return (
-                      <TouchableOpacity
-                        key={index}
-                        style={styles.checkRow}
-                        onPress={() =>
-                          toggleFilterOption(selectedFilterSection, item)
-                        }
-                      >
-                        <View
-                          style={[
-                            styles.checkbox,
-                            isSelected && styles.checkboxActive,
-                          ]}
+                  {categoriesTreeLoading ? (
+                    <View style={{ padding: 20, alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color="#A0208C" />
+                      <Text style={{ marginTop: 10, color: '#666', fontSize: 14 }}>
+                        Loading categories...
+                      </Text>
+                    </View>
+                  ) : (
+                    categoriesTree.map((category) => (
+                      <View key={category.id}>
+                        {/* Parent Category */}
+                        <TouchableOpacity
+                          style={styles.categoryParentItem}
+                          onPress={() =>
+                            handleCategorySelection(category.name, category.id)
+                          }
                         >
-                          {isSelected && (
-                            <Ionicons name="checkmark" size={14} color="#fff" />
-                          )}
-                        </View>
-                        <Text style={styles.checkText}>{item}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                          <View
+                            style={[
+                              styles.checkbox,
+                              selectedFilters[selectedFilterSection]?.includes(category.name) &&
+                                styles.checkboxActive,
+                            ]}
+                          >
+                            {selectedFilters[selectedFilterSection]?.includes(category.name) && (
+                              <Ionicons name="checkmark" size={14} color="#fff" />
+                            )}
+                          </View>
+                          <Text style={styles.categoryParentText}>{category.name}</Text>
+                        </TouchableOpacity>
+                        
+                        {/* Child Categories */}
+                        {category.children && category.children.length > 0 && (
+                          <View style={styles.categoryChildrenContainer}>
+                            {category.children.map((child) => (
+                              <TouchableOpacity
+                                key={child.id}
+                                style={styles.categoryChildItem}
+                                onPress={() =>
+                                  handleCategorySelection(child.name, child.id)
+                                }
+                              >
+                                <View
+                                  style={[
+                                    styles.checkbox,
+                                    selectedFilters[selectedFilterSection]?.includes(child.name) &&
+                                      styles.checkboxActive,
+                                  ]}
+                                >
+                                  {selectedFilters[selectedFilterSection]?.includes(child.name) && (
+                                    <Ionicons name="checkmark" size={14} color="#fff" />
+                                  )}
+                                </View>
+                                <Text style={styles.categoryChildText}>{child.name}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    ))
+                  )}
                 </ScrollView>
               </View>
             </View>
@@ -7966,6 +8157,35 @@ latestSection: {
     color: "#FFFFFF",
     letterSpacing: 0.2,
   },
+  latestGridStockPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexShrink: 1,
+    maxWidth: "52%",
+  },
+  latestGridStockPillOk: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#34D399",
+  },
+  latestGridStockPillLow: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#F59E0B",
+  },
+  latestGridStockPillOut: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FCA5A5",
+  },
+  latestGridStockText: {
+    fontSize: 11.5,
+    fontWeight: "900",
+    color: "#065F46",
+    letterSpacing: 0.1,
+  },
+  latestGridStockTextOut: {
+    color: "#991B1B",
+  },
   latestGridAddCartRow: {
     marginTop: 2,
   },
@@ -7975,6 +8195,9 @@ latestSection: {
     paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
+  },
+  latestGridAddCartButtonDisabled: {
+    backgroundColor: "#D1D5DB",
   },
   latestGridAddCartButtonText: {
     color: "#FFFFFF",
@@ -8715,5 +8938,39 @@ shopStoreImage: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  // Category tree styles for filter modal
+  categoryParentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#F8F8F8",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E5E5",
+  },
+  categoryParentText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  categoryChildrenContainer: {
+    backgroundColor: "#FFFFFF",
+  },
+  categoryChildItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 32, // Indented for child items
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  categoryChildText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "400",
+    color: "#666",
   },
 });

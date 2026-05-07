@@ -1,49 +1,10 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+import Constants from "expo-constants";
 
-function resolveFlintScheme(): "http" | "https" {
-  try {
-    if (typeof window !== "undefined" && window.location?.protocol === "https:") {
-      return "https";
-    }
-  } catch {
-    // no-op: keep default
-  }
-  return "http";
-}
-
-const FLINT_SCHEME = resolveFlintScheme();
-const FLINT_HOST = "flintnthread.com";
-function resolveWebOrigin(): string | null {
-  try {
-    if (typeof window !== "undefined" && window.location?.origin) {
-      return String(window.location.origin).replace(/\/+$/, "");
-    }
-  } catch {
-    // no-op
-  }
-  return null;
-}
-
-const WEB_ORIGIN = resolveWebOrigin();
-function isFlintOrigin(origin: string | null): boolean {
-  if (!origin) return false;
-  try {
-    const u = new URL(origin);
-    return u.hostname === FLINT_HOST || u.hostname.endsWith(`.${FLINT_HOST}`);
-  } catch {
-    return false;
-  }
-}
-
-const WEB_ORIGIN_IS_FLINT = isFlintOrigin(WEB_ORIGIN);
-const API_BASE_URL = WEB_ORIGIN_IS_FLINT
-  ? `${WEB_ORIGIN}/api`
-  : `${FLINT_SCHEME}://${FLINT_HOST}/api`;
-
-function normalizeBaseUrl(url: string): string {
-  return url.replace(/\/+$/, "");
-}
+const LOCAL_API_ORIGIN = "http://localhost:8080";
+const API_BASE_URL = "http://localhost:8080";
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   const parts = token.split(".");
@@ -72,12 +33,41 @@ function extractUserIdFromToken(token: string): number | null {
 }
 
 function resolveBaseUrl(): string {
-  const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
-  if (envBaseUrl) return normalizeBaseUrl(envBaseUrl);
+  const hostUri =
+    Constants.expoConfig?.hostUri ??
+    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost ??
+    (Constants as any)?.manifest?.debuggerHost ??
+    "";
+  const lanHost = String(hostUri).split(":")[0].trim();
+  if (lanHost && lanHost !== "localhost" && lanHost !== "127.0.0.1") {
+    return `http://${lanHost}:8080`;
+  }
+  if (Platform.OS === "android") {
+    // Android emulator cannot access host localhost directly.
+    return "http://10.0.2.2:8080";
+  }
   return API_BASE_URL;
 }
 
 const normalizedBaseUrl = resolveBaseUrl();
+console.log("Main API Base URL:", normalizedBaseUrl);
+
+function getMainOriginFallbacks(): string[] {
+  const origins = [API_BASE_URL];
+  const hostUri =
+    Constants.expoConfig?.hostUri ??
+    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost ??
+    (Constants as any)?.manifest?.debuggerHost ??
+    "";
+  const lanHost = String(hostUri).split(":")[0].trim();
+  if (lanHost && lanHost !== "localhost" && lanHost !== "127.0.0.1") {
+    origins.push(`http://${lanHost}:8080`);
+  }
+  if (Platform.OS === "android") {
+    origins.push("http://10.0.2.2:8080", "http://10.0.3.2:8080");
+  }
+  return [...new Set(origins)];
+}
 
 const api = axios.create({
   baseURL: normalizedBaseUrl,
@@ -89,9 +79,8 @@ const api = axios.create({
   withCredentials: true, // ✅ crucial for session/cookies
 });
 
-// Auth API instance for login/OTP only (single `/api/...` path).
-// Use resolveBaseUrl() to respect EXPO_PUBLIC_API_BASE_URL env var for deployed environments
-const AUTH_BASE_URL = resolveBaseUrl();
+// Auth API instance for login/OTP only (no `/api` prefix).
+const AUTH_BASE_URL = LOCAL_API_ORIGIN;
 console.log("Auth API Base URL:", AUTH_BASE_URL);
 
 const authApi = axios.create({
@@ -102,6 +91,47 @@ const authApi = axios.create({
   },
   withCredentials: false, // Disable for HTTP cross-domain to avoid CORS issues
 });
+
+function getAuthOriginFallbacks(): string[] {
+  const origins = [LOCAL_API_ORIGIN];
+  const hostUri =
+    Constants.expoConfig?.hostUri ??
+    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost ??
+    (Constants as any)?.manifest?.debuggerHost ??
+    "";
+  const lanHost = String(hostUri).split(":")[0].trim();
+  if (lanHost && lanHost !== "localhost" && lanHost !== "127.0.0.1") {
+    origins.push(`http://${lanHost}:8080`);
+  }
+  if (Platform.OS === "android") {
+    // Android emulators cannot hit host machine via localhost.
+    origins.push("http://10.0.2.2:8080", "http://10.0.3.2:8080");
+  }
+  return [...new Set(origins)];
+}
+
+async function postAuthWithFallback<T>(path: string, payload: unknown): Promise<T> {
+  const origins = getAuthOriginFallbacks();
+  let lastError: unknown = null;
+
+  for (const origin of origins) {
+    try {
+      console.log("Auth fallback try:", `${origin}${path}`);
+      const response = await axios.post<T>(`${origin}${path}`, payload, {
+        timeout: 15000,
+        headers: { "Content-Type": "application/json" },
+        withCredentials: false,
+      });
+      return response.data;
+    } catch (error: any) {
+      lastError = error;
+      if (error?.code !== "ERR_NETWORK") {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
 
 // Add JWT token interceptor for authApi requests
 authApi.interceptors.request.use(
@@ -145,6 +175,22 @@ authApi.interceptors.response.use(
 api.interceptors.request.use(
   async (config) => {
     try {
+      const requestConfig = config as any;
+      if (!requestConfig.__originFallbacks) {
+        requestConfig.__originFallbacks = getMainOriginFallbacks();
+      }
+      if (typeof requestConfig.__originIndex !== "number") {
+        requestConfig.__originIndex = 0;
+      }
+      const fallbacks = Array.isArray(requestConfig.__originFallbacks)
+        ? requestConfig.__originFallbacks
+        : [API_BASE_URL];
+      const origin =
+        fallbacks[requestConfig.__originIndex] ??
+        fallbacks[0] ??
+        API_BASE_URL;
+      config.baseURL = origin;
+
       const token = await AsyncStorage.getItem("token");
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -199,6 +245,27 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    const requestConfig = error?.config as any;
+    if (error?.code === "ERR_NETWORK" && requestConfig) {
+      const fallbacks = Array.isArray(requestConfig.__originFallbacks)
+        ? requestConfig.__originFallbacks
+        : [API_BASE_URL];
+      const currentIndex =
+        typeof requestConfig.__originIndex === "number"
+          ? requestConfig.__originIndex
+          : 0;
+      const nextIndex = currentIndex + 1;
+      if (nextIndex < fallbacks.length) {
+        requestConfig.__originIndex = nextIndex;
+        requestConfig.baseURL = fallbacks[nextIndex];
+        console.log(
+          "Main API fallback retry:",
+          `${requestConfig.baseURL}${String(requestConfig.url ?? "")}`
+        );
+        return api.request(requestConfig);
+      }
+    }
+
     if (error.response?.status === 401) {
       // Token expired or invalid - clear token and redirect to login
       await AsyncStorage.removeItem("token");
@@ -544,6 +611,9 @@ export function subcategoriesByCategoryPath(categoryId: number): string {
   return `/api/categories/${id}/subcategories`;
 }
 
+/** Categories tree — path only (use with `api.get(...)`). */
+export const categoriesTreePath = "/api/categories/tree";
+
 // ===== ADDRESS API FUNCTIONS =====
 
 // Address interface for TypeScript
@@ -637,7 +707,7 @@ export const getDefaultAddress = async (): Promise<ApiResponse<Address>> => {
   return response.data;
 };
 
-// ===== OTP API FUNCTIONS (using flintnthread.com) =====
+// ===== OTP API FUNCTIONS (using localhost:8080) =====
 
 export interface LoginResponse {
   success: boolean;
@@ -667,14 +737,14 @@ export interface OtpResponse {
 }
 
 /**
- * Send OTP to email for verification - uses http://flintnthread.com
+ * Send OTP to email for verification - uses http://localhost:8080
  */
 export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => {
   try {
     console.log("Sending OTP request to:", AUTH_BASE_URL + "/auth/send-otp", "with email:", otpData.email);
-    const response = await authApi.post("/auth/send-otp", otpData);
-    console.log("OTP response:", response.data);
-    return response.data;
+    const data = await postAuthWithFallback<OtpResponse>("/auth/send-otp", otpData);
+    console.log("OTP response:", data);
+    return data;
   } catch (error: any) {
     console.error("Send OTP failed:", error.message, error.code);
     if (error.code === "ERR_NETWORK") {
@@ -685,14 +755,14 @@ export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => 
 };
 
 /**
- * Verify OTP for email - uses http://flintnthread.com
+ * Verify OTP for email - uses http://localhost:8080
  */
 export const verifyOtp = async (otpData: OtpRequest): Promise<LoginResponse> => {
   try {
     console.log("Verifying OTP at:", AUTH_BASE_URL + "/auth/verify-otp");
-    const response = await authApi.post("/auth/verify-otp", otpData);
-    console.log("Verify OTP response:", response.data);
-    return response.data;
+    const data = await postAuthWithFallback<LoginResponse>("/auth/verify-otp", otpData);
+    console.log("Verify OTP response:", data);
+    return data;
   } catch (error: any) {
     console.error("Verify OTP failed:", error.message, error.code);
     if (error.code === "ERR_NETWORK") {
