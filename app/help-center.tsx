@@ -16,6 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api from "../services/api";
+import { useLanguage } from "../lib/language";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -67,6 +68,10 @@ export default function HelpCenterScreen() {
   const [showSupportTicketModal, setShowSupportTicketModal] = useState(false);
   const [ticketName, setTicketName] = useState("");
   const [ticketEmail, setTicketEmail] = useState("");
+  
+  // FAQ API state
+  const [faqs, setFaqs] = useState<FAQ[]>([]);
+  const [faqsLoading, setFaqsLoading] = useState(false);
   const [ticketPhone, setTicketPhone] = useState("");
   const [ticketSubject, setTicketSubject] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
@@ -95,98 +100,128 @@ export default function HelpCenterScreen() {
     { key: "contact", label: "Contact", icon: "call" },
   ];
 
-  const faqs: FAQ[] = [
-    {
-      id: "1",
-      question: "How do I place an order?",
-      answer:
-        "To place an order, browse our products, add items to your cart, and proceed to checkout. Enter your shipping address and payment details, then confirm your order.",
-      category: "general",
-    },
-    {
-      id: "2",
-      question: "What payment methods do you accept?",
-      answer:
-        "We accept Credit/Debit Cards, UPI, Wallets (Paytm, PhonePe), and Cash on Delivery for orders above ₹99.",
-      category: "payment",
-    },
-    {
-      id: "3",
-      question: "How long does delivery take?",
-      answer:
-        "Standard delivery takes 3-7 business days. Express delivery (1-2 days) is available in select cities for an additional charge.",
-      category: "delivery",
-    },
-    {
-      id: "4",
-      question: "Can I cancel my order?",
-      answer:
-        "Yes, you can cancel your order within 24 hours of placing it. Go to 'My Orders' and select the order you want to cancel.",
-      category: "order",
-    },
-    {
-      id: "5",
-      question: "What is your return policy?",
-      answer:
-        "You can return products within 7 days of delivery. Items must be unused, in original packaging with tags attached. Refunds will be processed within 5-7 business days.",
-      category: "returns",
-    },
-    {
-      id: "6",
-      question: "How do I track my order?",
-      answer:
-        "You can track your order by going to 'My Orders' and clicking on the order. You'll receive SMS and email updates with tracking information.",
-      category: "order",
-    },
-    {
-      id: "7",
-      question: "Do you offer international shipping?",
-      answer:
-        "Currently, we only ship within India. International shipping will be available soon.",
-      category: "delivery",
-    },
-    {
-      id: "8",
-      question: "How do I apply a coupon code?",
-      answer:
-        "During checkout, enter your coupon code in the 'Apply Coupon' field. Valid codes will be automatically applied to your order total.",
-      category: "payment",
-    },
-  ];
+  // API function to fetch FAQs
+  const fetchFAQs = async () => {
+    setFaqsLoading(true);
+    try {
+      console.log('=== DEBUG: Starting FAQ API fetch ===');
+      console.log('API URL: http://flintnthread.com/api/api/faqs');
+      
+      const response = await fetch('http://flintnthread.com/api/api/faqs', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      if (!response.ok) {
+        if (response.status === 403) {
+          console.log('=== 403 Forbidden Error - Using fallback data ===');
+          throw new Error('403 Forbidden - API access denied');
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('=== RAW API RESPONSE ===');
+      console.log('Type of data:', typeof data);
+      console.log('Data keys:', Object.keys(data));
+      console.log('Full response data:', JSON.stringify(data, null, 2));
+      
+      // Check if response has the expected structure
+      if (data && typeof data === 'object') {
+        console.log('Success field:', data.success);
+        console.log('Message field:', data.message);
+        console.log('Data field type:', typeof data.data);
+        console.log('Data field is array:', Array.isArray(data.data));
+        
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+            console.log('Data array length:', data.data.length);
+            
+            if (data.data.length > 0) {
+              console.log('First FAQ item:', JSON.stringify(data.data[0], null, 2));
+              
+              // Transform API data to match FAQ interface
+              const transformedFAQs: FAQ[] = data.data.map((item: any, index: number) => {
+                console.log(`Processing FAQ ${index + 1}:`, {
+                  id: item.id,
+                  question: item.question,
+                  answer: item.answer,
+                  categoryId: item.categoryId,
+                  sortOrder: item.sortOrder,
+                  status: item.status
+                });
+                
+                return {
+                  id: String(item.id || index),
+                  question: item.question || 'No question available',
+                  answer: item.answer || 'No answer available',
+                  category: `Category ${item.categoryId || 'Unknown'}`
+                };
+              });
+              
+              setFaqs(transformedFAQs);
+              console.log('=== SUCCESS: FAQs loaded ===');
+              console.log('Transformed FAQs:', transformedFAQs.length, 'items');
+              console.log('First transformed FAQ:', JSON.stringify(transformedFAQs[0], null, 2));
+          } else {
+            console.log('=== WARNING: Empty FAQ array ===');
+            setFaqs([]);
+          }
+        } else {
+          console.log('=== ERROR: Invalid response structure ===');
+          console.log('=== ERROR: data.data is not an array ===');
+          console.log('data.data value:', data.data);
+          setFaqs([]);
+        }
+      } else {
+        console.log('=== ERROR: Invalid response structure ===');
+        setFaqs([]);
+      }
+    } catch (error) {
+      console.error('=== ERROR: FAQ API fetch failed ===');
+      console.error('Error details:', error);
+      
+      // Fallback to mock data for testing
+      const fallbackFAQs: FAQ[] = [
+        {
+          id: "32",
+          question: "What is Flint & Thread?",
+          answer: "Flint & Thread is a fashion e-commerce website offering trendy, affordable clothing, accessories, footwear, and lifestyle products for men, women, kids, infants and F&T products.",
+          category: "Category 13"
+        },
+        {
+          id: "37",
+          question: "How do I create an account on Flint & Thread?",
+          answer: "Click Sign Up, enter your Full Name, Email, Username, Mobile number verify with OTP, Password, and your account will be created instantly.",
+          category: "Category 14"
+        },
+        {
+          id: "41",
+          question: "How do I place an order on Flint & Thread?",
+          answer: "Select your product, choose size and color, click Add to Cart, proceed to Checkout, enter your address, choose a payment method, and confirm your order.",
+          category: "Category 15"
+        }
+      ];
+      
+      setFaqs(fallbackFAQs);
+      console.log('Using fallback FAQ data:', fallbackFAQs.length, 'items');
+    } finally {
+      setFaqsLoading(false);
+      console.log('=== END: FAQ API fetch completed ===');
+    }
+  };
 
-  const orderHelpTopics = [
-    {
-      id: "1",
-      title: "How to Place an Order",
-      icon: "cart",
-      description: "Step-by-step guide to placing your first order",
-    },
-    {
-      id: "2",
-      title: "Track Your Order",
-      icon: "location",
-      description: "Learn how to track your order status",
-    },
-    {
-      id: "3",
-      title: "Cancel or Modify Order",
-      icon: "close-circle",
-      description: "Cancel or modify your order before it ships",
-    },
-    {
-      id: "4",
-      title: "Return or Exchange",
-      icon: "return-down-back",
-      description: "Return or exchange products you've received",
-    },
-    {
-      id: "5",
-      title: "Order History",
-      icon: "time",
-      description: "View your past orders and invoices",
-    },
-  ];
+  useEffect(() => {
+    fetchFAQs();
+  }, []);
 
+  
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [ticketsError, setTicketsError] = useState<string | null>(null);
@@ -756,6 +791,19 @@ export default function HelpCenterScreen() {
           </Text>
         </View>
 
+        {/* Refresh Button */}
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={fetchFAQs}
+          disabled={faqsLoading}
+        >
+          <Ionicons 
+            name={faqsLoading ? "sync" : "refresh"} 
+            size={24} 
+            color="#666" 
+          />
+        </TouchableOpacity>
+
         {/* Tabs */}
         <ScrollView
           horizontal
@@ -806,70 +854,62 @@ export default function HelpCenterScreen() {
             <Text style={styles.sectionSubtitle}>
               Frequently Asked Questions
             </Text>
-            {faqs.map((faq, index) => (
-              <View
-                key={faq.id}
-                style={[
-                  styles.faqCard,
-                  index === faqs.length - 1 && styles.faqCardLast,
-                ]}
-              >
-                <TouchableOpacity
-                  style={styles.faqQuestion}
-                  onPress={() =>
-                    setExpandedFAQ(expandedFAQ === faq.id ? null : faq.id)
-                  }
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.faqQuestionText}>{faq.question}</Text>
-                  <Ionicons
-                    name={
-                      expandedFAQ === faq.id
-                        ? "chevron-up"
-                        : "chevron-down"
-                    }
-                    size={20}
-                    color="#666"
-                  />
-                </TouchableOpacity>
-                {expandedFAQ === faq.id && (
-                  <View style={styles.faqAnswer}>
-                    <Text style={styles.faqAnswerText}>{faq.answer}</Text>
-                  </View>
-                )}
+            {faqsLoading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading FAQs...</Text>
               </View>
-            ))}
-          </View>
-        )}
-
-        {/* Order Help Tab */}
-        {activeTab === "order_help" && (
-          <View style={styles.orderHelpContainer}>
-            <Text style={styles.sectionSubtitle}>
-              Order Related Help Topics
-            </Text>
-            {orderHelpTopics.map((topic, index) => (
-              <TouchableOpacity
-                key={topic.id}
-                style={[
-                  styles.helpTopicCard,
-                  index === orderHelpTopics.length - 1 &&
-                    styles.helpTopicCardLast,
-                ]}
-                activeOpacity={0.7}
-              >
-                <View style={styles.helpTopicLeft}>
-                  <View style={styles.helpTopicIcon}>
-                    <Ionicons name={topic.icon as any} size={24} color="#E97A1F" />
-                  </View>
-                  <View style={styles.helpTopicInfo}>
-                    <Text style={styles.helpTopicTitle}>{topic.title}</Text>
-                    <Text style={styles.helpTopicDesc}>{topic.description}</Text>
-                  </View>
+            ) : faqs.length === 0 ? (
+              <View style={styles.loadingContainer}>
+                <Ionicons name="warning-outline" size={60} color="#FF9800" />
+                <Text style={styles.emptyText}>API Access Issue</Text>
+                <Text style={styles.emptySubtext}>
+                  Could not connect to http://flintnthread.com/api/api/faqs
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  Showing fallback FAQ data instead.
+                </Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={fetchFAQs}
+                >
+                  <Text style={styles.retryButtonText}>Retry API</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              faqs.map((faq, index) => (
+                <View
+                  key={faq.id}
+                  style={[
+                    styles.faqCard,
+                    index === faqs.length - 1 && styles.faqCardLast,
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.faqQuestion}
+                    onPress={() =>
+                      setExpandedFAQ(expandedFAQ === faq.id ? null : faq.id)
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.faqQuestionText}>{faq.question}</Text>
+                    <Ionicons
+                      name={
+                        expandedFAQ === faq.id
+                          ? "chevron-up"
+                          : "chevron-down"
+                      }
+                      size={20}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
+                  {expandedFAQ === faq.id && (
+                    <View style={styles.faqAnswer}>
+                      <Text style={styles.faqAnswerText}>{faq.answer}</Text>
+                    </View>
+                  )}
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#CCCCCC" />
-              </TouchableOpacity>
-            ))}
+              ))
+            )}
           </View>
         )}
 
@@ -1266,10 +1306,18 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     position: "absolute",
+    left: 20,
     top: 50,
+    zIndex: 1,
+  },
+  refreshButton: {
+    position: "absolute",
     right: 20,
-    padding: 4,
-    zIndex: 10,
+    top: 50,
+    zIndex: 1,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
   },
   tabsContainer: {
     backgroundColor: "transparent",
@@ -1332,6 +1380,30 @@ const styles = StyleSheet.create({
   // FAQs Tab Styles
   faqsContainer: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   faqCard: {
     backgroundColor: "#FFFFFF",
