@@ -19,9 +19,9 @@ export default function PromoteScreen() {
   const insets = useSafeAreaInsets();
 
   const images = [
-    require("../assets/images/getpromoting1.png"),
-    require("../assets/images/getpromoting2.png"),
-    require("../assets/images/getpromoting3.png"),
+    require("../assets/images/promot1.png"),
+    require("../assets/images/promot2.png"),
+    require("../assets/images/promot3.png"),
   ];
 
   useEffect(() => {
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: "100%",
-    marginTop: 150,
+    marginTop: 330,
   },
 
   title: {
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   },
 
   button: {
-    backgroundColor: "#f58220",
+    backgroundColor: "#f0d55f",
     paddingVertical: 14,
     paddingHorizontal: 40,
     borderRadius: 10,
