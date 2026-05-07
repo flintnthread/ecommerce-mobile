@@ -89,7 +89,7 @@ export default function OtherScreen() {
         {/* Close Button - Absolute Positioned */}
         <TouchableOpacity
           style={styles.closeBtn}
-          onPress={() => router.back()}
+          onPress={() => router.replace("/account")}
         >
           <Ionicons name="close-circle" size={32} color="#666" />
         </TouchableOpacity>
