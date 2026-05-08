@@ -137,7 +137,7 @@ export default function BeautyPersonalCareScreen() {
     Animated.parallel([
       Animated.timing(introOpacity, {
         toValue: 1,
-        duration: 480,
+        duration: 470,
         useNativeDriver: true,
       }),
       Animated.timing(introTrans, {
