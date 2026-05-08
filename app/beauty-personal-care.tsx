@@ -25,6 +25,14 @@ const { width: SCREEN_W } = Dimensions.get("window");
 const CONTENT_PAD = 20;
 const FULL_W = SCREEN_W - CONTENT_PAD * 2;
 
+// Get window dimensions for responsive design
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = screenWidth >= 768;
+const isDesktop = screenWidth >= 1024;
+const isMobile = screenWidth < 768;
+
 const HEADER_FAVICON = require("../assets/images/fntfav.png");
 const DUMMY_BEAUTY_HERO = require("../assets/images/SkincareToolsDevices.png");
 const DUMMY_BEAUTY_1 = require("../assets/images/beauty1.jpg");
@@ -206,7 +214,7 @@ export default function BeautyPersonalCareScreen() {
             accessibilityRole="button"
             accessibilityLabel="Scroll to top"
           >
-            <Image source={HEADER_FAVICON} style={styles.headerFavicon} />
+            <Image source={HEADER_FAVICON} style={styles.headerFaviconImage} />
           </TouchableOpacity>
 
           <View style={styles.headerSearchBar}>
@@ -235,16 +243,7 @@ export default function BeautyPersonalCareScreen() {
           >
             <Ionicons name="heart-outline" size={22} color={NAVY_ICON} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            activeOpacity={0.8}
-            onPress={() => router.push("/notifications")}
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
-          >
-            <Ionicons name="notifications-outline" size={22} color={NAVY_ICON} />
-          </TouchableOpacity>
-        </View>
+                  </View>
         <Text style={styles.headerCaption} numberOfLines={2}>
           {SKINCARE_TOOLS_DEVICES_CATEGORY}
         </Text>
@@ -369,9 +368,14 @@ export default function BeautyPersonalCareScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: CREAM },
+  root: { 
+    flex: 1, 
+    backgroundColor: CREAM,
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
+  },
   visualHero: {
-    height: 220,
+    height: isDesktop ? 280 : 220,
     borderRadius: 18,
     overflow: "hidden",
     justifyContent: "flex-end",
@@ -423,12 +427,13 @@ const styles = StyleSheet.create({
   visualGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: isDesktop ? 12 : 10,
+    marginHorizontal: isDesktop ? 0 : CONTENT_PAD,
   },
   visualTile: {
-    width: (FULL_W - 10) / 2,
-    height: 130,
-    borderRadius: 16,
+    width: isDesktop ? 200 : (FULL_W - 10) / 2,
+    height: isDesktop ? 160 : 130,
+    borderRadius: isDesktop ? 18 : 16,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(29,50,78,0.12)",
@@ -453,11 +458,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    shadowColor: ORANGE_SOFT,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    paddingHorizontal: isDesktop ? 20 : 10,
+    paddingTop: isDesktop ? 50 : 40,
+    paddingBottom: isDesktop ? 16 : 10,
+    backgroundColor: CREAM,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e5e7eb",
+    shadowColor: "#152a45",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   headerRow: {
     flexDirection: "row",
@@ -465,50 +476,50 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerLeadingWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: isDesktop ? 40 : 32,
+    height: isDesktop ? 40 : 32,
+    borderRadius: isDesktop ? 20 : 16,
     backgroundColor: "rgba(255,255,255,0.95)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(234,88,12,0.2)",
   },
-  headerFavicon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    resizeMode: "cover",
+  headerFaviconImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    resizeMode: "contain",
   },
   headerSearchBar: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    height: 42,
-    borderRadius: 14,
+    height: isDesktop ? 42 : 36,
+    borderRadius: isDesktop ? 14 : 12,
     backgroundColor: "rgba(255,255,255,0.96)",
-    paddingHorizontal: 12,
+    paddingHorizontal: isDesktop ? 12 : 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(234,88,12,0.15)",
   },
   headerSearchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
+    marginLeft: isDesktop ? 8 : 6,
+    fontSize: isDesktop ? 14 : 12,
     fontWeight: "600",
     color: NAVY_TEXT,
-    paddingVertical: 8,
+    paddingVertical: isDesktop ? 8 : 6,
   },
   headerIconBtn: {
-    width: 40,
-    height: 40,
+    width: isDesktop ? 40 : 32,
+    height: isDesktop ? 40 : 32,
     alignItems: "center",
     justifyContent: "center",
   },
   headerCaption: {
     marginTop: 8,
-    marginLeft: 2,
-    fontSize: 12,
+    marginLeft: isDesktop ? 2 : 1,
+    fontSize: isDesktop ? 12 : 10,
     fontWeight: "800",
     color: NAVY_MID,
     letterSpacing: 0.15,
@@ -517,6 +528,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: CONTENT_PAD,
     alignItems: "center",
+    paddingBottom: 90,
+    flexGrow: 1,
   },
   categoryHero: {
     borderRadius: 22,
@@ -745,19 +758,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(234,88,12,0.45)",
   },
   facialBanner: {
-    borderRadius: 20,
-    marginBottom: 20,
-    minHeight: 168,
+    borderRadius: isDesktop ? 24 : 20,
+    marginBottom: isDesktop ? 24 : 20,
+    minHeight: isDesktop ? 200 : 168,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(234,88,12,0.18)",
     flexDirection: "row",
-    padding: 18,
+    padding: isDesktop ? 24 : 18,
     shadowColor: NAVY,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
-    shadowRadius: 14,
-    elevation: 5,
+    shadowRadius: isDesktop ? 16 : 14,
+    elevation: isDesktop ? 6 : 5,
   },
   facialBannerAccent: {
     position: "absolute",
@@ -771,12 +784,12 @@ const styles = StyleSheet.create({
   },
   facialIconCluster: {
     justifyContent: "center",
-    marginRight: 14,
+    marginRight: isDesktop ? 18 : 14,
   },
   facialIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: isDesktop ? 64 : 56,
+    height: isDesktop ? 64 : 56,
+    borderRadius: isDesktop ? 32 : 28,
     backgroundColor: "rgba(30,58,95,0.1)",
     alignItems: "center",
     justifyContent: "center",
@@ -784,11 +797,11 @@ const styles = StyleSheet.create({
     borderColor: "rgba(30,58,95,0.18)",
   },
   facialIconCircleSmall: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: isDesktop ? 48 : 40,
+    height: isDesktop ? 48 : 40,
+    borderRadius: isDesktop ? 24 : 20,
     marginTop: -8,
-    marginLeft: 20,
+    marginLeft: isDesktop ? 24 : 20,
     backgroundColor: "rgba(234,88,12,0.15)",
   },
   facialTextCol: { flex: 1, justifyContent: "center" },
@@ -801,18 +814,18 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   facialTitle: {
-    fontSize: 20,
+    fontSize: isDesktop ? 24 : 20,
     fontWeight: "800",
     color: NAVY_TEXT,
     letterSpacing: -0.3,
-    marginBottom: 8,
+    marginBottom: isDesktop ? 12 : 8,
   },
   facialBody: {
-    fontSize: 13,
+    fontSize: isDesktop ? 15 : 13,
     fontWeight: "600",
     color: NAVY_MID,
-    lineHeight: 19,
-    marginBottom: 10,
+    lineHeight: isDesktop ? 22 : 19,
+    marginBottom: isDesktop ? 12 : 10,
   },
   facialCtaRow: {
     flexDirection: "row",

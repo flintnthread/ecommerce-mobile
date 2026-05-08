@@ -6,11 +6,19 @@ import {
   TouchableOpacity,
   ScrollView,
   Pressable,
+  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../lib/language";
+
+const { width } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
 
 type GenderOption = "FEMALE" | "MALE";
 
@@ -205,10 +213,10 @@ const styles = StyleSheet.create({
 
   backBtnTop: {
     position: "absolute",
-    left: 14,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    left: isDesktop ? 20 : 14,
+    width: isDesktop ? 56 : 44,
+    height: isDesktop ? 56 : 44,
+    borderRadius: isDesktop ? 28 : 22,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
@@ -223,9 +231,9 @@ const styles = StyleSheet.create({
   },
 
   hero: {
-    marginTop: 56,
-    marginHorizontal: 14,
-    padding: 14,
+    marginTop: isDesktop ? 80 : 56,
+    marginHorizontal: isDesktop ? 40 : 14,
+    padding: isDesktop ? 20 : 14,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     borderWidth: StyleSheet.hairlineWidth,
@@ -273,17 +281,17 @@ const styles = StyleSheet.create({
     color: "#334155",
   },
   heroTitle: {
-    fontSize: 24,
+    fontSize: isDesktop ? 32 : isTablet ? 28 : 24,
     fontWeight: "900",
     color: "#0F172A",
     letterSpacing: 0.2,
   },
   heroSubtitle: {
     marginTop: 6,
-    fontSize: 13,
+    fontSize: isDesktop ? 15 : isTablet ? 14 : 13,
     fontWeight: "700",
     color: "#64748B",
-    lineHeight: 18,
+    lineHeight: isDesktop ? 22 : 18,
   },
   progressTrack: {
     marginTop: 12,
@@ -341,15 +349,16 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   tile: {
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    borderRadius: isDesktop ? 20 : 18,
+    paddingVertical: isDesktop ? 16 : 14,
+    paddingHorizontal: isDesktop ? 20 : 14,
     borderWidth: 1,
     borderColor: "rgba(15, 23, 42, 0.10)",
     backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: isDesktop ? 16 : 12,
+    minWidth: isDesktop ? 200 : 150,
   },
   tileSelected: {
     borderColor: "rgba(234, 88, 12, 0.38)",
@@ -360,9 +369,9 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.995 }],
   },
   tileIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
+    width: isDesktop ? 50 : 42,
+    height: isDesktop ? 50 : 42,
+    borderRadius: isDesktop ? 20 : 16,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#F1F5F9",
@@ -374,13 +383,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tileTitle: {
-    fontSize: 15,
+    fontSize: isDesktop ? 18 : isTablet ? 16 : 15,
     fontWeight: "900",
     color: "#0F172A",
   },
   tileSubtitle: {
     marginTop: 3,
-    fontSize: 12,
+    fontSize: isDesktop ? 14 : isTablet ? 13 : 12,
     fontWeight: "700",
     color: "#64748B",
   },

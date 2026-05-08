@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   Alert,
+  Dimensions,
   Easing,
   Image,
   ImageBackground,
@@ -1209,6 +1210,14 @@ const finalUniquePicks: CollectionItem[] = [
     image: require("../assets/images/latest4.png"),
   },
 ];
+
+// Get window dimensions for responsive design
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = screenWidth >= 768;
+const isDesktop = screenWidth >= 1024;
+const isMobile = screenWidth < 768;
 
 export default function Accessories() {
   const { tr } = useLanguage();
@@ -2596,10 +2605,7 @@ export default function Accessories() {
                 }
               }}
             />
-            <TouchableOpacity activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="camera-outline" size={20} color="#9aa0a6" />
-            </TouchableOpacity>
-          </View>
+                      </View>
 
           <View style={styles.headerIcons}>
             <TouchableOpacity
@@ -2620,21 +2626,7 @@ export default function Accessories() {
                 </View>
               ) : null}
             </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={styles.headerIconBtn}
-              onPress={() => router.push("/cart")}
-            >
-              <Ionicons name="bag-outline" size={23} color="#1d324e" />
-              {cartCount > 0 ? (
-                <View style={styles.headerIconBadge}>
-                  <Text style={styles.headerIconBadgeText}>
-                    {cartCount > 99 ? "99+" : String(cartCount)}
-                  </Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          </View>
+                      </View>
         </View>
 
         <ImageBackground
@@ -2944,13 +2936,10 @@ export default function Accessories() {
                     style={styles.collectionFeaturedImage}
                     resizeMode="contain"
                     onLoad={(e) => {
-                      const { width, height } = e.nativeEvent.source;
-                      if (
-                        typeof width === "number" &&
-                        typeof height === "number" &&
-                        height > 0
-                      ) {
-                        setTopCollectionBannerAspectRatio(width / height);
+                      // Handle both React Native and React Native Web
+                      const source = e.nativeEvent?.source;
+                      if (source && typeof source.width === "number" && typeof source.height === "number" && source.height > 0) {
+                        setTopCollectionBannerAspectRatio(source.width / source.height);
                       }
                     }}
                   />
@@ -3062,13 +3051,10 @@ export default function Accessories() {
                     style={styles.videoAdPlayer}
                     resizeMode="contain"
                     onLoad={(e) => {
-                      const { width, height } = e.nativeEvent.source;
-                      if (
-                        typeof width === "number" &&
-                        typeof height === "number" &&
-                        height > 0
-                      ) {
-                        setSpotlightBannerAspectRatio(width / height);
+                      // Handle both React Native and React Native Web
+                      const source = e.nativeEvent?.source;
+                      if (source && typeof source.width === "number" && typeof source.height === "number" && source.height > 0) {
+                        setSpotlightBannerAspectRatio(source.width / source.height);
                       }
                     }}
                   />
@@ -4576,6 +4562,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff4fb",
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
   },
   topFixedArea: {
     backgroundColor: "#fff9f2",
@@ -4594,9 +4582,9 @@ const styles = StyleSheet.create({
     paddingBottom: 90,
   },
   header: {
-    paddingTop: 50,
-    paddingHorizontal: 10,
-    paddingBottom: 10,
+    paddingTop: isDesktop ? 60 : 50,
+    paddingHorizontal: isDesktop ? 20 : 10,
+    paddingBottom: isDesktop ? 16 : 10,
     backgroundColor: "#fff9f2",
     flexDirection: "row",
     alignItems: "center",
@@ -4604,9 +4592,9 @@ const styles = StyleSheet.create({
   headerBrand: {
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
-    width: 30,
-    height: 30,
+    marginRight: isDesktop ? 12 : 8,
+    width: isDesktop ? 40 : 30,
+    height: isDesktop ? 40 : 30,
   },
   headerBrandLogo: {
     width: "100%",
@@ -4614,7 +4602,7 @@ const styles = StyleSheet.create({
   },
   searchBox: {
     flex: 1,
-    height: 40,
+    height: isDesktop ? 48 : 40,
     borderRadius: 20,
     backgroundColor: "#ffffff",
     borderWidth: StyleSheet.hairlineWidth,
@@ -4622,21 +4610,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    marginRight: 10,
+    paddingHorizontal: isDesktop ? 16 : 12,
+    marginRight: isDesktop ? 16 : 10,
   },
   searchInput: {
     flex: 1,
     marginLeft: 8,
     marginRight: 8,
     color: "#1d324e",
-    fontSize: 14,
-    paddingVertical: Platform.OS === "ios" ? 10 : 6,
+    fontSize: isDesktop ? 16 : 14,
+    paddingVertical: Platform.OS === "ios" ? (isDesktop ? 12 : 10) : 6,
   },
   headerIcons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: isDesktop ? 16 : 12,
   },
   headerIconBtn: {
     position: "relative",

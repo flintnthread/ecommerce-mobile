@@ -8,12 +8,19 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 import api from "../services/api";
+
+// Responsive breakpoints
+const { width } = Dimensions.get("window");
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
 
 type CategoryKey =
   | "womenswear"
@@ -709,13 +716,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#ffffff",
+    paddingHorizontal: isDesktop ? 40 : 16,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 48,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingTop: isDesktop ? 60 : 48,
+    paddingHorizontal: isDesktop ? 32 : 16,
+    paddingBottom: isDesktop ? 16 : 12,
     backgroundColor: "#ffffff",
   },
   backButton: {
@@ -725,11 +733,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerFavicon: {
-    width: 36,
-    height: 36,
+    width: isDesktop ? 44 : 36,
+    height: isDesktop ? 44 : 36,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: isDesktop ? 22 : 18,
     fontWeight: "600",
     flex: 1,
     textAlign: "left",
@@ -752,9 +760,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    marginHorizontal: isDesktop ? 16 : 8,
+    paddingHorizontal: isDesktop ? 16 : 10,
+    paddingVertical: isDesktop ? 8 : 4,
     borderRadius: 20,
     backgroundColor: "#ffffff",
     borderWidth: StyleSheet.hairlineWidth,
@@ -765,7 +773,7 @@ const styles = StyleSheet.create({
   },
   searchInputHeader: {
     flex: 1,
-    fontSize: 14,
+    fontSize: isDesktop ? 16 : 14,
     color: "#1d324e",
     paddingVertical: 2,
   },
@@ -788,14 +796,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#79411c",
   },
   sideImage: {
-    width: 100,
-    height: 100,
+    width: isDesktop ? 120 : 100,
+    height: isDesktop ? 120 : 100,
     borderRadius: 8,
     marginBottom: 3,
     backgroundColor: "transparent",
   },
   sideLabel: {
-    fontSize: 11,
+    fontSize: isDesktop ? 13 : 11,
     color: "#1d324e",
     textAlign: "center",
   },
@@ -805,8 +813,8 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 16,
+    paddingHorizontal: isDesktop ? 24 : 12,
+    paddingTop: isDesktop ? 24 : 16,
   },
   sideToggleColumn: {
     width: 40,
@@ -835,9 +843,9 @@ const styles = StyleSheet.create({
     borderTopColor: "#e5e5e5",
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: isDesktop ? 18 : 14,
     fontWeight: "600",
-    marginBottom: 10,
+    marginBottom: isDesktop ? 12 : 10,
     textTransform: "capitalize",
     color: "#1d324e",
   },
@@ -845,16 +853,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginTop: 18,
-    paddingHorizontal: 6,
+    marginTop: isDesktop ? 24 : 18,
+    paddingHorizontal: isDesktop ? 12 : 6,
   },
   itemCard: {
-    width: "48%",
+    width: isDesktop ? "30%" : "48%",
     backgroundColor: "transparent",
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    marginBottom: 18,
+    paddingVertical: isDesktop ? 16 : 12,
+    paddingHorizontal: isDesktop ? 16 : 10,
+    marginBottom: isDesktop ? 24 : 18,
     alignItems: "center",
   },
   itemImageWrapper: {
@@ -869,9 +877,9 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   itemLabel: {
-    fontSize: 12,
+    fontSize: isDesktop ? 14 : 12,
     fontWeight: "600",
-    marginTop: 10,
+    marginTop: isDesktop ? 12 : 10,
     color: "#1d324e",
     textAlign: "center",
   },

@@ -11,6 +11,7 @@ import {
   Modal,
   ActivityIndicator,
   useWindowDimensions,
+  Dimensions,
   type ImageSourcePropType,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -53,7 +54,8 @@ function HexagonShopBadge({
   clipId: string;
   selected: boolean;
 }) {
-  const resolved = Image.resolveAssetSource(source);
+  // Handle both React Native and React Native Web
+  const resolved = Image.resolveAssetSource ? Image.resolveAssetSource(source) : null;
   const href = resolved?.uri ? { uri: resolved.uri } : undefined;
   const pts = flatTopHexPoints(HEX_W, HEX_H);
   const strokeW = selected ? 3.4 : 2;
@@ -657,6 +659,14 @@ const FC_LIKED: {
 const LOVE_MASONRY_GAP = 10;
 const LOVE_MASONRY_TALL = 216;
 const LOVE_MASONRY_SHORT = 168;
+
+// Get window dimensions for responsive design
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = screenWidth >= 768;
+const isDesktop = screenWidth >= 1024;
+const isMobile = screenWidth < 768;
 
 export default function KidsScreen() {
   const router = useRouter();
@@ -1306,16 +1316,7 @@ export default function KidsScreen() {
               <Ionicons name="search-outline" size={19} color="#64748b" />
               <Text style={styles.kidsSearchPlaceholder}>Search..</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push("/camerasearch")}
-              style={styles.kidsSearchCameraBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel="Search by photo"
-            >
-              <Ionicons name="camera-outline" size={22} color="#64748b" />
-            </TouchableOpacity>
-          </View>
+                      </View>
 
           <View style={styles.kidsHeaderIconGroup}>
             <TouchableOpacity
@@ -1326,15 +1327,7 @@ export default function KidsScreen() {
             >
               <Ionicons name="heart-outline" size={24} color="#c2410c" />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.kidsHeaderIconHit}
-              onPress={() => router.push("/notifications")}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-            >
-              <Ionicons name="notifications-outline" size={24} color="#c2410c" />
-            </TouchableOpacity>
-          </View>
+                      </View>
         </View>
       </LinearGradient>
 
