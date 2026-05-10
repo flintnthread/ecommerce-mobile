@@ -474,6 +474,17 @@ export default function SearchResults() {
                 >
                   <View style={styles.allProductImageWrapper}>
                     <Image source={item.image} style={styles.allProductImage} />
+                    {item.discount !== "—" ? (
+                      <View style={styles.discountBadge}>
+                        <Text style={styles.discountBadgeText}>{item.discount}</Text>
+                      </View>
+                    ) : null}
+                    {item.rating !== "—" ? (
+                      <View style={styles.ratingPill}>
+                        <Ionicons name="star" size={10} color="#FBBF24" />
+                        <Text style={styles.ratingPillText}>{item.rating}</Text>
+                      </View>
+                    ) : null}
                   </View>
                   <Text style={styles.allProductName} numberOfLines={2}>
                     {item.name}
@@ -658,22 +669,59 @@ const styles = StyleSheet.create({
   allProductCard: {
     width: "48%",
     marginBottom: 16,
-    borderRadius: 14,
+    borderRadius: 18,
     backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "#F3F4F6",
     padding: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   allProductImageWrapper: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#f5f5f5",
     marginBottom: 8,
+    position: "relative",
   },
   allProductImage: {
     width: "100%",
     height: 160,
     resizeMode: "cover",
+  },
+  discountBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "#dc2626",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  discountBadgeText: {
+    fontSize: 11,
+    color: "#fff",
+    fontWeight: "700",
+  },
+  ratingPill: {
+    position: "absolute",
+    left: 10,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  ratingPillText: {
+    marginLeft: 4,
+    fontSize: 11,
+    color: "#111",
+    fontWeight: "700",
   },
   allProductName: {
     fontSize: 13,
