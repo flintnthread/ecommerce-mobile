@@ -13,15 +13,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width, height: SCREEN_H } = Dimensions.get("window");
 
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
+
 export default function PromoteScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const insets = useSafeAreaInsets();
 
   const images = [
-    require("../assets/images/getpromoting1.png"),
-    require("../assets/images/getpromoting2.png"),
-    require("../assets/images/getpromoting3.png"),
+    require("../assets/images/promot1.png"),
+    require("../assets/images/promot2.png"),
+    require("../assets/images/promot3.png"),
   ];
 
   useEffect(() => {
@@ -139,7 +144,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 24,
+    paddingHorizontal: isDesktop ? 48 : isTablet ? 32 : 24,
   },
 
   topContent: {
@@ -147,11 +152,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: "100%",
-    marginTop: 150,
+    marginTop: isDesktop ? 400 : isTablet ? 350 : 330,
   },
 
   title: {
-    fontSize: 32,
+    fontSize: isDesktop ? 48 : isTablet ? 40 : 32,
     fontWeight: "bold",
     color: "#fff",
     textAlign: "center",
@@ -161,7 +166,7 @@ const styles = StyleSheet.create({
   },
 
   subtitle: {
-    fontSize: 28,
+    fontSize: isDesktop ? 36 : isTablet ? 32 : 28,
     fontWeight: "bold",
     marginTop: 5,
     color: "#fff",
@@ -182,38 +187,40 @@ const styles = StyleSheet.create({
   },
 
   button: {
-    backgroundColor: "#f58220",
-    paddingVertical: 14,
-    paddingHorizontal: 40,
+    backgroundColor: "#f0d55f",
+    paddingVertical: isDesktop ? 18 : isTablet ? 16 : 14,
+    paddingHorizontal: isDesktop ? 60 : isTablet ? 50 : 40,
     borderRadius: 10,
-    marginTop: 30,
+    marginTop: isDesktop ? 40 : 30,
+    minWidth: isDesktop ? 200 : 150,
   },
 
   buttonText: {
     color: "#002B5B",
-    fontSize: 18,
+    fontSize: isDesktop ? 22 : isTablet ? 20 : 18,
     fontWeight: "bold",
   },
 
   dotsContainer: {
     flexDirection: "row",
     alignItems: "flex-end",
+    paddingHorizontal: isDesktop ? 48 : isTablet ? 32 : 24,
   },
 
   dot: {
-    width: 8,
-    height: 10,
-    borderRadius: 4,
+    width: isDesktop ? 10 : 8,
+    height: isDesktop ? 12 : 10,
+    borderRadius: isDesktop ? 5 : 4,
     backgroundColor: "#fff",
-    marginHorizontal: 4,
+    marginHorizontal: isDesktop ? 6 : 4,
     opacity: 0.45,
   },
 
   dotActive: {
-    width: 8,
-    height: 20,
-    borderRadius: 4,
+    width: isDesktop ? 10 : 8,
+    height: isDesktop ? 24 : 20,
+    borderRadius: isDesktop ? 5 : 4,
     backgroundColor: "#fff",
-    marginHorizontal: 4,
+    marginHorizontal: isDesktop ? 6 : 4,
   },
 });

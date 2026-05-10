@@ -13,6 +13,7 @@ import {
   Easing,
   Modal,
   type LayoutChangeEvent,
+  Dimensions,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -37,10 +38,20 @@ import {
 } from "../lib/cartServerApi";
 import api, { productByIdPath } from "../services/api";
 import { useLanguage } from "../lib/language";
+import AwesomeAlert from "react-native-awesome-alerts";
+import HomeBottomTabBar from "../components/HomeBottomTabBar";
+
+const { width } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
 
 const runnerBoyCartImg = require("../assets/images/runner-boy-cart.png");
 const RUNNER_W = 170;
 const RUNNER_H = 64;
+const BOTTOM_TAB_RESERVED_HEIGHT = 92;
 
 type CartItemSource = "local" | "server";
 
@@ -1069,7 +1080,9 @@ const handleClearServerCart =
         style={styles.content}
         contentContainerStyle={[
           styles.contentContainer,
-          cartItems.length > 0 ? { paddingBottom: Math.max(24, footerHeight + 24) } : null,
+          cartItems.length > 0
+            ? { paddingBottom: Math.max(24, footerHeight + BOTTOM_TAB_RESERVED_HEIGHT + 24) }
+            : { paddingBottom: BOTTOM_TAB_RESERVED_HEIGHT + 24 },
         ]}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
@@ -1090,30 +1103,28 @@ const handleClearServerCart =
           </View>
         ) : cartItems.length === 0 ? (
           <View style={styles.emptyContainer}>
-
-          <Image
-  source={runnerBoyCartImg}
-  style={{
-    width: 220,
-    height: 120,
-    opacity: 0.12,
-    position: "absolute",
-    top: 90,
-  }}
-  resizeMode="contain"
-/>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="cart-outline" size={80} color="#E0E0E0" />
+            <Image
+              source={runnerBoyCartImg}
+              style={{
+                width: isDesktop ? 280 : 220,
+                height: isDesktop ? 150 : 120,
+                opacity: 0.12,
+                position: "absolute",
+                top: isDesktop ? 120 : 90,
+              }}
+              resizeMode="contain"
+            />
+            <View style={{ marginTop: isDesktop ? 180 : 140 }}>
+              <Text style={styles.emptyText}>{tr("Your cart is empty")}</Text>
+              <Text style={styles.emptySubtext}>
+                {tr("Add some items to get started!")}
+              </Text>
             </View>
-            <Text style={styles.emptyText}>{tr("Your cart is empty")}</Text>
-            <Text style={styles.emptySubtext}>
-              {tr("Add some items to get started!")}
-            </Text>
             <TouchableOpacity
               style={styles.shopNowButton}
               onPress={() => router.push("/home")}
             >
-<Text style={styles.shopNowButtonText}>{tr("Start")}</Text>
+              <Text style={styles.shopNowButtonText}>{tr("Start")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1415,6 +1426,8 @@ const handleClearServerCart =
         </View>
       )}
 
+      <HomeBottomTabBar cartBadgeCount={totalItems} />
+
       <Modal
         visible={isVariantModalVisible}
         transparent
@@ -1443,7 +1456,7 @@ const handleClearServerCart =
                 require("../assets/images/look1.png")
               }
               style={{
-                width: 140,
+                width: 180,
                 height: 140,
                 borderRadius: 14,
                 backgroundColor: "#F3F4F6",
@@ -1593,13 +1606,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+    paddingHorizontal: isDesktop ? 40 : 16,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 48,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingTop: isDesktop ? 60 : 48,
+    paddingHorizontal: isDesktop ? 48 : 28,
+    paddingBottom: isDesktop ? 16 : 12,
     backgroundColor: "#ffffff",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#e5e5e5",
@@ -1613,16 +1627,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerFavicon: {
-    width: 36,
-    height: 36,
+    width: isDesktop ? 44 : 36,
+    height: isDesktop ? 44 : 36,
   },
   headerSearchWrapper: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    marginHorizontal: isDesktop ? 16 : 8,
+    paddingHorizontal: isDesktop ? 16 : 10,
+    paddingVertical: isDesktop ? 8 : 4,
     borderRadius: 20,
     backgroundColor: "#ffffff",
     borderWidth: StyleSheet.hairlineWidth,
@@ -1633,7 +1647,7 @@ const styles = StyleSheet.create({
   },
   searchInputHeader: {
     flex: 1,
-    fontSize: 14,
+    fontSize: isDesktop ? 16 : 14,
     color: "#1d324e",
     paddingVertical: 2,
   },
@@ -1642,7 +1656,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerIcon: {
-    marginRight: 14,
+    marginRight: isDesktop ? 20 : 14,
   },
   headerIconHit: {
     padding: 6,
@@ -1672,30 +1686,30 @@ const styles = StyleSheet.create({
     elevation: 31,
   },
   runnerImage: {
-    width: RUNNER_W,
-    height: RUNNER_H,
+    width: isDesktop ? RUNNER_W * 1.5 : RUNNER_W,
+    height: isDesktop ? RUNNER_H * 1.5 : RUNNER_H,
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    padding: isDesktop ? 32 : 20,
     paddingBottom: 24,
   },
   cartLoadingContainer: {
     minHeight: 320,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 48,
+    paddingVertical: isDesktop ? 80 : 48,
     overflow: "hidden",
   },
   cartLoadingFavicon: {
-    width: 62,
-    height: 62,
-    marginBottom: 16,
+    width: isDesktop ? 80 : 62,
+    height: isDesktop ? 80 : 62,
+    marginBottom: isDesktop ? 24 : 16,
   },
   cartLoadingText: {
-    fontSize: 14,
+    fontSize: isDesktop ? 18 : 14,
     color: "#69798c",
     fontWeight: "500",
   },
@@ -1703,38 +1717,38 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 80,
+    paddingVertical: isDesktop ? 120 : 80,
   },
   emptyIcon: {
     marginBottom: 24,
   },
   emptyText: {
-    fontSize: 22,
+    fontSize: isDesktop ? 28 : 22,
     fontWeight: "600",
     color: "#333",
     marginBottom: 8,
   },
   emptySubtext: {
-    fontSize: 16,
+    fontSize: isDesktop ? 20 : 16,
     color: "#666",
     marginBottom: 32,
   },
   shopNowButton: {
     backgroundColor: "#E97A1F",
-    paddingHorizontal: 32,
-    paddingVertical: 14,
+    paddingHorizontal: isDesktop ? 40 : 32,
+    paddingVertical: isDesktop ? 18 : 14,
     borderRadius: 8,
   },
   shopNowButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: isDesktop ? 18 : 16,
     fontWeight: "600",
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: isDesktop ? 22 : 18,
     fontWeight: "700",
     color: "#000",
     marginBottom: 0,
@@ -1772,17 +1786,17 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   cartItemImage: {
-    width: 100,
-    height: 100,
+    width: isDesktop ? 120 : 100,
+    height: isDesktop ? 120 : 100,
     borderRadius: 8,
     backgroundColor: "#F5F5F5",
   },
   cartItemInfo: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: isDesktop ? 20 : 16,
   },
   cartItemName: {
-    fontSize: 16,
+    fontSize: isDesktop ? 18 : 16,
     fontWeight: "600",
     color: "#000",
     marginBottom: 6,
@@ -1813,11 +1827,11 @@ const styles = StyleSheet.create({
   cartItemPriceRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
+    gap: isDesktop ? 12 : 10,
+    marginBottom: isDesktop ? 16 : 12,
   },
   cartItemPrice: {
-    fontSize: 18,
+    fontSize: isDesktop ? 20 : 18,
     fontWeight: "700",
     color: "#E97A1F",
   },
@@ -2075,7 +2089,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     position: "absolute",
-    bottom: 0,
+    bottom: BOTTOM_TAB_RESERVED_HEIGHT,
     left: 0,
     right: 0,
     backgroundColor: "#FFFFFF",

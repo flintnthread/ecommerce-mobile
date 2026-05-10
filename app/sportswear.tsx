@@ -40,6 +40,12 @@ import {
 const IMG_SPORTS_DEALS = require("../assets/images/sportswear.png");
 
 const { height, width } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
+
 /** Must match `styles.storeBanner.height` — used so carousel children get real pixel height (not 0). */
 const WOMEN_STORE_BANNER_HEIGHT = 250;
 /** Must match `styles.westernBanner.height`. */
@@ -910,9 +916,11 @@ function buildLocalLookbookForMensSubcategory(
   return out;
 }
 
-/** Products to buy — 2 columns; section horizontal padding 16 + gap between cells */
-const PTB_GRID_GAP = 12;
-const PTB_GRID_COL_W = Math.floor((width - 32 - PTB_GRID_GAP) / 2);
+/** Products to buy — responsive columns; section horizontal padding and gap between cells */
+const PTB_GRID_GAP = isDesktop ? 16 : 12;
+const PTB_GRID_COL_W = isDesktop 
+  ? Math.floor((width - 40 - PTB_GRID_GAP * 2) / 3)  // 3 columns on desktop
+  : Math.floor((width - 32 - PTB_GRID_GAP) / 2);     // 2 columns on mobile
 
 type MainCategoryApiRowSport = {
   id: number;
@@ -2578,14 +2586,6 @@ const rotate = rotateAnim.interpolate({
               }
             }}
           />
-          <TouchableOpacity
-            onPress={openCamera}
-            style={styles.searchBarIconBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Open camera"
-          >
-            <Ionicons name="camera-outline" size={22} color="#777" />
-          </TouchableOpacity>
         </View>
         <TouchableOpacity
           style={styles.iconBtn}
@@ -2600,19 +2600,6 @@ const rotate = rotateAnim.interpolate({
                   : String(
                       wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size
                     )}
-              </Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.cartBtn}
-          onPress={() => router.push("/cart")}
-        >
-          <Ionicons name="cart-outline" size={24} color="#000" />
-          {cartCount > 0 ? (
-            <View style={styles.headerIconBadge}>
-              <Text style={styles.headerIconBadgeText}>
-                {cartCount > 99 ? "99+" : String(cartCount)}
               </Text>
             </View>
           ) : null}
@@ -3820,23 +3807,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
   },
 
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingHorizontal: isDesktop ? 20 : 10,
+    paddingTop: isDesktop ? 12 : 8,
+    paddingBottom: isDesktop ? 12 : 8,
     marginTop: 0,
-    marginBottom: 14,
-    gap: 6,
+    marginBottom: isDesktop ? 20 : 14,
+    gap: isDesktop ? 10 : 6,
   },
 
   logo: {
-    width: 56,
-    height: 32,
-    marginRight: 4,
+    width: isDesktop ? 70 : 56,
+    height: isDesktop ? 40 : 32,
+    marginRight: isDesktop ? 8 : 4,
   },
 
   searchContainer: {
@@ -3845,16 +3834,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#f2f2f2",
     borderRadius: 22,
-    paddingHorizontal: 10,
-    minHeight: 44,
+    paddingHorizontal: isDesktop ? 16 : 10,
+    minHeight: isDesktop ? 52 : 44,
   },
 
   searchInput: {
     flex: 1,
     marginLeft: 6,
-    fontSize: 15,
+    fontSize: isDesktop ? 18 : 15,
     color: "#111",
-    paddingVertical: 8,
+    paddingVertical: isDesktop ? 10 : 8,
   },
 
   searchBarIconBtn: {
@@ -3894,8 +3883,9 @@ const styles = StyleSheet.create({
 
   bannerContainer: {
     width: "100%",
-    height: Math.min(Math.round(height * 0.62), 520),
+    height: Math.min(Math.round(height * 0.62), isDesktop ? 600 : 520),
     position: "relative",
+    marginHorizontal: isDesktop ? 20 : 0,
   },
 
   bannerImage: {
@@ -6142,6 +6132,7 @@ container2: {
     marginTop: 18,
     paddingBottom: 20,
     backgroundColor: "#fff",
+    marginHorizontal: isDesktop ? 20 : 0,
   },
   ptbHeaderSimple: {
     flexDirection: "row",
@@ -6185,7 +6176,7 @@ container2: {
   },
   ptbFpImage: {
     width: "100%",
-    height: 130,
+    height: isDesktop ? 150 : 130,
     resizeMode: "cover",
     backgroundColor: "#FFFFFF",
   },
@@ -6290,8 +6281,8 @@ container2: {
   ptbGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    paddingHorizontal: 16,
-    gap: PTB_GRID_GAP,
+    paddingHorizontal: isDesktop ? 20 : 16,
+    gap: isDesktop ? 16 : 10,
   },
   ptbCard: {
     backgroundColor: "#fff",

@@ -34,7 +34,13 @@ import {
   togglePtbWishlistWithServer,
 } from "../lib/wishlistServerApi";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
+
 const DESK_INNER_WIDTH = width - 20; // deskSection marginHorizontal: 10 × 2
 /** Horizontal padding inside the desk block; increase for narrower banners */
 const HERO_SIDE_INSET = 20;
@@ -48,7 +54,7 @@ const FW5 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.
 const FW6 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.20.33 AM.jpeg");
 const FW7 = require("../assets/footwearimages/WhatsApp Image 2026-03-26 at 6.21.01 AM.jpeg");
 const BOTTOM3_MAIN_BANNER = require("../assets/footwearimages/Footwearbanner.png");
-const HEADER_FAVICON = require("../assets/footwearimages/Fav Icon.png");
+const HEADER_FAVICON = require("../assets/images/logo.png");
 
 /**
  * Sticky top menu bar — one asset per tab. Change only the string inside each require().
@@ -952,8 +958,7 @@ export default function FootwearScreen() {
               }
             }}
           />
-          <Ionicons name="camera-outline" size={18} color="#72809A" />
-        </View>
+                  </View>
 
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push("/wishlist")}>
           <Ionicons name="heart-outline" size={24} color="#1D2430" />
@@ -965,16 +970,6 @@ export default function FootwearScreen() {
                   : String(
                       wishlistHasAuth ? wishlistServerKeys.size : wishlistIds.size
                     )}
-              </Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push("/cart")}>
-          <Ionicons name="bag-outline" size={24} color="#1D2430" />
-          {cartCount > 0 ? (
-            <View style={styles.headerIconBadge}>
-              <Text style={styles.headerIconBadgeText}>
-                {cartCount > 99 ? "99+" : String(cartCount)}
               </Text>
             </View>
           ) : null}
@@ -1715,6 +1710,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFF7F0",
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
   },
   contentContainer: {
     paddingBottom: 24,
@@ -1722,9 +1719,9 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingTop: 40,
-    paddingBottom: 10,
+    paddingHorizontal: isDesktop ? 20 : 10,
+    paddingTop: isDesktop ? 44 : 40,
+    paddingBottom: isDesktop ? 12 : 10,
     backgroundColor: "#FFF7F0",
     position: "absolute",
     top: 0,
@@ -1787,24 +1784,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#CFD7E6",
   },
   faviconImage: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    resizeMode: "cover",
+    width: isDesktop ? 70 : 56,
+    height: isDesktop ? 40 : 32,
+    resizeMode: "contain",
   },
   searchBar: {
     flex: 1,
-    height: 40,
+    height: isDesktop ? 48 : 40,
     borderRadius: 10,
     backgroundColor: "#fff",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
+    paddingHorizontal: isDesktop ? 16 : 10,
   },
   searchInput: {
     flex: 1,
     marginHorizontal: 7,
-    fontSize: 13,
+    fontSize: isDesktop ? 15 : 13,
     color: "#1D324E",
   },
   iconBtn: {
@@ -1829,7 +1825,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   dualBannerCard: {
-    marginHorizontal: 0,
+    marginHorizontal: isDesktop ? 20 : 0,
     marginTop: 4,
     marginBottom: 10,
     borderRadius: 0,
@@ -1845,7 +1841,7 @@ const styles = StyleSheet.create({
   },
   dualBannerTopImage: {
     width: "118%",
-    height: 280,
+    height: isDesktop ? 320 : 280,
     resizeMode: "cover",
   },
   dualBannerDivider: {
@@ -1898,7 +1894,7 @@ const styles = StyleSheet.create({
   },
   heroWrap: {
     width: HERO_SLIDE_WIDTH,
-    height: 310,
+    height: isDesktop ? 350 : 310,
     backgroundColor: "#f6c795",
     borderRadius: 14,
     overflow: "hidden",
@@ -1925,14 +1921,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#1d324e",
   },
   hubScreenTitle: {
-    fontSize: 22,
+    fontSize: isDesktop ? 26 : 22,
     fontWeight: "900",
     color: "#1d324e",
     paddingHorizontal: 14,
     marginBottom: 6,
   },
   hubScreenSub: {
-    fontSize: 14,
+    fontSize: isDesktop ? 16 : 14,
     color: "#5a6578",
     paddingHorizontal: 14,
     marginBottom: 16,
@@ -1942,11 +1938,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
+    paddingHorizontal: isDesktop ? 20 : 10,
     paddingBottom: 24,
   },
   hubCard: {
-    width: "48.5%",
+    width: isDesktop ? "23%" : "48.5%",
     backgroundColor: "#FFFDF9",
     borderRadius: 14,
     overflow: "hidden",
@@ -1961,11 +1957,11 @@ const styles = StyleSheet.create({
   },
   hubCardImage: {
     width: "100%",
-    height: 120,
+    height: isDesktop ? 140 : 120,
     resizeMode: "cover",
   },
   hubCardLabel: {
-    fontSize: 13,
+    fontSize: isDesktop ? 14 : 13,
     fontWeight: "800",
     color: "#0A6B5C",
     paddingHorizontal: 10,
@@ -2167,7 +2163,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: isDesktop ? 28 : 24,
     fontWeight: "900",
     color: "#F4F6FA",
     paddingHorizontal: 10,
@@ -2175,7 +2171,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitles: {
-    fontSize: 24,
+    fontSize: isDesktop ? 28 : 24,
     fontWeight: "900",
     color: "#1d324e",
     paddingHorizontal: 10,
@@ -2222,10 +2218,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
+    paddingHorizontal: isDesktop ? 20 : 10,
   },
   promoCard: {
-    width: "48.5%",
+    width: isDesktop ? "23%" : "48.5%",
     borderRadius: 10,
     overflow: "hidden",
     marginBottom: 10,
@@ -2451,9 +2447,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 2,
     paddingBottom: 40,
+    gap: isDesktop ? 16 : 10,
   },
   relatedProductCard: {
-    width: "49%",
+    width: isDesktop ? "31%" : "49%",
     borderRadius: 12,
     
     backgroundColor: "#ef7b1a",
@@ -2472,7 +2469,7 @@ const styles = StyleSheet.create({
   },
   relatedProductImage: {
     width: "100%",
-    height: 130,
+    height: isDesktop ? 150 : 130,
     resizeMode: "cover",
     backgroundColor: "#FFFFFF",
   },
@@ -2481,7 +2478,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   relatedProductName: {
-    fontSize: 12,
+    fontSize: isDesktop ? 14 : 12,
     fontWeight: "800",
     color: "#1D2430",
     minHeight: 30,

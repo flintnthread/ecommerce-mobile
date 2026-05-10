@@ -24,13 +24,13 @@ export default function OtherScreen() {
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
 
-  const languages = [
-    { code: "en", name: "English", nativeName: "English" },
-    { code: "hi", name: "Hindi", nativeName: "हिंदी" },
-    { code: "ta", name: "Tamil", nativeName: "தமிழ்" },
-    { code: "te", name: "Telugu", nativeName: "తెలుగు" },
-    { code: "kn", name: "Kannada", nativeName: "ಕನ್ನಡ" },
-    { code: "ml", name: "Malayalam", nativeName: "മലയാളം" },
+  const languages: { code: string; language: SupportedLanguage; name: string; nativeName: string }[] = [
+    { code: "en", language: "English", name: "English", nativeName: "English" },
+    { code: "hi", language: "Hindi", name: "Hindi", nativeName: "हिंदी" },
+    { code: "ta", language: "Tamil", name: "Tamil", nativeName: "தமிழ்" },
+    { code: "te", language: "Telugu", name: "Telugu", nativeName: "తెలుగు" },
+    { code: "kn", language: "Kannada", name: "Kannada", nativeName: "ಕನ್ನಡ" },
+    { code: "ml", language: "Malayalam", name: "Malayalam", nativeName: "മലയാളം" },
   ];
 
   const appVersion = "1.0.0";
@@ -89,7 +89,7 @@ export default function OtherScreen() {
         {/* Close Button - Absolute Positioned */}
         <TouchableOpacity
           style={styles.closeBtn}
-          onPress={() => router.back()}
+          onPress={() => router.replace("/account")}
         >
           <Ionicons name="close-circle" size={32} color="#666" />
         </TouchableOpacity>
@@ -196,14 +196,14 @@ export default function OtherScreen() {
               <View key={lang.code}>
                 <TouchableOpacity
                   style={styles.languageItem}
-                  onPress={() => handleLanguageSelect(lang.code as SupportedLanguage)}
+                  onPress={() => handleLanguageSelect(lang.language)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.languageItemLeft}>
                     <Text style={styles.languageName}>{lang.name}</Text>
                     <Text style={styles.languageNative}>{lang.nativeName}</Text>
                   </View>
-                  {selectedLanguage === (lang.code as SupportedLanguage) && (
+                  {selectedLanguage === lang.language && (
                     <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
                   )}
                 </TouchableOpacity>

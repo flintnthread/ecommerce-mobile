@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Dimensions,
   type ImageSourcePropType,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -12,6 +13,13 @@ import { Ionicons } from "@expo/vector-icons";
 import NotificationPermission from "./notification";
 import LocationPermission from "./loc";
 import { type SupportedLanguage, useLanguage } from "../lib/language";
+
+const { width } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
 
 const languages = [
   { name: "Telugu", image: require("../assets/images/telugu.png") },
@@ -139,11 +147,11 @@ const styles = StyleSheet.create({
 
   backBtnTop: {
     position: "absolute",
-    left: 10,
+    left: isDesktop ? 20 : 10,
     top: 60,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: isDesktop ? 56 : 48,
+    height: isDesktop ? 56 : 48,
+    borderRadius: isDesktop ? 28 : 24,
     backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
@@ -158,19 +166,19 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    paddingTop: 66,
-    paddingHorizontal: 20,
+    paddingTop: isDesktop ? 80 : 66,
+    paddingHorizontal: isDesktop ? 40 : 20,
     paddingBottom: 10,
   },
   title: {
-    fontSize: 28,
+    fontSize: isDesktop ? 36 : isTablet ? 32 : 28,
     fontWeight: "800",
     color: "#111",
     letterSpacing: 0.3,
   },
   titleAlt: {
     marginTop: 6,
-    fontSize: 15,
+    fontSize: isDesktop ? 18 : isTablet ? 16 : 15,
     fontWeight: "500",
     color: "#666",
     letterSpacing: 0.2,
@@ -180,21 +188,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-evenly",
-    paddingHorizontal: 6,
+    justifyContent: isDesktop ? "flex-start" : "space-evenly",
+    paddingHorizontal: isDesktop ? 40 : 6,
   },
 
   // Card Style
   card: {
-    width: 154,
-    height: 118,
+    width: isDesktop ? 180 : isTablet ? 170 : 154,
+    height: isDesktop ? 140 : isTablet ? 130 : 118,
     backgroundColor: "#fff",
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: "#2563EB",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 18,
+    marginBottom: isDesktop ? 24 : 18,
+    marginHorizontal: isDesktop ? 12 : 0,
 
     // Shadow (iOS)
     shadowColor: "#000",
@@ -207,21 +216,21 @@ const styles = StyleSheet.create({
   },
 
   imageFrame: {
-    width: 64,
-    height: 64,
+    width: isDesktop ? 80 : 64,
+    height: isDesktop ? 80 : 64,
     marginBottom: 8,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
   },
   image: {
-    width: 64,
-    height: 64,
+    width: isDesktop ? 80 : 64,
+    height: isDesktop ? 80 : 64,
     resizeMode: "contain",
   },
 
   text: {
-    fontSize: 16,
+    fontSize: isDesktop ? 18 : isTablet ? 17 : 16,
     fontWeight: "600",
     color: "#000",
   },
