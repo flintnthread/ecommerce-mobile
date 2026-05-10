@@ -361,7 +361,7 @@ function escapeInvoiceHtml(value: string): string {
 function buildInvoiceHtml(
   order: Order,
   invoiceNumber: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown> | any
 ): string {
   const readField = (keys: string[], fallback = ""): string => {
     if (!details) return fallback;
@@ -398,17 +398,36 @@ function buildInvoiceHtml(
   const invoiceDate = order.date?.trim() || new Date().toLocaleDateString("en-IN");
   const lineItems = order.products ?? [];
   const orderTotalNum = parseApiNumber(order.total.replace(/[^\d.]/g, ""));
-  const subtotalNum =
-    lineItems.length > 0
+  
+  // Use backend invoice data if available
+  const isBackendInvoice = details && details.invoiceNumber;
+  const subtotalNum = isBackendInvoice 
+    ? parseApiNumber(details.subtotalBeforeTax || 0)
+    : lineItems.length > 0
       ? lineItems.reduce((sum, p) => {
           const unit = parseApiNumber(String(p.price).replace(/[^\d.]/g, ""));
           return sum + unit * Math.max(1, p.quantity);
         }, 0)
       : orderTotalNum;
-  const taxAmount = Math.max(0, orderTotalNum - subtotalNum);
+  
+  const taxAmount = isBackendInvoice
+    ? parseApiNumber(details.totalGstAmount || 0)
+    : Math.max(0, orderTotalNum - subtotalNum);
+  
+  const cgstAmount = isBackendInvoice ? parseApiNumber(details.cgstAmount || 0) : 0;
+  const sgstAmount = isBackendInvoice ? parseApiNumber(details.sgstAmount || 0) : 0;
+  const igstAmount = isBackendInvoice ? parseApiNumber(details.igstAmount || 0) : taxAmount;
+  
   const igstPct = subtotalNum > 0 ? (taxAmount / subtotalNum) * 100 : 0;
+  const cgstPct = subtotalNum > 0 ? (cgstAmount / subtotalNum) * 100 : 0;
+  const sgstPct = subtotalNum > 0 ? (sgstAmount / subtotalNum) * 100 : 0;
+  
   const deliveryCharge = parseApiNumber(details?.shippingCharge);
-  const grandTotal = subtotalNum + taxAmount + deliveryCharge;
+  const grandTotal = isBackendInvoice
+    ? parseApiNumber(details.grandTotal || 0)
+    : subtotalNum + taxAmount + deliveryCharge;
+  
+  const isInterState = isBackendInvoice ? details.isInterState : false;
 
   const rowsHtml =
     lineItems.length > 0
@@ -570,17 +589,26 @@ function buildInvoiceHtml(
 
       <div class="totals">
         <div class="row"><span>Subtotal (Before Tax)</span><span>${formatMoney(subtotalNum)}</span></div>
-        <div class="row"><span>IGST @ ${igstPct > 0 ? igstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(taxAmount)}</span></div>
+        ${isInterState ? 
+          `<div class="row"><span>IGST @ ${igstPct > 0 ? igstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(igstAmount)}</span></div>` :
+          `<div class="row"><span>CGST @ ${cgstPct > 0 ? cgstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(cgstAmount)}</span></div>
+           <div class="row"><span>SGST @ ${sgstPct > 0 ? sgstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(sgstAmount)}</span></div>`
+        }
         <div class="row"><span>Shipping Charges</span><span class="${deliveryCharge <= 0 ? "free" : ""}">${deliveryCharge <= 0 ? "FREE" : formatMoney(deliveryCharge)}</span></div>
         <div class="row" style="border-bottom:0;"><strong>Grand Total</strong><span class="grand">${formatMoney(grandTotal)}</span></div>
       </div>
 
       <div class="gst-box">
         <p class="gst-title">GST Breakdown Summary</p>
-        <div class="row"><span>Total CGST:</span><span>₹0.00</span></div>
-        <div class="row"><span>Total SGST:</span><span>₹0.00</span></div>
-        <div class="row"><span>Total IGST:</span><span>${formatMoney(taxAmount)}</span></div>
-        <div class="row" style="border-bottom:0; font-weight:700;"><span>Total GST:</span><span>${formatMoney(taxAmount)}</span></div>
+        ${isInterState ? 
+          `<div class="row"><span>Total IGST:</span><span>${formatMoney(igstAmount)}</span></div>
+           <div class="row"><span>Total GST:</span><span>${formatMoney(taxAmount)}</span></div>
+           <div class="row" style="border-bottom:0; font-weight:700; font-style:italic;">*inter-state transaction - IGST applicable</div>` :
+          `<div class="row"><span>Total CGST:</span><span>${formatMoney(cgstAmount)}</span></div>
+           <div class="row"><span>Total SGST:</span><span>${formatMoney(sgstAmount)}</span></div>
+           <div class="row"><span>Total GST:</span><span>${formatMoney(taxAmount)}</span></div>
+           <div class="row" style="border-bottom:0; font-weight:700; font-style:italic;">*intra-state transaction - CGST/SGST applicable</div>`
+        }
       </div>
 
       <div class="pay-box">
@@ -1189,6 +1217,31 @@ export default function OrdersScreen() {
   const handleDownloadInvoice = async (order: Order) => {
     const orderId = Number(order.id);
     try {
+      // First try to fetch invoice from backend API
+      const token = await AsyncStorage.getItem("token");
+      if (token) {
+        try {
+          const response = await api.get(`/api/invoices?orderId=${orderId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.data && response.data.success && response.data.data && response.data.data.length > 0) {
+            const invoice = response.data.data[0];
+            // Use backend invoice data
+            const html = buildInvoiceHtml(order, invoice.invoiceNumber, invoice);
+            await Print.printAsync({
+              html,
+            });
+            return;
+          }
+        } catch (apiError) {
+          console.log('Backend invoice not available, using fallback:', apiError);
+        }
+      }
+      
+      // Fallback to client-side generation if backend invoice not available
       const fallbackNumber = Number.isFinite(orderId) && orderId > 0 ? Math.floor(orderId) : order.id;
       const invoiceNumber = `INV-${fallbackNumber}`;
       const html = buildInvoiceHtml(order, invoiceNumber);
@@ -1452,6 +1505,15 @@ export default function OrdersScreen() {
                         <Text style={styles.viewDetailsText}>{tr("View Details")}</Text>
                         <Ionicons name="chevron-forward" size={16} color="#E97A1F" />
                       </TouchableOpacity>
+                      {order.status === 'delivered' && (
+                        <TouchableOpacity
+                          style={styles.invoiceBtn}
+                          onPress={() => handleDownloadInvoice(order)}
+                        >
+                          <Ionicons name="document-text-outline" size={16} color="#fff" />
+                          <Text style={styles.invoiceBtnText}>{tr("Invoice")}</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </TouchableOpacity>
                 );
@@ -2181,6 +2243,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#E97A1F",
     marginRight: 4,
+  },
+  invoiceBtn: {
+    backgroundColor: "#28a745",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  invoiceBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginLeft: 4,
   },
   detailsContainer: {
     flex: 1,
