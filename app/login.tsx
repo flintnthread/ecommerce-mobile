@@ -222,9 +222,10 @@ export default function Login() {
   const router = useRouter();
   const { tr } = useLanguage();
 
-  const [isChecked, setChecked] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [isChecked, setChecked] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
 
   const googleClientId = resolveGoogleOAuthClientId();
   const fallbackChooserReturnUri = useMemo(() => {
@@ -249,6 +250,13 @@ export default function Login() {
         const payload = emailRegex.test(value)
           ? { email: value }
           : { mobile: value };
+        
+        // Add referral code if provided
+        if (referralCode.trim()) {
+          (payload as any).referralCode = referralCode.trim();
+        }
+        
+        console.log("OTP Payload:", payload);
         const data = await sendOtp(payload);
         if (data) {
           router.push({
@@ -257,6 +265,7 @@ export default function Login() {
               input: value,
               resendSeconds: String(OTP_RESEND_SECONDS),
               showSentToast: "1",
+              referralCode: referralCode.trim(), // Pass referral code to OTP screen
             },
           });
         } else {
@@ -273,7 +282,7 @@ export default function Login() {
         setLoading(false);
       }
     },
-    [tr, router]
+    [tr, router, referralCode]
   );
 
   const completeGoogleSignIn = useCallback(
@@ -438,6 +447,18 @@ export default function Login() {
             mobileRegex.test(inputValue) ? "number-pad" : "email-address"
           }
           autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Ionicons name="ticket-outline" size={20} color="#888" />
+        <TextInput
+          placeholder={tr("Referral Code (Optional)")}
+          value={referralCode}
+          onChangeText={setReferralCode}
+          style={styles.input}
+          autoCapitalize="characters"
           autoCorrect={false}
         />
       </View>

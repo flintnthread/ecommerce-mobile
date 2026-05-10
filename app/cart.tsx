@@ -38,6 +38,7 @@ import {
 } from "../lib/cartServerApi";
 import api, { productByIdPath } from "../services/api";
 import { useLanguage } from "../lib/language";
+
 import AwesomeAlert from "react-native-awesome-alerts";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
 
@@ -414,6 +415,33 @@ const [alertVisible, setAlertVisible] = useState(false);
 const [alertTitle, setAlertTitle] = useState("");
 const [alertMessage, setAlertMessage] = useState("");
 const [alertAction, setAlertAction] = useState<(() => void) | null>(null);
+
+useEffect(() => {
+  if (alertVisible && alertTitle) {
+    Alert.alert(
+      alertTitle,
+      alertMessage,
+      [
+        {
+          text: "Cancel",
+          onPress: () => setAlertVisible(false),
+          style: "cancel"
+        },
+        {
+          text: "OK",
+          onPress: () => {
+            setAlertVisible(false);
+            if (alertAction) {
+              alertAction();
+            }
+          }
+        }
+      ],
+      { cancelable: false }
+    );
+  }
+}, [alertVisible, alertTitle, alertMessage, alertAction]);
+
 const showSweetAlert = (
   title: string,
   message: string,
@@ -1567,29 +1595,7 @@ const handleClearServerCart =
       ) : null}
 
 
-      <AwesomeAlert
-  show={alertVisible}
-  showProgress={false}
-  title={alertTitle}
-  message={alertMessage}
-  closeOnTouchOutside={false}
-  closeOnHardwareBackPress={false}
-  showCancelButton={true}
-  showConfirmButton={true}
-  cancelText="Cancel"
-  confirmText="OK"
-  confirmButtonColor="#E97A1F"
-  onCancelPressed={() => {
-    setAlertVisible(false);
-  }}
-  onConfirmPressed={() => {
-    setAlertVisible(false);
-
-    if (alertAction) {
-      alertAction();
-    }
-  }}
-/>
+      {null}
     </View>
   </View>
 </Modal>

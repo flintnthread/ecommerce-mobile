@@ -63,9 +63,14 @@ export default function RazorpayWebCheckoutScreen() {
           if (verify.success) {
             if (Number.isFinite(appOrderId) && appOrderId > 0) {
               try {
-                await api.post("/api/invoices", { orderId: Math.floor(appOrderId) });
+                // Verify payment with backend using the actual order ID
+                await api.post(`/api/payment/verify?orderId=${data.razorpay_order_id}&paymentId=${data.razorpay_payment_id}&signature=${data.razorpay_signature}`);
+                console.log("Payment verified successfully for order:", appOrderId);
               } catch (error) {
-                console.warn("Invoice generation failed after web checkout:", error);
+                console.warn("Payment verification failed after web checkout:", error);
+                Alert.alert("Payment", "Payment verification failed. Please contact support.");
+                router.back();
+                return;
               }
             }
             // Keep cart in sync after successful payment on web checkout path.

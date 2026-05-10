@@ -70,6 +70,8 @@ import api, {
 
   productsByMainCategoryPath,
 
+  productsBySubcategoryPath,
+
   productsSearchPath,
 
   ratingPath,
@@ -3654,7 +3656,9 @@ export default function Home() {
 
       const apiOrigin = (api.defaults.baseURL as string | undefined)?.trim() || "";
 
-      const mappedProducts = response.content?.map((product: any) => ({
+      // Force TypeScript re-evaluation
+      // @ts-ignore
+      const mappedProducts = response.data?.content?.map((product: any) => ({
 
         id: product.id,
 
@@ -3699,91 +3703,53 @@ export default function Home() {
 
 
   const applyHomeBrowseFilters = useCallback(() => {
-
     const genderLabel = selectedGender.trim();
-
     const parts: string[] = [];
 
     if (genderLabel) {
-
       parts.push(genderLabel);
-
     }
 
     for (const c of selectedCategory) {
-
       const t = c.trim();
-
       if (t) parts.push(t);
-
     }
 
     for (const vals of Object.values(selectedFilters)) {
-
       for (const v of vals) {
-
         const t = v.trim();
-
         if (t) parts.push(t);
-
       }
-
     }
 
     const q = parts.join(" ");
-
     const categoryIdNum = Number(selectedBrowseMainCategoryId || undefined);
 
-
-
     if (!q && !Number.isFinite(categoryIdNum)) {
-
       Alert.alert(
-
         "Choose filters",
-
         "Pick a department and/or gender, category, or filter options, then try again."
-
       );
-
       return;
-
     }
 
-
-
     router.push({
-
-      pathname: "/browse",
-
+      pathname: "/searchresults",
       params: {
-
         q,
-
         categoryId: selectedBrowseMainCategoryId || undefined,
-
         sort: selectedSort.toLowerCase(),
-
       },
-
-    } as Href<string>);
+    });
 
   }, [
-
     router,
-
     selectedGender,
-
     selectedCategory,
-
     selectedFilters,
-
     selectedBrowseMainCategoryId,
-
     selectedSort,
-
   ]);
-
 
 
   const [wishlistCount, setWishlistCount] = useState(0);
@@ -11843,44 +11809,16 @@ const categoryData = [
 
 
 
-
-
-
-
-
-
-
-
-
-      
-
-
-
       <HomeBottomTabBar cartBadgeCount={cartBadgeCount} />
 
     </View>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   );
 
 }
+
+
+
 
 
 
@@ -11917,16 +11855,6 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
   </TouchableOpacity>
 
 );
-
-
-
-
-
-
-
-
-
-
 
 const styles = StyleSheet.create({
 
@@ -11967,7 +11895,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
 
   },
-
 
 
   saveSheetOverlay: {
