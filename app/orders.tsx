@@ -1215,7 +1215,7 @@ export default function OrdersScreen() {
   };
 
   const handleDownloadInvoice = async (order: Order) => {
-    const orderId = Number(order.id);
+    const orderId = parseInt(String(order.id).replace(/\D/g, ''), 10);
     try {
       // First try to fetch invoice from backend API
       const token = await AsyncStorage.getItem("token");

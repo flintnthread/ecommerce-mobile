@@ -32,6 +32,12 @@ export default function OTP() {
       : Array.isArray(params.showSentToast)
       ? params.showSentToast[0]
       : "";
+  const referralCodeParam =
+    typeof params.referralCode === "string"
+      ? params.referralCode
+      : Array.isArray(params.referralCode)
+      ? params.referralCode[0]
+      : "";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -179,6 +185,13 @@ const inputs = useRef<(TextInput | null)[]>([]);
       const payload = userInput.includes("@")
         ? { email: userInput, otp: enteredOtp }
         : { mobile: userInput, otp: enteredOtp };
+
+      // Add referral code if provided
+      if (referralCodeParam.trim()) {
+        (payload as any).referralCode = referralCodeParam.trim();
+      }
+
+      console.log("Verify OTP Payload:", payload);
 
       const data = await verifyOtp(payload);
 
