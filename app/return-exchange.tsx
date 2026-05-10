@@ -12,6 +12,10 @@ import {
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import {
+  createReturn,
+  createExchange,
+} from "../services/api";
 
 type ReasonRow = {
   id: string;
@@ -113,12 +117,13 @@ const EXCHANGE_OPTION_LIST = [
 
 export default function ReturnExchangeScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{
-    mode?: string;
-    orderNumber?: string;
-    productName?: string;
-    productPrice?: string;
-  }>();
+const params = useLocalSearchParams<{
+  orderId?: string;
+  mode?: string;
+  orderNumber?: string;
+  productName?: string;
+  productPrice?: string;
+}>();
   const [selectedReasonId, setSelectedReasonId] = useState<string>("");
   const [selectedIssueOption, setSelectedIssueOption] = useState<string>("");
   const [isIssueStepComplete, setIsIssueStepComplete] = useState(false);
@@ -168,60 +173,209 @@ export default function ReturnExchangeScreen() {
     const fallbackName = pickedVideo.uri.split("/").pop() ?? "Selected video";
     setSelectedVideoName(pickedVideo.fileName ?? fallbackName);
   };
-  const handleSubmit = () => {
-    if (!selectedReasonId || !selectedIssueOption) {
-      Alert.alert("Incomplete details", "Please select a reason and issue before submitting.");
+  const handleSubmit = async () => {
+
+  try {
+
+    // =====================================
+    // VALIDATIONS
+    // =====================================
+
+    if (
+      !selectedReasonId
+      || !selectedIssueOption
+    ) {
+
+      Alert.alert(
+        "Incomplete details",
+        "Please select a reason and issue before submitting."
+      );
+
       return;
     }
 
     if (!selectedVideoName) {
-      Alert.alert("Video required", "Please upload unboxing video before submitting.");
+
+      Alert.alert(
+        "Video required",
+        "Please upload unboxing video before submitting."
+      );
+
       return;
     }
 
-    if (selectedAction === "exchange" && !isExchangeAvailable) {
+    // =====================================
+    // EXCHANGE VALIDATIONS
+    // =====================================
+
+    if (
+      selectedAction === "exchange"
+      && !isExchangeAvailable
+    ) {
+
       Alert.alert(
         "Exchange unavailable",
-        "Exchange is not available for this reason. Your return request has been submitted instead.",
+        "Exchange is not available for this reason."
+      );
+
+      return;
+    }
+
+    if (
+      selectedAction === "exchange"
+      && isExchangeAvailable
+    ) {
+
+      if (!selectedExchangeOption) {
+
+        Alert.alert(
+          "Exchange details needed",
+          "Please choose exchange option."
+        );
+
+        return;
+      }
+
+      if (
+        requiresSizeSelection
+        && !selectedNewSize
+      ) {
+
+        Alert.alert(
+          "Size needed",
+          "Please select new size."
+        );
+
+        return;
+      }
+
+      if (
+        requiresColorSelection
+        && !selectedNewColor
+      ) {
+
+        Alert.alert(
+          "Color needed",
+          "Please select new color."
+        );
+
+        return;
+      }
+    }
+
+    // =====================================
+    // RETURN REQUEST
+    // =====================================
+
+    if (
+      selectedAction === "return"
+    ) {
+
+      const payload = {
+
+        orderId: Number(
+          params.orderId
+        ),
+
+        reason:
+          selectedReason?.title,
+
+        issue:
+          selectedIssueOption,
+
+        description:
+          exchangeComment,
+
+        images: [
+          selectedVideoName
+        ],
+      };
+
+      await createReturn(
+        payload
+      );
+
+      Alert.alert(
+        "Return submitted",
+        "Your return request has been submitted successfully.",
         [
           {
             text: "OK",
-            onPress: () => router.replace("/orders" as any),
+
+            onPress: () =>
+              router.replace(
+                "/orders" as any
+              ),
           },
         ]
       );
+
       return;
     }
 
-    if (selectedAction === "exchange" && isExchangeAvailable) {
-      if (!selectedExchangeOption) {
-        Alert.alert("Exchange details needed", "Please choose an exchange option.");
-        return;
-      }
-      if (requiresSizeSelection && !selectedNewSize) {
-        Alert.alert("Size needed", "Please select the new size for exchange.");
-        return;
-      }
-      if (requiresColorSelection && !selectedNewColor) {
-        Alert.alert("Color needed", "Please select the new color for exchange.");
-        return;
-      }
-    }
+    const payload = {
 
-    const requestType = selectedAction === "exchange" ? "Exchange" : "Return";
+      orderId: Number(
+        params.orderId
+      ),
+
+      reason:
+        selectedReason?.title,
+
+      issue:
+        selectedIssueOption,
+
+      exchangeType:
+        selectedExchangeOption,
+
+      newSize:
+        selectedNewSize,
+
+      newColor:
+        selectedNewColor,
+
+      description:
+        exchangeComment,
+
+      images: [
+        selectedVideoName
+      ],
+    };
+
+    await createExchange(
+      payload
+    );
+
     Alert.alert(
-      "Request submitted",
-      selectedAction === "exchange"
-        ? "Exchange request submitted successfully. We will verify the product and schedule pickup for replacement."
-        : `${requestType} request submitted successfully. We will review and update you shortly.`,
+      "Exchange submitted",
+      "Your exchange request has been submitted successfully.",
       [
         {
           text: "OK",
-          onPress: () => router.replace("/orders" as any),
+
+          onPress: () =>
+            router.replace(
+              "/orders" as any
+            ),
         },
       ]
     );
-  };
+
+  } catch (e: any) {
+
+    console.log(
+      "Return/Exchange Error",
+      e?.response?.data
+      || e.message
+    );
+
+    Alert.alert(
+      "Request failed",
+      e?.response?.data?.message
+      || "Something went wrong."
+    );
+  }
+};
 
   return (
     <View style={styles.container}>

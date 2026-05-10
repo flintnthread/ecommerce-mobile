@@ -40,6 +40,11 @@ import api from "../services/api";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+// Responsive breakpoints
+const isTablet = SCREEN_WIDTH >= 768;
+const isDesktop = SCREEN_WIDTH >= 1024;
+const isMobile = SCREEN_WIDTH < 768;
+
 const PROMOTE_WITH_US_URL = "https://flintnthread.in/ads-panel/index";
 const RECENT_VIEW_SESSION_KEY = "ft_recent_view_session_id";
 
@@ -1665,9 +1670,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
+    paddingHorizontal: isDesktop ? 40 : 16,
   },
   scrollContent: {
-    padding: 16,
+    padding: isDesktop ? 32 : 16,
     paddingBottom: 100,
   },
   topRow: {
@@ -1683,8 +1689,8 @@ const styles = StyleSheet.create({
   profileCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
-    marginTop: 24,
-    marginBottom: 20,
+    marginTop: isDesktop ? 32 : 24,
+    marginBottom: isDesktop ? 32 : 20,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -1696,9 +1702,9 @@ const styles = StyleSheet.create({
   },
   profileCardHeader: {
     backgroundColor: "#F8F9FA",
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 20,
+    paddingHorizontal: isDesktop ? 32 : 20,
+    paddingTop: isDesktop ? 32 : 24,
+    paddingBottom: isDesktop ? 24 : 20,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E5E5",
   },
@@ -1726,15 +1732,15 @@ const styles = StyleSheet.create({
   },
   accountAvatarWrap: {
     position: "relative",
-    width: 124,
-    height: 124,
+    width: isDesktop ? 140 : 124,
+    height: isDesktop ? 140 : 124,
     alignItems: "center",
     justifyContent: "center",
   },
   accountAvatarRing: {
-    width: 124,
-    height: 124,
-    borderRadius: 62,
+    width: isDesktop ? 140 : 124,
+    height: isDesktop ? 140 : 124,
+    borderRadius: isDesktop ? 70 : 62,
     padding: 4,
     justifyContent: "center",
     alignItems: "center",
@@ -1745,18 +1751,18 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   accountAvatarInner: {
-    width: 116,
-    height: 116,
-    borderRadius: 58,
+    width: isDesktop ? 132 : 116,
+    height: isDesktop ? 132 : 116,
+    borderRadius: isDesktop ? 66 : 58,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
   },
   accountAvatarImage: {
-    width: 116,
-    height: 116,
-    borderRadius: 58,
+    width: isDesktop ? 132 : 116,
+    height: isDesktop ? 132 : 116,
+    borderRadius: isDesktop ? 66 : 58,
   },
   accountAvatarCamera: {
     position: "absolute",
@@ -1778,9 +1784,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   circleIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: isDesktop ? 52 : 44,
+    height: isDesktop ? 52 : 44,
+    borderRadius: isDesktop ? 26 : 22,
     backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
@@ -1813,7 +1819,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   profileLabel: {
-    fontSize: 22,
+    fontSize: isDesktop ? 26 : 22,
     color: "#1A1A1A",
     marginBottom: 6,
     fontWeight: "700",
@@ -2050,8 +2056,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: isDesktop ? 24 : 16,
+    paddingVertical: isDesktop ? 16 : 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#DDDDDD",
   },
@@ -2062,18 +2068,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   menuLabel: {
-    fontSize: 14,
+    fontSize: isDesktop ? 16 : 14,
     flex: 1,
   },
   logoutButton: {
     backgroundColor: "#FFFFFF",
     alignSelf: "center",
-    paddingHorizontal: 40,
-    paddingVertical: 12,
+    paddingHorizontal: isDesktop ? 48 : 40,
+    paddingVertical: isDesktop ? 16 : 12,
     borderRadius: 6,
   },
   logoutText: {
-    fontSize: 14,
+    fontSize: isDesktop ? 16 : 14,
     fontWeight: "600",
   },
   fullImageModalContainer: {

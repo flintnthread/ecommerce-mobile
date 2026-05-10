@@ -124,6 +124,12 @@ const PRODUCTS: ProductItem[] = [
 ];
 
 const { width } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
+
 const bannerWidth = width - 24;
 
 const bannerImages = [
@@ -1874,29 +1880,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 48,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingTop: isDesktop ? 56 : 48,
+    paddingHorizontal: isDesktop ? 24 : 16,
+    paddingBottom: isDesktop ? 16 : 12,
     backgroundColor: "#f6c795",
     shadowColor: "#1d324e",
     shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowRadius: isDesktop ? 10 : 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
   headerIconButton: {
-    paddingRight: 8,
-    paddingVertical: 4,
+    paddingRight: isDesktop ? 12 : 8,
+    paddingVertical: isDesktop ? 6 : 4,
   },
   headerTitle: {
     flex: 1,
     textAlign: "left",
     marginLeft: 4,
-    fontSize: 18,
+    fontSize: isDesktop ? 22 : 18,
     fontWeight: "600",
     letterSpacing: 0.5,
     color: "#1d324e",

@@ -1187,7 +1187,7 @@ export default function OrdersScreen() {
   };
 
   const handleDownloadInvoice = async (order: Order) => {
-    const orderId = Number(order.id);
+    const orderId = parseInt(String(order.id).replace(/\D/g, ''), 10);
     try {
       const fallbackNumber = Number.isFinite(orderId) && orderId > 0 ? Math.floor(orderId) : order.id;
       const invoiceNumber = `INV-${fallbackNumber}`;

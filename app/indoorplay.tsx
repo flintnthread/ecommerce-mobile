@@ -1700,16 +1700,7 @@ export default function IndoorPlayScreen() {
                 }}
               />
             </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => router.push("/camerasearch")}
-              accessibilityRole="button"
-              accessibilityLabel="Search by camera"
-            >
-              <Ionicons name="camera-outline" size={20} color="#9aa0a6" />
-            </TouchableOpacity>
-          </View>
+                      </View>
 
           <View style={styles.headerIcons}>
             <TouchableOpacity

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   useWindowDimensions,
+  Dimensions,
   type ImageSourcePropType,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -71,7 +72,8 @@ function HexagonShopBadge({
   clipId: string;
   selected: boolean;
 }) {
-  const resolved = Image.resolveAssetSource(source);
+  // Handle both React Native and React Native Web
+  const resolved = Image.resolveAssetSource ? Image.resolveAssetSource(source) : null;
   const href = resolved?.uri ? { uri: resolved.uri } : undefined;
   const pts = flatTopHexPoints(HEX_W, HEX_H);
   const strokeW = selected ? 3.4 : 2;
@@ -543,6 +545,14 @@ const LOVE_MASONRY_TALL = 216;
 const LOVE_MASONRY_SHORT = 168;
 
 const WOMEN_PTB_GRID_GAP = 12;
+
+// Get window dimensions for responsive design
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = screenWidth >= 768;
+const isDesktop = screenWidth >= 1024;
+const isMobile = screenWidth < 768;
 
 export default function WomenScreen() {
   const router = useRouter();
@@ -1861,16 +1871,7 @@ export default function WomenScreen() {
               <Ionicons name="search-outline" size={19} color="#64748b" />
               <Text style={styles.womenSearchPlaceholder}>Search..</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push("/camerasearch")}
-              style={styles.womenSearchCameraBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel="Search by photo"
-            >
-              <Ionicons name="camera-outline" size={22} color="#64748b" />
-            </TouchableOpacity>
-          </View>
+                      </View>
 
           <View style={styles.womenHeaderIconGroup}>
             <TouchableOpacity
@@ -1900,32 +1901,7 @@ export default function WomenScreen() {
                 ) : null}
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.womenHeaderIconHit}
-              onPress={() => router.push("/cart")}
-              accessibilityRole="button"
-              accessibilityLabel="Cart"
-            >
-              <View style={styles.womenHeaderIconBadgeWrap}>
-                <Ionicons name="cart-outline" size={24} color="#c2410c" />
-                {womenCartCount > 0 ? (
-                  <View style={styles.womenHeaderIconBadge}>
-                    <Text style={styles.womenHeaderIconBadgeText}>
-                      {womenCartCount > 99 ? "99+" : String(womenCartCount)}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.womenHeaderIconHit}
-              onPress={() => router.push("/notifications")}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-            >
-              <Ionicons name="notifications-outline" size={24} color="#c2410c" />
-            </TouchableOpacity>
-          </View>
+                      </View>
         </View>
       </LinearGradient>
 

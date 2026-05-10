@@ -70,6 +70,8 @@ import api, {
 
   productsByMainCategoryPath,
 
+  productsBySubcategoryPath,
+
   productsSearchPath,
 
   ratingPath,
@@ -151,8 +153,12 @@ import {
 } from "../services/pushNotifications";
 
 
-
 const { width, height } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
 
 const HIDE_TOP_BAR_H = 66;
 
@@ -3650,7 +3656,9 @@ export default function Home() {
 
       const apiOrigin = (api.defaults.baseURL as string | undefined)?.trim() || "";
 
-      const mappedProducts = response.content?.map((product: any) => ({
+      // Force TypeScript re-evaluation
+      // @ts-ignore
+      const mappedProducts = response.data?.content?.map((product: any) => ({
 
         id: product.id,
 
@@ -3695,91 +3703,53 @@ export default function Home() {
 
 
   const applyHomeBrowseFilters = useCallback(() => {
-
     const genderLabel = selectedGender.trim();
-
     const parts: string[] = [];
 
     if (genderLabel) {
-
       parts.push(genderLabel);
-
     }
 
     for (const c of selectedCategory) {
-
       const t = c.trim();
-
       if (t) parts.push(t);
-
     }
 
     for (const vals of Object.values(selectedFilters)) {
-
       for (const v of vals) {
-
         const t = v.trim();
-
         if (t) parts.push(t);
-
       }
-
     }
 
     const q = parts.join(" ");
-
     const categoryIdNum = Number(selectedBrowseMainCategoryId || undefined);
 
-
-
     if (!q && !Number.isFinite(categoryIdNum)) {
-
       Alert.alert(
-
         "Choose filters",
-
         "Pick a department and/or gender, category, or filter options, then try again."
-
       );
-
       return;
-
     }
 
-
-
     router.push({
-
-      pathname: "/browse",
-
+      pathname: "/searchresults",
       params: {
-
         q,
-
         categoryId: selectedBrowseMainCategoryId || undefined,
-
         sort: selectedSort.toLowerCase(),
-
       },
-
-    } as Href<string>);
+    });
 
   }, [
-
     router,
-
     selectedGender,
-
     selectedCategory,
-
     selectedFilters,
-
     selectedBrowseMainCategoryId,
-
     selectedSort,
-
   ]);
-
 
 
   const [wishlistCount, setWishlistCount] = useState(0);
@@ -11839,44 +11809,16 @@ const categoryData = [
 
 
 
-
-
-
-
-
-
-
-
-
-      
-
-
-
       <HomeBottomTabBar cartBadgeCount={cartBadgeCount} />
 
     </View>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   );
 
 }
+
+
+
 
 
 
@@ -11913,16 +11855,6 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
   </TouchableOpacity>
 
 );
-
-
-
-
-
-
-
-
-
-
 
 const styles = StyleSheet.create({
 
@@ -11963,7 +11895,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
 
   },
-
 
 
   saveSheetOverlay: {
@@ -12362,7 +12293,12 @@ const styles = StyleSheet.create({
 
   collectionCreateBtnText: { fontSize: 16, fontWeight: "900", color: "#FFFFFF" },
 
-  container: { flex: 1, backgroundColor: HOME_PAGE_BG },
+  container: { 
+    flex: 1, 
+    backgroundColor: HOME_PAGE_BG,
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
+  },
 
 
 
@@ -13528,13 +13464,13 @@ const styles = StyleSheet.create({
 
     alignItems: "center",
 
-    borderRadius: 22,
+    borderRadius: isDesktop ? 24 : 22,
 
-    paddingHorizontal: 10,
+    paddingHorizontal: isDesktop ? 12 : 10,
 
-    minHeight: 44,
+    minHeight: isDesktop ? 48 : 44,
 
-    paddingVertical: 2,
+    paddingVertical: isDesktop ? 4 : 2,
 
     borderWidth: 1,
 

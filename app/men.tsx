@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   useWindowDimensions,
+  Dimensions,
   type ImageSourcePropType,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -65,7 +66,8 @@ function HexagonShopBadge({
   clipId: string;
   selected: boolean;
 }) {
-  const resolved = Image.resolveAssetSource(source);
+  // Handle both React Native and React Native Web
+  const resolved = Image.resolveAssetSource ? Image.resolveAssetSource(source) : null;
   const href = resolved?.uri ? { uri: resolved.uri } : undefined;
   const pts = flatTopHexPoints(HEX_W, HEX_H);
   const strokeW = selected ? 3.4 : 2;
@@ -768,6 +770,14 @@ const LOVE_MASONRY_SHORT = 168;
 
 /** Products to buy — gap between cells (see `menPtbGrid`). */
 const MEN_PTB_GRID_GAP = 12;
+
+// Get window dimensions for responsive design
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = screenWidth >= 768;
+const isDesktop = screenWidth >= 1024;
+const isMobile = screenWidth < 768;
 
 type MainCategoryApiRowMen = {
   id: number;
@@ -2110,16 +2120,7 @@ export default function MenScreen() {
               <Ionicons name="search-outline" size={19} color="#64748b" />
               <Text style={styles.menSearchPlaceholder}>Search..</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push("/camerasearch")}
-              style={styles.menSearchCameraBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel="Search by photo"
-            >
-              <Ionicons name="camera-outline" size={22} color="#64748b" />
-            </TouchableOpacity>
-          </View>
+                      </View>
 
           <View style={styles.menHeaderIconGroup}>
             <TouchableOpacity
@@ -2143,32 +2144,7 @@ export default function MenScreen() {
                 ) : null}
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.menHeaderIconHit}
-              onPress={() => router.push("/cart")}
-              accessibilityRole="button"
-              accessibilityLabel="Cart"
-            >
-              <View style={styles.menHeaderIconBadgeWrap}>
-                <Ionicons name="cart-outline" size={24} color="#c2410c" />
-                {cartCount > 0 ? (
-                  <View style={styles.menHeaderIconBadge}>
-                    <Text style={styles.menHeaderIconBadgeText}>
-                      {cartCount > 99 ? "99+" : String(cartCount)}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.menHeaderIconHit}
-              onPress={() => router.push("/notifications")}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-            >
-              <Ionicons name="notifications-outline" size={24} color="#c2410c" />
-            </TouchableOpacity>
-          </View>
+                      </View>
         </View>
       </LinearGradient>
 
