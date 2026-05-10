@@ -72,10 +72,58 @@ export function extractUserIdFromToken(token: string): number | null {
 export async function getCurrentUserIdFromToken(): Promise<number | null> {
   try {
     const token = (await AsyncStorage.getItem("token"))?.trim();
-    if (!token) return null;
-    return extractUserIdFromToken(token);
-  } catch {
+    if (!token) {
+      console.log("No token found in AsyncStorage");
+      return null;
+    }
+    
+    // Validate token format
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      console.log("Invalid token format - not a proper JWT");
+      // Clear invalid token
+      await AsyncStorage.removeItem("token");
+      return null;
+    }
+    
+    const userId = extractUserIdFromToken(token);
+    if (!userId) {
+      console.log("Could not extract user ID from token - token may be invalid or expired");
+      // Clear invalid token
+      await AsyncStorage.removeItem("token");
+      return null;
+    }
+    
+    console.log("Successfully extracted user ID from token:", userId);
+    return userId;
+  } catch (error) {
+    console.log("Error getting user ID from token:", error);
+    // Clear potentially corrupted token
+    await AsyncStorage.removeItem("token");
     return null;
+  }
+}
+
+// Add function to validate and refresh token if needed
+export async function validateAndRefreshToken(): Promise<boolean> {
+  try {
+    const userId = await getCurrentUserIdFromToken();
+    if (!userId) {
+      console.log("Token validation failed - user needs to login again");
+      return false;
+    }
+    
+    // Optionally: You could make a backend call to validate the token
+    // const response = await api.get('/api/user/validate-token');
+    // if (!response.data.valid) {
+    //   await AsyncStorage.removeItem("token");
+    //   return false;
+    // }
+    
+    return true;
+  } catch (error) {
+    console.log("Token validation error:", error);
+    return false;
   }
 }
 

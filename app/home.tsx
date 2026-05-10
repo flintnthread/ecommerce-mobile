@@ -5577,21 +5577,10 @@ const categoryData = [
 
 
 
-
-
       
 
       <HomeBottomTabBar cartBadgeCount={cartBadgeCount} />
     </View>
-
-
-
-
-
-
-
-
-
   );
 }
 
@@ -5613,10 +5602,6 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
   </TouchableOpacity>
 );
 
-
-
-
-
 const styles = StyleSheet.create({
   headerWishlistBadge: {
     position: "absolute",
@@ -5636,28 +5621,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "900",
     color: "#FFFFFF",
-  },
-
-  saveSheetOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  saveSheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  saveSheetCard: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingTop: 10,
-    paddingHorizontal: 18,
-  },
-  saveSheetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingBottom: 12,
   },
   saveSheetTitle: {
     flex: 1,

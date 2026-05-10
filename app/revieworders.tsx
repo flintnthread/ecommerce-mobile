@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import api from "../services/api";
+import api, { placeOrder } from "../services/api";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import { payWithRazorpay } from "../lib/payment/razorpayFlow";
 import type { ApiCartItem, ApiCartPriceSummary } from "../lib/cartServerApi";
@@ -264,25 +264,57 @@ export default function ReviewOrdersScreen() {
     }
   };
 
-  const placeOrderOnServer = async (addressId: number): Promise<number> => {
-    const { data } = await api.post<{
-      success: boolean;
-      message?: string;
-      data?: {
-        orderId?: number;
+  const placeOrderOnServer = async (addressId: number, razorpayOrderId?: string): Promise<number> => {
+    try {
+      // Ensure cart is synchronized with server before placing order
+      if (cartSource !== "server") {
+        Alert.alert(tr("Cart Sync"), tr("Please wait while cart syncs with server."));
+        await reloadReviewCart();
+        throw new Error("Cart must be synchronized before placing order.");
+      }
+
+      // Validate cart has items
+      if (items.length === 0) {
+        throw new Error("Your cart is empty. Please add items before placing order.");
+      }
+
+      const orderData = {
+        addressId,
+        paymentMethod: "upi",
+        orderNotes: "",
+        useWallet: false,
+        walletAmount: 0.0,
+        ...(razorpayOrderId && { razorpayOrderId }),
       };
-    }>("/api/orders/place", {
-      addressId,
-      paymentMethod: "upi",
-    });
-    if (!data?.success) {
-      throw new Error(data?.message || "Could not place order.");
+      
+      console.log("Placing order with data:", orderData);
+      const response = await placeOrder(orderData);
+      console.log("Place order response:", response);
+      
+      if (!response.orderId) {
+        throw new Error(response.message || "Could not place order.");
+      }
+      
+      return response.orderId;
+    } catch (error) {
+      console.error("Place order error:", error);
+      
+      // Handle specific error cases
+      if (error instanceof Error) {
+        if (error.message.includes("Cart is empty")) {
+          throw new Error("Your cart is empty. Please add items before placing order.");
+        }
+        if (error.message.includes("Address not found")) {
+          throw new Error("Delivery address not found. Please select a valid address.");
+        }
+        if (error.message.includes("Only") && error.message.includes("items available")) {
+          throw new Error("Some items in your cart are out of stock. Please update your cart.");
+        }
+        throw error;
+      }
+      
+      throw new Error("Could not place order. Please try again.");
     }
-    const orderId = Number(data?.data?.orderId);
-    if (!Number.isFinite(orderId) || orderId <= 0) {
-      throw new Error("Order placed but no order ID was returned.");
-    }
-    return Math.floor(orderId);
   };
 
   const createInvoiceForOrder = async (orderId: number): Promise<void> => {
@@ -310,46 +342,73 @@ export default function ReviewOrdersScreen() {
         await AsyncStorage.getItem(DELIVERY_SELECTED_ADDRESS_ID_STORAGE_KEY)
       )?.trim();
       const selectedAddressId = Number(selectedAddressIdRaw);
+      console.log("Selected address ID raw:", selectedAddressIdRaw);
+      console.log("Selected address ID parsed:", selectedAddressId);
+      console.log("Is valid address ID:", !selectedAddressIdRaw || !Number.isFinite(selectedAddressId) || selectedAddressId <= 0);
+      
       if (!selectedAddressIdRaw || !Number.isFinite(selectedAddressId) || selectedAddressId <= 0) {
-        Alert.alert(tr("Checkout"), tr("Please select a delivery address."));
+        Alert.alert(tr("Address Required"), tr("Please select a delivery address."));
         return;
       }
 
-      const orderId = await placeOrderOnServer(Math.floor(selectedAddressId));
-
-      const result = await payWithRazorpay(total);
-      if (result.ok === false) {
-        if (result.reason === "use_web_checkout") {
+      // Create Razorpay order first, then place order with Razorpay ID
+      const paymentResult = await payWithRazorpay(total);
+      console.log("Payment result:", paymentResult);
+      
+      if (paymentResult.ok && paymentResult.ok === true) {
+        // Payment successful with native module
+        const orderId = await placeOrderOnServer(selectedAddressId, paymentResult.verify.orderId);
+        console.log("Order placed successfully with ID:", orderId);
+        
+        Alert.alert(
+          tr("Order Placed"),
+          tr("Your order has been placed successfully!"),
+          [
+            {
+              text: tr("OK"),
+              onPress: () => router.push("/orders")
+            }
+          ]
+        );
+      } else if (paymentResult.reason === "use_web_checkout") {
+        // Place order first, then redirect to web checkout
+        try {
+          const orderId = await placeOrderOnServer(selectedAddressId, paymentResult.orderId);
+          console.log("Order placed for web checkout with ID:", orderId);
+          
+          // Redirect to web checkout screen with order ID
           router.push({
             pathname: "/razorpay-web-checkout",
             params: {
-              key: result.razorpayKeyId,
-              orderId: result.orderId,
-              amount: String(result.amountPaise),
-              currency: result.currency,
+              key: paymentResult.razorpayKeyId,
+              orderId: paymentResult.orderId,
+              amount: String(paymentResult.amountPaise),
+              currency: paymentResult.currency,
               appOrderId: String(orderId),
             },
           } as any);
           return;
+        } catch (error) {
+          console.error("Failed to place order for web checkout:", error);
+          Alert.alert(
+            tr("Order Failed"),
+            tr("Could not place order. Please try again.")
+          );
         }
-        if (result.reason === "cancelled") {
-          return;
-        }
-        Alert.alert(tr("Payment"), tr(result.message));
-        return;
+      } else {
+        // Payment failed or cancelled
+        Alert.alert(
+          tr("Payment Failed"), 
+          paymentResult.message || tr("Payment was not successful. Please try again.")
+        );
       }
-      try {
-        await createInvoiceForOrder(orderId);
-      } catch {
-        // Invoice generation should not block successful payment completion.
-      }
-      await clearCartAfterSuccessfulOrder();
-      Alert.alert(tr("Payment successful"), tr(result.verify.message ?? "Your payment was verified."), [
-        { text: tr("OK"), onPress: () => router.replace("/orders" as any) },
-      ]);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Something went wrong.";
-      Alert.alert(tr("Payment"), tr(msg));
+      
+    } catch (error) {
+      console.error("Place order error:", error);
+      Alert.alert(
+        tr("Order Failed"),
+        error instanceof Error ? error.message : tr("Could not place order. Please try again.")
+      );
     } finally {
       setPaying(false);
     }

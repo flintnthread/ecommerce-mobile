@@ -3,19 +3,31 @@ import api from "../services/api";
 export type ApiOrderRow = {
   orderId: number;
   orderNumber: string;
-  orderStatus?: string;
+  orderStatus: string;
   paymentStatus?: string;
   paymentMethod?: string;
   totalAmount?: number;
   finalAmount?: number;
-  createdDate?: string;
-  firstProductImage?: string | null;
+  shippingAmount?: number;
+  discountAmount?: number;
   totalItems?: number;
+  firstProductImage?: string | null;
+  createdDate?: string;
   shippingAddress?: string;
   shiprocketAwbCode?: string | null;
   shiprocketTrackingUrl?: string | null;
   shiprocketCourierName?: string | null;
   shiprocketStatus?: string | null;
+  items?: Array<{
+    productId: number;
+    productName: string;
+    quantity: number;
+    price: number;
+    sellingPrice?: number;
+    productImage?: string;
+    size?: string;
+    color?: string;
+  }>;
 };
 
 type ApiEnvelope<T> = {
@@ -26,24 +38,32 @@ type ApiEnvelope<T> = {
 
 /**
  * GET /api/orders — requires JWT (same axios instance as rest of app).
- * Accepts both `{ success, data: [] }` and legacy/raw array shapes.
+ * Backend returns: { success: boolean, message: string, data: OrderResponseDTO[] }
  */
 export async function fetchUserOrdersList(
   status?: string
-): Promise<Record<string, unknown>[]> {
-  const { data } = await api.get<unknown>("/api/orders", {
-    params: status ? { status } : undefined,
-  });
-  if (Array.isArray(data)) {
-    return data.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"));
-  }
-  if (data && typeof data === "object") {
-    const env = data as ApiEnvelope<unknown[]> & Record<string, unknown>;
-    if (Array.isArray(env.data)) {
-      return env.data.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"));
+): Promise<ApiOrderRow[]> {
+  try {
+    const { data } = await api.get<ApiEnvelope<ApiOrderRow[]>>("/api/orders", {
+      params: status ? { status } : undefined,
+    });
+    
+    console.log("Orders API Response:", data);
+    
+    if (data?.success && Array.isArray(data.data)) {
+      return data.data;
     }
+    
+    // Fallback for unexpected response format
+    if (Array.isArray(data)) {
+      return data.filter((row): row is ApiOrderRow => Boolean(row && typeof row === "object"));
+    }
+    
+    return [];
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    return [];
   }
-  return [];
 }
 
 /** PUT /api/orders/{id}/cancel — requires JWT. */

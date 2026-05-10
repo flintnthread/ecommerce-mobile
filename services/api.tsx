@@ -836,4 +836,236 @@ export const searchProductsByImage = async (
   }
 };
 
+// ===== ORDER PLACING API FUNCTIONS =====
+
+export interface PlaceOrderRequest {
+  addressId: number;
+  paymentMethod: string;
+  orderNotes?: string;
+  couponCode?: string;
+  useWallet?: boolean;
+  walletAmount?: number;
+  razorpayOrderId?: string;
+}
+
+export interface PlaceOrderResponse {
+  orderId: number;
+  orderNumber: string;
+  message: string;
+}
+
+/**
+ * Place a new order
+ */
+export const placeOrder = async (orderData: PlaceOrderRequest): Promise<PlaceOrderResponse> => {
+  console.log("Place order request data:", JSON.stringify(orderData, null, 2));
+  
+  try {
+    const response = await api.post<ApiResponse<PlaceOrderResponse>>("/api/orders/place", orderData);
+    console.log("Place order API response:", response.data);
+    
+    if (!response.data?.success) {
+      throw new Error(response.data.message || "Failed to place order");
+    }
+    
+    if (!response.data.data?.orderId) {
+      throw new Error("Order placed but no order ID returned");
+    }
+    
+    return response.data.data;
+  } catch (error: any) {
+    console.error("Place order API error:", error);
+    console.error("Error response data:", error.response?.data);
+    console.error("Error status:", error.response?.status);
+    console.error("Error headers:", error.response?.headers);
+    
+    // Extract backend error message if available
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    
+    throw error;
+  }
+};
+
+// ===== PAYMENT API FUNCTIONS =====
+
+export interface CreatePaymentOrderRequest {
+  amount: number;
+}
+
+export interface CreatePaymentOrderResponse {
+  success: boolean;
+  message: string;
+  data: {
+    id: string;
+    entity: string;
+    amount: number;
+    currency: string;
+    status: string;
+    razorpayKeyId: string;
+  };
+}
+
+export interface VerifyPaymentRequest {
+  orderId: string;
+  paymentId: string;
+  signature: string;
+}
+
+export interface VerifyPaymentResponse {
+  success: boolean;
+  message: string;
+  shipping_initiated?: boolean;
+  order_number?: string;
+  shiprocket?: any;
+}
+
+/**
+ * Create Razorpay payment order
+ */
+export const createPaymentOrder = async (requestData: CreatePaymentOrderRequest): Promise<CreatePaymentOrderResponse> => {
+  const response = await api.post("/api/payment/create-order", requestData);
+  return response.data;
+};
+
+/**
+ * Verify Razorpay payment
+ */
+export const verifyPayment = async (verifyData: VerifyPaymentRequest): Promise<VerifyPaymentResponse> => {
+  const response = await api.post("/api/payment/verify", null, {
+    params: verifyData,
+  });
+  return response.data;
+};
+
+// ===== REVIEW API FUNCTIONS =====
+
+export interface CreateReviewRequest {
+  productId: number;
+  orderId: number;
+  rating: number;
+  comment: string;
+}
+
+export interface ReviewResponse {
+  id: number;
+  productId: number;
+  orderId: number;
+  rating: number;
+  comment: string;
+  status: boolean;
+  createdAt: string;
+}
+
+/**
+ * Create a product review
+ */
+export const createReview = async (reviewData: CreateReviewRequest): Promise<ReviewResponse> => {
+  const response = await api.post("/api/reviews", reviewData);
+  return response.data;
+};
+
+/**
+ * Get reviews for a product
+ */
+export const getProductReviews = async (productId: number): Promise<ReviewResponse[]> => {
+  const response = await api.get(`/api/reviews/product/${productId}`);
+  return response.data;
+};
+
+// ===== RETURN/EXCHANGE API FUNCTIONS =====
+
+export interface CreateReturnRequest {
+  orderId: number;
+  reason: string;
+  description: string;
+  images?: string[];
+}
+
+export interface CreateExchangeRequest {
+  orderId: number;
+  reason: string;
+  description: string;
+  images?: string[];
+  exchangeSize?: string;
+  exchangeColor?: string;
+}
+
+/**
+ * Create a return request
+ */
+export const createReturn = async (returnData: CreateReturnRequest) => {
+  const response = await api.post("/api/returns", returnData);
+  return response.data;
+};
+
+/**
+ * Create an exchange request
+ */
+export const createExchange = async (exchangeData: CreateExchangeRequest) => {
+  const response = await api.post("/api/exchanges", exchangeData);
+  return response.data;
+};
+
+/**
+ * Get user's return requests
+ */
+export const getUserReturns = async () => {
+  const response = await api.get("/api/returns");
+  return response.data;
+};
+
+/**
+ * Get user's exchange requests
+ */
+export const getUserExchanges = async () => {
+  const response = await api.get("/api/exchanges");
+  return response.data;
+};
+
+// ===== PAYMENT RETRY FUNCTIONS =====
+
+export interface RetryPaymentRequest {
+  orderId: number;
+}
+
+export interface VerifyRetryPaymentRequest {
+  orderId: number;
+  paymentId?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  razorpaySignature?: string;
+}
+
+/**
+ * Retry failed payment for an order
+ */
+export const retryPayment = async (retryData: RetryPaymentRequest) => {
+  const response = await api.post("/api/orders/retry-payment", retryData);
+  return response.data;
+};
+
+/**
+ * Verify retry payment
+ */
+export const verifyRetryPayment = async (verifyData: VerifyRetryPaymentRequest) => {
+  const response = await api.post("/api/orders/verify-retry-payment", verifyData);
+  return response.data;
+};
+
+// ===== INVOICE API FUNCTIONS =====
+
+export interface CreateInvoiceRequest {
+  orderId: number;
+}
+
+/**
+ * Generate invoice for an order
+ */
+export const createInvoice = async (invoiceData: CreateInvoiceRequest) => {
+  const response = await api.post("/api/invoices", invoiceData);
+  return response.data;
+};
+
 export default api;
