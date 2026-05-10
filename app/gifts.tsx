@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   useWindowDimensions,
+  Dimensions,
   type ImageSourcePropType,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -589,10 +590,18 @@ const BEST_SELLER_PRODUCTS: TrendingProduct[] = [
 
 const GIFTS_PTB_GRID_GAP = 12;
 
+// Get window dimensions for responsive design
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = screenWidth >= 768;
+const isDesktop = screenWidth >= 1024;
+const isMobile = screenWidth < 768;
+
 export default function GiftsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: giftWinW } = useWindowDimensions();
+  const { width: giftWinW, height } = useWindowDimensions();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchResults, setSearchResults] = React.useState([]);
   const [searchLoading, setSearchLoading] = React.useState(false);
@@ -1690,16 +1699,7 @@ export default function GiftsScreen() {
               <Ionicons name="search-outline" size={19} color="#64748b" />
               <Text style={styles.giftsSearchPlaceholder}>Search..</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push("/camerasearch")}
-              style={styles.giftsSearchCameraBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel="Search by photo"
-            >
-              <Ionicons name="camera-outline" size={22} color="#64748b" />
-            </TouchableOpacity>
-            {showSearchResults && (
+                        {showSearchResults && (
               <View style={styles.searchResultsOverlay}>
                 <View style={styles.searchResultsContainer}>
                   {searchLoading ? (
@@ -1754,32 +1754,7 @@ export default function GiftsScreen() {
                 ) : null}
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.giftsHeaderIconHit}
-              onPress={() => router.push("/cart")}
-              accessibilityRole="button"
-              accessibilityLabel="Cart"
-            >
-              <View style={styles.giftsHeaderIconBadgeWrap}>
-                <Ionicons name="cart-outline" size={24} color="#c2410c" />
-                {giftsCartCount > 0 ? (
-                  <View style={styles.giftsHeaderIconBadge}>
-                    <Text style={styles.giftsHeaderIconBadgeText}>
-                      {giftsCartCount > 99 ? "99+" : String(giftsCartCount)}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.giftsHeaderIconHit}
-              onPress={() => router.push("/notifications")}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-            >
-              <Ionicons name="notifications-outline" size={24} color="#c2410c" />
-            </TouchableOpacity>
-          </View>
+                      </View>
         </View>
       </LinearGradient>
 
@@ -3222,6 +3197,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFF0E5",
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
   },
   screenBgGradient: {
     ...StyleSheet.absoluteFillObject,
@@ -3237,21 +3214,21 @@ const styles = StyleSheet.create({
   giftsHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    gap: 12,
+    paddingHorizontal: isDesktop ? 20 : 14,
+    gap: isDesktop ? 16 : 12,
   },
   giftsLogoHit: {
     borderRadius: 18,
   },
   giftsLogoTile: {
-    width: 46,
-    height: 46,
+    width: isDesktop ? 56 : 46,
+    height: isDesktop ? 56 : 46,
     alignItems: "center",
     justifyContent: "center",
   },
   giftsLogoImage: {
-    width: 40,
-    height: 40,
+    width: isDesktop ? 48 : 40,
+    height: isDesktop ? 48 : 40,
   },
   giftsSearchPill: {
     flex: 1,
@@ -3260,9 +3237,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     backgroundColor: "rgba(255,255,255,0.92)",
     borderRadius: 999,
-    paddingLeft: 4,
-    paddingRight: 6,
-    paddingVertical: 5,
+    paddingLeft: isDesktop ? 8 : 4,
+    paddingRight: isDesktop ? 10 : 6,
+    paddingVertical: isDesktop ? 8 : 5,
     shadowColor: "#1d324e",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.07,
@@ -3273,14 +3250,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-    paddingLeft: 10,
+    gap: isDesktop ? 12 : 8,
+    paddingVertical: isDesktop ? 10 : 8,
+    paddingLeft: isDesktop ? 14 : 10,
     minWidth: 0,
   },
   giftsSearchPlaceholder: {
     flex: 1,
-    fontSize: 16,
+    fontSize: isDesktop ? 18 : 16,
     fontWeight: "500",
     color: "#94a3b8",
   },
@@ -3730,8 +3707,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   categoryCircleRow: {
-    paddingRight: 10,
-    paddingLeft: 2,
+    paddingRight: isDesktop ? 20 : 10,
+    paddingLeft: isDesktop ? 10 : 2,
     paddingBottom: 4,
   },
   subCategorySection: {
@@ -3941,22 +3918,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#0B1220",
   },
   categoryCircleItem: {
-    width: 86,
-    marginRight: 12,
+    width: isDesktop ? 100 : 86,
+    marginRight: isDesktop ? 16 : 12,
     alignItems: "center",
   },
   categoryCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.10)",
-    shadowColor: "#000",
+    width: isDesktop ? 80 : 68,
+    height: isDesktop ? 80 : 68,
+    borderRadius: isDesktop ? 40 : 34,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(29, 50, 78, 0.08)",
+    shadowColor: "#1d324e",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 6,
     elevation: 3,
     backgroundColor: "#fff",
   },
@@ -4465,25 +4440,22 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   trendingProductCard: {
-    width: 178,
-    height: 242,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    width: isDesktop ? 200 : 160,
+    marginRight: isDesktop ? 16 : 12,
+    backgroundColor: "#fff",
+    borderRadius: 12,
     overflow: "hidden",
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: "rgba(249, 115, 22, 0.22)",
-    shadowColor: "#c2410c",
-    shadowOpacity: 0.09,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
+    shadowColor: "#1d324e",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   trendingProductImageWrap: {
     width: "100%",
-    flex: 18,
-    backgroundColor: "#F1F5F9",
+    height: isDesktop ? 160 : 130,
     position: "relative",
+    backgroundColor: "#f8fafc",
   },
   productWishlistHit: {
     position: "absolute",
@@ -4532,11 +4504,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   trendingProductName: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#111827",
-    lineHeight: 17,
-    minHeight: 32,
+    fontSize: isDesktop ? 14 : 12,
+    fontWeight: "700",
+    color: "#1d324e",
+    lineHeight: isDesktop ? 18 : 16,
+    marginBottom: 4,
   },
   trendingProductPriceRow: {
     flexDirection: "row",

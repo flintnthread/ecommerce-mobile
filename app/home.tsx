@@ -151,8 +151,12 @@ import {
 } from "../services/pushNotifications";
 
 
-
 const { width, height } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+const isMobile = width < 768;
 
 const HIDE_TOP_BAR_H = 66;
 
@@ -12362,7 +12366,12 @@ const styles = StyleSheet.create({
 
   collectionCreateBtnText: { fontSize: 16, fontWeight: "900", color: "#FFFFFF" },
 
-  container: { flex: 1, backgroundColor: HOME_PAGE_BG },
+  container: { 
+    flex: 1, 
+    backgroundColor: HOME_PAGE_BG,
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
+  },
 
 
 
@@ -13528,13 +13537,13 @@ const styles = StyleSheet.create({
 
     alignItems: "center",
 
-    borderRadius: 22,
+    borderRadius: isDesktop ? 24 : 22,
 
-    paddingHorizontal: 10,
+    paddingHorizontal: isDesktop ? 12 : 10,
 
-    minHeight: 44,
+    minHeight: isDesktop ? 48 : 44,
 
-    paddingVertical: 2,
+    paddingVertical: isDesktop ? 4 : 2,
 
     borderWidth: 1,
 

@@ -103,6 +103,14 @@ const SWEETS_PTB_GRID_GAP = 12;
 /** Parent used by sweets subcategory APIs — default main-category products id. */
 const SWEETS_MAIN_CATEGORY_FALLBACK_ID = 53;
 
+// Get window dimensions for responsive design
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = screenWidth >= 768;
+const isDesktop = screenWidth >= 1024;
+const isMobile = screenWidth < 768;
+
 export default function Sweets() {
   const router = useRouter();
   const { tr } = useLanguage();
@@ -873,8 +881,7 @@ export default function Sweets() {
               }
             }}
           />
-          <Ionicons name="camera-outline" size={18} color="#72809A" />
-        </View>
+                  </View>
 
         <TouchableOpacity
           style={styles.iconBtn}
@@ -902,25 +909,7 @@ export default function Sweets() {
             ) : null}
           </View>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.iconBtn}
-          activeOpacity={0.8}
-          onPress={() => router.push("/cart")}
-          accessibilityRole="button"
-          accessibilityLabel="Cart"
-        >
-          <View style={styles.sweetsHeaderBadgeWrap}>
-            <Ionicons name="bag-outline" size={22} color="#1D2430" />
-            {sweetsCartCount > 0 ? (
-              <View style={styles.sweetsHeaderBadge}>
-                <Text style={styles.sweetsHeaderBadgeText}>
-                  {sweetsCartCount > 99 ? "99+" : String(sweetsCartCount)}
-                </Text>
               </View>
-            ) : null}
-          </View>
-        </TouchableOpacity>
-      </View>
 
       {/* Sticky top menu bar (chips) */}
       <View style={[styles.topMenuBar, { top: headerHeight, minHeight: MENU_BAR_HEIGHT }]}>
@@ -1232,13 +1221,18 @@ export default function Sweets() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFF7F0" },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#FFF7F0",
+    maxWidth: isDesktop ? 1200 : "100%",
+    marginHorizontal: isDesktop ? "auto" : 0,
+  },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingTop: 40,
-    paddingBottom: 10,
+    paddingHorizontal: isDesktop ? 20 : 10,
+    paddingTop: isDesktop ? 50 : 40,
+    paddingBottom: isDesktop ? 16 : 10,
     backgroundColor: "#FFF7F0",
     position: "absolute",
     top: 0,
@@ -1254,15 +1248,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   headerLeading: {
-    width: 32,
-    marginRight: 6,
+    width: isDesktop ? 40 : 32,
+    marginRight: isDesktop ? 8 : 6,
     alignItems: "center",
     justifyContent: "center",
   },
   faviconImage: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: isDesktop ? 22 : 18,
+    height: isDesktop ? 22 : 18,
+    borderRadius: isDesktop ? 11 : 9,
     resizeMode: "cover",
   },
   iconBtn: {
