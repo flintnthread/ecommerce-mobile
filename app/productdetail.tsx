@@ -31,6 +31,7 @@ import {
   parseCartApiError,
   postCartAdd,
   serverCartContainsVariant,
+  type CartAddResult,
 } from "../lib/cartServerApi";
 import { parseWishlistApiError, postWishlistAdd } from "../lib/wishlistServerApi";
 import { buildProductGalleryUris } from "../lib/pickProductImageUri";
@@ -1629,6 +1630,125 @@ export default function ProductDetail() {
     })();
   };
 
+  const handleBuyNow = () => {
+    if (selectedVariantStock.tone === "out") {
+      Alert.alert("Out of stock", "This variant is currently unavailable.");
+      return;
+    }
+    void (async () => {
+      const token = (await AsyncStorage.getItem("token"))?.trim();
+      if (
+        token &&
+        numericProductId != null &&
+        apiDetail &&
+        typeof apiDetail.id === "number"
+      ) {
+        const { requiresSize, requiresColor } = hasVariantDimensionOptions(apiDetail);
+        if (requiresSize && !String(selectedSize ?? "").trim()) {
+          Alert.alert("Select size", "Please select size before buying.");
+          return;
+        }
+        if (requiresColor && !String(selectedColor ?? "").trim()) {
+          Alert.alert("Select color", "Please select color before buying.");
+          return;
+        }
+
+        const vrow = findVariantRowForWishlist(
+          apiDetail,
+          selectedSize,
+          selectedColor
+        );
+        const vid = vrow?.id;
+        if (!vid || vid <= 0) {
+          Alert.alert(
+            "Select size",
+            "Please choose a size (and color if shown) before buying."
+          );
+          return;
+        }
+        try {
+          const result: CartAddResult = await postCartAdd(numericProductId, vid, 1);
+          if (!result.ok) {
+            const errorResult = result as { ok: false; message: string; stock?: number };
+            Alert.alert(
+              "Cart",
+              errorResult.message || "Could not add to cart. Please try again."
+            );
+            return;
+          }
+          // Get the itemId from the returned cart bundle
+          const items = result.cart?.items ?? [];
+          const addedItem = items.find(
+            (it: any) =>
+              Math.floor(Number(it.productId)) === numericProductId &&
+              Math.floor(Number(it.variantId)) === vid
+          );
+          const buyNowItemId = addedItem?.itemId
+            ? String(addedItem.itemId)
+            : String(product.id);
+          await refreshCartAndWishlistState();
+          router.push({
+            pathname: "/revieworders",
+            params: { buyNowItemId },
+          } as any);
+        } catch (e: unknown) {
+          Alert.alert(
+            "Cart",
+            parseCartApiError(e, "Could not add to cart. Please try again.")
+          );
+        }
+        return;
+      }
+      // Guest user flow - local cart
+      const localChosenVariant =
+        apiDetail && typeof apiDetail === "object"
+          ? findVariantForSelection(apiDetail, selectedSize, selectedColor)
+          : null;
+      const localVariantIdRaw = Number(
+        localChosenVariant?.id ?? localChosenVariant?.variantId
+      );
+      const localVariantId =
+        Number.isFinite(localVariantIdRaw) && localVariantIdRaw > 0
+          ? Math.floor(localVariantIdRaw)
+          : undefined;
+      const localStock = (() => {
+        const candidates = [
+          localChosenVariant?.quantity,
+          localChosenVariant?.availableQuantity,
+          localChosenVariant?.stock,
+        ];
+        for (const c of candidates) {
+          const n = typeof c === "string" ? Number(c) : Number(c);
+          if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+        }
+        return undefined;
+      })();
+      if (typeof localStock === "number" && localStock <= 0) {
+        Alert.alert("Out of stock", "This variant is currently unavailable.");
+        return;
+      }
+      await addProductToCart({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        mrp: product.mrp,
+        imageUri:
+          mainImage && typeof mainImage === "object" && "uri" in (mainImage as any)
+            ? String((mainImage as any).uri ?? "").trim() || undefined
+            : undefined,
+        variantId: localVariantId,
+        stock: localStock,
+        size: selectedSize ?? undefined,
+        color: selectedColor ?? undefined,
+      });
+      await refreshCartAndWishlistState();
+      router.push({
+        pathname: "/revieworders",
+        params: { buyNowItemId: product.id },
+      } as any);
+    })();
+  };
+
   const handleShare = async () => {
     try {
       await Share.share({
@@ -2385,9 +2505,9 @@ export default function ProductDetail() {
               >
                 <Ionicons
                   name={isWishlisted ? "heart" : "heart-outline"}
-                  size={18}
+                  size={16}
                   color={isWishlisted ? "red" : "#1d324e"}
-                  style={{ marginRight: 4 }}
+                  style={{ marginRight: 3 }}
                 />
                 <Text style={styles.inlineWishlistText}>
                   {isWishlisted ? "Go to wishlist" : "Wishlist"}
@@ -2401,9 +2521,9 @@ export default function ProductDetail() {
               >
                 <Ionicons
                   name="share-social-outline"
-                  size={18}
+                  size={16}
                   color="#1d324e"
-                  style={{ marginRight: 4 }}
+                  style={{ marginRight: 3 }}
                 />
                 <Text style={styles.inlineShareText}>Share</Text>
               </TouchableOpacity>
@@ -2423,10 +2543,23 @@ export default function ProductDetail() {
                 }}
                 disabled={selectedVariantStock.tone === "out"}
               >
-                <Ionicons name="bag-outline" size={18} color="#ffffff" style={{ marginRight: 4 }} />
+                <Ionicons name="bag-outline" size={16} color="#ffffff" style={{ marginRight: 3 }} />
                 <Text style={styles.inlineAddToBagText}>
                   {hasAddedToCart ? "Go to cart" : "Add to bag"}
                 </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.inlineBuyNowButton,
+                  selectedVariantStock.tone === "out" ? styles.inlineBuyNowButtonDisabled : null,
+                ]}
+                activeOpacity={0.9}
+                onPress={handleBuyNow}
+                disabled={selectedVariantStock.tone === "out"}
+              >
+                <Ionicons name="flash-outline" size={16} color="#ffffff" style={{ marginRight: 3 }} />
+                <Text style={styles.inlineBuyNowText}>Buy now</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -3516,50 +3649,70 @@ const styles = StyleSheet.create({
   sizeActionButtonsRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 4,
   },
   inlineWishlistButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
+    paddingHorizontal: 6,
     paddingVertical: 6,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#D0D0D0",
-    marginRight: 8,
   },
   inlineWishlistText: {
-    fontSize: 12,
+    fontSize: 10,
     color: "#1d324e",
     fontWeight: "500",
   },
   inlineShareButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#D0D0D0",
-    marginRight: 8,
   },
   inlineShareText: {
-    fontSize: 12,
+    fontSize: 10,
     color: "#1d324e",
     fontWeight: "500",
   },
   inlineAddToBagButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 35,
-    paddingVertical: 10,
-    borderRadius: 22,
+    justifyContent: "center",
+    flex: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 18,
     backgroundColor: "#ef7b1a",
   },
   inlineAddToBagButtonDisabled: {
     backgroundColor: "#9CA3AF",
   },
   inlineAddToBagText: {
-    fontSize: 13,
+    fontSize: 11,
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  inlineBuyNowButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: "#10893E",
+  },
+  inlineBuyNowButtonDisabled: {
+    backgroundColor: "#9CA3AF",
+  },
+  inlineBuyNowText: {
+    fontSize: 11,
     color: "#FFFFFF",
     fontWeight: "700",
   },
