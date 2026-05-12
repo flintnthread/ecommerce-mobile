@@ -292,6 +292,11 @@ export default function Login() {
         return;
       }
       const sessionSecret = idToken ?? accessToken;
+      console.log("Google Login - idToken exists:", !!idToken);
+      console.log("Google Login - accessToken exists:", !!accessToken);
+      console.log("Google Login - sessionSecret exists:", !!sessionSecret);
+      console.log("Google Login - sessionSecret length:", sessionSecret?.length || 0);
+      
       if (!sessionSecret) {
         Alert.alert(tr("Google"), tr("Could not read Google credentials. Try again."));
         return;
@@ -301,29 +306,44 @@ export default function Login() {
       try {
         let appJwt: string | null = null;
         try {
+          console.log("Making API call to /auth/google...");
           const res = await api.post("/auth/google", {
             email,
             idToken,
             accessToken,
           });
+          console.log("API response:", res.data);
           const d = res.data as {
             success?: boolean;
             token?: string;
             message?: string;
           };
           if (d?.success === false && d.message) {
+            console.log("API returned error:", d.message);
             Alert.alert(tr("Error"), tr(d.message));
             return;
           }
           if (typeof d?.token === "string" && d.token.length > 0) {
+            console.log("Got token from API:", d.token.substring(0, 30) + "...");
             appJwt = d.token;
+          } else {
+            console.log("No token in API response, using Google token");
           }
-        } catch {
+        } catch (error) {
+          console.log("API call failed, using Google token:", error);
           /* Server may not expose POST /auth/google yet — fall back to Google token for local session. */
         }
 
         const tokenToStore = appJwt ?? sessionSecret;
+        console.log("Login - Storing token:", tokenToStore ? "YES" : "NO");
+        console.log("Login - Token length:", tokenToStore?.length || 0);
         await AsyncStorage.setItem("token", tokenToStore);
+        
+        // Verify token was stored
+        const storedToken = await AsyncStorage.getItem("token");
+        console.log("Login - Token stored successfully:", !!storedToken);
+        console.log("Login - Stored token length:", storedToken?.length || 0);
+        
         await AsyncStorage.setItem(
           "userDisplayName",
           email.includes("@") ? email.split("@")[0]! : email

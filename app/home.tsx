@@ -10,6 +10,8 @@ import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 
 import { useRouter, type Href } from "expo-router";
 
+import ReferralPopup from "../components/ReferralPopup";
+
 import {
 
   View,
@@ -2712,7 +2714,24 @@ const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
 
 export default function Home() {
 
- const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
+
+  const [wishlistCount, setWishlistCount] = useState(0);
+
+const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+
+  const [notificationCount, setNotificationCount] = useState(0);
+
+
+  const [cartBadgeCount, setCartBadgeCount] = useState(0);
+
+  const [showReferralPopup, setShowReferralPopup] = useState(false);
+
+const [products, setProducts] = useState<any[]>([]);
+
+  const [loading, setLoading] = useState(false);
 
   const router = useRouter();
 
@@ -2741,6 +2760,21 @@ export default function Home() {
     [router]
 
   );
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      setProducts([]);
+    } catch (error) {
+      console.error('Failed to load products:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
 
   const openSubcatProducts = useCallback(
 
@@ -3398,10 +3432,6 @@ export default function Home() {
 
           if (spoken) {
 
-
-
-            router.push({ pathname: "/searchresults", params: { q: spoken } });
-
             openSearchResults(spoken);
 
 
@@ -3554,6 +3584,14 @@ export default function Home() {
 
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
 
+  const filterOptions: Record<string, string[]> = {
+  Category: ["Men", "Women", "Kids", "Accessories"],
+  Size: ["S", "M", "L", "XL"],
+  Color: ["Red", "Blue", "Black", "White"],
+  Brand: ["Nike", "Puma", "Adidas"],
+  Price: ["0-500", "500-1000", "1000-2000"],
+};
+
   /** Main category id from the home category strip API — sent as `categoryId` to `/api/products/search`. */
 
   const [selectedBrowseMainCategoryId, setSelectedBrowseMainCategoryId] = useState<
@@ -3632,11 +3670,15 @@ export default function Home() {
 
       } else if (hasRatingFilter) {
 
-        // Use rating-only filter endpoint
+  // Use rating-only filter endpoint
 
-        response = await filterProductsByRating(filterState.rating, 0, 20);
+  response = await filterProductsByRating(
+    filterState.rating,
+    0,
+    20
+  );
 
-      } else {
+} else {
 
         // No filters applied
 
@@ -3672,7 +3714,9 @@ export default function Home() {
 
         discountPercentage: product.discountPercentage,
 
-        image: resolveProductPrimaryImageUri(product, apiOrigin),
+image: product?.images?.[0]?.imagePath
+  ? `${apiOrigin}${product.images[0].imagePath}`
+  : "",
 
         // Add any other fields you need
 
@@ -3723,8 +3767,10 @@ export default function Home() {
     }
 
     const q = parts.join(" ");
-    const categoryIdNum = Number(selectedBrowseMainCategoryId || undefined);
-
+const categoryIdNum = selectedBrowseMainCategoryId
+  ? Number(selectedBrowseMainCategoryId)
+  : null;
+  
     if (!q && !Number.isFinite(categoryIdNum)) {
       Alert.alert(
         "Choose filters",
@@ -3750,17 +3796,6 @@ export default function Home() {
     selectedBrowseMainCategoryId,
     selectedSort,
   ]);
-
-
-  const [wishlistCount, setWishlistCount] = useState(0);
-
-  const [notificationCount, setNotificationCount] = useState(0);
-
-  const [cartBadgeCount, setCartBadgeCount] = useState(0);
-
-  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
-
-  const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
 
   const [saveToWishlistChecked, setSaveToWishlistChecked] = useState(true);
 
@@ -3990,7 +4025,8 @@ export default function Home() {
 
         setWishlistCount(rows.length);
 
-        setWishlistIds(ids);
+setWishlistIds(new Set(ids));
+
 
         return;
 
@@ -6390,24 +6426,6 @@ useEffect(() => {
 
 
 
-  const filterOptions: Record<string, string[]> = {
-
-    Category: categoryOptions,
-
-    Identity: ["Women", "Men", "Girls", "Boys"],
-
-    Color: colors.map((color) => color.name),
-
-    Size: sizes.map((size) => size.name),
-
-    Price: prices.map((price) => price.name),
-
-    Rating: ratings.map((rating) => rating.name),
-
-    };
-
-
-
   const handleFilterPress = (label: string) => {
 
     if (label === "Sort") setSortModalVisible(true);
@@ -6961,17 +6979,18 @@ const categoryData = [
 
 
   return (
+    <>
 
-    <View style={styles.container}>
+      <View style={styles.container}>
 
-      <View style={styles.headerSticky}>
+        <View style={styles.headerSticky}>
 
-        <LinearGradient
+          <LinearGradient
 
+            // Header (logo + search + camera/mic + location) should stay white.
+
+            colors={["#FFFFFF", "#FFFFFF"]}
           // Header (logo + search + camera/mic + location) should stay white.
-
-          colors={["#FFFFFF", "#FFFFFF"]}
-
           locations={[0, 1]}
 
           start={{ x: 0, y: 0 }}
@@ -7018,20 +7037,13 @@ const categoryData = [
 
           >
 
-          <View style={styles.topRow}>
-
-            <View style={styles.greetingCol}>
+            <View style={styles.greetingRow}>
 
               <TouchableOpacity
-
                 activeOpacity={0.88}
-
                 onPress={() => setPromoSpotlightModalVisible(true)}
-
                 accessibilityRole="button"
-
                 accessibilityLabel={tr("Open promotional offer")}
-
               >
 
                 <LinearGradient
@@ -7119,8 +7131,6 @@ const categoryData = [
               </TouchableOpacity>
 
             </View>
-
-          </View>
 
           </Animated.View>
 
@@ -11376,8 +11386,7 @@ const categoryData = [
 
                           <View style={styles.categoryChildrenContainer}>
 
-                            {category.children.map((child) => (
-
+                            {category.children.map((child: any) => (
                               <TouchableOpacity
 
                                 key={child.id}
@@ -11811,12 +11820,17 @@ const categoryData = [
 
       <HomeBottomTabBar cartBadgeCount={cartBadgeCount} />
 
-    </View>
+      {/* Referral Popup */}
+<ReferralPopup 
+  visible={showReferralPopup}
+  onClose={() => setShowReferralPopup(false)}
+/>
 
-  );
+    </View>
+  </>
+);
 
 }
-
 
 
 
@@ -11858,44 +11872,101 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
 
 const styles = StyleSheet.create({
 
-  headerWishlistBadge: {
 
-    position: "absolute",
+  greetingRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+},
 
-    top: -2,
+greetingTextChip: {
+  paddingHorizontal: 16,
+  paddingVertical: 10,
+  borderRadius: 20,
+},
 
-    right: -2,
+helloLine: {
+  fontSize: 16,
+  color: "#111827",
+},
 
-    minWidth: 16,
+helloName: {
+  fontWeight: "700",
+  color: "#111827",
+},
 
-    height: 16,
+headerIconHit: {
+  marginLeft: 14,
+  position: "relative",
+},
 
-    paddingHorizontal: 4,
+headerWishlistBadge: {
+  position: "absolute",
+  top: -6,
+  right: -6,
+  minWidth: 18,
+  height: 18,
+  borderRadius: 9,
+  backgroundColor: "#EF4444",
+  alignItems: "center",
+  justifyContent: "center",
+  paddingHorizontal: 4,
+},
 
-    borderRadius: 999,
+headerWishlistBadgeText: {
+  color: "#FFFFFF",
+  fontSize: 10,
+  fontWeight: "700",
+},
 
-    backgroundColor: "#E11D48",
+categoryParentItem: {
+  flexDirection: "row",
+  alignItems: "center",
+  paddingVertical: 12,
+  paddingHorizontal: 16,
+  borderBottomWidth: 1,
+  borderBottomColor: "#E5E5E5",
+  backgroundColor: "#FFFFFF",
+},
 
-    justifyContent: "center",
+categoryParentText: {
+  fontSize: 16,
+  color: "#111827",
+  fontWeight: "500",
+},
 
-    alignItems: "center",
+categoryChildrenContainer: {
+  marginTop: 8,
+  marginLeft: 12,
+},
 
-    borderWidth: 1,
+categoryChildItem: {
+  flexDirection: "row",
+  alignItems: "center",
+  paddingVertical: 10,
+},
 
-    borderColor: "rgba(255,255,255,0.55)",
+checkbox: {
+  width: 20,
+  height: 20,
+  borderRadius: 4,
+  borderWidth: 1,
+  borderColor: "#D1D5DB",
+  alignItems: "center",
+  justifyContent: "center",
+  marginRight: 10,
+  backgroundColor: "#FFFFFF",
+},
 
-  },
+checkboxActive: {
+  backgroundColor: "#7C3AED",
+  borderColor: "#7C3AED",
+},
 
-  headerWishlistBadgeText: {
-
-    fontSize: 10,
-
-    fontWeight: "900",
-
-    color: "#FFFFFF",
-
-  },
-
+categoryChildText: {
+  fontSize: 15,
+  color: "#111827",
+},
 
   saveSheetOverlay: {
 
@@ -12744,58 +12815,6 @@ const styles = StyleSheet.create({
 
   },
 
-  headerIconHit: {
-
-    width: 36,
-
-    height: 36,
-
-    alignItems: "center",
-
-    justifyContent: "center",
-
-  },
-
-  greetingTextChip: {
-
-    alignSelf: "flex-start",
-
-    maxWidth: "100%",
-
-    paddingVertical: 6,
-
-    paddingHorizontal: 12,
-
-    borderRadius: 14,
-
-    borderWidth: 1,
-
-    borderColor: "rgba(249, 115, 22, 0.4)",
-
-    shadowColor: "#F97316",
-
-    shadowOffset: { width: 0, height: 1 },
-
-    shadowOpacity: 0.12,
-
-    shadowRadius: 4,
-
-    elevation: 2,
-
-  },
-
-
-
-  helloLine: {
-
-    fontSize: 11,
-
-    lineHeight: 14,
-
-  },
-
-
-
   helloMuted: {
 
     color: "#EA580C",
@@ -12805,20 +12824,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
 
   },
-
-
-
-  helloName: {
-
-    color: "#7C2D12",
-
-    fontWeight: "800",
-
-    letterSpacing: 0.1,
-
-  },
-
-
 
   shopText: {
 
@@ -14605,42 +14610,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
 
   },
-
-
-
-  checkbox: {
-
-    width: 22,
-
-    height: 22,
-
-    borderWidth: 2,
-
-    borderColor: "#888",
-
-    marginRight: 14,
-
-    borderRadius: 3,
-
-    justifyContent: "center",
-
-    alignItems: "center",
-
-    backgroundColor: "#fff",
-
-  },
-
-
-
-  checkboxActive: {
-
-    backgroundColor: "#d48933",
-
-    borderColor: "#d78322",
-
-  },
-
-
 
   checkText: {
 
@@ -18474,102 +18443,42 @@ shopStoreImage: {
 
     textAlign: "center",
 
-    lineHeight: 16,
+lineHeight: 16,
 
-  },
+},
 
-  cartAlertButton: {
+cartAlertButton: {
 
-    backgroundColor: "#10B981",
+backgroundColor: "#10B981",
 
-    paddingHorizontal: 24,
+paddingHorizontal: 24,
 
-    paddingVertical: 10,
+paddingVertical: 10,
 
-    borderRadius: 8,
+borderRadius: 8,
 
-    minWidth: 80,
+minWidth: 80,
 
-    alignItems: "center",
+alignItems: "center",
 
-  },
+},
 
-  cartAlertButtonText: {
+cartAlertButtonText: {
 
-    color: "#FFFFFF",
+color: "#FFFFFF",
 
-    fontSize: 16,
+fontSize: 16,
 
-    fontWeight: "600",
+fontWeight: "600",
 
-  },
+},
 
+filterButton: {
 
+backgroundColor: '#007bff',
 
-  // Category tree styles for filter modal
+paddingHorizontal: 15,
 
-  categoryParentItem: {
-
-    flexDirection: "row",
-
-    alignItems: "center",
-
-    paddingVertical: 12,
-
-    paddingHorizontal: 16,
-
-    backgroundColor: "#F8F8F8",
-
-    borderBottomWidth: 1,
-
-    borderBottomColor: "#E5E5E5",
-
-  },
-
-  categoryParentText: {
-
-    flex: 1,
-
-    fontSize: 16,
-
-    fontWeight: "600",
-
-    color: "#333",
-
-  },
-
-  categoryChildrenContainer: {
-
-    backgroundColor: "#FFFFFF",
-
-  },
-
-  categoryChildItem: {
-
-    flexDirection: "row",
-
-    alignItems: "center",
-
-    paddingVertical: 10,
-
-    paddingHorizontal: 32, // Indented for child items
-
-    borderBottomWidth: 1,
-
-    borderBottomColor: "#F0F0F0",
-
-  },
-
-  categoryChildText: {
-
-    flex: 1,
-
-    fontSize: 14,
-
-    fontWeight: "400",
-
-    color: "#666",
-
-  },
-
+paddingVertical: 8,
+},
 });

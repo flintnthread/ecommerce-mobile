@@ -1,4 +1,5 @@
 import api from "./api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /** Relative to `api` baseURL (see `services/api.tsx`). */
 export const ADDRESSES_ENDPOINT = "/api/addresses";
@@ -58,9 +59,31 @@ export interface CreateAddressPayload {
 
 /** `GET /api/addresses` — uses shared `api` instance (auth base URL). */
 export async function fetchAddresses(): Promise<ApiAddress[]> {
-  const { data } = await api.get<AddressesListResponse>(ADDRESSES_ENDPOINT);
-  if (data?.data && Array.isArray(data.data)) return data.data;
-  return [];
+  try {
+    console.log("Fetching addresses from API...");
+
+    const { data } = await api.get<AddressesListResponse>(
+      ADDRESSES_ENDPOINT
+    );
+
+    console.log("Address API response:", data);
+
+    if (data?.data && Array.isArray(data.data)) {
+      return data.data;
+    }
+
+    return [];
+  } catch (error: any) {
+    console.error("fetchAddresses FAILED:", error);
+
+    if (error.code === "ERR_NETWORK") {
+      throw new Error(
+        "Network error. Please check your internet connection."
+      );
+    }
+
+    throw error;
+  }
 }
 
 function joinAddressLines(line1: string, line2: string): string {
@@ -155,15 +178,41 @@ export function parseServerAddressId(body: unknown): string | null {
 export async function createAddress(
   payload: CreateAddressPayload
 ): Promise<unknown> {
-  const { data } = await api.post<unknown>(ADDRESSES_ENDPOINT, payload);
-  return data;
+  try {
+    // Check if user has token
+    const token = await AsyncStorage.getItem("token");
+    if (!token || token.trim() === "") {
+      throw new Error("Please login to add an address.");
+    }
+
+    console.log("Creating address with payload:", payload);
+    const { data } = await api.post<unknown>(ADDRESSES_ENDPOINT, payload);
+    console.log("Address creation response:", data);
+    return data;
+  } catch (error: any) {
+    console.error("Address creation failed:", error);
+    
+    // Handle authentication errors
+  
+    
+    // Handle network errors
+    if (error.code === "ERR_NETWORK") {
+      throw new Error("Network error. Please check your connection.");
+    }
+    
+    throw error;
+  }
 }
 
 /** `DELETE /api/addresses/{id}` — uses shared `api` instance. */
 export async function deleteAddress(id: string | number): Promise<void> {
-  await api.delete(addressDetailPath(id));
+  try {
+    await api.delete(addressDetailPath(id));
+  } catch (error: any) {
+    console.error("Delete address failed:", error);
+  
 }
-
+}
 export interface SetDefaultAddressResponse {
   success?: boolean;
   message?: string;
@@ -177,9 +226,14 @@ export interface SetDefaultAddressResponse {
 export async function setDefaultAddress(
   id: string | number
 ): Promise<SetDefaultAddressResponse> {
-  const { data } = await api.put<SetDefaultAddressResponse>(
-    addressDefaultPath(id),
-    {}
-  );
-  return data;
+  try {
+    const { data } = await api.put<SetDefaultAddressResponse>(
+      addressDefaultPath(id),
+      {}
+    );
+    return data;
+  } catch (error: any) {
+    console.error("Set default address failed:", error);
+    throw error;
+  }
 }

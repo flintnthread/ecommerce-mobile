@@ -16,21 +16,14 @@ import { getCurrentUserIdFromToken, validateAndRefreshToken } from "../services/
 import { useLanguage } from "../lib/language";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { 
-  getStoredReferralCode, 
-  getReferralStats, 
-  updateReferralStats,
-  getReferralUsageCount,
-  processReferralCode
-} from "../services/referralService";
+import * as Clipboard from "expo-clipboard";
 
-type ReferralOverview = {
+type ReferralDashboard = {
   referralCode: string;
   confirmedReferrals: number;
   requiredReferrals: number;
-  discountPercent: number;
   rewardUnlocked: boolean;
-  rewardUsed: boolean;
+  alreadyUsedReferral: boolean;
 };
 
 const GIFT_IMAGE = require("../assets/images/userrewords-gift.png");
@@ -41,74 +34,105 @@ export default function UserRewardsScreen() {
   const [loading, setLoading] = React.useState(false);
   const [applyCode, setApplyCode] = React.useState("");
   const [referralCode, setReferralCode] = React.useState("");
-  const [overview, setOverview] = React.useState<ReferralOverview>({
+  const [dashboard, setDashboard] = React.useState<ReferralDashboard>({
     referralCode: "",
     confirmedReferrals: 0,
     requiredReferrals: 5,
-    discountPercent: 10,
     rewardUnlocked: false,
-    rewardUsed: false,
+    alreadyUsedReferral: false,
   });
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
 
-  // 🔥 FETCH DASHBOARD - Use referral service for persistent data
-  const fetchOverview = React.useCallback(async () => {
-    console.log("Loading referral data from service");
+  // 🔥 FETCH DASHBOARD
+  const fetchDashboard = React.useCallback(async () => {
     setLoading(true);
-    
     try {
-      // Get persistent referral code and stats
-      const [storedCode, stats] = await Promise.all([
-        getStoredReferralCode(),
-        getReferralStats()
-      ]);
-      
-      // Get actual usage count for this referral code
-      const usageCount = await getReferralUsageCount(storedCode);
-      
-      // Update stats with actual usage count
-      const updatedStats = {
-        ...stats,
-        referralCode: storedCode,
-        confirmedReferrals: usageCount,
-        rewardUnlocked: usageCount >= stats.requiredReferrals,
-      };
-      
-      // Update local state
-      setOverview(updatedStats);
-      setReferralCode(storedCode);
-      
-      console.log("Loaded referral data:", {
-        code: storedCode,
-        usageCount,
-        stats: updatedStats
+      const userId = await getCurrentUserIdFromToken();
+
+      console.log("USER ID:", userId);
+
+      if (!userId) {
+        console.log("ERROR: No userId found - user might not be logged in");
+        Alert.alert(
+          "Login Required", 
+          "Please login to view referral data",
+          [
+            {
+              text: "Cancel",
+              style: "cancel"
+            },
+            {
+              text: "Login",
+              onPress: () => router.push("/login")
+            }
+          ]
+        );
+        return;
+      }
+
+      console.log("Making API call to:", "/api/referral/dashboard");
+      const { data } = await api.get("/api/referral/dashboard");
+
+      console.log("API RESPONSE:", data);
+
+      // Backend returns ReferralDashboardDto
+      setDashboard({
+        referralCode: data.referralCode,
+        confirmedReferrals: data.confirmedReferrals,
+        requiredReferrals: data.requiredReferrals,
+        rewardUnlocked: data.rewardUnlocked,
+        alreadyUsedReferral: data.alreadyUsedReferral,
       });
-    } catch (error) {
-      console.log("Error loading referral data:", error);
-      // Fallback to basic data
-      const fallbackCode = await getStoredReferralCode();
-      setReferralCode(fallbackCode);
-      setOverview({
-        referralCode: fallbackCode,
-        confirmedReferrals: 0,
-        requiredReferrals: 5,
-        discountPercent: 10,
-        rewardUnlocked: false,
-        rewardUsed: false,
+
+      setReferralCode(data.referralCode);
+    } catch (e: any) {
+      console.log("Dashboard error details:", {
+        message: e?.message,
+        response: e?.response?.data,
+        status: e?.response?.status,
+        statusText: e?.response?.statusText
       });
+      
+      const errorMessage = e?.response?.data?.message || e?.message || "Unknown error occurred";
+      Alert.alert("Referral Error", `Failed to load referral data: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   }, []);
 
   React.useEffect(() => {
-    // Bypass authentication and always fetch data
-    console.log("Component mounted - fetching overview data");
-    fetchOverview();
-  }, []);
+    const checkAuth = async () => {
+      const isValidToken = await validateAndRefreshToken();
+      console.log("Auth check - Valid token:", isValidToken);
+      setIsAuthenticated(isValidToken);
+      
+      if (isValidToken) {
+        const userId = await getCurrentUserIdFromToken();
+        if (userId) {
+          fetchDashboard();
+        }
+      }
+    };
+    checkAuth();
+  }, [fetchDashboard]);
 
-  
-  // 🔥 APPLY REFERRAL - Use referral service for real tracking
+  // 🔥 COPY REFERRAL CODE
+  const handleCopyCode = async () => {
+    if (!referralCode) {
+      Alert.alert("Error", "No referral code available");
+      return;
+    }
+
+    try {
+      await Clipboard.setStringAsync(referralCode);
+      Alert.alert("Success", "Referral code copied to clipboard!");
+    } catch (error) {
+      console.error("Copy error:", error);
+      Alert.alert("Error", "Failed to copy referral code");
+    }
+  };
+
+  // 🔥 APPLY REFERRAL
   const handleApplyReferralCode = async () => {
     const code = applyCode.trim();
 
@@ -117,50 +141,100 @@ export default function UserRewardsScreen() {
       return;
     }
 
-    console.log("Applying referral code:", code);
-    
-    // Don't allow applying own code
-    if (code === referralCode) {
-      Alert.alert("Invalid Code", "You cannot use your own referral code.");
+    if (code.length < 3) {
+      Alert.alert("Invalid code", "Referral code must be at least 3 characters long.");
       return;
     }
-    
+
     try {
-      // Get current user email (simulate for demo)
-      const currentUserId = await getCurrentUserIdFromToken();
-      const newUserEmail = "user" + currentUserId + "@example.com"; // Simulate email
-      
-      // Process the referral code (this will increment the referrer's count)
-      const success = await processReferralCode(code, newUserEmail);
-      
-      if (success) {
-        Alert.alert("Success", "Referral code applied successfully!");
-        setApplyCode(""); // Clear the input
-        
-        // Refresh the data to show updated counts
-        fetchOverview();
-      } else {
-        Alert.alert("Error", "Failed to apply referral code. You may have already used this code.");
+      const userId = await getCurrentUserIdFromToken();
+
+      if (!userId) {
+        Alert.alert(
+          "Login Required", 
+          "Please login to apply referral code",
+          [
+            {
+              text: "Cancel",
+              style: "cancel"
+            },
+            {
+              text: "Login", 
+              onPress: () => router.push("/login")
+            }
+          ]
+        );
+        return;
       }
-    } catch (error) {
-      console.log("Error applying referral code:", error);
-      Alert.alert("Error", "Failed to apply referral code");
+
+      console.log("Applying referral code:", { userId, referralCode: code });
+
+      const { data } = await api.post("/api/referral/apply", {
+        referralCode: code,
+      });
+
+      console.log("Apply response:", data);
+
+      if (!data.success) {
+        throw new Error(data.message || "Failed to apply referral code");
+      }
+
+      Alert.alert("Success", data.message || "Referral code applied successfully!");
+      setApplyCode("");
+      fetchDashboard(); // Refresh dashboard
+    } catch (e: any) {
+      console.log("Apply error:", e?.response?.data || e.message);
+      
+      if (e.message.includes("Invalid referral code")) {
+        Alert.alert("Invalid Code", "The referral code you entered is not valid. Please check and try again.");
+      } else if (e.message.includes("Referral already used")) {
+        Alert.alert("Already Used", "You have already used a referral code.");
+      } else if (e.message.includes("Own code not allowed")) {
+        Alert.alert("Invalid Code", "You cannot use your own referral code.");
+      } else {
+        Alert.alert("Error", e.message || "Failed to apply referral code");
+      }
     }
   };
 
-  // 🔥 SHARE - Disabled API calls
+  // 🔥 SHARE
   const handleInviteFriends = async () => {
-    console.log("Mock share - opening share dialog");
-    
     try {
+      const userId = await getCurrentUserIdFromToken();
+      
+      if (!userId) {
+        Alert.alert(
+          "Login Required", 
+          "Please login to share referral code",
+          [
+            {
+              text: "Cancel",
+              style: "cancel"
+            },
+            {
+              text: "Login",
+              onPress: () => router.push("/login")
+            }
+          ]
+        );
+        return;
+      }
+
+      const { data } = await api.get("/api/referral/share");
+
+      console.log("Share response:", data);
+
       await Share.share({
-        message: "Join me on this amazing app and get rewards! Use my referral code: " + referralCode,
+        message: data.message + "\n" + data.shareLink,
       });
-    } catch (error) {
-      console.log("Share error:", error);
+    } catch (e: any) {
+      console.log("Share error:", e?.response?.data || e.message);
       Alert.alert("Share", "Could not open share options right now.");
     }
   };
+
+  // Calculate progress percentage
+  const progressPercentage = Math.min((dashboard.confirmedReferrals / dashboard.requiredReferrals) * 100, 100);
 
   return (
     <LinearGradient
@@ -171,12 +245,25 @@ export default function UserRewardsScreen() {
       style={styles.container}
     >
       <>
-        {/* Always show main content - bypass authentication for now */}
-        <View style={styles.cardShell}>
+        {!isAuthenticated ? (
+          <View style={styles.authMessage}>
+            <Text style={styles.authMessageText}>
+              Please login to view referral data
+            </Text>
+            <TouchableOpacity 
+              style={styles.loginBtn} 
+              onPress={() => router.replace("/login")}
+            >
+              <Text style={styles.loginBtnText}>� Login</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.cardShell}>
             <View style={styles.giftIconWrap}>
               <Image source={GIFT_IMAGE} style={styles.giftImage} resizeMode="contain" />
             </View>
 
+            {/* SECTION 1 - HEADER OFFER */}
             <Text style={styles.title}>
               Invite 5 friends{"\n"}and get 10% Discount on First Order
             </Text>
@@ -185,105 +272,89 @@ export default function UserRewardsScreen() {
               After successful registration you and your{"\n"}friends will get Referral code
             </Text>
 
+            {/* SECTION 2 - USER REFERRAL CODE */}
             <View style={styles.referralCodeWrap}>
-              <View style={styles.referralCodeChip}>
-                <Ionicons name="ticket-outline" size={16} color="#d9ccff" />
+              <Text style={styles.referralCodeLabel}>Your Referral Code</Text>
+              <View style={styles.referralCodeBox}>
                 <Text style={styles.referralCodeText}>
-                  {referralCode || "No code available"}
+                  {referralCode || "Loading..."}
                 </Text>
-              </View>
-
-              <Text style={styles.codeNoteText}>
-                Your permanent referral code - share with friends
-              </Text>
-            </View>
-
-            <View style={styles.applyCodeWrap}>
-              <TextInput
-                value={applyCode}
-                onChangeText={setApplyCode}
-                placeholder="Enter referral code"
-                placeholderTextColor="#bba9ff"
-                style={styles.applyCodeInput}
-                autoCapitalize="characters"
-              />
-
-              <TouchableOpacity style={styles.applyCodeBtn} onPress={handleApplyReferralCode}>
-                <Text style={styles.applyCodeBtnText}>Apply</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.invitesHeadRow}>
-              <Text style={styles.invitesTitle}>Invites</Text>
-              <Text style={styles.invitesCount}>
-                {overview.confirmedReferrals}/{overview.requiredReferrals}
-              </Text>
-            </View>
-
-            <View style={styles.invitesProgress}>
-              <View style={styles.progressBar}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${(overview.confirmedReferrals / overview.requiredReferrals) * 100}%` }
-                  ]}
-                />
+                <TouchableOpacity style={styles.copyBtn} onPress={handleCopyCode}>
+                  <Ionicons name="copy-outline" size={20} color="#E97A1F" />
+                </TouchableOpacity>
               </View>
             </View>
 
-            <View style={styles.invitesList}>
-              {[/* ... */].map((item, index) => (
-                <View key={index} style={styles.inviteItem}>
-                  <Ionicons
-                    name={item.icon}
-                    size={16}
-                    color={item.completed ? "#34C759" : "#9CA3AF"}
+            {/* SECTION 3 - ENTER REFERRAL CODE (only show if not used) */}
+            {!dashboard.alreadyUsedReferral && (
+              <View style={styles.applyCodeWrap}>
+                <Text style={styles.applyCodeLabel}>Enter Referral Code</Text>
+                <View style={styles.applyCodeRow}>
+                  <TextInput
+                    value={applyCode}
+                    onChangeText={setApplyCode}
+                    placeholder="Enter referral code"
+                    placeholderTextColor="#bba9ff"
+                    style={styles.applyCodeInput}
+                    autoCapitalize="characters"
                   />
-                  <Text style={styles.inviteItemText}>{item.label}</Text>
+                  <TouchableOpacity style={styles.applyCodeBtn} onPress={handleApplyReferralCode}>
+                    <Text style={styles.applyCodeBtnText}>Apply</Text>
+                  </TouchableOpacity>
                 </View>
-              ))}
-            </View>
+              </View>
+            )}
 
+            {/* SECTION 4 & 5 - INVITES COUNT AND PROGRESS */}
+            {/* SECTION 4 & 5 - INVITES COUNT AND PROGRESS */}
+<View style={styles.invitesSection}>
+  <View style={styles.invitesHeadRow}>
+    <Text style={styles.invitesTitle}>Invites</Text>
+    <Text style={styles.invitesCount}>
+      {dashboard.confirmedReferrals}
+    </Text>
+  </View>
+
+  <Text style={styles.confirmedText}>
+    Confirmed referrals: {dashboard.confirmedReferrals}/{dashboard.requiredReferrals}
+  </Text>
+
+  {/* Progress Bar */}
+  <View style={styles.progressContainer}>
+    <View style={styles.progressBar}>
+      <View
+        style={[
+          styles.progressFill,
+          { width: `${progressPercentage}%` }
+        ]}
+      />
+    </View>
+
+    <Text style={styles.progressText}>
+      {Math.round(progressPercentage)}%
+    </Text>
+  </View>
+</View>
+          
+
+            {/* SECTION 6 - REWARD STATUS */}
+            {dashboard.rewardUnlocked && (
+              <View style={styles.rewardUnlockedContainer}>
+                <Ionicons name="trophy" size={24} color="#FFD700" />
+                <Text style={styles.rewardUnlockedText}>🎉 Reward Unlocked!</Text>
+              </View>
+            )}
+
+            {/* SECTION 7 - INVITE FRIENDS BUTTON */}
             <View style={styles.bottomActions}>
               <TouchableOpacity style={styles.primaryBtn} onPress={handleInviteFriends}>
                 <LinearGradient colors={["#8B47FF", "#6B2BFF"]} style={styles.primaryBtnGradient}>
-                  <Text style={styles.primaryBtnText}>Invite friends</Text>
+                  <Text style={styles.primaryBtnText}>Invite Friends</Text>
                 </LinearGradient>
               </TouchableOpacity>
-              
-              {/* Alternative Options for Old Users */}
-              <View style={styles.alternativeOptions}>
-                <Text style={styles.alternativeTitle}>🎁 Alternative Ways to Earn</Text>
-                
-                <TouchableOpacity style={styles.alternativeItem} onPress={() => Alert.alert("Coming Soon", "Daily login rewards will be available soon!")}>
-                  <Ionicons name="calendar-outline" size={20} color="#d9ccff" />
-                  <View style={styles.alternativeContent}>
-                    <Text style={styles.alternativeItemTitle}>Daily Login</Text>
-                    <Text style={styles.alternativeItemDesc}>Get points for daily check-ins</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color="#d9ccff" />
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.alternativeItem} onPress={() => Alert.alert("Coming Soon", "Social sharing rewards will be available soon!")}>
-                  <Ionicons name="share-social-outline" size={20} color="#d9ccff" />
-                  <View style={styles.alternativeContent}>
-                    <Text style={styles.alternativeItemTitle}>Share on Social</Text>
-                    <Text style={styles.alternativeItemDesc}>Extra rewards for social shares</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color="#d9ccff" />
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.alternativeItem} onPress={() => Alert.alert("Coming Soon", "Purchase rewards will be available soon!")}>
-                  <Ionicons name="cart-outline" size={20} color="#d9ccff" />
-                  <View style={styles.alternativeContent}>
-                    <Text style={styles.alternativeItemTitle}>Purchase Rewards</Text>
-                    <Text style={styles.alternativeItemDesc}>Earn rewards on every purchase</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color="#d9ccff" />
-                </TouchableOpacity>
-              </View>
             </View>
-        </View>
+          </View>
+        )}
       </>
     </LinearGradient>
   );
@@ -306,6 +377,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
     marginBottom: 20,
+  },
+  loginBtn: {
+    backgroundColor: "#A0208C",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  loginBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   authRetryBtn: {
     backgroundColor: "rgba(255,255,255,0.2)",
@@ -357,46 +440,52 @@ const styles = StyleSheet.create({
     lineHeight: 23,
   },
   referralCodeWrap: {
-    marginTop: 12,
+    marginTop: 20,
     alignItems: "center",
   },
-  referralCodeChip: {
+  referralCodeLabel: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.9)",
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  referralCodeBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    borderRadius: 999,
+    backgroundColor: "rgba(120,83,255,0.2)",
+    borderRadius: 12,
+    padding: 16,
     borderWidth: 1,
     borderColor: "rgba(165,136,255,0.45)",
-    backgroundColor: "rgba(120,83,255,0.2)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    marginTop: 8,
   },
   referralCodeText: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
     color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0.4,
+    letterSpacing: 2,
+    textAlign: "center",
   },
-  generateBtn: {
-    marginTop: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(139,71,255,0.28)",
-    borderWidth: 1,
-    borderColor: "rgba(165,136,255,0.55)",
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  generateBtnText: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+  copyBtn: {
+    padding: 8,
+    marginLeft: 12,
   },
   applyCodeWrap: {
-    marginTop: 12,
+    marginTop: 20,
+    alignItems: "center",
+  },
+  applyCodeLabel: {
+    fontSize: 16,
+    color: "rgba(255,255,255,0.9)",
+    marginBottom: 12,
+    fontWeight: "600",
+  },
+  applyCodeRow: {
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
+    width: "100%",
   },
   applyCodeInput: {
     flex: 1,
@@ -408,22 +497,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontWeight: "700",
+    fontSize: 16,
   },
   applyCodeBtn: {
     borderRadius: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: "#8B47FF",
   },
   applyCodeBtnText: {
     color: "#fff",
     fontWeight: "800",
+    fontSize: 16,
+  },
+  invitesSection: {
+    marginTop: 25,
+    alignItems: "center",
   },
   invitesHeadRow: {
-    marginTop: 28,
     flexDirection: "row",
-    alignItems: "baseline",
-    gap: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
   },
   invitesTitle: {
     color: "#ffffff",
@@ -432,62 +527,67 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   invitesCount: {
-    color: "rgba(255,255,255,0.78)",
+    color: "#E97A1F",
     fontSize: 32,
     fontWeight: "800",
+    marginLeft: 8,
   },
-  invitesList: {
-    marginTop: 10,
-    gap: 12,
-  },
-  inviteRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  avatarWrap: {
-    marginRight: 10,
-  },
-  avatarRing: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 3,
-    borderColor: "#32d583",
-    backgroundColor: "#18192f",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  inviteMeta: {
-    flex: 1,
-  },
-  inviteEmail: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  inviteStatus: {
-    marginTop: 2,
-    color: "rgba(255,255,255,0.68)",
+  confirmedText: {
+    color: "rgba(255,255,255,0.78)",
     fontSize: 16,
     fontWeight: "600",
+    marginBottom: 16,
+    textAlign: "center",
   },
-  remindBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  progressContainer: {
+    width: "100%",
+    alignItems: "center",
+    position: "relative",
   },
-  remindText: {
-    color: "#8f7dff",
+  progressBar: {
+    height: 8,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 4,
+    overflow: "hidden",
+    width: "100%",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#34C759",
+    borderRadius: 4,
+  },
+  progressText: {
+    position: "absolute",
+    right: 10,
+    top: -8,
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  rewardUnlockedContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,215,0,0.2)",
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  rewardUnlockedText: {
+    color: "#FFD700",
     fontSize: 16,
     fontWeight: "700",
+    marginLeft: 8,
   },
   bottomActions: {
-    gap: 10,
-    marginTop: 8,
-    marginBottom: 16,
+    marginTop: 20,
+    alignItems: "center",
   },
   primaryBtn: {
     borderRadius: 14,
     overflow: "hidden",
+    width: "100%",
   },
   primaryBtnGradient: {
     paddingVertical: 16,
@@ -498,73 +598,5 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 21,
     fontWeight: "800",
-  },
-  invitesProgress: {
-    marginTop: 12,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#34C759",
-    borderRadius: 4,
-  },
-  inviteItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 8,
-  },
-  inviteItemText: {
-    color: "#ffffff",
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  alternativeOptions: {
-    marginTop: 20,
-    paddingHorizontal: 10,
-  },
-  alternativeTitle: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  alternativeItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  alternativeContent: {
-    flex: 1,
-    marginLeft: 15,
-  },
-  alternativeItemTitle: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  alternativeItemDesc: {
-    color: "#d9ccff",
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  codeNoteText: {
-    color: "#d9ccff",
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 8,
-    fontStyle: "italic",
   },
 });
