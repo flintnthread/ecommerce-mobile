@@ -131,15 +131,29 @@ export default function AccountScreen() {
   const [notificationCount, setNotificationCount] = useState(0);
 
   const loadSavedProfilesFromApi = useCallback(async () => {
-    try {
-      const rows = await fetchAddresses();
-      setSavedProfiles(
-        rows.map((row) => mapApiAddressToSavedProfileShape(row) as SavedProfile)
-      );
-    } catch {
-      // Keep current list on failure (e.g. offline); avoid blocking the screen.
+  try {
+    const token = await AsyncStorage.getItem("token");
+
+    console.log("ADDRESS TOKEN:", token);
+
+    if (!token || token.trim() === "") {
+      console.log("No token available yet");
+      return;
     }
-  }, []);
+
+    console.log("Fetching addresses from API...");
+
+    const rows = await fetchAddresses();
+
+    console.log("ADDRESS RESPONSE:", rows);
+
+    setSavedProfiles(
+      rows.map((row) => mapApiAddressToSavedProfileShape(row) as SavedProfile)
+    );
+  } catch (e) {
+    console.log("ADDRESS FETCH ERROR:", e);
+  }
+}, []);
 
   const loadEmailActivityFromApi = useCallback(async () => {
     const email = (getCurrentProfileData().email || "").trim();
