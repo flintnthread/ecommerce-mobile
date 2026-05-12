@@ -17,8 +17,7 @@ import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isAxiosError } from "axios";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import type { BarcodeScanningResult } from "expo-camera";
-import api, { searchProductsByImage, searchProductByBarcode, type SearchUiResult } from "../services/api";
+import api, { searchProductsByImage, type SearchUiResult } from "../services/api";
 
 const { width, height } = Dimensions.get("window");
 const PLACEHOLDER = require("../assets/images/product1.png");
@@ -68,6 +67,42 @@ export default function CameraSearch() {
     }
   }, []);
 
+
+  const runImageSearch = useCallback(
+    async (uri: string) => {
+      setSearching(true);
+      setError(null);
+      setResults([]);
+      try {
+        const token = (await AsyncStorage.getItem("token"))?.trim() || "";
+        const userId = token ? decodeUserIdFromToken(token) : undefined;
+        const sessionId =
+          (await AsyncStorage.getItem(SEARCH_SESSION_KEY))?.trim() || undefined;
+
+        const rows = await searchProductsByImage(uri, { userId, sessionId });
+        const products = rows.filter((x: any) => x.kind === "product");
+        setResults(products);
+        if (products.length === 0) {
+          setError("No similar products found. Try another angle or lighting.");
+        }
+      } catch (err) {
+        let message = "Could not run camera search. Please try again.";
+        if (err instanceof Error && err.message.trim()) {
+          message = err.message.trim();
+        } else if (isAxiosError(err)) {
+          const apiMessage = err.response?.data?.message;
+          if (typeof apiMessage === "string" && apiMessage.trim()) {
+            message = apiMessage.trim();
+          }
+        }
+        setError(message);
+      } finally {
+        setSearching(false);
+      }
+    },
+    [decodeUserIdFromToken]
+  );
+
   const takePhoto = useCallback(async () => {
     if (!cameraRef.current) {
       Alert.alert("Error", "Camera ref not available.");
@@ -97,62 +132,18 @@ export default function CameraSearch() {
       const msg = err instanceof Error ? err.message : String(err);
       Alert.alert("Error", "Could not capture photo: " + msg);
     }
-  }, [cameraRef, isCameraReady]);
+  }, [cameraRef, isCameraReady, runImageSearch]);
 
-  const runImageSearch = useCallback(async (uri: string) => {
-    setSearching(true);
-    setError(null);
-    setResults([]);
-    try {
-      const token = (await AsyncStorage.getItem("token"))?.trim() || "";
-      const userId = token ? decodeUserIdFromToken(token) : undefined;
-      const sessionId = (await AsyncStorage.getItem(SEARCH_SESSION_KEY))?.trim() || undefined;
-      const rows = await searchProductsByImage(uri, { userId, sessionId });
-      const products = rows.filter((x) => x.kind === "product");
-      setResults(products);
-      if (products.length === 0) {
-        setError("No similar products found. Try a clearer photo or barcode scan.");
-      }
-    } catch (err) {
-      let message = "Could not run camera search.";
-      if (err instanceof Error) message = err.message;
-      else if (isAxiosError(err)) message = err.response?.data?.message || message;
-      setError(message);
-    } finally {
-      setSearching(false);
-    }
-  }, [decodeUserIdFromToken]);
+  // Barcode search functionality - API endpoint not available yet
+  // const runBarcodeSearch = useCallback(async (barcode: string) => { ... }, [decodeUserIdFromToken]);
 
-  const runBarcodeSearch = useCallback(async (barcode: string) => {
-    setSearching(true);
-    setError(null);
-    setResults([]);
-    try {
-      const token = (await AsyncStorage.getItem("token"))?.trim() || "";
-      const userId = token ? decodeUserIdFromToken(token) : undefined;
-      const sessionId = (await AsyncStorage.getItem(SEARCH_SESSION_KEY))?.trim() || undefined;
-      const rows = await searchProductByBarcode(barcode, { userId, sessionId });
-      const products = rows.filter((x) => x.kind === "product");
-      setResults(products);
-      if (products.length === 0) {
-        setError("No product found for this barcode.");
-      }
-    } catch (err) {
-      let message = "Could not search by barcode.";
-      if (err instanceof Error) message = err.message;
-      else if (isAxiosError(err)) message = err.response?.data?.message || message;
-      setError(message);
-    } finally {
-      setSearching(false);
-    }
-  }, [decodeUserIdFromToken]);
-
-  const handleBarcodeScanned = useCallback((result: any) => {
-    const data = result?.data;
-    if (data && typeof data === "string") {
-      runBarcodeSearch(data);
-    }
-  }, [runBarcodeSearch]);
+  // Barcode scanning handler - requires barcode search API endpoint
+  // const handleBarcodeScanned = useCallback((result: any) => {
+  //   const data = result?.data;
+  //   if (data && typeof data === "string") {
+  //     runBarcodeSearch(data);
+  //   }
+  // }, [runBarcodeSearch]);
 
   const openGallery = useCallback(async () => {
     try {
@@ -237,7 +228,7 @@ export default function CameraSearch() {
             facing="back"
             onCameraReady={() => setIsCameraReady(true)}
             barcodeScannerSettings={scanMode === "barcode" ? { barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"] } : undefined}
-            onBarcodeScanned={scanMode === "barcode" ? handleBarcodeScanned : undefined}
+            onBarcodeScanned={undefined}
           >
             {scanMode === "barcode" && (
               <View style={styles.barcodeOverlay}>

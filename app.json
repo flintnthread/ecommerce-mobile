@@ -14,7 +14,9 @@
           "NSAllowsArbitraryLoads": true
         },
         "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition.",
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone."
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone.",
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use camera for product search.",
+        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access photos for product search."
       }
     },
     "android": {
@@ -26,14 +28,13 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECORD_AUDIO",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
       "package": "com.anonymous.MyLoginApp"
     },
@@ -63,7 +64,14 @@
       ],
       "expo-web-browser",
       "expo-speech-recognition",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos for product search.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use camera for product search."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
