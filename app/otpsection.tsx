@@ -195,15 +195,49 @@ const inputs = useRef<(TextInput | null)[]>([]);
 
       const data = await verifyOtp(payload);
 
+      console.log("OTP - Full API response:", JSON.stringify(data, null, 2));
+
       if (data?.success) {
-        await AsyncStorage.setItem("token", data.token || "");
-        await AsyncStorage.setItem(SHOW_POST_LOGIN_PROMO_KEY, "1");
-        showToast("success", "OTP verified successfully");
-        setTimeout(() => {
-          router.replace("/home");
-        }, 300);
-        return;
+        console.log("OTP - Success response received");
+        console.log("OTP - Token in response:", data.token ? "YES" : "NO");
+        console.log("OTP - Token length:", data.token?.length || 0);
+        console.log("OTP - Token preview:", data.token ? `${data.token.substring(0, 50)}...` : "NONE");
+
+        if (!data.token || data.token.trim() === "") {
+          console.error("OTP ERROR: No token received from server");
+          showToast("error", "Authentication failed - no token received");
+          return;
+        }
+
+        try {
+          await AsyncStorage.setItem("token", data.token);
+          console.log("OTP - Token stored to AsyncStorage");
+
+          // Verify token was stored
+          const storedToken = await AsyncStorage.getItem("token");
+          console.log("OTP - Token stored successfully:", !!storedToken);
+          console.log("OTP - Stored token length:", storedToken?.length || 0);
+          console.log("OTP - Stored token preview:", storedToken ? `${storedToken.substring(0, 50)}...` : "NONE");
+
+          if (!storedToken || storedToken.trim() === "") {
+            console.error("OTP ERROR: Token storage failed");
+            showToast("error", "Authentication failed - could not store token");
+            return;
+          }
+
+          await AsyncStorage.setItem(SHOW_POST_LOGIN_PROMO_KEY, "1");
+          showToast("success", "OTP verified successfully");
+          setTimeout(() => {
+            router.replace("/home");
+          }, 300);
+          return;
+        } catch (storageError) {
+          console.error("OTP ERROR: AsyncStorage failed:", storageError);
+          showToast("error", "Authentication failed - storage error");
+          return;
+        }
       } else {
+        console.error("OTP ERROR: API returned failure:", data?.message);
         showToast("error", data?.message || "Invalid OTP");
       }
     } catch (error: any) {

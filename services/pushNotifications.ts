@@ -88,20 +88,18 @@ export async function getCurrentUserIdFromToken(): Promise<number | null> {
     
     const userId = extractUserIdFromToken(token);
     if (!userId) {
-      console.log("Could not extract user ID from token - token may be invalid or expired");
-      // Clear invalid token
-      await AsyncStorage.removeItem("token");
-      return null;
-    }
+  console.log("Could not extract user ID from token");
+
+  return null;
+}
     
     console.log("Successfully extracted user ID from token:", userId);
     return userId;
   } catch (error) {
-    console.log("Error getting user ID from token:", error);
-    // Clear potentially corrupted token
-    await AsyncStorage.removeItem("token");
-    return null;
-  }
+  console.log("Error getting user ID from token:", error);
+
+  return null;
+}
 }
 
 // Add function to validate and refresh token if needed
