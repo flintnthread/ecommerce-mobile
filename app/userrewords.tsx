@@ -19,11 +19,15 @@ import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 
 type ReferralDashboard = {
+  userId?: number;
   referralCode: string;
   confirmedReferrals: number;
   requiredReferrals: number;
+  remainingReferrals: number;
   rewardUnlocked: boolean;
   alreadyUsedReferral: boolean;
+  discountAvailable: boolean;
+  reward: string;
 };
 
 const GIFT_IMAGE = require("../assets/images/userrewords-gift.png");
@@ -38,8 +42,11 @@ export default function UserRewardsScreen() {
     referralCode: "",
     confirmedReferrals: 0,
     requiredReferrals: 5,
+    remainingReferrals: 5,
     rewardUnlocked: false,
     alreadyUsedReferral: false,
+    discountAvailable: false,
+    reward: "",
   });
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
 
@@ -74,14 +81,20 @@ export default function UserRewardsScreen() {
       const { data } = await api.get("/api/referral/dashboard");
 
       console.log("API RESPONSE:", data);
+      if (data.userId != null && Number(data.userId) !== Number(userId)) {
+        console.warn("Referral dashboard userId mismatch token vs server:", userId, data.userId);
+      }
 
-      // Backend returns ReferralDashboardDto
       setDashboard({
+        userId: data.userId != null ? Number(data.userId) : Number(userId),
         referralCode: data.referralCode,
         confirmedReferrals: data.confirmedReferrals,
         requiredReferrals: data.requiredReferrals,
+        remainingReferrals: data.remainingReferrals ?? Math.max(0, data.requiredReferrals - data.confirmedReferrals),
         rewardUnlocked: data.rewardUnlocked,
         alreadyUsedReferral: data.alreadyUsedReferral,
+        discountAvailable: data.discountAvailable ?? false,
+        reward: data.reward ?? "",
       });
 
       setReferralCode(data.referralCode);
@@ -254,7 +267,7 @@ export default function UserRewardsScreen() {
               style={styles.loginBtn} 
               onPress={() => router.replace("/login")}
             >
-              <Text style={styles.loginBtnText}>� Login</Text>
+              <Text style={styles.loginBtnText}>Login</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -269,7 +282,7 @@ export default function UserRewardsScreen() {
             </Text>
 
             <Text style={styles.subtitle}>
-              After successful registration you and your{"\n"}friends will get Referral code
+              Share your code. When 5 friends complete a purchase, you unlock 10% off your first order.
             </Text>
 
             {/* SECTION 2 - USER REFERRAL CODE */}
@@ -283,6 +296,11 @@ export default function UserRewardsScreen() {
                   <Ionicons name="copy-outline" size={20} color="#E97A1F" />
                 </TouchableOpacity>
               </View>
+              {dashboard.userId != null ? (
+                <Text style={styles.accountIdHint}>
+                  Loaded for user ID: {dashboard.userId}
+                </Text>
+              ) : null}
             </View>
 
             {/* SECTION 3 - ENTER REFERRAL CODE (only show if not used) */}
@@ -341,7 +359,11 @@ export default function UserRewardsScreen() {
             {dashboard.rewardUnlocked && (
               <View style={styles.rewardUnlockedContainer}>
                 <Ionicons name="trophy" size={24} color="#FFD700" />
-                <Text style={styles.rewardUnlockedText}>🎉 Reward Unlocked!</Text>
+                <Text style={styles.rewardUnlockedText}>
+                  {dashboard.discountAvailable
+                    ? "Reward unlocked — 10% off your next first order!"
+                    : "Reward unlocked — you already used your 10% discount."}
+                </Text>
               </View>
             )}
 
@@ -466,6 +488,12 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     letterSpacing: 2,
     textAlign: "center",
+  },
+  accountIdHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "rgba(255,255,255,0.55)",
+    fontWeight: "500",
   },
   copyBtn: {
     padding: 8,

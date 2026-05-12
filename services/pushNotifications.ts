@@ -61,9 +61,15 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 export function extractUserIdFromToken(token: string): number | null {
   const payload = decodeJwtPayload(token);
   if (!payload) return null;
-  const candidates = [payload.userId, payload.id, payload.uid, payload.sub];
-  for (const value of candidates) {
-    const n = Number(value);
+  // Backend puts numeric user id in "userId" claim; subject ("sub") is email/phone — not numeric.
+  const raw = payload.userId ?? payload.id ?? payload.uid;
+  if (raw !== undefined && raw !== null) {
+    const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  }
+  const sub = payload.sub;
+  if (typeof sub === "string" && /^\d{6,}$/.test(sub.trim())) {
+    const n = Number(sub.trim());
     if (Number.isFinite(n) && n > 0) return Math.floor(n);
   }
   return null;
@@ -86,14 +92,20 @@ export async function getCurrentUserIdFromToken(): Promise<number | null> {
       return null;
     }
     
-    const userId = extractUserIdFromToken(token);
+    let userId = extractUserIdFromToken(token);
     if (!userId) {
-  console.log("Could not extract user ID from token");
+      const stored = (await AsyncStorage.getItem("userId"))?.trim();
+      if (stored) {
+        const n = Number(stored);
+        if (Number.isFinite(n) && n > 0) userId = Math.floor(n);
+      }
+    }
+    if (!userId) {
+      console.log("Could not get user ID from JWT or AsyncStorage userId");
+      return null;
+    }
 
-  return null;
-}
-    
-    console.log("Successfully extracted user ID from token:", userId);
+    console.log("Current user ID:", userId);
     return userId;
   } catch (error) {
   console.log("Error getting user ID from token:", error);
