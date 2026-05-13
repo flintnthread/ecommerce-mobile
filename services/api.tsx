@@ -46,15 +46,29 @@ function extractUserIdFromToken(token: string): number | null {
 
   if (!payload) return null;
 
-  const candidate = Number(
+  const raw = payload.userId ?? payload.id ?? payload.uid;
 
-    payload.userId ?? payload.id ?? payload.uid ?? payload.sub
+  if (raw !== undefined && raw !== null) {
 
-  );
+    const candidate = typeof raw === "number" ? raw : Number(String(raw).trim());
 
-  if (!Number.isFinite(candidate) || candidate <= 0) return null;
+    if (!Number.isFinite(candidate) || candidate <= 0) return null;
 
-  return Math.floor(candidate);
+    return Math.floor(candidate);
+
+  }
+
+  const sub = payload.sub;
+
+  if (typeof sub === "string" && /^\d{6,}$/.test(sub.trim())) {
+
+    const n = Number(sub.trim());
+
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+
+  }
+
+  return null;
 
 }
 
@@ -384,13 +398,13 @@ api.interceptors.request.use(
 
         config.headers.Authorization = `Bearer ${token}`;
 
-        console.log("API Request with token:", config.method?.toUpperCase(), config.baseURL + config.url);
+        console.log("API Request with token:", config.method?.toUpperCase(), (config.baseURL ?? "") + (config.url ?? ""));
 
         console.log("Token being sent:", token.substring(0, 30) + "...");
 
       } else {
 
-        console.log("API Request without token:", config.method?.toUpperCase(), config.baseURL + config.url);
+        console.log("API Request without token:", config.method?.toUpperCase(), (config.baseURL ?? "") + (config.url ?? ""));
 
         console.log("No token found in AsyncStorage");
 
@@ -1652,6 +1666,9 @@ export interface LoginResponse {
 
   role?: string;
 
+  /** Present when backend includes it (OTP verify); also stored in AsyncStorage as "userId". */
+  userId?: number;
+
   user?: {
 
     id: number;
@@ -1780,7 +1797,7 @@ export const logout = async (): Promise<{ success: boolean; message: string }> =
 
   try {
 
-    await AsyncStorage.removeItem("token");
+    await AsyncStorage.multiRemove(["token", "userId"]);
 
     return { success: true, message: "Logged out successfully" };
 
@@ -2365,11 +2382,24 @@ export const createInvoice = async (invoiceData: CreateInvoiceRequest) => {
 // ===== REFERRAL API FUNCTIONS =====
 
 export interface ReferralDashboardResponse {
+  /** Same as JWT account; server derives from token, not client-supplied id. */
+  userId?: number;
   referralCode: string;
   confirmedReferrals: number;
   requiredReferrals: number;
+  remainingReferrals: number;
   rewardUnlocked: boolean;
   alreadyUsedReferral: boolean;
+  discountAvailable: boolean;
+  reward: string;
+}
+
+export interface ReferralRewardStatusResponse {
+  rewardUnlocked: boolean;
+  discountAvailable: boolean;
+  eligibleForInviterDiscountOnNextOrder: boolean;
+  percentOff: number;
+  message: string;
 }
 
 export interface ApplyReferralRequest {
@@ -2391,6 +2421,11 @@ export interface ShareResponse {
  */
 export const getReferralDashboard = async (): Promise<ReferralDashboardResponse> => {
   const response = await api.get("/api/referral/dashboard");
+  return response.data;
+};
+
+export const getReferralRewardStatus = async (): Promise<ReferralRewardStatusResponse> => {
+  const response = await api.get("/api/referral/reward-status");
   return response.data;
 };
 

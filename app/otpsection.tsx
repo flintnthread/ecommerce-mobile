@@ -211,6 +211,9 @@ const inputs = useRef<(TextInput | null)[]>([]);
 
         try {
           await AsyncStorage.setItem("token", data.token);
+          if (typeof data.userId === "number" && data.userId > 0) {
+            await AsyncStorage.setItem("userId", String(data.userId));
+          }
           console.log("OTP - Token stored to AsyncStorage");
 
           // Verify token was stored

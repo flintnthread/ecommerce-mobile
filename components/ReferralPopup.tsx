@@ -66,7 +66,7 @@ export default function ReferralPopup({ visible, onClose }: { visible: boolean; 
 
             {/* Description */}
             <Text style={styles.description}>
-              Share your referral code with friends and get 10% discount on their first order.
+              Invite friends with your code. After 5 friends complete a purchase, you get 10% off your first order.
               {"\n\n"}
               Invite 5 friends to unlock exclusive rewards!
             </Text>
