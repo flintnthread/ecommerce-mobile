@@ -3583,6 +3583,7 @@ const [products, setProducts] = useState<any[]>([]);
   const [searchCategoryText, setSearchCategoryText] = useState("");
 
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
 
   const filterOptions: Record<string, string[]> = {
   Category: ["Men", "Women", "Kids", "Accessories"],
@@ -6509,29 +6510,34 @@ useEffect(() => {
 
 
   const handleCategorySelection = (categoryName: string, categoryId: number) => {
-
-    // Navigate to subcatProducts with the selected category
-
-    router.push({
-
-      pathname: "/subcatProducts",
-
-      params: {
-
-        subCategory: categoryName,
-
-        categoryId: String(categoryId),
-
-      },
-
-    } as any);
-
+    // Toggle the category selection in selectedFilters (don't navigate immediately)
+    setSelectedFilters((prev) => {
+      const section = "Category";
+      const existingValues = prev[section] || [];
+      
+      if (existingValues.includes(categoryName)) {
+        // Remove the category if already selected
+        return {
+          ...prev,
+          [section]: existingValues.filter((v) => v !== categoryName),
+        };
+      } else {
+        // Add the category
+        return {
+          ...prev,
+          [section]: [...existingValues, categoryName],
+        };
+      }
+    });
     
-
-    // Close the filter modal
-
-    setFilterModalVisible(false);
-
+    // Store the category ID for later use when navigating
+    setSelectedCategoryIds((prev) => {
+      if (prev.includes(categoryId)) {
+        return prev.filter((id) => id !== categoryId);
+      } else {
+        return [...prev, categoryId];
+      }
+    });
   };
 
 
@@ -6579,6 +6585,8 @@ useEffect(() => {
     setSelectedFilters({});
 
     setSelectedCategory([]);
+
+    setSelectedCategoryIds([]);
 
     setSelectedGender("");
 
@@ -11774,29 +11782,75 @@ const categoryData = [
                 style={styles.doneButton}
 
                 onPress={() => {
-
-                  // Apply price and rating filters
-
-                  const filterState = {
-
-                    selectedPriceRanges: selectedFilters["Price"] || [],
-
-                    rating: selectedFilters["Rating"]?.length > 0 ? 
-
-                      parseInt(selectedFilters["Rating"][0]) : undefined
-
-                  };
-
+                  // Check if any filters are selected
+                  const hasCategories = (selectedFilters["Category"]?.length || 0) > 0;
+                  const hasColors = (selectedFilters["Color"]?.length || 0) > 0;
+                  const hasSizes = (selectedFilters["Size"]?.length || 0) > 0;
+                  const hasGenders = (selectedFilters["Gender"]?.length || 0) > 0;
+                  const hasPrices = (selectedFilters["Price"]?.length || 0) > 0;
+                  const hasRatings = (selectedFilters["Rating"]?.length || 0) > 0;
                   
-
-                  if (filterState.selectedPriceRanges.length > 0 || filterState.rating !== undefined) {
-
-                    applyPriceAndRatingFilters(filterState);
-
+                  const hasAnyFilter = hasCategories || hasColors || hasSizes || hasGenders || hasPrices || hasRatings;
+                  
+                  if (hasAnyFilter) {
+                    // Build filter params for navigation
+                    const filterParams: Record<string, string> = {};
+                    
+                    // Categories
+                    if (hasCategories && selectedCategoryIds.length > 0) {
+                      filterParams.categoryIds = selectedCategoryIds.join(',');
+                      filterParams.subCategory = selectedFilters["Category"]?.join(', ') || 'Filtered Products';
+                    } else if (hasCategories) {
+                      filterParams.subCategory = selectedFilters["Category"]?.join(', ') || 'Filtered Products';
+                    }
+                    
+                    // Colors
+                    if (hasColors) {
+                      filterParams.colorNames = selectedFilters["Color"]?.join(',') || '';
+                    }
+                    
+                    // Sizes
+                    if (hasSizes) {
+                      filterParams.sizeNames = selectedFilters["Size"]?.join(',') || '';
+                    }
+                    
+                    // Genders
+                    if (hasGenders) {
+                      filterParams.genders = selectedFilters["Gender"]?.join(',') || '';
+                    }
+                    
+                    // Price ranges - extract min/max from first selected range
+                    if (hasPrices) {
+                      const selectedRange = selectedFilters["Price"]?.[0];
+                      if (selectedRange) {
+                        const [minStr, maxStr] = selectedRange.split('-');
+                        filterParams.minPrice = minStr || '0';
+                        filterParams.maxPrice = maxStr === '+' ? '999999' : (maxStr || '999999');
+                      }
+                    }
+                    
+                    // Ratings - extract minimum rating value
+                    if (hasRatings) {
+                      const ratingStr = selectedFilters["Rating"]?.[0];
+                      if (ratingStr) {
+                        const match = ratingStr.match(/(\d+)/);
+                        if (match) {
+                          filterParams.minRating = match[1];
+                        }
+                      }
+                    }
+                    
+                    // Navigate to subcatProducts with all filter params
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        ...filterParams,
+                        subCategory: filterParams.subCategory || 'Filtered Products',
+                        filterApplied: 'true',
+                      },
+                    } as any);
                   }
-
                   
-
                   setFilterModalVisible(false);
 
                 }}
