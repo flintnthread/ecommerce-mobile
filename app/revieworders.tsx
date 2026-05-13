@@ -17,7 +17,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import api, { placeOrder } from "../services/api";
+import api, { getReferralRewardStatus, placeOrder } from "../services/api";
+import type { ReferralRewardStatusResponse } from "../services/api";
 import DeliveryLocationSection from "../components/DeliveryLocationSection";
 import { payWithRazorpay } from "../lib/payment/razorpayFlow";
 import type { ApiCartItem, ApiCartPriceSummary } from "../lib/cartServerApi";
@@ -108,6 +109,8 @@ export default function ReviewOrdersScreen() {
   const [cartSource, setCartSource] = useState<ReviewItemSource>("local");
   const [serverPriceSummary, setServerPriceSummary] = useState<ApiCartPriceSummary | null>(null);
   const [qtyUpdatingIds, setQtyUpdatingIds] = useState<Set<string>>(new Set());
+  const [referralRewardStatus, setReferralRewardStatus] =
+    useState<ReferralRewardStatusResponse | null>(null);
 
   const reloadReviewCart = async () => {
     const token = (await AsyncStorage.getItem("token"))?.trim();
@@ -118,23 +121,32 @@ export default function ReviewOrdersScreen() {
           setItems(bundle.items.map(serverRowToReviewItem));
           setCartSource("server");
           setServerPriceSummary(bundle.priceSummary);
+          try {
+            const rs = await getReferralRewardStatus();
+            setReferralRewardStatus(rs);
+          } catch {
+            setReferralRewardStatus(null);
+          }
           return;
         }
         // Signed-in users should remain server-authoritative.
         setItems([]);
         setCartSource("server");
         setServerPriceSummary(null);
+        setReferralRewardStatus(null);
         return;
       } catch {
         // Signed-in users should remain server-authoritative.
         setItems([]);
         setCartSource("server");
         setServerPriceSummary(null);
+        setReferralRewardStatus(null);
         return;
       }
     }
     setCartSource("local");
     setServerPriceSummary(null);
+    setReferralRewardStatus(null);
     const lines = await loadCart();
     setItems(lines.map(persistedToReviewItem));
   };
@@ -193,9 +205,16 @@ export default function ReviewOrdersScreen() {
     if (apiWeightDeliveryCharge != null) return apiWeightDeliveryCharge;
     return 99;
   }, [apiWeightDeliveryCharge, cartSource, serverPriceSummary]);
+  const referralDiscountEstimate = useMemo(() => {
+    if (!referralRewardStatus?.eligibleForInviterDiscountOnNextOrder) {
+      return 0;
+    }
+    return Math.round(subtotal * 0.1 * 100) / 100;
+  }, [referralRewardStatus, subtotal]);
+
   const total = useMemo(() => {
-    return Math.max(0, subtotal - productDiscount + deliveryCharge);
-  }, [deliveryCharge, productDiscount, subtotal]);
+    return Math.max(0, subtotal - productDiscount - referralDiscountEstimate + deliveryCharge);
+  }, [deliveryCharge, productDiscount, referralDiscountEstimate, subtotal]);
 
   const updateQty = (id: string, delta: number) => {
     void (async () => {
@@ -528,10 +547,29 @@ export default function ReviewOrdersScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Price details</Text>
 
+          {referralRewardStatus?.eligibleForInviterDiscountOnNextOrder ? (
+            <View style={styles.referralHintBox}>
+              <Ionicons name="pricetag" size={18} color="#10893E" style={{ marginRight: 8 }} />
+              <Text style={styles.referralHintText}>
+                10% referral reward applies to subtotal on this order. Your payable amount includes this estimate;
+                the server applies the final discount when you place the order.
+              </Text>
+            </View>
+          ) : null}
+
           <View style={styles.lineRow}>
             <Text style={styles.lineLabel}>Subtotal</Text>
             <Text style={styles.lineValue}>₹{subtotal.toLocaleString()}</Text>
           </View>
+
+          {referralDiscountEstimate > 0 ? (
+            <View style={styles.lineRow}>
+              <Text style={styles.lineLabel}>Referral reward (10%)</Text>
+              <Text style={[styles.lineValue, styles.positive]}>
+                -₹{referralDiscountEstimate.toLocaleString()}
+              </Text>
+            </View>
+          ) : null}
 
           {/* <View style={styles.lineRow}>
             <Text style={styles.lineLabel}>Product discount</Text>
@@ -688,6 +726,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1d324e",
     fontWeight: "800",
+  },
+  referralHintBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#F0FAF3",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(16,137,62,0.25)",
+  },
+  referralHintText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#1d324e",
+    lineHeight: 17,
+    fontWeight: "600",
   },
   changeBtn: {
     paddingHorizontal: 10,
