@@ -159,29 +159,16 @@ const api = axios.create({
 });
 
 
-
-// Auth API instance for login/OTP only (no `/api` prefix).
-
-const AUTH_BASE_URL = LOCAL_API_ORIGIN;
+const AUTH_BASE_URL = "http://flintnthread.online";
 
 console.log("Auth API Base URL:", AUTH_BASE_URL);
 
-
-
 const authApi = axios.create({
-
   baseURL: AUTH_BASE_URL,
-
-  timeout: 15000, // Increased timeout for slower connections
-
+  timeout: 15000,
   headers: {
-
     "Content-Type": "application/json",
-
   },
-
-  withCredentials: false, // Disable for HTTP cross-domain to avoid CORS issues
-
 });
 
 
@@ -384,14 +371,20 @@ api.interceptors.request.use(
 
         config.headers.Authorization = `Bearer ${token}`;
 
-        console.log("API Request with token:", config.method?.toUpperCase(), config.baseURL + config.url);
-
+console.log(
+  "API Request with token:",
+  config.method?.toUpperCase(),
+  `${config.baseURL ?? ""}${config.url ?? ""}`
+);
         console.log("Token being sent:", token.substring(0, 30) + "...");
 
       } else {
 
-        console.log("API Request without token:", config.method?.toUpperCase(), config.baseURL + config.url);
-
+console.log(
+  "API Request without token:",
+  config.method?.toUpperCase(),
+  `${config.baseURL ?? ""}${config.url ?? ""}`
+);
         console.log("No token found in AsyncStorage");
 
       }
@@ -1540,8 +1533,6 @@ export interface ApiResponse<T> {
 
 }
 
-
-
 /**
 
  * Add a new address for the authenticated user
@@ -1664,18 +1655,11 @@ export interface LoginResponse {
 
 }
 
-
-
 export interface OtpRequest {
-
   email?: string;
-
   mobile?: string;
-
-  otp: string;
-
+  otp: string | number;
 }
-
 
 
 export interface SendOtpRequest {
@@ -1704,32 +1688,32 @@ export interface OtpResponse {
 
  */
 
-export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => {
+export const sendOtp = async (
+  otpData: SendOtpRequest
+): Promise<OtpResponse> => {
 
   try {
 
-    console.log("Sending OTP request to:", AUTH_BASE_URL + "/auth/send-otp", "with email:", otpData.email);
+    console.log("Sending OTP:", otpData);
 
-    const data = await postAuthWithFallback<OtpResponse>("/auth/send-otp", otpData);
+    const response = await authApi.post(
+      "/auth/send-otp",
+      otpData
+    );
 
-    console.log("OTP response:", data);
+    console.log("Send OTP Response:", response.data);
 
-    return data;
+    return response.data;
 
   } catch (error: any) {
 
-    console.error("Send OTP failed:", error.message, error.code);
+    console.log("Send OTP Error:", error?.response?.data);
 
-    if (error.code === "ERR_NETWORK") {
-
-      throw new Error("Cannot connect to server. Please check your internet connection or try again later.");
-
-    }
-
-    throw error;
-
+    throw new Error(
+      error?.response?.data?.message ||
+      "Failed to send OTP"
+    );
   }
-
 };
 
 
@@ -1740,32 +1724,41 @@ export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => 
 
  */
 
-export const verifyOtp = async (otpData: OtpRequest): Promise<LoginResponse> => {
+export const verifyOtp = async (
+  otpData: OtpRequest
+): Promise<LoginResponse> => {
 
   try {
 
-    console.log("Verifying OTP at:", AUTH_BASE_URL + "/auth/verify-otp");
+    console.log("Verify OTP Request:", otpData);
 
-    const data = await postAuthWithFallback<LoginResponse>("/auth/verify-otp", otpData);
+    const response = await authApi.post(
+      "/auth/verify-otp",
+      otpData
+    );
 
-    console.log("Verify OTP response:", data);
+    console.log("Verify OTP Response:", response.data);
 
-    return data;
+    // Save JWT token
+    if (response.data?.token) {
+
+      await AsyncStorage.setItem(
+        "token",
+        response.data.token
+      );
+    }
+
+    return response.data;
 
   } catch (error: any) {
 
-    console.error("Verify OTP failed:", error.message, error.code);
+    console.log("Verify OTP Error:", error?.response?.data);
 
-    if (error.code === "ERR_NETWORK") {
-
-      throw new Error("Cannot connect to server. Please check your internet connection or try again later.");
-
-    }
-
-    throw error;
-
+    throw new Error(
+      error?.response?.data?.message ||
+      "OTP verification failed"
+    );
   }
-
 };
 
 
@@ -2419,4 +2412,4 @@ export const refreshReferralCode = async (): Promise<string> => {
 };
 
 
-export default api;
+export default api; 
