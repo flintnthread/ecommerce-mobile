@@ -1186,21 +1186,237 @@ export default function OrdersScreen() {
     });
   };
 
-  const handleDownloadInvoice = async (order: Order) => {
-    const orderId = parseInt(String(order.id).replace(/\D/g, ''), 10);
+  // Add this type near the other types (around line 345)
+// type InvoiceRow = {
+//   id: number;
+//   orderId: number;
+//   invoiceNumber: string;
+//   invoicePath?: string | null;
+//   createdAt?: string;
+//   updatedAt?: string;
+// };
+
+const handleDownloadInvoice = async (order: Order) => {
+  const orderId = Number(order.id);
+
+  // Validate order ID
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    Alert.alert(tr("Invoice"), tr("Invalid order ID"));
+    return;
+  }
+
+  try {
+    // Step 1: Try to fetch existing invoices from backend
+    let invoices: InvoiceRow[] = [];
+
     try {
-      const fallbackNumber = Number.isFinite(orderId) && orderId > 0 ? Math.floor(orderId) : order.id;
-      const invoiceNumber = `INV-${fallbackNumber}`;
-      const html = buildInvoiceHtml(order, invoiceNumber);
-      await Print.printAsync({
-        html,
+      const { data: response } = await api.get("/api/invoices", {
+        params: { orderId: orderId },
       });
-    } catch (e) {
+
+      if (response?.success && Array.isArray(response?.data)) {
+        invoices = response.data;
+      } else if (Array.isArray(response?.data)) {
+        invoices = response.data;
+      }
+    } catch (fetchError: any) {
+      // 404 or no invoices found - will create new ones
+    }
+
+    // Step 2: If no invoices exist, try to create via backend
+    if (invoices.length === 0) {
+      try {
+        await api.post("/api/invoices", {
+          orderId: orderId,
+          invoicePath: null,
+        });
+
+        // After creation, fetch all invoices again
+        const { data: refetchResponse } = await api.get("/api/invoices", {
+          params: { orderId: orderId },
+        });
+
+        if (refetchResponse?.success && Array.isArray(refetchResponse?.data)) {
+          invoices = refetchResponse.data;
+        } else if (Array.isArray(refetchResponse?.data)) {
+          invoices = refetchResponse.data;
+        }
+      } catch (createError: any) {
+        // Backend invoice creation failed - will use client fallback
+      }
+    }
+
+    // Step 3: If we have invoices, let user select or download
+    if (invoices.length > 0) {
+      if (invoices.length === 1) {
+        // Single invoice - download directly
+        await downloadSingleInvoice(order, invoices[0]);
+      } else {
+        // Multiple invoices - show selection dialog
+// Multiple invoices - show selection dialog
+const options: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[] = [];
+
+invoices.forEach((inv, index) => {
+  options.push({
+    text: `Invoice ${index + 1}: ${inv.invoiceNumber}`,
+    onPress: () => {
+      downloadSingleInvoice(order, inv);
+    },
+  });
+});
+
+        // Add Cancel option
+        options.push({
+          text: tr("Cancel"),
+          style: "cancel",
+        });
+
+        Alert.alert(
+          tr("Multiple Invoices"),
+          tr("This order has multiple invoices from different sellers. Which one would you like to download?"),
+          options
+        );
+        return;
+      }
+    } else {
+      // No invoices from backend - fallback to client-side
+      const invoiceNumber = `INV-${orderId}`;
+      const html = buildInvoiceHtml(order, invoiceNumber);
+      await Print.printAsync({ html });
+    }
+
+  } catch (e) {
+    // Final fallback - just generate client-side invoice
+    try {
+      const invoiceNumber = `INV-${orderId}`;
+      const html = buildInvoiceHtml(order, invoiceNumber);
+      await Print.printAsync({ html });
+    } catch (printError) {
       const message = e instanceof Error ? e.message : tr("Could not download invoice right now.");
       Alert.alert(tr("Invoice"), message);
     }
-  };
+  }
+};
 
+// Helper function to download ALL invoices combined into one PDF
+const downloadAllInvoices = async (order: Order, invoices: InvoiceRow[]) => {
+  try {
+    const htmlParts: string[] = [];
+
+    for (const invoice of invoices) {
+      let invoiceHtml = "";
+
+      if (invoice.invoicePath) {
+        try {
+          const invoiceUrl = resolveApiImageUri(invoice.invoicePath);
+          const htmlResponse = await fetch(invoiceUrl);
+
+          if (htmlResponse.ok) {
+            invoiceHtml = await htmlResponse.text();
+          }
+        } catch (fetchError) {
+          // Fallback to client-side
+        }
+      }
+
+      // If no HTML from backend, generate client-side
+      if (!invoiceHtml) {
+        invoiceHtml = buildInvoiceHtml(order, invoice.invoiceNumber);
+      }
+
+      // Extract body content from HTML (remove html, head, body tags for combining)
+      const bodyMatch = invoiceHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      const bodyContent = bodyMatch ? bodyMatch[1] : invoiceHtml;
+
+      htmlParts.push(bodyContent);
+    }
+
+    // Combine all invoices with page breaks
+    const combinedHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          @media print {
+            .invoice-page {
+              page-break-after: always;
+            }
+            .invoice-page:last-child {
+              page-break-after: avoid;
+            }
+          }
+          .invoice-page {
+            margin-bottom: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        ${htmlParts.map((html, index) => `<div class="invoice-page">${html}</div>`).join("")}
+      </body>
+      </html>
+    `;
+
+    await Print.printAsync({ html: combinedHtml });
+
+  } catch (error) {
+    // Fallback - generate all invoices client-side
+    try {
+      const htmlParts = invoices.map((inv) => {
+        const html = buildInvoiceHtml(order, inv.invoiceNumber);
+        const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        return bodyMatch ? bodyMatch[1] : html;
+      });
+
+      const combinedHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            @media print {
+              .invoice-page { page-break-after: always; }
+              .invoice-page:last-child { page-break-after: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          ${htmlParts.map((html) => `<div class="invoice-page">${html}</div>`).join("")}
+        </body>
+        </html>
+      `;
+
+      await Print.printAsync({ html: combinedHtml });
+    } catch (printError) {
+      Alert.alert(tr("Invoice"), tr("Could not download invoices right now."));
+    }
+  }
+};
+
+// Helper function to download a single invoice
+const downloadSingleInvoice = async (order: Order, invoice: InvoiceRow) => {
+  try {
+    if (invoice.invoicePath) {
+      const invoiceUrl = resolveApiImageUri(invoice.invoicePath);
+      const htmlResponse = await fetch(invoiceUrl);
+
+      if (htmlResponse.ok) {
+        const html = await htmlResponse.text();
+        await Print.printAsync({ html });
+        return;
+      }
+    }
+
+    // Fallback to client-side generated invoice
+    const html = buildInvoiceHtml(order, invoice.invoiceNumber);
+    await Print.printAsync({ html });
+  } catch (error) {
+    // Fallback to client-side
+    const html = buildInvoiceHtml(order, invoice.invoiceNumber);
+    await Print.printAsync({ html });
+  }
+};
   const filteredOrders = getFilteredOrders();
 
   return (
