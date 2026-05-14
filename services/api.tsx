@@ -70,13 +70,11 @@ function extractUserIdFromToken(token: string): number | null {
 
 
 function resolveBaseUrl(): string {
-  return "http://flintnthread.online";
+  return "https://flintnthread.online";
 }
 
-const API_BASE_URL = "http://flintnthread.online";
-
-const LOCAL_API_ORIGIN = "http://flintnthread.online";
-
+const API_BASE_URL = "https://flintnthread.online";
+const LOCAL_API_ORIGIN = "https://flintnthread.online";
 const normalizedBaseUrl = resolveBaseUrl();
 
 const api = axios.create({
@@ -88,7 +86,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-const AUTH_BASE_URL = "http://flintnthread.online";
+const AUTH_BASE_URL = "https://flintnthread.online";
 
 const authApi = axios.create({
   baseURL: AUTH_BASE_URL,
@@ -99,7 +97,7 @@ const authApi = axios.create({
 });
 
 function getAuthOriginFallbacks(): string[] {
-  return ["http://flintnthread.online"];
+return ["https://flintnthread.online"];
 }
 
 
@@ -545,7 +543,6 @@ function resolveSearchImageUri(raw: unknown, apiBase: string): string {
   return `${apiBase}/uploads/${value}`;
 
 }
-
 
 
 function collectSearchRows(payload: unknown): Record<string, unknown>[] {
