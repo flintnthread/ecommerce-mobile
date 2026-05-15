@@ -11,6 +11,7 @@ import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 
 import ReferralPopup from "../components/ReferralPopup";
+import { createAddressFromLocation } from "../lib/requestForegroundLocation";
 
 import {
 
@@ -3288,21 +3289,29 @@ const [products, setProducts] = useState<any[]>([]);
 
 
 
-  const handleUseCurrentLocation = useCallback(async () => {
+   // adjust path
 
-    const result = await requestForegroundLocation();
-
-    if (result.ok) {
-
-      setDisplayDeliveryLine(result.addressLine);
-
-      closeDeliveryModal();
-
+const handleUseCurrentLocation = useCallback(async () => {
+  const result = await requestForegroundLocation();
+  if (result.ok) {
+    setDisplayDeliveryLine(result.addressLine);
+    
+    // Save address to database - backend will reverse geocode
+    try {
+      await createAddressFromLocation({
+        latitude: result.latitude,
+        longitude: result.longitude,
+        name: "Current Location",
+        addressType: "other",
+        isDefault: true,
+      });
+    } catch (error) {
+      console.log("Failed to save current location address:", error);
     }
-
-  }, [closeDeliveryModal]);
-
-
+    
+    closeDeliveryModal();
+  }
+}, [closeDeliveryModal]);
 
   const handleSaveNewAddress = useCallback(() => {
 
@@ -7618,7 +7627,7 @@ const categoryData = [
 
           >
 
-            <Text style={styles.homeBrowseApplyText}>View results</Text>
+            {/* <Text style={styles.homeBrowseApplyText}>View results</Text> */}
 
           </TouchableOpacity>
 
@@ -10588,7 +10597,7 @@ const categoryData = [
 
               <Text style={styles.promoBodyBold}>
 
-              Refer 5 friends using your code and get **10% OFF on your first order** 
+              Refer 5 friends using your code and get 10% OFF on your first order 
 
               </Text>
 
@@ -11108,6 +11117,13 @@ const categoryData = [
 
                     }
 
+                    router.push({
+  pathname: "/subcatProducts",
+  params: {
+    gender: item.label.toLowerCase(),
+  },
+});
+
                   }}
 
                 >
@@ -11589,7 +11605,42 @@ const categoryData = [
 
                         style={styles.categoryParentItem}
 
-                        onPress={() => toggleFilterOption("Gender", gender)}
+                        onPress={() => {
+  
+
+  toggleFilterOption("Gender", gender);
+
+  if (gender === "Men") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "men",
+      },
+    });
+
+  } else if (gender === "Women") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "women",
+      },
+    });
+
+  } else if (gender === "Boy" || gender === "Girl") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "kids",
+      },
+    });
+
+  }
+
+}}
+  
 
                       >
 
@@ -12527,45 +12578,45 @@ categoryChildText: {
 
 
 
-  homeBrowseApplyBtn: {
+  // homeBrowseApplyBtn: {
 
-    marginHorizontal: 10,
+  //   marginHorizontal: 10,
 
-    marginTop: 6,
+  //   marginTop: 6,
 
-    marginBottom: 8,
+  //   marginBottom: 8,
 
-    paddingVertical: 10,
+  //   paddingVertical: 10,
 
-    paddingHorizontal: 14,
+  //   paddingHorizontal: 14,
 
-    borderRadius: 12,
+  //   borderRadius: 12,
 
-    backgroundColor: "rgba(255,255,255,0.92)",
+  //   backgroundColor: "rgba(255,255,255,0.92)",
 
-    borderWidth: 1,
+  //   borderWidth: 1,
 
-    borderColor: "rgba(255,255,255,0.65)",
+  //   borderColor: "rgba(255,255,255,0.65)",
 
-    alignItems: "center",
+  //   alignItems: "center",
 
-    justifyContent: "center",
+  //   justifyContent: "center",
 
-  },
+  // },
 
 
 
-  homeBrowseApplyText: {
+  // homeBrowseApplyText: {
 
-    fontSize: 13,
+  //   fontSize: 13,
 
-    fontWeight: "800",
+  //   fontWeight: "800",
 
-    color: "#1E1B4B",
+  //   color: "#1E1B4B",
 
-    letterSpacing: 0.3,
+  //   letterSpacing: 0.3,
 
-  },
+  // },
 
 
 
