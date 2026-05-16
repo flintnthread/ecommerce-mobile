@@ -374,9 +374,9 @@ export default function ReviewOrdersScreen() {
       const paymentResult = await payWithRazorpay(total);
       console.log("Payment result:", paymentResult);
       
-      if (paymentResult.ok && paymentResult.ok === true) {
+      if (paymentResult.ok) {
         // Payment successful with native module
-        const orderId = await placeOrderOnServer(selectedAddressId, paymentResult.verify.orderId);
+        const orderId = await placeOrderOnServer(selectedAddressId);
         console.log("Order placed successfully with ID:", orderId);
         
         Alert.alert(
@@ -389,37 +389,42 @@ export default function ReviewOrdersScreen() {
             }
           ]
         );
-      } else if (paymentResult.reason === "use_web_checkout") {
-        // Place order first, then redirect to web checkout
-        try {
-          const orderId = await placeOrderOnServer(selectedAddressId, paymentResult.orderId);
-          console.log("Order placed for web checkout with ID:", orderId);
-          
-          // Redirect to web checkout screen with order ID
-          router.push({
-            pathname: "/razorpay-web-checkout",
-            params: {
-              key: paymentResult.razorpayKeyId,
-              orderId: paymentResult.orderId,
-              amount: String(paymentResult.amountPaise),
-              currency: paymentResult.currency,
-              appOrderId: String(orderId),
-            },
-          } as any);
-          return;
-        } catch (error) {
-          console.error("Failed to place order for web checkout:", error);
+      } else {
+        // Payment failed or requires web checkout
+        const failedResult = paymentResult as Extract<typeof paymentResult, { ok: false }>;
+        if (failedResult.reason === "use_web_checkout") {
+          // Place order first, then redirect to web checkout
+          const webCheckoutResult = failedResult as Extract<typeof failedResult, { reason: "use_web_checkout" }>;
+          try {
+            const orderId = await placeOrderOnServer(selectedAddressId, webCheckoutResult.orderId);
+            console.log("Order placed for web checkout with ID:", orderId);
+            
+            // Redirect to web checkout screen with order ID
+            router.push({
+              pathname: "/razorpay-web-checkout",
+              params: {
+                key: webCheckoutResult.razorpayKeyId,
+                orderId: webCheckoutResult.orderId,
+                amount: String(webCheckoutResult.amountPaise),
+                currency: webCheckoutResult.currency,
+                appOrderId: String(orderId),
+              },
+            } as any);
+            return;
+          } catch (error) {
+            console.error("Failed to place order for web checkout:", error);
+            Alert.alert(
+              tr("Order Failed"),
+              tr("Could not place order. Please try again.")
+            );
+          }
+        } else {
+          // Payment failed or cancelled
           Alert.alert(
-            tr("Order Failed"),
-            tr("Could not place order. Please try again.")
+            tr("Payment Failed"),
+            failedResult.message || tr("Payment was not successful. Please try again.")
           );
         }
-      } else {
-        // Payment failed or cancelled
-        Alert.alert(
-          tr("Payment Failed"), 
-          paymentResult.message || tr("Payment was not successful. Please try again.")
-        );
       }
       
     } catch (error) {
@@ -637,9 +642,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF7F0",
   },
   header: {
-    paddingTop: 14,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
+    paddingTop: 40,
+    paddingBottom: 20,
+    paddingHorizontal: 16,
     backgroundColor: "#FFF7F0",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(29,50,78,0.10)",
@@ -667,9 +672,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 18,
     backgroundColor: "#FFF7F0",
   },
   stepChip: {
@@ -700,16 +705,16 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1 },
   contentContainer: {
-    padding: 14,
-    paddingBottom: 20,
+    padding: 16,
+    paddingBottom: 24,
   },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
-    padding: 14,
+    padding: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(29,50,78,0.12)",
-    marginBottom: 12,
+    marginBottom: 16,
     shadowColor: "#1d324e",
     shadowOpacity: 0.07,
     shadowRadius: 8,
@@ -950,11 +955,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(29,50,78,0.15)",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderRadius: 16,
-    marginHorizontal: 12,
-    marginBottom: 14,
+    marginHorizontal: 14,
+    marginBottom: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

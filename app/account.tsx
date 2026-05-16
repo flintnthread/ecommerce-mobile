@@ -676,28 +676,31 @@ export default function AccountScreen() {
       try {
         responseBody = await createAddress(payload);
       } catch (e) {
-        let msg = "Could not save address. Please try again.";
-        if (isAxiosError(e)) {
-          const status = e.response?.status;
-          const d = e.response?.data as
-            | { message?: string; error?: string }
-            | undefined;
-          const serverMsg =
-            (typeof d?.message === "string" && d.message) ||
-            (typeof d?.error === "string" && d.error);
-          if (status === 401 || status === 403) {
-            msg =
-              serverMsg ||
-              "Access denied. Log in again from the login screen so your session token is sent with this request.";
-          } else {
-            msg = serverMsg || e.message || msg;
-          }
-        } else if (e instanceof Error) {
-          msg = e.message;
-        }
-        Alert.alert("Save failed", String(msg));
-        return;
-      }
+  let msg = "Could not save address. Please try again.";
+
+  if (isAxiosError(e)) {
+    const status = e.response?.status;
+    const d = e.response?.data as
+      | { message?: string; error?: string }
+      | undefined;
+
+    const serverMsg =
+      (typeof d?.message === "string" && d.message) ||
+      (typeof d?.error === "string" && d.error);
+
+    if (serverMsg) {
+      msg = serverMsg;
+    } else if (status === 401 || status === 403) {
+      msg =
+        "Access denied. Log in again from the login screen so your session token is sent with this request.";
+    }
+  } else if (e instanceof Error) {
+    msg = e.message;
+  }
+
+  Alert.alert("Save failed", String(msg));
+  return;
+}
 
       const newId = parseServerAddressId(responseBody);
       await loadSavedProfilesFromApi();
