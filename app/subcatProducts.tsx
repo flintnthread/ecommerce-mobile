@@ -572,6 +572,8 @@ export default function SubcategoriesScreen() {
   const { tr } = useLanguage();
   const params = useLocalSearchParams<{
     mainCat?: string | string[];
+
+    gender?: string | string[];
     subCategory?: string | string[];
     subcategoryId?: string | string[];
     mainCategoryId?: string | string[];
@@ -597,6 +599,16 @@ export default function SubcategoriesScreen() {
   const mainCat = Array.isArray(params.mainCat)
     ? params.mainCat[0]
     : params.mainCat;
+
+const routedGenderRaw = Array.isArray(params.gender)
+  ? params.gender[0]
+  : params.gender;
+
+const routedGender = String(
+  routedGenderRaw ?? ""
+).trim().toLowerCase();
+
+
   const selectedSubCategory = Array.isArray(params.subCategory)
     ? params.subCategory[0]
     : params.subCategory;
@@ -706,6 +718,56 @@ export default function SubcategoriesScreen() {
 
   const [selectedSort, setSelectedSort] = useState("Relevance");
   const [selectedGender, setSelectedGender] = useState("");
+
+const loadMensProducts = async () => {
+  try {
+    const response = await api.get(productsByMainCategoryPath(60));
+    setFilteredProducts(response.data);
+  } catch (error) {
+    console.log("Men products error", error);
+  }
+};
+
+
+const loadWomenProducts = async () => {
+  try {
+    const response = await api.get(productsByMainCategoryPath(61));
+    setFilteredProducts(response.data);
+  } catch (error) {
+    console.log("Women products error", error);
+  }
+};
+
+const loadKidsProducts = async () => {
+  try {
+    const response = await api.get(productsByMainCategoryPath(62));
+    setFilteredProducts(response.data);
+  } catch (error) {
+    console.log("Kids products error", error);
+  }
+};
+
+  useEffect(() => {
+
+  if (!routedGender) return;
+
+  if (routedGender === "women") {
+    setSelectedGender("Women");
+  }
+
+  if (routedGender === "men") {
+    setSelectedGender("Men");
+  }
+
+  if (routedGender === "girls") {
+    setSelectedGender("Girls");
+  }
+
+  if (routedGender === "boys") {
+    setSelectedGender("Boys");
+  }
+
+}, [routedGender]);
   const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
   const [selectedFilterSection, setSelectedFilterSection] =
     useState<string>("Category");
