@@ -7622,6 +7622,7 @@ const categoryData = [
           <TouchableOpacity
 
             style={styles.homeBrowseApplyBtn}
+            
 
             onPress={() => void applyHomeBrowseFilters()}
 
@@ -11991,7 +11992,18 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
 
 const styles = StyleSheet.create({
 
-
+homeBrowseApplyBtn: {
+  backgroundColor: "#f97316",
+  paddingVertical: 12,
+  borderRadius: 12,
+  alignItems: "center",
+  justifyContent: "center",
+},
+homeBrowseApplyBtnText: {
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: "700",
+},
   greetingRow: {
   flexDirection: "row",
   alignItems: "center",
