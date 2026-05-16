@@ -154,7 +154,9 @@ import {
 
 } from "../services/pushNotifications";
 
+import AppAlert from "../components/AppAlert";
 
+import useAppAlert from "../lib/useAppAlert";
 const { width, height } = Dimensions.get("window");
 
 // Responsive breakpoints
@@ -2714,6 +2716,15 @@ const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
 
 export default function Home() {
 
+  const {
+  visible,
+  title,
+  message,
+  type,
+  setVisible,
+  showAlert,
+} = useAppAlert();
+
   const [activeIndex, setActiveIndex] = useState(0);
 
   const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
@@ -3314,13 +3325,11 @@ const [products, setProducts] = useState<any[]>([]);
 
     if (!name || !line) {
 
-      Alert.alert(
-
-        "Missing details",
-
-        "Please enter the recipient name and full address."
-
-      );
+      showAlert(
+  "Missing Details",
+  "Please enter recipient name and full address",
+  "warning"
+);
 
       return;
 
@@ -3378,13 +3387,11 @@ const [products, setProducts] = useState<any[]>([]);
 
     if (Platform.OS !== "android") {
 
-      Alert.alert(
-
-        "Voice search",
-
-        "Google voice input is available on Android. On iPhone, type your search in the bar."
-
-      );
+      showAlert(
+  "Voice Search",
+  "Could not open speech recognition",
+  "error"
+);
 
       return;
 
@@ -3446,13 +3453,11 @@ const [products, setProducts] = useState<any[]>([]);
 
     } catch {
 
-      Alert.alert(
-
-        "Voice search",
-
-        "Could not open speech recognition. Check Google / speech services on your device."
-
-      );
+     showAlert(
+  "Voice Search",
+  "Could not open speech recognition. Check Google or speech services on your device.",
+  "error"
+);
 
     }
 
@@ -3729,9 +3734,13 @@ image: product?.images?.[0]?.imagePath
     } catch (error: any) {
 
       console.error('Filter error:', error);
+ showAlert(
+  "Error",
+  "Failed to apply filters. Please try again.",
+  "error"
+);
 
-      Alert.alert('Error', 'Failed to apply filters. Please try again.');
-
+    
       setFilteredProducts([]);
 
       setShowFilteredResults(false);
@@ -3772,10 +3781,11 @@ const categoryIdNum = selectedBrowseMainCategoryId
   : null;
   
     if (!q && !Number.isFinite(categoryIdNum)) {
-      Alert.alert(
-        "Choose filters",
-        "Pick a department and/or gender, category, or filter options, then try again."
-      );
+      showAlert(
+  "Choose Filters",
+  "Pick department or category",
+  "warning"
+);
       return;
     }
 
@@ -5532,7 +5542,11 @@ setWishlistIds(new Set(ids));
 
                     if (addDisabled) {
 
-                      Alert.alert("Out of stock", `${item.name} is currently unavailable.`);
+                   showAlert(
+  "Out of Stock",
+  `${item.name} is currently unavailable.`,
+  "warning"
+);
 
                       return;
 
@@ -5842,13 +5856,11 @@ setWishlistIds(new Set(ids));
 
     if (!token) {
 
-      Alert.alert(
-
-        "Sign in required",
-
-        "Please log in to save items to your wishlist."
-
-      );
+     showAlert(
+  "Sign In Required",
+  "Please log in to save items to your wishlist.",
+  "warning"
+);
 
       return;
 
@@ -5860,7 +5872,11 @@ setWishlistIds(new Set(ids));
 
     if (!Number.isFinite(productId) || productId <= 0) {
 
-      Alert.alert("Cannot add", "Invalid product.");
+     showAlert(
+  "Cannot Add",
+  "Invalid product.",
+  "error"
+);
 
       return;
 
@@ -5880,13 +5896,11 @@ setWishlistIds(new Set(ids));
 
     ) {
 
-      Alert.alert(
-
-        "Cannot add to wishlist",
-
-        "This listing does not include a variant id. Open the product page, choose size or color, then add to wishlist."
-
-      );
+     showAlert(
+  "Cannot Add To Wishlist",
+  "Please choose size or color before adding to wishlist.",
+  "warning"
+);
 
       return;
 
@@ -5935,30 +5949,22 @@ setWishlistIds(new Set(ids));
       setPendingWishlist(null);
 
 
-
-      Alert.alert(
-
-        "Added to wishlist",
-
-        (nameFromServer && nameFromServer.trim()) || line.name
-
-      );
+showAlert(
+  "Wishlist Updated",
+  `${(nameFromServer && nameFromServer.trim()) || line.name} added successfully`,
+  "success"
+);
 
     } catch (e: unknown) {
 
-      Alert.alert(
-
-        "Wishlist",
-
-        parseWishlistApiError(
-
-          e,
-
-          "We could not add this item to your wishlist. Please try again."
-
-        )
-
-      );
+     showAlert(
+  "Wishlist Error",
+  parseWishlistApiError(
+    e,
+    "We could not add this item to your wishlist. Please try again."
+  ),
+  "error"
+);
 
     }
 
@@ -7274,7 +7280,7 @@ const categoryData = [
 
               <View style={styles.cartAlertHeader}>
 
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
 
                 <Text style={styles.cartAlertTitle}>Added to cart</Text>
 
@@ -11825,7 +11831,13 @@ const categoryData = [
   visible={showReferralPopup}
   onClose={() => setShowReferralPopup(false)}
 />
-
+<AppAlert
+  show={visible}
+  title={title}
+  message={message}
+  type={type}
+  onConfirm={() => setVisible(false)}
+/>
     </View>
   </>
 );
@@ -11867,6 +11879,8 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
     <Text style={styles.filterChipLabel}>{label}</Text>
 
   </TouchableOpacity>
+
+  
 
 );
 
@@ -18385,7 +18399,7 @@ shopStoreImage: {
 
   cartAlertContainer: {
 
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#16a34a",
 
     borderRadius: 8,
 
@@ -18429,7 +18443,7 @@ shopStoreImage: {
 
     fontWeight: "600",
 
-    color: "#111827",
+    color: "#ffffff",
 
     marginLeft: 6,
 
@@ -18439,7 +18453,7 @@ shopStoreImage: {
 
     fontSize: 12,
 
-    color: "#6B7280",
+    color: "#ffffff",
 
     textAlign: "center",
 
@@ -18449,7 +18463,7 @@ lineHeight: 16,
 
 cartAlertButton: {
 
-backgroundColor: "#10B981",
+backgroundColor: "#ffffff",
 
 paddingHorizontal: 24,
 
@@ -18465,7 +18479,7 @@ alignItems: "center",
 
 cartAlertButtonText: {
 
-color: "#FFFFFF",
+color: "#10B981",
 
 fontSize: 16,
 

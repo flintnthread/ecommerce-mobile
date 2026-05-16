@@ -32,7 +32,8 @@ import {
 } from "../lib/shopStorage";
 import { useLanguage } from "../lib/language";
 import HomeBottomTabBar from "../components/HomeBottomTabBar";
-
+import AppAlert from "../components/AppAlert";
+import useAppAlert from "../lib/useAppAlert";
 const { width, height } = Dimensions.get("window");
 
 interface WishlistItem {
@@ -219,6 +220,14 @@ function persistedToWishlistItem(line: PersistedWishlistLine): WishlistItem {
 }
 
 export default function WishlistScreen() {
+  const {
+  visible,
+  title,
+  message,
+  type,
+  setVisible,
+  showAlert,
+} = useAppAlert();
   const router = useRouter();
   const { tr } = useLanguage();
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
@@ -463,10 +472,14 @@ export default function WishlistScreen() {
         try {
           await postCartAdd(item.productId, item.variantId, 1);
         } catch (e: unknown) {
-          Alert.alert(
-            "Cart",
-            parseCartApiError(e, "Could not add to cart. Please try again.")
-          );
+         showAlert(
+  "Cart Error",
+  parseCartApiError(
+    e,
+    "Could not add to cart. Please try again."
+  ),
+  "error"
+);
           return;
         }
       } else {
@@ -523,7 +536,11 @@ export default function WishlistScreen() {
                   const m = (d as { message?: unknown }).message;
                   if (typeof m === "string" && m.trim()) msg = m.trim();
                 }
-                Alert.alert("Wishlist", msg);
+               showAlert(
+  "Wishlist Error",
+  msg,
+  "error"
+);
                 return;
               }
               await removeWishlistLine(String(item.productId));
@@ -547,7 +564,7 @@ export default function WishlistScreen() {
       mrp: item.mrp,
     });
     setCartCount(await getCartUnitCount());
-    Alert.alert("Cart", `${item.name} added to cart.`);
+    showCartSweetAlert(item.name);
   }, []);
 
   return (
@@ -880,6 +897,13 @@ export default function WishlistScreen() {
           </Animated.View>
         </View>
       )}
+      <AppAlert
+  show={visible}
+  title={title}
+  message={message}
+  type={type}
+  onConfirm={() => setVisible(false)}
+/>
     </View>
   );
 }

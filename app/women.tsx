@@ -2102,8 +2102,7 @@ export default function WomenScreen() {
                 accent={activeBlock.railTo}
                 title="Trending picks"
                 sub="What everyone is adding to bag"
-                icon="flame"
-                iconColor="#f97316"
+               
               />
               <TouchableOpacity onPress={goWomenPtbShop} activeOpacity={0.85}>
                 <Text style={styles.womenPtbSeeAll}>See all</Text>
@@ -2200,8 +2199,7 @@ export default function WomenScreen() {
                 accent="#8b5cf6"
                 title="Unique picks"
                 sub="Rare finds & small runs"
-                icon="sparkles-outline"
-                iconColor="#8b5cf6"
+                
               />
               <TouchableOpacity onPress={goWomenUniqueShop} activeOpacity={0.85}>
                 <Text style={styles.womenPtbSeeAll}>See all</Text>
@@ -2318,7 +2316,7 @@ export default function WomenScreen() {
                 accent={activeBlock.railTo}
                 title="Top collections"
                 sub="Curated rails by occasion"
-                icon="grid-outline"
+              
               />
               <TouchableOpacity onPress={goWomenTopCollectionsShop} activeOpacity={0.85}>
                 <Text style={styles.womenPtbSeeAll}>See all</Text>
@@ -2627,8 +2625,7 @@ export default function WomenScreen() {
                 accent="#ea580c"
                 title="Bought again & again"
                 sub="Trusted repeat buys from real shoppers"
-                icon="bag-handle-outline"
-                iconColor="#c2410c"
+               
               />
               <TouchableOpacity onPress={goWomenLatestShop} activeOpacity={0.85}>
                 <Text style={styles.womenPtbSeeAll}>See all</Text>
@@ -2686,8 +2683,7 @@ export default function WomenScreen() {
                 accent="#ec4899"
                 title="Most loved"
                 sub="Staggered spotlight grid — tap to shop"
-                icon="heart"
-                iconColor="#db2777"
+               
               />
               <TouchableOpacity onPress={goWomenMostLovedShop} activeOpacity={0.85}>
                 <Text style={styles.womenPtbSeeAll}>See all</Text>
@@ -3050,9 +3046,11 @@ const styles = StyleSheet.create({
     color: "#0f172a",
   },
   womenPtbSeeAll: {
-    fontSize: 14,
-    fontWeight: "700",
+     fontSize: 14,
+    fontWeight: "500",
     color: "#ea580c",
+    left:-20,
+    top:-8,
   },
   womenPtbStatus: {
     paddingHorizontal: 16,
