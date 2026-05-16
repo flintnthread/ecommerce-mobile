@@ -314,7 +314,19 @@ function mapApiOrderRowToOrder(
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-type OrderStatus = "all" | "processing" | "shipped" | "delivered" | "cancelled" | "returns";
+type OrderStatus =
+  | "all"
+  | "confirmed"
+  | "processing"
+  | "awb_assigned"
+  | "pickup_scheduled"
+  | "picked_up"
+  | "in_transit"
+  | "out_for_delivery"
+  | "shipped"
+  | "delivered"
+  | "cancelled"
+  | "returns";
 
 interface Order {
   id: string;
@@ -698,12 +710,47 @@ const sampleOrders: Order[] = [
 ];
 
 function mapBackendOrderStatus(s?: string): OrderStatus {
+
   const x = (s || "").toLowerCase();
-  if (x === "completed" || x === "delivered") return "delivered";
-  if (x === "cancelled") return "cancelled";
-  if (x === "returns" || x === "return") return "returns";
-  if (x === "shipped") return "shipped";
-  return "processing";
+
+  switch (x) {
+
+    case "confirmed":
+      return "confirmed";
+
+    case "processing":
+      return "processing";
+
+    case "awb_assigned":
+      return "awb_assigned";
+
+    case "pickup_scheduled":
+      return "pickup_scheduled";
+
+    case "picked_up":
+      return "picked_up";
+
+    case "in_transit":
+    case "shipped":
+      return "shipped";
+
+    case "out_for_delivery":
+      return "out_for_delivery";
+
+    case "completed":
+    case "delivered":
+      return "delivered";
+
+    case "cancelled":
+      return "cancelled";
+
+    case "returns":
+    case "return":
+      return "returns";
+
+    default:
+      return "processing";
+  }
 }
 
 function mapApiOrderToUiOrder(row: ApiOrderRow): Order {
@@ -1103,6 +1150,45 @@ export default function OrdersScreen() {
         return { color: "#8B5CF6", bgColor: "#EDE9FE", icon: "return-down-back", text: tr("Return") };
       default:
         return { color: "#6B7280", bgColor: "#F3F4F6", icon: "ellipse", text: status };
+        case "confirmed":
+  return {
+    color: "#6366F1",
+    bgColor: "#E0E7FF",
+    icon: "checkmark-done",
+    text: tr("Confirmed")
+  };
+
+case "awb_assigned":
+  return {
+    color: "#2563EB",
+    bgColor: "#DBEAFE",
+    icon: "cube",
+    text: tr("AWB Assigned")
+  };
+
+case "pickup_scheduled":
+  return {
+    color: "#7C3AED",
+    bgColor: "#EDE9FE",
+    icon: "calendar",
+    text: tr("Pickup Scheduled")
+  };
+
+case "picked_up":
+  return {
+    color: "#EA580C",
+    bgColor: "#FED7AA",
+    icon: "bag-check",
+    text: tr("Picked Up")
+  };
+
+case "out_for_delivery":
+  return {
+    color: "#0891B2",
+    bgColor: "#CFFAFE",
+    icon: "bicycle",
+    text: tr("Out for Delivery")
+  };
     }
   };
 
@@ -1146,32 +1232,98 @@ export default function OrdersScreen() {
   };
 
   const handleCancel = async () => {
-    if (!cancelReason.trim()) {
-      Alert.alert(tr("Required"), tr("Please provide a reason"));
-      return;
-    }
-    if (!selectedOrder || selectedOrder.status !== "processing") {
-      Alert.alert(tr("Not allowed"), tr("Only processing orders can be cancelled"));
-      return;
-    }
-    try {
-      const result = await cancelOrderById(Number(selectedOrder.id));
-      if (!result.success) {
-        Alert.alert(tr("Cancel failed"), tr(result.message));
-        return;
-      }
-      await loadOrdersFromApi();
-      setSelectedOrder((prev) =>
-        prev ? { ...prev, status: "cancelled", estimatedDelivery: tr("Order cancelled") } : prev
+
+  if (!cancelReason.trim()) {
+
+    Alert.alert(
+      tr("Required"),
+      tr("Please provide a reason")
+    );
+
+    return;
+  }
+
+  const cancellableStatuses = [
+    "processing",
+    "confirmed",
+    "awb_assigned",
+    "pickup_scheduled",
+  ];
+
+  if (
+    !selectedOrder ||
+    !cancellableStatuses.includes(
+      selectedOrder.status?.toLowerCase?.()
+    )
+  ) {
+
+    Alert.alert(
+      tr("Not allowed"),
+      tr("This order cannot be cancelled now")
+    );
+
+    return;
+  }
+
+  try {
+
+    const result =
+      await cancelOrderById(
+        Number(selectedOrder.id)
       );
-      Alert.alert(tr("Success"), tr(result.message));
-      setShowCancelModal(false);
-      setCancelReason("");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not cancel order.";
-      Alert.alert(tr("Cancel failed"), tr(msg));
+
+    if (!result.success) {
+
+      Alert.alert(
+        tr("Cancel failed"),
+        tr(result.message)
+      );
+
+      return;
     }
-  };
+
+    // refresh all orders
+
+    await loadOrdersFromApi();
+
+    await fetchAllOrders();
+
+    await fetchCancelledOrders();
+
+    // update selected order UI
+
+    setSelectedOrder((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: "cancelled",
+            estimatedDelivery: tr("Order cancelled"),
+          }
+        : prev
+    );
+
+    Alert.alert(
+      tr("Success"),
+      tr(result.message)
+    );
+
+    setShowCancelModal(false);
+
+    setCancelReason("");
+
+  } catch (e) {
+
+    const msg =
+      e instanceof Error
+        ? e.message
+        : "Could not cancel order.";
+
+    Alert.alert(
+      tr("Cancel failed"),
+      tr(msg)
+    );
+  }
+};
 
   const openReturnExchange = (mode: "return" | "exchange") => {
     if (!selectedOrder) return;
