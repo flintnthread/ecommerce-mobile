@@ -314,7 +314,19 @@ function mapApiOrderRowToOrder(
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-type OrderStatus = "all" | "processing" | "shipped" | "delivered" | "cancelled" | "returns";
+type OrderStatus =
+  | "all"
+  | "confirmed"
+  | "processing"
+  | "awb_assigned"
+  | "pickup_scheduled"
+  | "picked_up"
+  | "in_transit"
+  | "out_for_delivery"
+  | "shipped"
+  | "delivered"
+  | "cancelled"
+  | "returns";
 
 interface Order {
   id: string;
@@ -361,7 +373,7 @@ function escapeInvoiceHtml(value: string): string {
 function buildInvoiceHtml(
   order: Order,
   invoiceNumber: string,
-  details?: Record<string, unknown> | any
+  details?: Record<string, unknown>
 ): string {
   const readField = (keys: string[], fallback = ""): string => {
     if (!details) return fallback;
@@ -398,36 +410,17 @@ function buildInvoiceHtml(
   const invoiceDate = order.date?.trim() || new Date().toLocaleDateString("en-IN");
   const lineItems = order.products ?? [];
   const orderTotalNum = parseApiNumber(order.total.replace(/[^\d.]/g, ""));
-  
-  // Use backend invoice data if available
-  const isBackendInvoice = details && details.invoiceNumber;
-  const subtotalNum = isBackendInvoice 
-    ? parseApiNumber(details.subtotalBeforeTax || 0)
-    : lineItems.length > 0
+  const subtotalNum =
+    lineItems.length > 0
       ? lineItems.reduce((sum, p) => {
           const unit = parseApiNumber(String(p.price).replace(/[^\d.]/g, ""));
           return sum + unit * Math.max(1, p.quantity);
         }, 0)
       : orderTotalNum;
-  
-  const taxAmount = isBackendInvoice
-    ? parseApiNumber(details.totalGstAmount || 0)
-    : Math.max(0, orderTotalNum - subtotalNum);
-  
-  const cgstAmount = isBackendInvoice ? parseApiNumber(details.cgstAmount || 0) : 0;
-  const sgstAmount = isBackendInvoice ? parseApiNumber(details.sgstAmount || 0) : 0;
-  const igstAmount = isBackendInvoice ? parseApiNumber(details.igstAmount || 0) : taxAmount;
-  
+  const taxAmount = Math.max(0, orderTotalNum - subtotalNum);
   const igstPct = subtotalNum > 0 ? (taxAmount / subtotalNum) * 100 : 0;
-  const cgstPct = subtotalNum > 0 ? (cgstAmount / subtotalNum) * 100 : 0;
-  const sgstPct = subtotalNum > 0 ? (sgstAmount / subtotalNum) * 100 : 0;
-  
   const deliveryCharge = parseApiNumber(details?.shippingCharge);
-  const grandTotal = isBackendInvoice
-    ? parseApiNumber(details.grandTotal || 0)
-    : subtotalNum + taxAmount + deliveryCharge;
-  
-  const isInterState = isBackendInvoice ? details.isInterState : false;
+  const grandTotal = subtotalNum + taxAmount + deliveryCharge;
 
   const rowsHtml =
     lineItems.length > 0
@@ -589,26 +582,17 @@ function buildInvoiceHtml(
 
       <div class="totals">
         <div class="row"><span>Subtotal (Before Tax)</span><span>${formatMoney(subtotalNum)}</span></div>
-        ${isInterState ? 
-          `<div class="row"><span>IGST @ ${igstPct > 0 ? igstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(igstAmount)}</span></div>` :
-          `<div class="row"><span>CGST @ ${cgstPct > 0 ? cgstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(cgstAmount)}</span></div>
-           <div class="row"><span>SGST @ ${sgstPct > 0 ? sgstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(sgstAmount)}</span></div>`
-        }
+        <div class="row"><span>IGST @ ${igstPct > 0 ? igstPct.toFixed(2) : "0.00"}%</span><span>${formatMoney(taxAmount)}</span></div>
         <div class="row"><span>Shipping Charges</span><span class="${deliveryCharge <= 0 ? "free" : ""}">${deliveryCharge <= 0 ? "FREE" : formatMoney(deliveryCharge)}</span></div>
         <div class="row" style="border-bottom:0;"><strong>Grand Total</strong><span class="grand">${formatMoney(grandTotal)}</span></div>
       </div>
 
       <div class="gst-box">
         <p class="gst-title">GST Breakdown Summary</p>
-        ${isInterState ? 
-          `<div class="row"><span>Total IGST:</span><span>${formatMoney(igstAmount)}</span></div>
-           <div class="row"><span>Total GST:</span><span>${formatMoney(taxAmount)}</span></div>
-           <div class="row" style="border-bottom:0; font-weight:700; font-style:italic;">*inter-state transaction - IGST applicable</div>` :
-          `<div class="row"><span>Total CGST:</span><span>${formatMoney(cgstAmount)}</span></div>
-           <div class="row"><span>Total SGST:</span><span>${formatMoney(sgstAmount)}</span></div>
-           <div class="row"><span>Total GST:</span><span>${formatMoney(taxAmount)}</span></div>
-           <div class="row" style="border-bottom:0; font-weight:700; font-style:italic;">*intra-state transaction - CGST/SGST applicable</div>`
-        }
+        <div class="row"><span>Total CGST:</span><span>₹0.00</span></div>
+        <div class="row"><span>Total SGST:</span><span>₹0.00</span></div>
+        <div class="row"><span>Total IGST:</span><span>${formatMoney(taxAmount)}</span></div>
+        <div class="row" style="border-bottom:0; font-weight:700;"><span>Total GST:</span><span>${formatMoney(taxAmount)}</span></div>
       </div>
 
       <div class="pay-box">
@@ -726,12 +710,47 @@ const sampleOrders: Order[] = [
 ];
 
 function mapBackendOrderStatus(s?: string): OrderStatus {
+
   const x = (s || "").toLowerCase();
-  if (x === "completed" || x === "delivered") return "delivered";
-  if (x === "cancelled") return "cancelled";
-  if (x === "returns" || x === "return") return "returns";
-  if (x === "shipped") return "shipped";
-  return "processing";
+
+  switch (x) {
+
+    case "confirmed":
+      return "confirmed";
+
+    case "processing":
+      return "processing";
+
+    case "awb_assigned":
+      return "awb_assigned";
+
+    case "pickup_scheduled":
+      return "pickup_scheduled";
+
+    case "picked_up":
+      return "picked_up";
+
+    case "in_transit":
+    case "shipped":
+      return "shipped";
+
+    case "out_for_delivery":
+      return "out_for_delivery";
+
+    case "completed":
+    case "delivered":
+      return "delivered";
+
+    case "cancelled":
+      return "cancelled";
+
+    case "returns":
+    case "return":
+      return "returns";
+
+    default:
+      return "processing";
+  }
 }
 
 function mapApiOrderToUiOrder(row: ApiOrderRow): Order {
@@ -1131,6 +1150,45 @@ export default function OrdersScreen() {
         return { color: "#8B5CF6", bgColor: "#EDE9FE", icon: "return-down-back", text: tr("Return") };
       default:
         return { color: "#6B7280", bgColor: "#F3F4F6", icon: "ellipse", text: status };
+        case "confirmed":
+  return {
+    color: "#6366F1",
+    bgColor: "#E0E7FF",
+    icon: "checkmark-done",
+    text: tr("Confirmed")
+  };
+
+case "awb_assigned":
+  return {
+    color: "#2563EB",
+    bgColor: "#DBEAFE",
+    icon: "cube",
+    text: tr("AWB Assigned")
+  };
+
+case "pickup_scheduled":
+  return {
+    color: "#7C3AED",
+    bgColor: "#EDE9FE",
+    icon: "calendar",
+    text: tr("Pickup Scheduled")
+  };
+
+case "picked_up":
+  return {
+    color: "#EA580C",
+    bgColor: "#FED7AA",
+    icon: "bag-check",
+    text: tr("Picked Up")
+  };
+
+case "out_for_delivery":
+  return {
+    color: "#0891B2",
+    bgColor: "#CFFAFE",
+    icon: "bicycle",
+    text: tr("Out for Delivery")
+  };
     }
   };
 
@@ -1174,32 +1232,98 @@ export default function OrdersScreen() {
   };
 
   const handleCancel = async () => {
-    if (!cancelReason.trim()) {
-      Alert.alert(tr("Required"), tr("Please provide a reason"));
-      return;
-    }
-    if (!selectedOrder || selectedOrder.status !== "processing") {
-      Alert.alert(tr("Not allowed"), tr("Only processing orders can be cancelled"));
-      return;
-    }
-    try {
-      const result = await cancelOrderById(Number(selectedOrder.id));
-      if (!result.success) {
-        Alert.alert(tr("Cancel failed"), tr(result.message));
-        return;
-      }
-      await loadOrdersFromApi();
-      setSelectedOrder((prev) =>
-        prev ? { ...prev, status: "cancelled", estimatedDelivery: tr("Order cancelled") } : prev
+
+  if (!cancelReason.trim()) {
+
+    Alert.alert(
+      tr("Required"),
+      tr("Please provide a reason")
+    );
+
+    return;
+  }
+
+  const cancellableStatuses = [
+    "processing",
+    "confirmed",
+    "awb_assigned",
+    "pickup_scheduled",
+  ];
+
+  if (
+    !selectedOrder ||
+    !cancellableStatuses.includes(
+      selectedOrder.status?.toLowerCase?.()
+    )
+  ) {
+
+    Alert.alert(
+      tr("Not allowed"),
+      tr("This order cannot be cancelled now")
+    );
+
+    return;
+  }
+
+  try {
+
+    const result =
+      await cancelOrderById(
+        Number(selectedOrder.id)
       );
-      Alert.alert(tr("Success"), tr(result.message));
-      setShowCancelModal(false);
-      setCancelReason("");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not cancel order.";
-      Alert.alert(tr("Cancel failed"), tr(msg));
+
+    if (!result.success) {
+
+      Alert.alert(
+        tr("Cancel failed"),
+        tr(result.message)
+      );
+
+      return;
     }
-  };
+
+    // refresh all orders
+
+    await loadOrdersFromApi();
+
+    await fetchAllOrders();
+
+    await fetchCancelledOrders();
+
+    // update selected order UI
+
+    setSelectedOrder((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: "cancelled",
+            estimatedDelivery: tr("Order cancelled"),
+          }
+        : prev
+    );
+
+    Alert.alert(
+      tr("Success"),
+      tr(result.message)
+    );
+
+    setShowCancelModal(false);
+
+    setCancelReason("");
+
+  } catch (e) {
+
+    const msg =
+      e instanceof Error
+        ? e.message
+        : "Could not cancel order.";
+
+    Alert.alert(
+      tr("Cancel failed"),
+      tr(msg)
+    );
+  }
+};
 
   const openReturnExchange = (mode: "return" | "exchange") => {
     if (!selectedOrder) return;
@@ -1214,46 +1338,237 @@ export default function OrdersScreen() {
     });
   };
 
-  const handleDownloadInvoice = async (order: Order) => {
-    const orderId = parseInt(String(order.id).replace(/\D/g, ''), 10);
+  // Add this type near the other types (around line 345)
+// type InvoiceRow = {
+//   id: number;
+//   orderId: number;
+//   invoiceNumber: string;
+//   invoicePath?: string | null;
+//   createdAt?: string;
+//   updatedAt?: string;
+// };
+
+const handleDownloadInvoice = async (order: Order) => {
+  const orderId = Number(order.id);
+
+  // Validate order ID
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    Alert.alert(tr("Invoice"), tr("Invalid order ID"));
+    return;
+  }
+
+  try {
+    // Step 1: Try to fetch existing invoices from backend
+    let invoices: InvoiceRow[] = [];
+
     try {
-      // First try to fetch invoice from backend API
-      const token = await AsyncStorage.getItem("token");
-      if (token) {
-        try {
-          const response = await api.get(`/api/invoices?orderId=${orderId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (response.data && response.data.success && response.data.data && response.data.data.length > 0) {
-            const invoice = response.data.data[0];
-            // Use backend invoice data
-            const html = buildInvoiceHtml(order, invoice.invoiceNumber, invoice);
-            await Print.printAsync({
-              html,
-            });
-            return;
-          }
-        } catch (apiError) {
-          console.log('Backend invoice not available, using fallback:', apiError);
-        }
-      }
-      
-      // Fallback to client-side generation if backend invoice not available
-      const fallbackNumber = Number.isFinite(orderId) && orderId > 0 ? Math.floor(orderId) : order.id;
-      const invoiceNumber = `INV-${fallbackNumber}`;
-      const html = buildInvoiceHtml(order, invoiceNumber);
-      await Print.printAsync({
-        html,
+      const { data: response } = await api.get("/api/invoices", {
+        params: { orderId: orderId },
       });
-    } catch (e) {
+
+      if (response?.success && Array.isArray(response?.data)) {
+        invoices = response.data;
+      } else if (Array.isArray(response?.data)) {
+        invoices = response.data;
+      }
+    } catch (fetchError: any) {
+      // 404 or no invoices found - will create new ones
+    }
+
+    // Step 2: If no invoices exist, try to create via backend
+    if (invoices.length === 0) {
+      try {
+        await api.post("/api/invoices", {
+          orderId: orderId,
+          invoicePath: null,
+        });
+
+        // After creation, fetch all invoices again
+        const { data: refetchResponse } = await api.get("/api/invoices", {
+          params: { orderId: orderId },
+        });
+
+        if (refetchResponse?.success && Array.isArray(refetchResponse?.data)) {
+          invoices = refetchResponse.data;
+        } else if (Array.isArray(refetchResponse?.data)) {
+          invoices = refetchResponse.data;
+        }
+      } catch (createError: any) {
+        // Backend invoice creation failed - will use client fallback
+      }
+    }
+
+    // Step 3: If we have invoices, let user select or download
+    if (invoices.length > 0) {
+      if (invoices.length === 1) {
+        // Single invoice - download directly
+        await downloadSingleInvoice(order, invoices[0]);
+      } else {
+        // Multiple invoices - show selection dialog
+// Multiple invoices - show selection dialog
+const options: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[] = [];
+
+invoices.forEach((inv, index) => {
+  options.push({
+    text: `Invoice ${index + 1}: ${inv.invoiceNumber}`,
+    onPress: () => {
+      downloadSingleInvoice(order, inv);
+    },
+  });
+});
+
+        // Add Cancel option
+        options.push({
+          text: tr("Cancel"),
+          style: "cancel",
+        });
+
+        Alert.alert(
+          tr("Multiple Invoices"),
+          tr("This order has multiple invoices from different sellers. Which one would you like to download?"),
+          options
+        );
+        return;
+      }
+    } else {
+      // No invoices from backend - fallback to client-side
+      const invoiceNumber = `INV-${orderId}`;
+      const html = buildInvoiceHtml(order, invoiceNumber);
+      await Print.printAsync({ html });
+    }
+
+  } catch (e) {
+    // Final fallback - just generate client-side invoice
+    try {
+      const invoiceNumber = `INV-${orderId}`;
+      const html = buildInvoiceHtml(order, invoiceNumber);
+      await Print.printAsync({ html });
+    } catch (printError) {
       const message = e instanceof Error ? e.message : tr("Could not download invoice right now.");
       Alert.alert(tr("Invoice"), message);
     }
-  };
+  }
+};
 
+// Helper function to download ALL invoices combined into one PDF
+const downloadAllInvoices = async (order: Order, invoices: InvoiceRow[]) => {
+  try {
+    const htmlParts: string[] = [];
+
+    for (const invoice of invoices) {
+      let invoiceHtml = "";
+
+      if (invoice.invoicePath) {
+        try {
+          const invoiceUrl = resolveApiImageUri(invoice.invoicePath);
+          const htmlResponse = await fetch(invoiceUrl);
+
+          if (htmlResponse.ok) {
+            invoiceHtml = await htmlResponse.text();
+          }
+        } catch (fetchError) {
+          // Fallback to client-side
+        }
+      }
+
+      // If no HTML from backend, generate client-side
+      if (!invoiceHtml) {
+        invoiceHtml = buildInvoiceHtml(order, invoice.invoiceNumber);
+      }
+
+      // Extract body content from HTML (remove html, head, body tags for combining)
+      const bodyMatch = invoiceHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      const bodyContent = bodyMatch ? bodyMatch[1] : invoiceHtml;
+
+      htmlParts.push(bodyContent);
+    }
+
+    // Combine all invoices with page breaks
+    const combinedHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          @media print {
+            .invoice-page {
+              page-break-after: always;
+            }
+            .invoice-page:last-child {
+              page-break-after: avoid;
+            }
+          }
+          .invoice-page {
+            margin-bottom: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        ${htmlParts.map((html, index) => `<div class="invoice-page">${html}</div>`).join("")}
+      </body>
+      </html>
+    `;
+
+    await Print.printAsync({ html: combinedHtml });
+
+  } catch (error) {
+    // Fallback - generate all invoices client-side
+    try {
+      const htmlParts = invoices.map((inv) => {
+        const html = buildInvoiceHtml(order, inv.invoiceNumber);
+        const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        return bodyMatch ? bodyMatch[1] : html;
+      });
+
+      const combinedHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            @media print {
+              .invoice-page { page-break-after: always; }
+              .invoice-page:last-child { page-break-after: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          ${htmlParts.map((html) => `<div class="invoice-page">${html}</div>`).join("")}
+        </body>
+        </html>
+      `;
+
+      await Print.printAsync({ html: combinedHtml });
+    } catch (printError) {
+      Alert.alert(tr("Invoice"), tr("Could not download invoices right now."));
+    }
+  }
+};
+
+// Helper function to download a single invoice
+const downloadSingleInvoice = async (order: Order, invoice: InvoiceRow) => {
+  try {
+    if (invoice.invoicePath) {
+      const invoiceUrl = resolveApiImageUri(invoice.invoicePath);
+      const htmlResponse = await fetch(invoiceUrl);
+
+      if (htmlResponse.ok) {
+        const html = await htmlResponse.text();
+        await Print.printAsync({ html });
+        return;
+      }
+    }
+
+    // Fallback to client-side generated invoice
+    const html = buildInvoiceHtml(order, invoice.invoiceNumber);
+    await Print.printAsync({ html });
+  } catch (error) {
+    // Fallback to client-side
+    const html = buildInvoiceHtml(order, invoice.invoiceNumber);
+    await Print.printAsync({ html });
+  }
+};
   const filteredOrders = getFilteredOrders();
 
   return (
@@ -1505,15 +1820,6 @@ export default function OrdersScreen() {
                         <Text style={styles.viewDetailsText}>{tr("View Details")}</Text>
                         <Ionicons name="chevron-forward" size={16} color="#E97A1F" />
                       </TouchableOpacity>
-                      {order.status === 'delivered' && (
-                        <TouchableOpacity
-                          style={styles.invoiceBtn}
-                          onPress={() => handleDownloadInvoice(order)}
-                        >
-                          <Ionicons name="document-text-outline" size={16} color="#fff" />
-                          <Text style={styles.invoiceBtnText}>{tr("Invoice")}</Text>
-                        </TouchableOpacity>
-                      )}
                     </View>
                   </TouchableOpacity>
                 );
@@ -2243,20 +2549,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#E97A1F",
     marginRight: 4,
-  },
-  invoiceBtn: {
-    backgroundColor: "#28a745",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  invoiceBtnText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "bold",
-    marginLeft: 4,
   },
   detailsContainer: {
     flex: 1,

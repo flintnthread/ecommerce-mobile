@@ -72,7 +72,7 @@ export async function cancelOrderById(orderId: number): Promise<{ success: boole
   if (!Number.isFinite(id) || id <= 0) {
     return { success: false, message: "Invalid order id." };
   }
-  const { data } = await api.put<ApiEnvelope<string>>(`/api/orders/${id}/cancel`);
+const { data } = await api.post<ApiEnvelope<string>>(`/api/orders/${id}/cancel`);
   return {
     success: Boolean(data?.success),
     message: data?.message || (data?.success ? "Order cancelled successfully" : "Could not cancel order."),

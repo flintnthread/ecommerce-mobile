@@ -11,6 +11,7 @@ import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 
 import ReferralPopup from "../components/ReferralPopup";
+import { createAddressFromLocation } from "../lib/requestForegroundLocation";
 
 import {
 
@@ -3299,21 +3300,29 @@ const [products, setProducts] = useState<any[]>([]);
 
 
 
-  const handleUseCurrentLocation = useCallback(async () => {
+   // adjust path
 
-    const result = await requestForegroundLocation();
-
-    if (result.ok) {
-
-      setDisplayDeliveryLine(result.addressLine);
-
-      closeDeliveryModal();
-
+const handleUseCurrentLocation = useCallback(async () => {
+  const result = await requestForegroundLocation();
+  if (result.ok) {
+    setDisplayDeliveryLine(result.addressLine);
+    
+    // Save address to database - backend will reverse geocode
+    try {
+      await createAddressFromLocation({
+        latitude: result.latitude,
+        longitude: result.longitude,
+        name: "Current Location",
+        addressType: "other",
+        isDefault: true,
+      });
+    } catch (error) {
+      console.log("Failed to save current location address:", error);
     }
-
-  }, [closeDeliveryModal]);
-
-
+    
+    closeDeliveryModal();
+  }
+}, [closeDeliveryModal]);
 
   const handleSaveNewAddress = useCallback(() => {
 
@@ -3588,6 +3597,7 @@ const [products, setProducts] = useState<any[]>([]);
   const [searchCategoryText, setSearchCategoryText] = useState("");
 
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
 
   const filterOptions: Record<string, string[]> = {
   Category: ["Men", "Women", "Kids", "Accessories"],
@@ -6515,29 +6525,34 @@ useEffect(() => {
 
 
   const handleCategorySelection = (categoryName: string, categoryId: number) => {
-
-    // Navigate to subcatProducts with the selected category
-
-    router.push({
-
-      pathname: "/subcatProducts",
-
-      params: {
-
-        subCategory: categoryName,
-
-        categoryId: String(categoryId),
-
-      },
-
-    } as any);
-
+    // Toggle the category selection in selectedFilters (don't navigate immediately)
+    setSelectedFilters((prev) => {
+      const section = "Category";
+      const existingValues = prev[section] || [];
+      
+      if (existingValues.includes(categoryName)) {
+        // Remove the category if already selected
+        return {
+          ...prev,
+          [section]: existingValues.filter((v) => v !== categoryName),
+        };
+      } else {
+        // Add the category
+        return {
+          ...prev,
+          [section]: [...existingValues, categoryName],
+        };
+      }
+    });
     
-
-    // Close the filter modal
-
-    setFilterModalVisible(false);
-
+    // Store the category ID for later use when navigating
+    setSelectedCategoryIds((prev) => {
+      if (prev.includes(categoryId)) {
+        return prev.filter((id) => id !== categoryId);
+      } else {
+        return [...prev, categoryId];
+      }
+    });
   };
 
 
@@ -6585,6 +6600,8 @@ useEffect(() => {
     setSelectedFilters({});
 
     setSelectedCategory([]);
+
+    setSelectedCategoryIds([]);
 
     setSelectedGender("");
 
@@ -7616,7 +7633,7 @@ const categoryData = [
 
           >
 
-            <Text style={styles.homeBrowseApplyText}>View results</Text>
+            {/* <Text style={styles.homeBrowseApplyText}>View results</Text> */}
 
           </TouchableOpacity>
 
@@ -10586,7 +10603,7 @@ const categoryData = [
 
               <Text style={styles.promoBodyBold}>
 
-              Refer 5 friends using your code and get **10% OFF on your first order** 
+              Refer 5 friends using your code and get 10% OFF on your first order 
 
               </Text>
 
@@ -11106,6 +11123,13 @@ const categoryData = [
 
                     }
 
+                    router.push({
+  pathname: "/subcatProducts",
+  params: {
+    gender: item.label.toLowerCase(),
+  },
+});
+
                   }}
 
                 >
@@ -11587,7 +11611,42 @@ const categoryData = [
 
                         style={styles.categoryParentItem}
 
-                        onPress={() => toggleFilterOption("Gender", gender)}
+                        onPress={() => {
+  
+
+  toggleFilterOption("Gender", gender);
+
+  if (gender === "Men") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "men",
+      },
+    });
+
+  } else if (gender === "Women") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "women",
+      },
+    });
+
+  } else if (gender === "Boy" || gender === "Girl") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "kids",
+      },
+    });
+
+  }
+
+}}
+  
 
                       >
 
@@ -11780,29 +11839,75 @@ const categoryData = [
                 style={styles.doneButton}
 
                 onPress={() => {
-
-                  // Apply price and rating filters
-
-                  const filterState = {
-
-                    selectedPriceRanges: selectedFilters["Price"] || [],
-
-                    rating: selectedFilters["Rating"]?.length > 0 ? 
-
-                      parseInt(selectedFilters["Rating"][0]) : undefined
-
-                  };
-
+                  // Check if any filters are selected
+                  const hasCategories = (selectedFilters["Category"]?.length || 0) > 0;
+                  const hasColors = (selectedFilters["Color"]?.length || 0) > 0;
+                  const hasSizes = (selectedFilters["Size"]?.length || 0) > 0;
+                  const hasGenders = (selectedFilters["Gender"]?.length || 0) > 0;
+                  const hasPrices = (selectedFilters["Price"]?.length || 0) > 0;
+                  const hasRatings = (selectedFilters["Rating"]?.length || 0) > 0;
                   
-
-                  if (filterState.selectedPriceRanges.length > 0 || filterState.rating !== undefined) {
-
-                    applyPriceAndRatingFilters(filterState);
-
+                  const hasAnyFilter = hasCategories || hasColors || hasSizes || hasGenders || hasPrices || hasRatings;
+                  
+                  if (hasAnyFilter) {
+                    // Build filter params for navigation
+                    const filterParams: Record<string, string> = {};
+                    
+                    // Categories
+                    if (hasCategories && selectedCategoryIds.length > 0) {
+                      filterParams.categoryIds = selectedCategoryIds.join(',');
+                      filterParams.subCategory = selectedFilters["Category"]?.join(', ') || 'Filtered Products';
+                    } else if (hasCategories) {
+                      filterParams.subCategory = selectedFilters["Category"]?.join(', ') || 'Filtered Products';
+                    }
+                    
+                    // Colors
+                    if (hasColors) {
+                      filterParams.colorNames = selectedFilters["Color"]?.join(',') || '';
+                    }
+                    
+                    // Sizes
+                    if (hasSizes) {
+                      filterParams.sizeNames = selectedFilters["Size"]?.join(',') || '';
+                    }
+                    
+                    // Genders
+                    if (hasGenders) {
+                      filterParams.genders = selectedFilters["Gender"]?.join(',') || '';
+                    }
+                    
+                    // Price ranges - extract min/max from first selected range
+                    if (hasPrices) {
+                      const selectedRange = selectedFilters["Price"]?.[0];
+                      if (selectedRange) {
+                        const [minStr, maxStr] = selectedRange.split('-');
+                        filterParams.minPrice = minStr || '0';
+                        filterParams.maxPrice = maxStr === '+' ? '999999' : (maxStr || '999999');
+                      }
+                    }
+                    
+                    // Ratings - extract minimum rating value
+                    if (hasRatings) {
+                      const ratingStr = selectedFilters["Rating"]?.[0];
+                      if (ratingStr) {
+                        const match = ratingStr.match(/(\d+)/);
+                        if (match) {
+                          filterParams.minRating = match[1];
+                        }
+                      }
+                    }
+                    
+                    // Navigate to subcatProducts with all filter params
+                    router.push({
+                      pathname: "/subcatProducts",
+                      params: {
+                        ...filterParams,
+                        subCategory: filterParams.subCategory || 'Filtered Products',
+                        filterApplied: 'true',
+                      },
+                    } as any);
                   }
-
                   
-
                   setFilterModalVisible(false);
 
                 }}
@@ -12487,45 +12592,45 @@ categoryChildText: {
 
 
 
-  homeBrowseApplyBtn: {
+  // homeBrowseApplyBtn: {
 
-    marginHorizontal: 10,
+  //   marginHorizontal: 10,
 
-    marginTop: 6,
+  //   marginTop: 6,
 
-    marginBottom: 8,
+  //   marginBottom: 8,
 
-    paddingVertical: 10,
+  //   paddingVertical: 10,
 
-    paddingHorizontal: 14,
+  //   paddingHorizontal: 14,
 
-    borderRadius: 12,
+  //   borderRadius: 12,
 
-    backgroundColor: "rgba(255,255,255,0.92)",
+  //   backgroundColor: "rgba(255,255,255,0.92)",
 
-    borderWidth: 1,
+  //   borderWidth: 1,
 
-    borderColor: "rgba(255,255,255,0.65)",
+  //   borderColor: "rgba(255,255,255,0.65)",
 
-    alignItems: "center",
+  //   alignItems: "center",
 
-    justifyContent: "center",
+  //   justifyContent: "center",
 
-  },
+  // },
 
 
 
-  homeBrowseApplyText: {
+  // homeBrowseApplyText: {
 
-    fontSize: 13,
+  //   fontSize: 13,
 
-    fontWeight: "800",
+  //   fontWeight: "800",
 
-    color: "#1E1B4B",
+  //   color: "#1E1B4B",
 
-    letterSpacing: 0.3,
+  //   letterSpacing: 0.3,
 
-  },
+  // },
 
 
 

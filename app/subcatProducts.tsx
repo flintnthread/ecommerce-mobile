@@ -26,6 +26,9 @@ import api, {
   WISHLIST_ADD_PATH,
   WISHLIST_REMOVE_PATH,
   WISHLIST_USER_PATH,
+  filterProductsByPriceRange,
+  filterProductsByRating,
+  filterProductsByPriceAndRating,
 } from "../services/api";
 import {
   addWishlistProductIfAbsent,
@@ -569,10 +572,13 @@ export default function SubcategoriesScreen() {
   const { tr } = useLanguage();
   const params = useLocalSearchParams<{
     mainCat?: string | string[];
+
+    gender?: string | string[];
     subCategory?: string | string[];
     subcategoryId?: string | string[];
     mainCategoryId?: string | string[];
     categoryId?: string | string[];
+    categoryIds?: string | string[];
     discountMin?: string | string[];
     discountMax?: string | string[];
     productsSearchQ?: string | string[];
@@ -581,10 +587,28 @@ export default function SubcategoriesScreen() {
     productsSearchGender?: string | string[];
     mainCategoryFeed?: string | string[];
     mainCategoryPath?: string | string[];
+    // New filter params from home.tsx filter modal
+    colorNames?: string | string[];
+    sizeNames?: string | string[];
+    genders?: string | string[];
+    minPrice?: string | string[];
+    maxPrice?: string | string[];
+    minRating?: string | string[];
+    filterApplied?: string | string[];
   }>();
   const mainCat = Array.isArray(params.mainCat)
     ? params.mainCat[0]
     : params.mainCat;
+
+const routedGenderRaw = Array.isArray(params.gender)
+  ? params.gender[0]
+  : params.gender;
+
+const routedGender = String(
+  routedGenderRaw ?? ""
+).trim().toLowerCase();
+
+
   const selectedSubCategory = Array.isArray(params.subCategory)
     ? params.subCategory[0]
     : params.subCategory;
@@ -644,6 +668,32 @@ export default function SubcategoriesScreen() {
     ? params.mainCategoryPath[0]
     : params.mainCategoryPath;
   const routedMainCategoryPath = String(mainCategoryPathRaw ?? "").trim();
+  
+  // Parse new filter params from home.tsx filter modal
+  const categoryIdsRaw = Array.isArray(params.categoryIds) ? params.categoryIds[0] : params.categoryIds;
+  const routedCategoryIds = categoryIdsRaw ? categoryIdsRaw.split(',').map((id: string) => Number.parseInt(id.trim(), 10)).filter((id: number) => !Number.isNaN(id)) : [];
+  
+  const colorNamesRaw = Array.isArray(params.colorNames) ? params.colorNames[0] : params.colorNames;
+  const routedColorNames = colorNamesRaw ? colorNamesRaw.split(',').map((c: string) => c.trim()).filter(Boolean) : [];
+  
+  const sizeNamesRaw = Array.isArray(params.sizeNames) ? params.sizeNames[0] : params.sizeNames;
+  const routedSizeNames = sizeNamesRaw ? sizeNamesRaw.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+  
+  const gendersRaw = Array.isArray(params.genders) ? params.genders[0] : params.genders;
+  const routedGenders = gendersRaw ? gendersRaw.split(',').map((g: string) => g.trim()).filter(Boolean) : [];
+  
+  const minPriceRaw = Array.isArray(params.minPrice) ? params.minPrice[0] : params.minPrice;
+  const routedMinPrice = minPriceRaw ? Number.parseFloat(minPriceRaw) : undefined;
+  
+  const maxPriceRaw = Array.isArray(params.maxPrice) ? params.maxPrice[0] : params.maxPrice;
+  const routedMaxPrice = maxPriceRaw ? Number.parseFloat(maxPriceRaw) : undefined;
+  
+  const minRatingRaw = Array.isArray(params.minRating) ? params.minRating[0] : params.minRating;
+  const routedMinRating = minRatingRaw ? Number.parseFloat(minRatingRaw) : undefined;
+  
+  const filterAppliedRaw = Array.isArray(params.filterApplied) ? params.filterApplied[0] : params.filterApplied;
+  const isFilterApplied = filterAppliedRaw === 'true';
+  
   const pageTitle = tr(selectedSubCategory || "Products").toUpperCase();
 
   useEffect(() => {
@@ -668,6 +718,56 @@ export default function SubcategoriesScreen() {
 
   const [selectedSort, setSelectedSort] = useState("Relevance");
   const [selectedGender, setSelectedGender] = useState("");
+
+const loadMensProducts = async () => {
+  try {
+    const response = await api.get(productsByMainCategoryPath(60));
+    setFilteredProducts(response.data);
+  } catch (error) {
+    console.log("Men products error", error);
+  }
+};
+
+
+const loadWomenProducts = async () => {
+  try {
+    const response = await api.get(productsByMainCategoryPath(61));
+    setFilteredProducts(response.data);
+  } catch (error) {
+    console.log("Women products error", error);
+  }
+};
+
+const loadKidsProducts = async () => {
+  try {
+    const response = await api.get(productsByMainCategoryPath(62));
+    setFilteredProducts(response.data);
+  } catch (error) {
+    console.log("Kids products error", error);
+  }
+};
+
+  useEffect(() => {
+
+  if (!routedGender) return;
+
+  if (routedGender === "women") {
+    setSelectedGender("Women");
+  }
+
+  if (routedGender === "men") {
+    setSelectedGender("Men");
+  }
+
+  if (routedGender === "girls") {
+    setSelectedGender("Girls");
+  }
+
+  if (routedGender === "boys") {
+    setSelectedGender("Boys");
+  }
+
+}, [routedGender]);
   const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
   const [selectedFilterSection, setSelectedFilterSection] =
     useState<string>("Category");
@@ -728,6 +828,11 @@ export default function SubcategoriesScreen() {
   /** Fresh Finds products state */
   const [freshFindsProducts, setFreshFindsProducts] = useState<ProductItem[]>([]);
   const [freshFindsReady, setFreshFindsReady] = useState(false);
+
+  /** Filtered products state (from home.tsx filter modal) */
+  const [filteredProducts, setFilteredProducts] = useState<ProductItem[]>([]);
+  const [filteredProductsReady, setFilteredProductsReady] = useState(false);
+  const [filteredProductsLoading, setFilteredProductsLoading] = useState(false);
 
   // Enhanced zoom and blink animation for loading logo
   const logoScale = useRef(new Animated.Value(1)).current;
@@ -1444,6 +1549,146 @@ export default function SubcategoriesScreen() {
     return () => controller.abort();
   }, [routedSubcategoryId, routedFromSubcategoryId, selectedSubCategory, mainCat]);
 
+  // Fetch filtered products when filter params are passed from home.tsx
+  useEffect(() => {
+    if (!isFilterApplied) {
+      setFilteredProducts([]);
+      setFilteredProductsReady(false);
+      setFilteredProductsLoading(false);
+      return;
+    }
+
+    setFilteredProductsLoading(true);
+    setFilteredProductsReady(false);
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        let response: any;
+        
+        // Determine which API to call based on available filters
+        const hasPrice = routedMinPrice !== undefined || routedMaxPrice !== undefined;
+        const hasRating = routedMinRating !== undefined;
+        const hasCategories = routedCategoryIds.length > 0;
+        
+        const minPrice = routedMinPrice ?? 0;
+        const maxPrice = routedMaxPrice ?? 999999;
+        const rating = routedMinRating ?? 0;
+
+        if (hasPrice && hasRating) {
+          // Use combined filter endpoint
+          response = await filterProductsByPriceAndRating(
+            minPrice,
+            maxPrice,
+            rating,
+            0,
+            50
+          );
+        } else if (hasPrice) {
+          // Use price-only filter endpoint
+          response = await filterProductsByPriceRange(minPrice, maxPrice, 0, 50);
+        } else if (hasRating) {
+          // Use rating-only filter endpoint
+          response = await filterProductsByRating(rating, 0, 50);
+        } else if (hasCategories) {
+          // Fetch products by category IDs
+          const categoryPromises = routedCategoryIds.map(catId => 
+            api.get(productsByCategoryPath(catId), { signal: controller.signal })
+          );
+          const responses = await Promise.all(categoryPromises);
+          const allProducts: ProductItem[] = [];
+          
+          for (const res of responses) {
+            let products: unknown[] = [];
+            if (Array.isArray(res.data)) {
+              products = res.data;
+            } else if (res.data && typeof res.data === 'object' && 'content' in res.data) {
+              products = Array.isArray((res.data as any).content) ? (res.data as any).content : [];
+            }
+            const mapped = products
+              .map((row) => mapApiProductToProductItem(row))
+              .filter(Boolean) as ProductItem[];
+            allProducts.push(...mapped);
+          }
+          
+          setFilteredProducts(allProducts);
+          setFilteredProductsLoading(false);
+          setFilteredProductsReady(true);
+          return;
+        } else {
+          // No filters, don't fetch
+          setFilteredProducts([]);
+          setFilteredProductsLoading(false);
+          setFilteredProductsReady(true);
+          return;
+        }
+
+        if (controller.signal.aborted) return;
+
+        // Map the response to product items
+        let products: unknown[] = [];
+        if (Array.isArray(response?.data)) {
+          products = response.data;
+        } else if (response?.data && typeof response.data === 'object') {
+          if ('content' in response.data && Array.isArray(response.data.content)) {
+            products = response.data.content;
+          } else {
+            products = normalizeProductListPayload(response.data);
+          }
+        }
+
+        let mapped = products
+          .map((row) => mapApiProductToProductItem(row))
+          .filter(Boolean) as ProductItem[];
+
+        // Apply additional client-side filters for colors, sizes, genders
+        if (routedColorNames.length > 0) {
+          mapped = mapped.filter(p => {
+            const productColor = (p as any).color?.toLowerCase() || '';
+            return routedColorNames.some(c => productColor.includes(c.toLowerCase()));
+          });
+        }
+
+        if (routedSizeNames.length > 0) {
+          mapped = mapped.filter(p => {
+            const productSize = (p as any).size?.toLowerCase() || '';
+            return routedSizeNames.some(s => productSize.includes(s.toLowerCase()));
+          });
+        }
+
+        if (routedGenders.length > 0) {
+          mapped = mapped.filter(p => {
+            const productGender = (p as any).gender?.toLowerCase() || '';
+            return routedGenders.some(g => productGender.includes(g.toLowerCase()));
+          });
+        }
+
+        setFilteredProducts(mapped);
+      } catch (error) {
+        console.error("Error fetching filtered products:", error);
+        if (!controller.signal.aborted) {
+          setFilteredProducts([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setFilteredProductsLoading(false);
+          setFilteredProductsReady(true);
+        }
+      }
+    })();
+
+    return () => controller.abort();
+  }, [
+    isFilterApplied,
+    routedCategoryIds,
+    routedColorNames,
+    routedSizeNames,
+    routedGenders,
+    routedMinPrice,
+    routedMaxPrice,
+    routedMinRating,
+  ]);
+
   useEffect(() => {
     const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
     if (subNorm !== "top picks for you") {
@@ -1721,6 +1966,12 @@ export default function SubcategoriesScreen() {
 const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
   const subNorm = String(selectedSubCategory ?? "").trim().toLowerCase();
 
+  // Handle filters from home.tsx filter modal (highest priority)
+  if (isFilterApplied) {
+    if (!filteredProductsReady) return [];
+    return filteredProducts;
+  }
+
   if (routedFromProductsSearch) {
     if (!productsSearchApiReady) return [];
     return productsSearchApiProducts;
@@ -1807,6 +2058,9 @@ const effectiveRoutedSubcategoryProducts = React.useMemo(() => {
   routedFromProductsSearch,
   productsSearchApiReady,
   productsSearchApiProducts,
+  isFilterApplied,
+  filteredProductsReady,
+  filteredProducts,
 ]);
 
 const filteredRoutedProducts = React.useMemo(() => {
@@ -2576,7 +2830,8 @@ const handleBannerScroll = (event: any) => {
             (routedFromMainCategoryPath && !mainCategoryPathReady) ||
             (routedFromMainCategoryFeed && !mainCategoryFeedReady) ||
             (routedFromMainCategoryId && !mainCategoryApiReady) ||
-            (routedFromProductsSearch && !productsSearchApiReady) ? (
+            (routedFromProductsSearch && !productsSearchApiReady) ||
+            (isFilterApplied && filteredProductsLoading) ? (
               <View style={styles.loadingContainer}>
                 <View style={styles.loadingSpinner}>
                   <Animated.Image 
