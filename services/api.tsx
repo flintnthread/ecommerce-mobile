@@ -2,11 +2,6 @@ import axios from "axios";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { Platform } from "react-native";
-
-import Constants from "expo-constants";
-
-
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
@@ -75,163 +70,36 @@ function extractUserIdFromToken(token: string): number | null {
 
 
 function resolveBaseUrl(): string {
-
-  const hostUri =
-
-    Constants.expoConfig?.hostUri ??
-
-    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost ??
-
-    (Constants as any)?.manifest?.debuggerHost ??
-
-    "";
-
-  const lanHost = String(hostUri).split(":")[0].trim();
-
-  if (lanHost && lanHost !== "localhost" && lanHost !== "127.0.0.1") {
-
-    return `http://${lanHost}:8080`;
-
-  }
-
-  if (Platform.OS === "android") {
-
-    // Android emulator cannot access host localhost directly.
-
-    return "http://10.0.2.2:8080";
-
-  }
-
-return "http://localhost:8080";
-
+  return "http://flintnthread.online";
 }
 
+const API_BASE_URL = "http://flintnthread.online";
 
-
-const API_BASE_URL = resolveBaseUrl();
-
-const LOCAL_API_ORIGIN = resolveBaseUrl();
-
-
+const LOCAL_API_ORIGIN = "http://flintnthread.online";
 
 const normalizedBaseUrl = resolveBaseUrl();
 
-console.log("Main API Base URL:", normalizedBaseUrl);
-
-
-
-function getMainOriginFallbacks(): string[] {
-
-  const origins = [API_BASE_URL];
-
-  const hostUri =
-
-    Constants.expoConfig?.hostUri ??
-
-    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost ??
-
-    (Constants as any)?.manifest?.debuggerHost ??
-
-    "";
-
-  const lanHost = String(hostUri).split(":")[0].trim();
-
-  if (lanHost && lanHost !== "localhost" && lanHost !== "127.0.0.1") {
-
-    origins.push(`http://${lanHost}:8080`);
-
-  }
-
-  if (Platform.OS === "android") {
-
-    origins.push("http://10.0.2.2:8080", "http://10.0.3.2:8080");
-
-  }
-
-  return [...new Set(origins)];
-
-}
-
-
-
 const api = axios.create({
-
   baseURL: normalizedBaseUrl,
-
-
-
   timeout: 10000,
-
   headers: {
-
     "Content-Type": "application/json",
-
   },
-
-  withCredentials: true, // ✅ crucial for session/cookies
-
+  withCredentials: true,
 });
 
-
-
-// Auth API instance for login/OTP only (no `/api` prefix).
-
-const AUTH_BASE_URL = LOCAL_API_ORIGIN;
-
-console.log("Auth API Base URL:", AUTH_BASE_URL);
-
-
+const AUTH_BASE_URL = "http://flintnthread.online";
 
 const authApi = axios.create({
-
   baseURL: AUTH_BASE_URL,
-
-  timeout: 15000, // Increased timeout for slower connections
-
+  timeout: 15000,
   headers: {
-
     "Content-Type": "application/json",
-
   },
-
-  withCredentials: false, // Disable for HTTP cross-domain to avoid CORS issues
-
 });
 
-
-
 function getAuthOriginFallbacks(): string[] {
-
-  const origins = [LOCAL_API_ORIGIN];
-
-  const hostUri =
-
-    Constants.expoConfig?.hostUri ??
-
-    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost ??
-
-    (Constants as any)?.manifest?.debuggerHost ??
-
-    "";
-
-  const lanHost = String(hostUri).split(":")[0].trim();
-
-  if (lanHost && lanHost !== "localhost" && lanHost !== "127.0.0.1") {
-
-    origins.push(`http://${lanHost}:8080`);
-
-  }
-
-  if (Platform.OS === "android") {
-
-    // Android emulators cannot hit host machine via localhost.
-
-    origins.push("http://10.0.2.2:8080", "http://10.0.3.2:8080");
-
-  }
-
-  return [...new Set(origins)];
-
+  return ["http://flintnthread.online"];
 }
 
 
@@ -309,9 +177,6 @@ authApi.interceptors.request.use(  async (config) => {
 );
 
 
-
-
-
 // Add response interceptor for authApi to log errors
 
 authApi.interceptors.response.use(
@@ -353,151 +218,46 @@ authApi.interceptors.response.use(
 // Add JWT token interceptor to include bearer token in all requests
 
 api.interceptors.request.use(
-
   async (config) => {
-
     try {
 
       const requestConfig = config as any;
 
       if (!requestConfig.__originFallbacks) {
-
-        requestConfig.__originFallbacks = getMainOriginFallbacks();
-
+        requestConfig.__originFallbacks = [API_BASE_URL];
       }
 
       if (typeof requestConfig.__originIndex !== "number") {
-
         requestConfig.__originIndex = 0;
-
       }
 
       const fallbacks = Array.isArray(requestConfig.__originFallbacks)
-
         ? requestConfig.__originFallbacks
-
         : [API_BASE_URL];
 
       const origin =
-
         fallbacks[requestConfig.__originIndex] ??
-
         fallbacks[0] ??
-
         API_BASE_URL;
 
       config.baseURL = origin;
 
-
-
       const token = await AsyncStorage.getItem("token");
 
-      console.log("ASYNC STORAGE TOKEN:", token);
-
       if (token && token.trim() !== "") {
-
         config.headers.Authorization = `Bearer ${token}`;
-
-        console.log("API Request with token:", config.method?.toUpperCase(), (config.baseURL ?? "") + (config.url ?? ""));
-
-        console.log("Token being sent:", token.substring(0, 30) + "...");
-
-      } else {
-
-        console.log("API Request without token:", config.method?.toUpperCase(), (config.baseURL ?? "") + (config.url ?? ""));
-
-        console.log("No token found in AsyncStorage");
-
       }
 
-
-
-      const rawUrl = String(config.url ?? "");
-
-      const isSearchRequest =
-
-        rawUrl.startsWith("/api/search") &&
-
-        !rawUrl.startsWith("/api/search/history") &&
-
-        !rawUrl.startsWith("/api/search/suggestions");
-
-
-
-      if (isSearchRequest) {
-
-        const base = String(config.baseURL ?? api.defaults.baseURL ?? "").replace(
-
-          /\/$/,
-
-          ""
-
-        );
-
-        const absolute = rawUrl.startsWith("http")
-
-          ? rawUrl
-
-          : `${base}${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`;
-
-        const u = new URL(absolute);
-
-        const hasUserId = u.searchParams.has("userId");
-
-        const hasSessionId = u.searchParams.has("sessionId");
-
-
-
-        if (!hasUserId && token) {
-
-          const userId = extractUserIdFromToken(token);
-
-          if (userId) {
-
-            u.searchParams.set("userId", String(userId));
-
-          }
-
-        }
-
-
-
-        if (!hasSessionId) {
-
-          const sessionId =
-
-            (await AsyncStorage.getItem("ft_recent_view_session_id"))?.trim() || "";
-
-          if (sessionId) {
-
-            u.searchParams.set("sessionId", sessionId);
-
-          }
-
-        }
-
-
-
-        config.url = `${u.pathname}${u.search}`;
-
-      }
+      return config;
 
     } catch (error) {
-
-      console.log("Error getting token from AsyncStorage:", error);
-
+      console.log("Interceptor Error:", error);
+      return config;
     }
-
-    return config;
-
   },
-
   (error) => {
-
     return Promise.reject(error);
-
   }
-
 );
 
 
@@ -1554,8 +1314,6 @@ export interface ApiResponse<T> {
 
 }
 
-
-
 /**
 
  * Add a new address for the authenticated user
@@ -1681,18 +1439,11 @@ export interface LoginResponse {
 
 }
 
-
-
 export interface OtpRequest {
-
   email?: string;
-
   mobile?: string;
-
-  otp: string;
-
+  otp: string | number;
 }
-
 
 
 export interface SendOtpRequest {
@@ -1721,32 +1472,32 @@ export interface OtpResponse {
 
  */
 
-export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => {
+export const sendOtp = async (
+  otpData: SendOtpRequest
+): Promise<OtpResponse> => {
 
   try {
 
-    console.log("Sending OTP request to:", AUTH_BASE_URL + "/auth/send-otp", "with email:", otpData.email);
+    console.log("Sending OTP:", otpData);
 
-    const data = await postAuthWithFallback<OtpResponse>("/auth/send-otp", otpData);
+    const response = await authApi.post(
+      "/auth/send-otp",
+      otpData
+    );
 
-    console.log("OTP response:", data);
+    console.log("Send OTP Response:", response.data);
 
-    return data;
+    return response.data;
 
   } catch (error: any) {
 
-    console.error("Send OTP failed:", error.message, error.code);
+    console.log("Send OTP Error:", error?.response?.data);
 
-    if (error.code === "ERR_NETWORK") {
-
-      throw new Error("Cannot connect to server. Please check your internet connection or try again later.");
-
-    }
-
-    throw error;
-
+    throw new Error(
+      error?.response?.data?.message ||
+      "Failed to send OTP"
+    );
   }
-
 };
 
 
@@ -1757,32 +1508,41 @@ export const sendOtp = async (otpData: SendOtpRequest): Promise<OtpResponse> => 
 
  */
 
-export const verifyOtp = async (otpData: OtpRequest): Promise<LoginResponse> => {
+export const verifyOtp = async (
+  otpData: OtpRequest
+): Promise<LoginResponse> => {
 
   try {
 
-    console.log("Verifying OTP at:", AUTH_BASE_URL + "/auth/verify-otp");
+    console.log("Verify OTP Request:", otpData);
 
-    const data = await postAuthWithFallback<LoginResponse>("/auth/verify-otp", otpData);
+    const response = await authApi.post(
+      "/auth/verify-otp",
+      otpData
+    );
 
-    console.log("Verify OTP response:", data);
+    console.log("Verify OTP Response:", response.data);
 
-    return data;
+    // Save JWT token
+    if (response.data?.token) {
+
+      await AsyncStorage.setItem(
+        "token",
+        response.data.token
+      );
+    }
+
+    return response.data;
 
   } catch (error: any) {
 
-    console.error("Verify OTP failed:", error.message, error.code);
+    console.log("Verify OTP Error:", error?.response?.data);
 
-    if (error.code === "ERR_NETWORK") {
-
-      throw new Error("Cannot connect to server. Please check your internet connection or try again later.");
-
-    }
-
-    throw error;
-
+    throw new Error(
+      error?.response?.data?.message ||
+      "OTP verification failed"
+    );
   }
-
 };
 
 
@@ -2454,4 +2214,4 @@ export const refreshReferralCode = async (): Promise<string> => {
 };
 
 
-export default api;
+export default api; 
