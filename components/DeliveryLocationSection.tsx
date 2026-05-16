@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import * as Location from "expo-location";
 import {
   View,
   Text,
@@ -157,6 +158,9 @@ export default function DeliveryLocationSection({
   const [deliveryAddMode, setDeliveryAddMode] = useState<"list" | "add">(
     "list"
   );
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
+const [currentUserPhone, setCurrentUserPhone] = useState("");
+const [currentUserName, setCurrentUserName] = useState("");
   const [newAddressName, setNewAddressName] = useState("");
   const [newAddressEmail, setNewAddressEmail] = useState("");
   const [newAddressPhone, setNewAddressPhone] = useState("");
@@ -268,6 +272,51 @@ export default function DeliveryLocationSection({
     void (async () => {
       try {
         const token = await AsyncStorage.getItem("token");
+        const userData = await AsyncStorage.getItem("user");
+if (userData) {
+
+  console.log("RAW USER DATA:", userData);
+
+  const parsedUser = JSON.parse(userData);
+
+  console.log("PARSED USER:", parsedUser);
+
+  const actualEmail =
+    parsedUser.email ||
+    parsedUser.emailId ||
+    parsedUser.userEmail ||
+    parsedUser.customerEmail ||
+    "";
+
+  const actualPhone =
+    parsedUser.phone ||
+    parsedUser.mobile ||
+    parsedUser.contactNumber ||
+    parsedUser.phoneNumber ||
+    parsedUser.mobileNumber ||
+    parsedUser.customerPhone ||
+    "";
+
+  const actualName =
+    parsedUser.name ||
+    parsedUser.fullName ||
+    parsedUser.username ||
+    "";
+
+  console.log("ACTUAL EMAIL:", actualEmail);
+  console.log("ACTUAL PHONE:", actualPhone);
+  console.log("ACTUAL NAME:", actualName);
+
+  setCurrentUserEmail(String(actualEmail).trim());
+
+  setCurrentUserPhone(
+    String(actualPhone)
+      .replace(/\D/g, "")
+      .slice(-10)
+  );
+
+  setCurrentUserName(String(actualName).trim());
+}
         if (cancelled) return;
         setIsLoggedIn(!!token);
         // For new users (no token), show a direct "Use current location" CTA by default.
@@ -1009,34 +1058,98 @@ export default function DeliveryLocationSection({
     },
     [closeDeliveryModal]
   );
+const handleUseCurrentLocation = useCallback(async () => {
+  try {
 
-  const handleUseCurrentLocation = useCallback(async () => {
-    const result: RequestForegroundLocationResult =
-      await requestForegroundLocation();
-    if (result.ok) {
-      setDisplayDeliveryLine(result.addressLine);
-      closeDeliveryModal();
-      return;
-    }
+    const { status } =
+      await Location.requestForegroundPermissionsAsync();
 
-    // `ok: false` path (new user / denied / errors)
-    const err = result as any;
-    if (err.reason === "denied") {
+    if (status !== "granted") {
       Alert.alert(
-        "Location",
-        "Location permission is required to use your current address."
+        "Permission Denied",
+        "Location permission is required."
       );
       return;
     }
-    if (err.reason === "error") {
-      Alert.alert("Location", err.message ?? "Unable to fetch your location.");
-      return;
+
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    });
+
+    const latitude = location.coords.latitude;
+    const longitude = location.coords.longitude;
+
+    console.log("Latitude:", latitude);
+    console.log("Longitude:", longitude);
+
+const payload: CreateAddressPayload = {
+  latitude,
+  longitude,
+
+  addressType: "home",
+  isDefault: true,
+};
+
+    console.log("USER EMAIL:", currentUserEmail);
+console.log("USER PHONE:", currentUserPhone);
+console.log("FINAL PAYLOAD:", payload);
+console.log("FINAL PHONE:", currentUserPhone);
+    await createAddress(payload);
+
+    const rows = await fetchAddresses();
+
+    const mapped = rows.map(mapApiToSavedDelivery);
+
+    setSavedDeliveryAddresses(mapped);
+
+    const latest = mapped[mapped.length - 1];
+
+    if (latest) {
+      setSelectedDeliveryAddressId(latest.id);
+      setDisplayDeliveryLine(latest.line);
     }
-    if (err.reason === "web") {
-      Alert.alert("Location", "Current location is not supported on web.");
-      return;
+
+    Alert.alert(
+      "Success",
+      "Current location saved successfully."
+    );
+
+    closeDeliveryModal();
+
+  } catch (error: any) {
+
+    console.log("FULL ERROR:", error);
+
+    if (axios.isAxiosError(error)) {
+
+      console.log("STATUS:", error.response?.status);
+
+      console.log(
+        "RESPONSE:",
+        JSON.stringify(error.response?.data, null, 2)
+      );
+
+      Alert.alert(
+        "Backend Error",
+        JSON.stringify(error.response?.data)
+      );
+
+    } else {
+
+      console.log("NORMAL ERROR:", error);
+
+      Alert.alert(
+        "Error",
+        "Unable to fetch current location."
+      );
     }
-  }, [closeDeliveryModal]);
+  }
+}, [
+  currentUserEmail,
+  currentUserPhone,
+  currentUserName,
+  closeDeliveryModal,
+]);
 
   const handleSaveNewAddress = useCallback(() => {
     const name = newAddressName.trim();
