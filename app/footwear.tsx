@@ -1049,7 +1049,7 @@ export default function FootwearScreen() {
             ],
           }}
         >
-          
+{/*           
           <View style={styles.topTierSection}>
             <Text style={styles.sectionTitle}>Top-tier Kicks</Text>
             <View style={styles.grid2}>
@@ -1077,7 +1077,7 @@ export default function FootwearScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
+          </View> */}
  {/* Categories list + per-category subcategory sections */}
  <View
           style={styles.categoriesListSection}
@@ -1141,10 +1141,7 @@ export default function FootwearScreen() {
           <View style={styles.deskSection}>
             {/* New section from shared reference style */}
             <View style={styles.deskHeaderStrip}>
-              <Text style={styles.deskHeaderTitle}>From Desk to Dazzle</Text>
-              <Text style={styles.deskHeaderSub}>
-                Style that moves with your day and lights up your night
-              </Text>
+              
             </View>
 
             <ScrollView
@@ -1282,7 +1279,7 @@ export default function FootwearScreen() {
                 animatedBlockYRef.current + event.nativeEvent.layout.y;
             }}
           >
-            <View style={styles.perfectPairHeader}>
+            {/* <View style={styles.perfectPairHeader}>
               <Text style={styles.perfectPairTitle}>Pick Your Perfect Pair</Text>
             </View>
 
@@ -1300,7 +1297,7 @@ export default function FootwearScreen() {
                   )
                 )}
               </View>
-            </View>
+            </View> */}
           </View>
           {/* Tall portrait video banner */}
  <View
@@ -1315,9 +1312,7 @@ export default function FootwearScreen() {
                 nativeControls={false}
               />
             </View>
-            <Text style={styles.tallVideoHint}>
-              Replace this with your final vertical video later.
-            </Text>
+            
           </View>
 
         </Animated.View>
@@ -1431,9 +1426,7 @@ export default function FootwearScreen() {
               <Text style={styles.goldHeroSub}>
               Premium quality products at the best prices, with reliable service and fast delivery.
               </Text>
-              <TouchableOpacity style={styles.goldHeroCta} activeOpacity={0.9}>
-                <Text style={styles.goldHeroCtaText}>Shop Here</Text>
-              </TouchableOpacity>
+             
             </View>
             <Image source={FW2} style={styles.goldHeroImage} />
           </View>
@@ -2623,10 +2616,10 @@ const styles = StyleSheet.create({
   },
   goldHeroImage: {
     position: "absolute",
-    right: -12,
-    bottom: 10,
+    right: 10,
+    bottom: 15,
     borderRadius:290,
-    width: 200,
+    width: 140,
     height: 170,
     resizeMode: "contain",
   },

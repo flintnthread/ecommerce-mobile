@@ -43,19 +43,24 @@ export interface AddressesListResponse {
   data: ApiAddress[];
 }
 
-export interface CreateAddressPayload {
-  name: string;
-  email: string;
-  phone: string;
-  addressLine1: string;
-  addressLine2: string;
-  city: string;
-  state: string;
-  country: string;
-  pincode: string;
+export type CreateAddressPayload = {
+  name?: string;
+  email?: string;
+  phone?: string;
+
+  latitude?: number;
+  longitude?: number;
+
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+
   addressType: AddressType;
-  isDefault: boolean;
-}
+  isDefault?: boolean;
+};
 
 /** `GET /api/addresses` — uses shared `api` instance (auth base URL). */
 export async function fetchAddresses(): Promise<ApiAddress[]> {

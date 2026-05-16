@@ -50,6 +50,7 @@
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to set your delivery address."
         }
       ],
+      
       [
         "expo-splash-screen",
         {
@@ -80,5 +81,8 @@
       "enabled": false,
       "checkAutomatically": "NEVER"
     }
+    
   }
+  
 }
+

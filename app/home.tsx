@@ -11,6 +11,7 @@ import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 
 import ReferralPopup from "../components/ReferralPopup";
+import { createAddressFromLocation } from "../lib/requestForegroundLocation";
 
 import {
 
@@ -154,7 +155,9 @@ import {
 
 } from "../services/pushNotifications";
 
+import AppAlert from "../components/AppAlert";
 
+import useAppAlert from "../lib/useAppAlert";
 const { width, height } = Dimensions.get("window");
 
 // Responsive breakpoints
@@ -2714,6 +2717,15 @@ const DEFAULT_SAVED_DELIVERY_ADDRESSES: SavedDeliveryAddress[] = [
 
 export default function Home() {
 
+  const {
+  visible,
+  title,
+  message,
+  type,
+  setVisible,
+  showAlert,
+} = useAppAlert();
+
   const [activeIndex, setActiveIndex] = useState(0);
 
   const [saveToWishlistVisible, setSaveToWishlistVisible] = useState(false);
@@ -3288,21 +3300,29 @@ const [products, setProducts] = useState<any[]>([]);
 
 
 
-  const handleUseCurrentLocation = useCallback(async () => {
+   // adjust path
 
-    const result = await requestForegroundLocation();
-
-    if (result.ok) {
-
-      setDisplayDeliveryLine(result.addressLine);
-
-      closeDeliveryModal();
-
+const handleUseCurrentLocation = useCallback(async () => {
+  const result = await requestForegroundLocation();
+  if (result.ok) {
+    setDisplayDeliveryLine(result.addressLine);
+    
+    // Save address to database - backend will reverse geocode
+    try {
+      await createAddressFromLocation({
+        latitude: result.latitude,
+        longitude: result.longitude,
+        name: "Current Location",
+        addressType: "other",
+        isDefault: true,
+      });
+    } catch (error) {
+      console.log("Failed to save current location address:", error);
     }
-
-  }, [closeDeliveryModal]);
-
-
+    
+    closeDeliveryModal();
+  }
+}, [closeDeliveryModal]);
 
   const handleSaveNewAddress = useCallback(() => {
 
@@ -3314,13 +3334,11 @@ const [products, setProducts] = useState<any[]>([]);
 
     if (!name || !line) {
 
-      Alert.alert(
-
-        "Missing details",
-
-        "Please enter the recipient name and full address."
-
-      );
+      showAlert(
+  "Missing Details",
+  "Please enter recipient name and full address",
+  "warning"
+);
 
       return;
 
@@ -3378,13 +3396,11 @@ const [products, setProducts] = useState<any[]>([]);
 
     if (Platform.OS !== "android") {
 
-      Alert.alert(
-
-        "Voice search",
-
-        "Google voice input is available on Android. On iPhone, type your search in the bar."
-
-      );
+      showAlert(
+  "Voice Search",
+  "Could not open speech recognition",
+  "error"
+);
 
       return;
 
@@ -3446,13 +3462,11 @@ const [products, setProducts] = useState<any[]>([]);
 
     } catch {
 
-      Alert.alert(
-
-        "Voice search",
-
-        "Could not open speech recognition. Check Google / speech services on your device."
-
-      );
+     showAlert(
+  "Voice Search",
+  "Could not open speech recognition. Check Google or speech services on your device.",
+  "error"
+);
 
     }
 
@@ -3730,9 +3744,13 @@ image: product?.images?.[0]?.imagePath
     } catch (error: any) {
 
       console.error('Filter error:', error);
+ showAlert(
+  "Error",
+  "Failed to apply filters. Please try again.",
+  "error"
+);
 
-      Alert.alert('Error', 'Failed to apply filters. Please try again.');
-
+    
       setFilteredProducts([]);
 
       setShowFilteredResults(false);
@@ -3773,10 +3791,11 @@ const categoryIdNum = selectedBrowseMainCategoryId
   : null;
   
     if (!q && !Number.isFinite(categoryIdNum)) {
-      Alert.alert(
-        "Choose filters",
-        "Pick a department and/or gender, category, or filter options, then try again."
-      );
+      showAlert(
+  "Choose Filters",
+  "Pick department or category",
+  "warning"
+);
       return;
     }
 
@@ -5533,7 +5552,11 @@ setWishlistIds(new Set(ids));
 
                     if (addDisabled) {
 
-                      Alert.alert("Out of stock", `${item.name} is currently unavailable.`);
+                   showAlert(
+  "Out of Stock",
+  `${item.name} is currently unavailable.`,
+  "warning"
+);
 
                       return;
 
@@ -5843,13 +5866,11 @@ setWishlistIds(new Set(ids));
 
     if (!token) {
 
-      Alert.alert(
-
-        "Sign in required",
-
-        "Please log in to save items to your wishlist."
-
-      );
+     showAlert(
+  "Sign In Required",
+  "Please log in to save items to your wishlist.",
+  "warning"
+);
 
       return;
 
@@ -5861,7 +5882,11 @@ setWishlistIds(new Set(ids));
 
     if (!Number.isFinite(productId) || productId <= 0) {
 
-      Alert.alert("Cannot add", "Invalid product.");
+     showAlert(
+  "Cannot Add",
+  "Invalid product.",
+  "error"
+);
 
       return;
 
@@ -5881,13 +5906,11 @@ setWishlistIds(new Set(ids));
 
     ) {
 
-      Alert.alert(
-
-        "Cannot add to wishlist",
-
-        "This listing does not include a variant id. Open the product page, choose size or color, then add to wishlist."
-
-      );
+     showAlert(
+  "Cannot Add To Wishlist",
+  "Please choose size or color before adding to wishlist.",
+  "warning"
+);
 
       return;
 
@@ -5936,30 +5959,22 @@ setWishlistIds(new Set(ids));
       setPendingWishlist(null);
 
 
-
-      Alert.alert(
-
-        "Added to wishlist",
-
-        (nameFromServer && nameFromServer.trim()) || line.name
-
-      );
+showAlert(
+  "Wishlist Updated",
+  `${(nameFromServer && nameFromServer.trim()) || line.name} added successfully`,
+  "success"
+);
 
     } catch (e: unknown) {
 
-      Alert.alert(
-
-        "Wishlist",
-
-        parseWishlistApiError(
-
-          e,
-
-          "We could not add this item to your wishlist. Please try again."
-
-        )
-
-      );
+     showAlert(
+  "Wishlist Error",
+  parseWishlistApiError(
+    e,
+    "We could not add this item to your wishlist. Please try again."
+  ),
+  "error"
+);
 
     }
 
@@ -7282,7 +7297,7 @@ const categoryData = [
 
               <View style={styles.cartAlertHeader}>
 
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
 
                 <Text style={styles.cartAlertTitle}>Added to cart</Text>
 
@@ -7607,6 +7622,7 @@ const categoryData = [
           <TouchableOpacity
 
             style={styles.homeBrowseApplyBtn}
+            
 
             onPress={() => void applyHomeBrowseFilters()}
 
@@ -7618,7 +7634,7 @@ const categoryData = [
 
           >
 
-            <Text style={styles.homeBrowseApplyText}>View results</Text>
+            {/* <Text style={styles.homeBrowseApplyText}>View results</Text> */}
 
           </TouchableOpacity>
 
@@ -10588,7 +10604,7 @@ const categoryData = [
 
               <Text style={styles.promoBodyBold}>
 
-              Refer 5 friends using your code and get **10% OFF on your first order** 
+              Refer 5 friends using your code and get 10% OFF on your first order 
 
               </Text>
 
@@ -11108,6 +11124,13 @@ const categoryData = [
 
                     }
 
+                    router.push({
+  pathname: "/subcatProducts",
+  params: {
+    gender: item.label.toLowerCase(),
+  },
+});
+
                   }}
 
                 >
@@ -11589,7 +11612,42 @@ const categoryData = [
 
                         style={styles.categoryParentItem}
 
-                        onPress={() => toggleFilterOption("Gender", gender)}
+                        onPress={() => {
+  
+
+  toggleFilterOption("Gender", gender);
+
+  if (gender === "Men") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "men",
+      },
+    });
+
+  } else if (gender === "Women") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "women",
+      },
+    });
+
+  } else if (gender === "Boy" || gender === "Girl") {
+
+    router.push({
+      pathname: "/subcatProducts",
+      params: {
+        genderType: "kids",
+      },
+    });
+
+  }
+
+}}
+  
 
                       >
 
@@ -11879,7 +11937,13 @@ const categoryData = [
   visible={showReferralPopup}
   onClose={() => setShowReferralPopup(false)}
 />
-
+<AppAlert
+  show={visible}
+  title={title}
+  message={message}
+  type={type}
+  onConfirm={() => setVisible(false)}
+/>
     </View>
   </>
 );
@@ -11922,11 +11986,24 @@ const FilterItem = ({ icon, label, onPress, tint }: FilterItemProps) => (
 
   </TouchableOpacity>
 
+  
+
 );
 
 const styles = StyleSheet.create({
 
-
+homeBrowseApplyBtn: {
+  backgroundColor: "#f97316",
+  paddingVertical: 12,
+  borderRadius: 12,
+  alignItems: "center",
+  justifyContent: "center",
+},
+homeBrowseApplyBtnText: {
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: "700",
+},
   greetingRow: {
   flexDirection: "row",
   alignItems: "center",
@@ -12527,45 +12604,45 @@ categoryChildText: {
 
 
 
-  homeBrowseApplyBtn: {
+  // homeBrowseApplyBtn: {
 
-    marginHorizontal: 10,
+  //   marginHorizontal: 10,
 
-    marginTop: 6,
+  //   marginTop: 6,
 
-    marginBottom: 8,
+  //   marginBottom: 8,
 
-    paddingVertical: 10,
+  //   paddingVertical: 10,
 
-    paddingHorizontal: 14,
+  //   paddingHorizontal: 14,
 
-    borderRadius: 12,
+  //   borderRadius: 12,
 
-    backgroundColor: "rgba(255,255,255,0.92)",
+  //   backgroundColor: "rgba(255,255,255,0.92)",
 
-    borderWidth: 1,
+  //   borderWidth: 1,
 
-    borderColor: "rgba(255,255,255,0.65)",
+  //   borderColor: "rgba(255,255,255,0.65)",
 
-    alignItems: "center",
+  //   alignItems: "center",
 
-    justifyContent: "center",
+  //   justifyContent: "center",
 
-  },
+  // },
 
 
 
-  homeBrowseApplyText: {
+  // homeBrowseApplyText: {
 
-    fontSize: 13,
+  //   fontSize: 13,
 
-    fontWeight: "800",
+  //   fontWeight: "800",
 
-    color: "#1E1B4B",
+  //   color: "#1E1B4B",
 
-    letterSpacing: 0.3,
+  //   letterSpacing: 0.3,
 
-  },
+  // },
 
 
 
@@ -18439,7 +18516,7 @@ shopStoreImage: {
 
   cartAlertContainer: {
 
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#16a34a",
 
     borderRadius: 8,
 
@@ -18483,7 +18560,7 @@ shopStoreImage: {
 
     fontWeight: "600",
 
-    color: "#111827",
+    color: "#ffffff",
 
     marginLeft: 6,
 
@@ -18493,7 +18570,7 @@ shopStoreImage: {
 
     fontSize: 12,
 
-    color: "#6B7280",
+    color: "#ffffff",
 
     textAlign: "center",
 
@@ -18503,7 +18580,7 @@ lineHeight: 16,
 
 cartAlertButton: {
 
-backgroundColor: "#10B981",
+backgroundColor: "#ffffff",
 
 paddingHorizontal: 24,
 
@@ -18519,7 +18596,7 @@ alignItems: "center",
 
 cartAlertButtonText: {
 
-color: "#FFFFFF",
+color: "#10B981",
 
 fontSize: 16,
 

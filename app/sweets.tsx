@@ -130,7 +130,7 @@ export default function Sweets() {
   const [headerHeight, setHeaderHeight] = useState(96);
   const HEADER_FAVICON = require("../assets/images/fntfav.png");
 
-  const bottomVideoPlayer = useVideoPlayer(require("../assets/images/videobanner.mp4"), (player) => {
+  const bottomVideoPlayer = useVideoPlayer(require("../assets/images/Sweets.mp4"), (player) => {
     player.loop = true;
     player.muted = true;
     player.play();
@@ -1018,7 +1018,7 @@ export default function Sweets() {
         <View style={styles.midPromoBlock}>
           <View style={styles.midPromoHeader}>
             <Text style={styles.midPromoTitle}>Deals & stories</Text>
-            <Text style={styles.midPromoHint}>Opens like a book</Text>
+            
           </View>
           <View style={styles.midPromoCarousel}>
             <Animated.FlatList
